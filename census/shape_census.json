@@ -1,0 +1,170 @@
+{
+  "generated_by": "census/make_census.py",
+  "prefill_s": 2048,
+  "models": [
+    {
+      "model": "allenai/OLMoE-1B-7B-0924",
+      "hidden": 2048,
+      "moe_intermediate": 1024,
+      "experts": 64,
+      "top_k": 8,
+      "layers": 16,
+      "per_expert_gemms": {
+        "gate_up": {
+          "N": 2048,
+          "K": 2048
+        },
+        "down": {
+          "N": 2048,
+          "K": 1024
+        }
+      },
+      "regimes": {
+        "decode_bs1": {
+          "tokens_total": 1,
+          "active_experts": 8,
+          "M_per_active_expert": 1,
+          "note": "k experts, one token each \u2014 the skinny extreme; launch amortization is the design center"
+        },
+        "prefill_s2048": {
+          "tokens_total": 2048,
+          "M_mean": 256.0,
+          "M_p50": 256,
+          "M_p95": 282,
+          "M_p99": 293,
+          "assumption": "uniform routing (analytic); replaced by measured histograms in Phase 1"
+        },
+        "train_microbatch": {
+          "same_shape_as": "prefill_s2048",
+          "note": "mb=1 seq 2048 packed (published bench config); backward stays dequant in v1"
+        }
+      },
+      "packed_nf4_gb": 3.22,
+      "absmax_fp32_gb": 0.403,
+      "absmax_overhead_pct_of_packed": 12.5
+    },
+    {
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hidden": 2048,
+      "moe_intermediate": 768,
+      "experts": 128,
+      "top_k": 8,
+      "layers": 48,
+      "per_expert_gemms": {
+        "gate_up": {
+          "N": 1536,
+          "K": 2048
+        },
+        "down": {
+          "N": 2048,
+          "K": 768
+        }
+      },
+      "regimes": {
+        "decode_bs1": {
+          "tokens_total": 1,
+          "active_experts": 8,
+          "M_per_active_expert": 1,
+          "note": "k experts, one token each \u2014 the skinny extreme; launch amortization is the design center"
+        },
+        "prefill_s2048": {
+          "tokens_total": 2048,
+          "M_mean": 128.0,
+          "M_p50": 128,
+          "M_p95": 147,
+          "M_p99": 154,
+          "assumption": "uniform routing (analytic); replaced by measured histograms in Phase 1"
+        },
+        "train_microbatch": {
+          "same_shape_as": "prefill_s2048",
+          "note": "mb=1 seq 2048 packed (published bench config); backward stays dequant in v1"
+        }
+      },
+      "packed_nf4_gb": 14.5,
+      "absmax_fp32_gb": 1.812,
+      "absmax_overhead_pct_of_packed": 12.5
+    },
+    {
+      "model": "google/gemma-4-26B-A4B",
+      "hidden": 2816,
+      "moe_intermediate": 704,
+      "experts": 128,
+      "top_k": 8,
+      "layers": 30,
+      "per_expert_gemms": {
+        "gate_up": {
+          "N": 1408,
+          "K": 2816
+        },
+        "down": {
+          "N": 2816,
+          "K": 704
+        }
+      },
+      "regimes": {
+        "decode_bs1": {
+          "tokens_total": 1,
+          "active_experts": 8,
+          "M_per_active_expert": 1,
+          "note": "k experts, one token each \u2014 the skinny extreme; launch amortization is the design center"
+        },
+        "prefill_s2048": {
+          "tokens_total": 2048,
+          "M_mean": 128.0,
+          "M_p50": 128,
+          "M_p95": 147,
+          "M_p99": 154,
+          "assumption": "uniform routing (analytic); replaced by measured histograms in Phase 1"
+        },
+        "train_microbatch": {
+          "same_shape_as": "prefill_s2048",
+          "note": "mb=1 seq 2048 packed (published bench config); backward stays dequant in v1"
+        }
+      },
+      "packed_nf4_gb": 11.42,
+      "absmax_fp32_gb": 1.427,
+      "absmax_overhead_pct_of_packed": 12.5
+    },
+    {
+      "model": "openai/gpt-oss-120b",
+      "hidden": 2880,
+      "moe_intermediate": 2880,
+      "experts": 128,
+      "top_k": 4,
+      "layers": 36,
+      "per_expert_gemms": {
+        "gate_up": {
+          "N": 5760,
+          "K": 2880
+        },
+        "down": {
+          "N": 2880,
+          "K": 2880
+        }
+      },
+      "regimes": {
+        "decode_bs1": {
+          "tokens_total": 1,
+          "active_experts": 4,
+          "M_per_active_expert": 1,
+          "note": "k experts, one token each \u2014 the skinny extreme; launch amortization is the design center"
+        },
+        "prefill_s2048": {
+          "tokens_total": 2048,
+          "M_mean": 64.0,
+          "M_p50": 64,
+          "M_p95": 77,
+          "M_p99": 83,
+          "assumption": "uniform routing (analytic); replaced by measured histograms in Phase 1"
+        },
+        "train_microbatch": {
+          "same_shape_as": "prefill_s2048",
+          "note": "mb=1 seq 2048 packed (published bench config); backward stays dequant in v1"
+        }
+      },
+      "packed_nf4_gb": 57.33,
+      "absmax_fp32_gb": 7.166,
+      "absmax_overhead_pct_of_packed": 12.5
+    }
+  ]
+}

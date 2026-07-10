@@ -1,0 +1,40 @@
+{
+  "registered": "2026-07-10, Phase 0 (Gate 0) — BEFORE any kernel code exists",
+  "success_thresholds": {
+    "decode_bs1_sm86": {
+      "metric": "tokens/s vs dequant + grouped_mm/bmm path, same model same card",
+      "threshold": ">= 1.3x",
+      "roofline_ceiling_vs_dequant_path": "~8.1x (two-pass lower-bound byte model; see roofline/ceilings.json)",
+      "roofline_ceiling_vs_bf16_resident": "~3.55x"
+    },
+    "train_microbatch_fwd_sm86": {
+      "metric": "s/step forward vs dequant path (backward stays dequant in v1)",
+      "threshold": ">= 1.0x (no regression)",
+      "note": "M~128-256/expert is compute-bound on sm_86 -> parity + energy is the win, not speedup"
+    },
+    "energy": {
+      "metric": "J/token via nvidia-smi power sampling (Phase-1 harness)",
+      "threshold": "strictly below the dequant path in ALL cells",
+      "context": "deletes the measured 1.2-2.3x NF4 energy penalty (METHODOLOGY §10) whose mechanism is the dequant round-trip"
+    },
+    "fidelity": {
+      "P-fid": "fused error vs fp64 <= dequant-path error vs fp64 (median over census shapes)",
+      "B-rel": "per-shape rel Frobenius error <= 2x dequant-path's",
+      "B-abs": "median rel err <= 1e-2"
+    }
+  },
+  "gate_2_go_no_go": "thresholds met at bs1 decode on sm_86 OR a roofline-backed narrowing of claims recorded; passing flips the repo public with receipts; missing honestly is a publishable negative result",
+  "baselines_to_beat": [
+    "dequant -> bf16 grouped_mm/bmm (the current e4b product path)",
+    "Unsloth UNSLOTH_MOE_BACKEND grouped_mm / unsloth_triton (where shapes allow)",
+    "Marlin / Marlin-MoE where runnable (expect skinny-shape collapse — MEASURE it)",
+    "bnb gemv_4bit at bs1 (the existing NF4-aware reference; per-expert loop)"
+  ],
+  "roofline_notes": {
+    "decode_bs1": "memory-bound everywhere (AI~3.5 vs machine balance ~111 sm_86); byte-ratio driven, robust to peak-FLOPs fine print",
+    "prefill_and_train": "compute-bound at M~64-256 -> ceiling vs bf16 ~1.0x; the claim there is energy + no bf16 materialization, registered as such",
+    "dequant_baseline_conservatism": "two-pass byte model is a LOWER bound for the baseline's cost; cache-resident reality can only shrink our measured speedup — conservative direction"
+  },
+  "census_pin": "census/shape_census.json (OLMoE-1B-7B, Qwen3-30B-A3B, Gemma-4-26B-A4B, GPT-OSS-120B; configs fetched 2026-07-10)",
+  "convention_pin": "bitsandbytes #1949 (merged 2026-05-21, milestone v0.50.0): op gemm_4bit, fp32 absmax + nested trio absmax_8bit/code/offset, canonical [N,K] packed, blocksize {32..4096}; 'E4M4' NOT found in merged source — recorded in KERNEL_CONTRACT.md deviations"
+}
