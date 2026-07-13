@@ -1,0 +1,82 @@
+[
+ {
+  "model": "heldout3/Grok-1",
+  "proj": "gate_up",
+  "N": 65536,
+  "K": 6144,
+  "E": 8,
+  "top_k": 2
+ },
+ {
+  "model": "heldout3/Grok-1",
+  "proj": "down",
+  "N": 6144,
+  "K": 32768,
+  "E": 8,
+  "top_k": 2
+ },
+ {
+  "model": "heldout3/Mixtral-8x22B",
+  "proj": "gate_up",
+  "N": 32768,
+  "K": 6144,
+  "E": 8,
+  "top_k": 2
+ },
+ {
+  "model": "heldout3/Mixtral-8x22B",
+  "proj": "down",
+  "N": 6144,
+  "K": 16384,
+  "E": 8,
+  "top_k": 2
+ },
+ {
+  "model": "heldout3/Hunyuan-Large",
+  "proj": "gate_up",
+  "N": 36608,
+  "K": 6400,
+  "E": 16,
+  "top_k": 1
+ },
+ {
+  "model": "heldout3/Hunyuan-Large",
+  "proj": "down",
+  "N": 6400,
+  "K": 18304,
+  "E": 16,
+  "top_k": 1
+ },
+ {
+  "model": "heldout3/Arctic",
+  "proj": "gate_up",
+  "N": 9728,
+  "K": 7168,
+  "E": 128,
+  "top_k": 2
+ },
+ {
+  "model": "heldout3/Arctic",
+  "proj": "down",
+  "N": 7168,
+  "K": 4864,
+  "E": 128,
+  "top_k": 2
+ },
+ {
+  "model": "heldout3/Switch-Base-128",
+  "proj": "gate_up",
+  "N": 6144,
+  "K": 768,
+  "E": 128,
+  "top_k": 1
+ },
+ {
+  "model": "heldout3/Switch-Base-128",
+  "proj": "down",
+  "N": 768,
+  "K": 3072,
+  "E": 128,
+  "top_k": 1
+ }
+]

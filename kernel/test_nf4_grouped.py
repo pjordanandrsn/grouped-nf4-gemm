@@ -1,5 +1,4 @@
-# Copyright (c) 2026 Cerin Amroth LLC. All rights reserved.
-# Private until Gate 2.
+# Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
 
 """TOLERANCE_CONTRACT property suite for the grouped NF4 kernel (GPU).
 
@@ -198,3 +197,86 @@ class TestBoundaries:
         a = torch.randn(65 + 17, 128, device="cuda", dtype=torch.bfloat16)
         out = gemm_4bit_grouped(a, B, A, [65, 17], [0, 7], block_m=64)
         assert err_vs_fp64(out, a, [65, 17], [0, 7], B, A, 128, 128) < 1e-2
+
+
+@cuda
+class TestSplitK:
+    """The split-K decode path (v3): occupancy-starved grids (top_k=1 class)
+    take a (g, n-tile, k-split) grid with fp32 partials host-reduced. Same
+    decode math; these tests pin exactness, fidelity ordering, plan logic,
+    and agreement with the single-pass path."""
+
+    def test_plan_thresholds(self):
+        from nf4_grouped import _decode_plan
+
+        # 64-SM part: constant is 64/2; Scout-down-like starved cell splits
+        bn, w, sk = _decode_plan(5120, 8192, 1, 64)
+        assert (bn, w) == (64, 2) and sk == 4  # 80 programs -> want 4/SM
+        # 26-SM part: constant flips to 128/4 (v2 paired A2000 result)
+        bn, w, sk = _decode_plan(2048, 768, 8, 26)
+        assert (bn, w) == (128, 4) and sk == 1  # 128 programs >= 4*26
+        # census-class cells never split on either device class
+        for N, K in ((2048, 2048), (1408, 2816), (1536, 2048), (2880, 2880)):
+            for sm in (26, 64):
+                *_, sk = _decode_plan(N, K, 8, sm)
+                assert sk == 1, (N, K, sm)
+        # split is capped at 8 and at one absmax block per split
+        *_, sk = _decode_plan(64, 64, 1, 64)
+        assert sk == 1  # K//64 == 1 caps it
+        *_, sk = _decode_plan(64, 8192, 1, 64)
+        assert sk == 8
+
+    def test_forced_split_matches_single_pass(self):
+        B, A, packed, states = make_stack(8, 512, 2048)
+        a, sizes, ids = groups_for(8, 2, 1, 2048)
+        one = gemm_4bit_grouped(a, B, A, sizes, ids, split_k=1)
+        for sk in (2, 4, 8):
+            sp = gemm_4bit_grouped(a, B, A, sizes, ids, split_k=sk)
+            # fp32 partial sums reassociate vs the single-pass K-loop; at bf16
+            # output precision the results should round to (near-)identical.
+            assert (sp.to(torch.float32) - one.to(torch.float32)).abs().max().item() <= 2 * 2**-8 * one.to(torch.float32).abs().max().item()
+
+    def test_split_exactness_one_hot(self):
+        # one-hot activation selects a single weight column: exact through
+        # any split (only one k contributes per output).
+        B, A, packed, states = make_stack(2, 128, 512)
+        a = torch.zeros(1, 512, device="cuda", dtype=torch.bfloat16)
+        a[0, 100] = 1.0
+        ref = dequant_ref(B[1], A[1], 128, 512)[:, 100]
+        out = gemm_4bit_grouped(a, B, A, [1], [1], split_k=4)
+        assert torch.equal(out[0], ref.to(torch.bfloat16))
+
+    def test_split_pfid_ordering(self):
+        # Scout-down-like starved shape (scaled): fused-with-split error must
+        # stay at-or-below the dequant path's vs fp64 (the P-fid claim).
+        E, N, K = 4, 1280, 2048
+        B, A, packed, states = make_stack(E, N, K)
+        a, sizes, ids = groups_for(E, 1, 1, K)
+        out = gemm_4bit_grouped(a, B, A, sizes, ids, split_k=4)
+        fused = err_vs_fp64(out, a, sizes, ids, B, A, N, K)
+        deq = dequant_path_err(a, sizes, ids, packed, states, B, A, N, K)
+        assert fused <= deq * 1.05  # ordering, small slack for reassociation
+
+    def test_split_span_not_divisible(self):
+        # 45 absmax blocks (K=2880) over split 4 -> spans 12/12/12/9; and an
+        # empty tail split (split 8 over 9 blocks) must contribute zeros.
+        B, A, *_ = make_stack(2, 128, 2880)
+        a, sizes, ids = groups_for(2, 1, 1, 2880)
+        one = gemm_4bit_grouped(a, B, A, sizes, ids, split_k=1)
+        for sk in (4, 8):
+            sp = gemm_4bit_grouped(a, B, A, sizes, ids, split_k=sk)
+            assert (sp.to(torch.float32) - one.to(torch.float32)).abs().max().item() <= 2 * 2**-8 * one.to(torch.float32).abs().max().item()
+
+    def test_auto_plan_takes_split_and_is_correct(self):
+        # Starved cell on the real device: the auto plan must split (on any
+        # sm_86 card >=26 SM this cell wants sk>1) and stay correct vs fp64.
+        from nf4_grouped import _decode_plan, _sm_count
+
+        E, N, K = 2, 1024, 4096
+        sm = _sm_count("cuda")
+        *_, sk = _decode_plan(N, K, 1, sm)
+        assert sk > 1
+        B, A, *_ = make_stack(E, N, K)
+        a, sizes, ids = groups_for(E, 1, 1, K)
+        out = gemm_4bit_grouped(a, B, A, sizes, ids)  # auto plan
+        assert err_vs_fp64(out, a, sizes, ids, B, A, N, K) < 1e-2

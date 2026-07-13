@@ -1,6 +1,6 @@
 # Kernel contract — grouped W4A16 GEMM over fused NF4 expert stacks
 
-*Phase 0 deliverable (Gate 0). Private until Gate 2. This document is the successor to the
+*Phase 0 deliverable (Gate 0). This document is the successor to the
 referenced-but-absent `kbit_gemm_context.md` (see Deviations) and is written against the two
 sources that actually exist: the locked Experts4bit design (bnb #1849 discussion / #1965 PR)
 and the **merged** #1949 `gemm_4bit` kernel family (bnb main, milestone v0.50.0, merged

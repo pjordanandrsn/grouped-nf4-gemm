@@ -1,5 +1,4 @@
-# Copyright (c) 2026 Cerin Amroth LLC. All rights reserved.
-# Private until Gate 2 (KERNEL_CONTRACT.md).
+# Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
 
 """Grouped W4A16 GEMM over fused NF4 expert stacks — dequant inside the mainloop.
 
@@ -206,7 +205,97 @@ def _gemv_nf4_grouped(
     tl.store(out_ptr + g * N + offs_n, acc.to(tl.bfloat16), mask=n_mask)
 
 
+@triton.jit
+def _gemv_nf4_grouped_splitk(
+    a_ptr,
+    b_ptr,
+    amax_ptr,
+    ws_ptr,
+    lut_ptr,
+    expert_ids_ptr,
+    K,
+    N,
+    T,
+    KBLOCKS_PER_SPLIT,
+    stride_be,
+    stride_bn,
+    stride_ae,
+    stride_an,
+    BLOCK_N: tl.constexpr,
+    BLOCK_K: tl.constexpr,
+):
+    """Split-K variant of the decode reduction for occupancy-starved grids
+    (few groups x few n-tiles, e.g. top_k=1): program (g, n-tile, k-split)
+    accumulates a PARTIAL fp32 sum over its span of whole absmax blocks into
+    ``ws[k_split, g, n]``; the host reduces ``ws.sum(0)`` (deterministic
+    two-pass, no atomics) and downcasts once. Decode math is identical to
+    ``_gemv_nf4_grouped``. A split whose span starts past K stores zeros."""
+    g = tl.program_id(0)
+    pid_n = tl.program_id(1)
+    pid_k = tl.program_id(2)
+    eid = tl.load(expert_ids_ptr + g)
+
+    offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
+    n_mask = offs_n < N
+    offs_k = tl.arange(0, BLOCK_K)
+    b_base = b_ptr + eid * stride_be + offs_n[:, None] * stride_bn
+    a_base = a_ptr + g * K
+
+    k_lo = pid_k * KBLOCKS_PER_SPLIT * BLOCK_K
+    k_hi = tl.minimum(k_lo + KBLOCKS_PER_SPLIT * BLOCK_K, K)
+    acc = tl.zeros((BLOCK_N,), dtype=tl.float32)
+    for k0 in range(k_lo, k_hi, BLOCK_K):
+        kk = k0 + offs_k
+        bytes_ = tl.load(b_base + (kk[None, :] // 2), mask=n_mask[:, None], other=0).to(
+            tl.int32
+        )
+        nib = tl.where((kk[None, :] % 2) == 0, (bytes_ >> 4) & 0xF, bytes_ & 0xF)
+        w = tl.load(lut_ptr + nib)
+        am = tl.load(
+            amax_ptr + eid * stride_ae + offs_n * stride_an + (k0 // BLOCK_K),
+            mask=n_mask,
+            other=0.0,
+        )
+        a = tl.load(a_base + kk).to(tl.float32)
+        acc += tl.sum(w * a[None, :], axis=1) * am
+
+    tl.store(ws_ptr + pid_k * (T * N) + g * N + offs_n, acc, mask=n_mask)
+
+
 _LUT_CACHE: dict = {}
+_SM_CACHE: dict = {}
+
+
+def _sm_count(device) -> int:
+    key = str(device)
+    if key not in _SM_CACHE:
+        _SM_CACHE[key] = torch.cuda.get_device_properties(device).multi_processor_count
+    return _SM_CACHE[key]
+
+
+def _decode_plan(N: int, K: int, T: int, sm_count: int):
+    """Decode launch plan: (BLOCK_N, num_warps, split_k).
+
+    Constant: (64, 2) on >=48-SM parts, (128, 4) below. Bases: the dense
+    2-device (N, K, T) config sweeps (bench/phase2/sweeps/ — 64/2 median
+    regret 1.000 on both grids) and the v2 confirmatory's PAIRED result that
+    the 26-SM A2000 consistently prefers the old 128/4 on several cells
+    (RESULTS-v2-confirmatory.md).
+
+    Split-K: when the (groups x n-tiles) grid can't put ~4 programs on every
+    SM (the top_k=1 starvation class v2 quantified: 0.47-0.83x speed AND the
+    only energy miss ever), split the reduction over whole absmax blocks to
+    restore parallelism; host reduces the fp32 partials. Power-of-2, capped
+    at 8 and at one block per split."""
+    bn, warps = (64, 2) if sm_count >= 48 else (128, 4)
+    programs = T * -(-N // bn)
+    split_k = 1
+    if programs < 2 * sm_count:  # true starvation only — census cells never split
+        want = -(-(4 * sm_count) // programs)
+        while split_k < want and split_k < 8:
+            split_k *= 2
+        split_k = min(split_k, max(K // BLOCKSIZE, 1))
+    return bn, warps, split_k
 
 
 def _lut(device):
@@ -224,12 +313,14 @@ def gemm_4bit_grouped(
     expert_ids,
     block_m: int | None = None,
     decode_config: tuple | None = None,
+    split_k: int | None = None,
 ):
     """Single-launch grouped NF4 GEMM. ``a_cat [T,K]`` bf16/fp16 in group-sorted
     order, ``B [E,N,K//2]`` uint8, ``absmax [E,N,K//64]`` fp32, ``sizes`` the
     per-group token counts (all > 0), ``expert_ids [G]`` int32/list. Returns
     ``[T, N]`` bf16 in the same group order. ``decode_config`` overrides the
-    decode path's (BLOCK_N, num_warps) — benchmark/ablation support only."""
+    decode path's (BLOCK_N, num_warps); ``split_k`` overrides the decode
+    split-K factor (None = plan, 1 = off) — benchmark/ablation support only."""
     E, N, _ = B.shape
     T, K = a_cat.shape
     assert sum(sizes) == T, (sum(sizes), T)
@@ -242,26 +333,50 @@ def gemm_4bit_grouped(
     out = torch.empty(T, N, dtype=torch.bfloat16, device=dev)
     if max(sizes) == 1:
         # decode: every group is one token; the reduction path skips the M-tile.
-        # Config is a single constant, (BLOCK_N=64, num_warps=2). Basis: a dense
-        # 360-cell (N, K, T) sweep x 14 configs on TWO sm_86 devices (A5000
-        # 64 SM + A2000 26 SM; bench/phase2/decode_config_sweep.py) — 64/2 is
-        # oracle on ~2/3 of cells and within a few % on ~90% (median regret
-        # 1.000 on both devices, p95 1.05/1.11, max 1.32/1.67), and within 10%
-        # of oracle on all 16 real model shapes measured. The previous
-        # exact-(N, K) dict (census-tuned, 8 shapes) had default-config regret
-        # up to 2.6x off-census and did not transfer across instances — the
-        # Gate-2 blind confirmatory caught it; this replaces it.
-        bn, warps = decode_config or (64, 2)
-        grid = (T, triton.cdiv(N, bn))
-        _gemv_nf4_grouped[grid](
+        # Launch plan (_decode_plan): SM-conditional constant + split-K for
+        # starved grids. Each part carries its measured basis in the plan's
+        # docstring; the ablation kwargs let a harness force either off.
+        bn, warps, sk = _decode_plan(N, K, T, _sm_count(dev))
+        if decode_config is not None:
+            bn, warps = decode_config
+        if split_k is not None:
+            sk = split_k
+        if sk <= 1:
+            grid = (T, triton.cdiv(N, bn))
+            _gemv_nf4_grouped[grid](
+                a_cat,
+                B,
+                absmax,
+                out,
+                _lut(dev),
+                eids,
+                K,
+                N,
+                B.stride(0),
+                B.stride(1),
+                absmax.stride(0),
+                absmax.stride(1),
+                BLOCK_N=bn,
+                BLOCK_K=BLOCKSIZE,
+                num_warps=warps,
+                num_stages=3,
+            )
+            return out
+        kblocks = -(-K // BLOCKSIZE)
+        span = -(-kblocks // sk)
+        ws = torch.empty(sk, T, N, dtype=torch.float32, device=dev)
+        grid = (T, triton.cdiv(N, bn), sk)
+        _gemv_nf4_grouped_splitk[grid](
             a_cat,
             B,
             absmax,
-            out,
+            ws,
             _lut(dev),
             eids,
             K,
             N,
+            T,
+            span,
             B.stride(0),
             B.stride(1),
             absmax.stride(0),
@@ -271,6 +386,7 @@ def gemm_4bit_grouped(
             num_warps=warps,
             num_stages=3,
         )
+        out.copy_(ws.sum(dim=0))  # fp32 partial reduce, single bf16 downcast
         return out
     if block_m is None:
         block_m = 16 if max(sizes) <= 16 else 64

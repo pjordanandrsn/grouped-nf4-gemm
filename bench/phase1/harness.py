@@ -406,8 +406,59 @@ def bk_fused_nf4_v1cfg(stack: QuantStack, groups):
     out = gemm_4bit_grouped(
         a_cat, B, A, sizes, ids,
         decode_config=v1.get((stack.spec.N, stack.spec.K), (128, 4)),
+        split_k=1,  # the retired config predates split-K; keep it faithful
     )
     IMPL_NOTE["fused_nf4_v1cfg"] = "gemm_4bit_grouped @ retired v1 census-dict config"
+    return _split(out, sizes)
+
+
+def bk_fused_nf4_v2cfg(stack: QuantStack, groups):
+    """Ablation backend: the exact v2 semantics — constant (64, 2), no
+    split-K — the paired comparator for the v3 SM-conditional-constant claim
+    (the A2000 cells where v2 measured consistent paired losses)."""
+    import sys
+
+    sys.path.insert(0, str(REPO / "kernel"))
+    from nf4_grouped import gemm_4bit_grouped
+
+    B, A = stack.fusedpack()
+    cache = getattr(stack, "_fused_asm", None)
+    if cache is None or cache[0] != id(groups):
+        a_cat = torch.cat([a for _, a in groups])
+        sizes = [a.shape[0] for _, a in groups]
+        ids = torch.tensor(
+            [e for e, _ in groups], dtype=torch.int32, device=a_cat.device
+        )
+        stack._fused_asm = (id(groups), a_cat, sizes, ids)
+    _, a_cat, sizes, ids = stack._fused_asm
+    out = gemm_4bit_grouped(
+        a_cat, B, A, sizes, ids, decode_config=(64, 2), split_k=1
+    )
+    IMPL_NOTE["fused_nf4_v2cfg"] = "gemm_4bit_grouped @ v2 constant (64/2), no split"
+    return _split(out, sizes)
+
+
+def bk_fused_nf4_nosplit(stack: QuantStack, groups):
+    """Ablation backend: the CURRENT plan's config with split-K forced OFF —
+    the paired comparator for the v3 split-K claim on starved cells (same
+    process, same stack, same thermal context)."""
+    import sys
+
+    sys.path.insert(0, str(REPO / "kernel"))
+    from nf4_grouped import gemm_4bit_grouped
+
+    B, A = stack.fusedpack()
+    cache = getattr(stack, "_fused_asm", None)
+    if cache is None or cache[0] != id(groups):
+        a_cat = torch.cat([a for _, a in groups])
+        sizes = [a.shape[0] for _, a in groups]
+        ids = torch.tensor(
+            [e for e, _ in groups], dtype=torch.int32, device=a_cat.device
+        )
+        stack._fused_asm = (id(groups), a_cat, sizes, ids)
+    _, a_cat, sizes, ids = stack._fused_asm
+    out = gemm_4bit_grouped(a_cat, B, A, sizes, ids, split_k=1)
+    IMPL_NOTE["fused_nf4_nosplit"] = "gemm_4bit_grouped, split_k forced 1"
     return _split(out, sizes)
 
 
@@ -421,6 +472,8 @@ BACKENDS = {
     "marlin": bk_marlin,
     "fused_nf4": bk_fused_nf4,
     "fused_nf4_v1cfg": bk_fused_nf4_v1cfg,
+    "fused_nf4_v2cfg": bk_fused_nf4_v2cfg,
+    "fused_nf4_nosplit": bk_fused_nf4_nosplit,
 }
 
 
