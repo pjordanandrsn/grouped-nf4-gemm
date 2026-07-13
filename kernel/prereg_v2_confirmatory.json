@@ -1,0 +1,48 @@
+{
+  "registered_utc": "2026-07-13T14:20:00Z",
+  "purpose": "BLIND CONFIRMATORY v2. Tests the post-v1 engineering change (decode config: census dict -> single dense-sweep-validated constant 64/2) on a fresh device instance and a FRESH held-out shape set. The v1 confirmatory (RESULTS-gate2-confirmatory.md) failed C1/C3 and narrowed the claim; this registers what the new selector is predicted to deliver and tests exactly that. Nothing here re-adjudicates v1: its verdict stands.",
+  "frozen_commit": "54492e8 (grouped-nf4-gemm main). No code, config, harness, or reducer changes between this stamp and the reported results. Any deviation voids the run and must be re-registered.",
+  "provenance_of_bars": "Every threshold below is derived from data that existed BEFORE this stamp: the two committed config sweeps (sweep_a5000.json / sweep_a2000.json, bench/phase2/decode_config_sweep.py) and the v1 confirmatory reps. The held-out-v2 shapes have NEVER been measured (only grid-NEIGHBOR predictions exist, listed below as falsifiable predictions). Two held-out-v2 (N,K) pairs coincide with grid points (granite gate_up 1024x1536, Qwen3-Next gate_up 1024x2048); the selector is a single constant chosen from 720-cell structure, not a per-cell fit, so pointwise leakage cannot select for them — disclosed anyway. Qwen3-Next top_k=10 exceeds the grid's T range (max 8): extrapolation, disclosed.",
+  "protocol": {
+    "devices": [
+      "FRESH RunPod SECURE A5000 (sm_86) provisioned AFTER this stamp; never used in tuning or sweeps",
+      "home RTX A2000 12GB (sm_86) — different SM count (26 vs 64), co-resident home-lab services (contention transients expected and tolerated per the bars)"
+    ],
+    "cells": "decode_bs1 x backends {dequant_grouped, gemv_4bit, fused_nf4, fused_nf4_v1cfg} x shapes: 8 census + 8 held-out-v2 (bench/phase1/heldout_v2_shapes.json: DeepSeek-V3, granite-3.1-3b-a800m, Llama-4-Scout-16E top_k=1, Qwen3-Next-80B-A3B top_k=10). fused_nf4_v1cfg = the SAME kernel forced onto the retired v1 census-dict config, so config claims are PAIRED (same process, same stack, same thermal context) — the v1 confirmatory showed unpaired cross-instance comparisons swing by up to 1.7x on the fused side while the dequant baseline is stable to a few %.",
+    "reps": "n=3 independent harness invocations per device (fresh process each). Property suite once per device before timing.",
+    "energy": "--energy-window 5.0; method + sample count recorded per cell.",
+    "reduction": "bench/phase1/reduce_confirmatory_v2.py reading frozen_verdict_criteria_params from THIS file. Per cell: worst-rep and median-rep dequant_ms/fused_ms; worst-rep and median-rep v1cfg_ms/fused_ms (paired); worst-rep fused_J/dequant_J. Cells skipped on every rep of a device are NOT-RUN, excluded from that device's denominators one-for-one (DeepSeek-V3 E=256 stacks ~8-9 GB resident may OOM the 12 GB A2000; recorded, never substituted)."
+  },
+  "frozen_verdict_criteria_params": {
+    "p1a_worst_floor": 0.88,
+    "p1b_min_gain": 1.10,
+    "p1b_min_cells": 2,
+    "s1_median_bar": 1.3,
+    "s1_median_min_cells": 7,
+    "s1_worst_floor_min_cells": 7,
+    "s2_median_floor_min_cells": 6,
+    "s2_median13_min_cells": 4,
+    "s2_worst_floor": 0.9,
+    "e1_min_cells": 15
+  },
+  "frozen_verdict_criteria": {
+    "P1a_bounded_loss": "PAIRED worst-rep fused/v1cfg time ratio (v1cfg_ms/fused_ms) >= 0.88 on ALL run cells, both devices. Meaning: the constant config never costs more than ~12% vs the retired per-shape dict anywhere, while eliminating its up-to-2.6x off-census default regret. Basis: min predicted paired = 0.913 (A2000 Qwen3-30B down) and 0.926 (A5000 OLMoE gate_up) from the sweeps, minus noise margin.",
+    "P1b_gains_exist": "PAIRED median-rep ratio >= 1.10 on >= 2 run cells per device (any of the 16). Basis: sweeps predict >= 1.11 on 6 cells (A5000: Qwen3-30B gu 1.16, gemma gu 1.18, gemma dn 1.17, gpt-oss dn 1.18, granite gu 1.12, Qwen3-Next gu 1.11) and >= 1.11 on 3 cells (A2000: granite gu 1.17, Qwen3-Next gu 1.13, gpt-oss gu 1.12). Median-rep because gains-existence is a typical-case claim; bounded-loss P1a stays worst-rep.",
+    "S1_census_vs_dequant": "Per device: median-rep ratio >= 1.3 on >= 7/8 census cells AND median-rep >= 1.0 on 8/8 AND worst-rep >= 1.0 on >= 7/8. Basis: v1 medians x predicted paired deltas put gpt-oss down (A5000) at ~1.2 and Qwen3-30B gu (A2000) at ~1.3 — hence 7/8 not 8/8; the worst-rep 7/8 floor tolerates exactly one home-card contention transient (v1 observed 1 in 48 cell-reps).",
+    "S2_heldout2_vs_dequant": "Per device (NOT-RUN-scaled): median-rep >= 1.0 on >= 6/8 AND median-rep >= 1.3 on >= 4/8 AND worst-rep >= 0.9 on >= 6/8. Basis: launch-bound dequant baseline (~3 launches per active expert) predicts strong fused wins on the k=8/k=10 cells; Llama-4-Scout top_k=1 cells are REGISTERED AS AT-RISK (T=1 occupancy starvation, the Phi-3.5-down structural class from v1; split-K is the registered follow-on, not this change).",
+    "E1_energy": "Per device: worst-rep fused J/token < dequant J/token on >= 15/16 run cells. v1 measured 32/32; the new T=1 cells could compress margins — one surprise per device is allowed and reported, not hidden.",
+    "Q1_suite": "Property suite 35/35 on both devices.",
+    "no_tune_clause": "Any failed criterion is reported at full volume and the claim narrowed accordingly; no re-runs until green, no reduction changes after data exists."
+  },
+  "falsifiable_predictions_heldout2_paired": {
+    "note": "grid-NEIGHBOR predictions of v1cfg_ms/fused_ms (old default 128/4 vs 64/2), min..max over neighbor cells; A5000 then A2000",
+    "DeepSeek-V3 gate_up": ["1.00..1.01", "1.04..1.14"],
+    "DeepSeek-V3 down": ["0.96..1.33", "1.05..1.06"],
+    "granite gate_up": ["1.12", "1.17"],
+    "granite down": ["1.09", "1.04"],
+    "Scout gate_up": ["0.99..1.00", "1.01"],
+    "Scout down": ["0.94..1.42", "1.00..1.21"],
+    "Qwen3-Next gate_up": ["1.11", "1.13"],
+    "Qwen3-Next down": ["1.08", "0.91"]
+  }
+}
