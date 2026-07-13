@@ -24,8 +24,9 @@ devices; n=3 fresh-process reps; worst/median-rep reduction; failures
 reported at full volume). On sm_86 at batch-1 decode, versus the
 dequantize-then-matmul baseline on the same stacks:
 
-- **Fidelity:** property suite 35/35 on every device; fused output error is
-  **below the baseline's in all 96+ measured cells** (fp32 accumulate).
+- **Fidelity:** property suite green on every device, every run (35 → 44
+  tests as the kernel grew); fused output error **below the baseline's in
+  every cell ever measured** (fp32 accumulate).
 - **Energy:** fused J/token **below the baseline in 104 of 112
   confirmatory-grade cells across v1–v3**. Six of the eight misses are the
   `top_k=1`/tiny class (named below); the other two are parity-margin
@@ -49,7 +50,7 @@ dequantize-then-matmul baseline on the same stacks:
   mainloop rewrite. Decode is still the primary product surface.
 
 Three blind confirmatories have run; **none fully passed as registered**,
-and both results docs say exactly what failed and why:
+and each results doc says exactly what failed and why:
 [v1](kernel/RESULTS-gate2-confirmatory.md) (caught the original per-shape
 config table overfitting its census), [v2](kernel/RESULTS-v2-confirmatory.md)
 (validated the replacement single-constant config on 64-SM parts and the
@@ -70,7 +71,7 @@ one command from a frozen tree. Requires an sm_86 GPU, `torch ≥ 2.8`,
 runtime).
 
 ```
-python -m pytest kernel/test_nf4_grouped.py -q        # 35 tests, ~2.5 min
+python -m pytest kernel/test_nf4_grouped.py -q        # 44 tests, ~2.5 min
 python bench/phase1/harness.py --models OLMoE --regimes decode_bs1 \
     --backends dequant_grouped fused_nf4 --out receipts.json
 ```
