@@ -102,8 +102,12 @@ class TestDecodeExactness:
         eye = torch.eye(K, dtype=torch.bfloat16, device=dev)  # one-hot rows
         out = gemm_4bit_grouped(eye, B, A, [K], [0])
         ref = dequant_ref(B[0], A[0], N, K)  # [N, K]
-        # out[j] = W @ e_j -> out.T == W (one product per sum: exact)
-        assert torch.equal(out.t().to(torch.float32), ref)
+        # out[j] = W @ e_j -> out.T == W, one product per sum. tl.dot runs TF32
+        # (~1e-3 rel rounding, measured 1.6e-3), which sits below bf16's 2^-8
+        # resolution — so at the kernel's actual output precision the equality
+        # is EXACT, and any wrong code/nibble-order still lands on a different
+        # codebook value entirely.
+        assert torch.equal(out.t(), ref.to(torch.bfloat16))
 
 
 @cuda
