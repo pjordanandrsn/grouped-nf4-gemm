@@ -74,17 +74,23 @@ class QuantStack:
         self.spec = spec
         self.device = device
         g = torch.Generator(device="cpu").manual_seed(seed)
-        w = torch.randn(spec.E, spec.N, spec.K, generator=g, dtype=torch.float32)
-        w = (w * 0.02).to(device=device, dtype=torch.bfloat16)
         from bitsandbytes import functional as F
 
+        # Per-expert generation: one [N,K] fp32 draw at a time (~120 MB peak
+        # host) instead of a monolithic [E,N,K] — DeepSeek-V3-class stacks
+        # (E=256, 4096x7168) need ~30 GB host RAM the old way, which the
+        # OOM-killer answered with SIGKILL on 24-GB pod containers. Sequential
+        # draws consume the same generator stream (N*K is even for every
+        # census/held-out shape, so the normal-pair stream stays aligned).
         self.packed, self.states = [], []
-        for e in range(spec.E):
-            q, st = F.quantize_4bit(w[e], blocksize=BLOCKSIZE, quant_type="nf4")
+        for _ in range(spec.E):
+            w_e = torch.randn(spec.N, spec.K, generator=g, dtype=torch.float32)
+            w_e = (w_e * 0.02).to(device=device, dtype=torch.bfloat16)
+            q, st = F.quantize_4bit(w_e, blocksize=BLOCKSIZE, quant_type="nf4")
             self.packed.append(q)
             self.states.append(st)
+            del w_e
         self._marlin = None
-        del w
 
     def dequant_bf16(self, e: int) -> torch.Tensor:
         from bitsandbytes import functional as F
@@ -616,7 +622,21 @@ def main():
         print(
             f"== {spec.model} {spec.proj} N={spec.N} K={spec.K} E={spec.E} k={spec.top_k}"
         )
-        stack = QuantStack(spec, device)
+        try:
+            stack = QuantStack(spec, device)
+        except Exception as e:  # stack won't fit this device: cells -> skipped,
+            for regime in args.regimes:  # the rest of the run proceeds (NOT-RUN
+                for name in args.backends:  # exclusion, never a dead process)
+                    cells.append({
+                        "model": spec.model, "proj": spec.proj, "regime": regime,
+                        "backend": name,
+                        **{k: getattr(spec, k) for k in ("N", "K", "E", "top_k")},
+                        "status": "skipped",
+                        "reason": f"stack build: {str(e)[:160]}",
+                    })
+            print(f"   stack build failed -> all cells skipped: {str(e)[:100]}")
+            torch.cuda.empty_cache()
+            continue
         routing = routings.get((spec.E, spec.top_k))
         # (regime, layer) work items; prefill_measured expands to per-layer when
         # --routing-layer all, else the representative (None) or a fixed int.
