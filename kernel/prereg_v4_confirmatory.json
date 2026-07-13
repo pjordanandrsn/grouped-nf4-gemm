@@ -1,0 +1,49 @@
+{
+  "registered_utc": "2026-07-13T22:35:00Z",
+  "purpose": "BLIND CONFIRMATORY v4. Tests the post-v3 queue: (1) decode_dispatch bytes floor (tiny cells route to the dequant path), (2) split-K per-split work floor, (3) universal-constant revert, (4) group-size-keyed prefill config. v1-v3 verdicts stand.",
+  "frozen_commit": "80bda12 (grouped-nf4-gemm main). No code/config/harness/reducer changes between this stamp and reported results.",
+  "provenance_of_bars": "All thresholds derive from pre-stamp data: the committed v4 exploratory runs (bench/phase2/sweeps/v4_prefill_{a5000,a2000}.json — the config-rule regret table; v4_floor_{a5000,a2000}.json — floor routing behavior), the v3 confirmatory, and the two decode sweeps. The v3 methodology law is applied: latency-bound cells carry PAIRED or loosely-banded criteria only; hard vs-dequant bars live on bandwidth-bound cells. Floor/split dev cells (Switch, granite-dn, Scout-dn, Hunyuan-dn) are development shapes (burned in v3) used to verify MECHANISM, not to claim novel wins; the prefill claim's census cells are long-standing development shapes — v4 makes PAIRED config claims on them, which the paired design keeps honest.",
+  "protocol": {
+    "devices": [
+      "FRESH RunPod SECURE A5000 (sm_86) provisioned AFTER this stamp",
+      "home RTX A2000 12GB (co-resident services; tiny-cell timings jitter up to ~1.75x on identical code — measured, disclosed, bars account for it)"
+    ],
+    "runs_per_rep": [
+      "decode: 8 census + bench/phase1/heldout_v4_floor_cells.json (Switch gu/dn = below-floor, granite dn = just-above-floor, Scout dn + Hunyuan dn = split cells) x backends {dequant_grouped, fused_nf4, fused_routed}",
+      "prefill_s2048: 8 census x backends {dequant_grouped, fused_nf4, fused_nf4_v3prefill}"
+    ],
+    "reps": "n=3 fresh-process invocations of each run per device; property suite (44 tests) once per device first.",
+    "energy": "--energy-window 5.0.",
+    "reduction": "bench/phase1/reduce_confirmatory_v4.py reading frozen_verdict_criteria_params from THIS file. NOT-RUN exclusion as always.",
+    "report_only": "Universal-constant revert (v3 established noise-equivalence on the 26-SM card) and split-K paired gains (v3 confirmed) are REPORTED, not re-judged. Prefill vs-dequant on gate_up cells is reported at full volume (known below parity; the mainloop rewrite is future work)."
+  },
+  "frozen_verdict_criteria_params": {
+    "a5000_name": "A5000",
+    "census_cells": [["allenai/OLMoE-1B-7B-0924", "gate_up"], ["allenai/OLMoE-1B-7B-0924", "down"], ["Qwen/Qwen3-30B-A3B", "gate_up"], ["Qwen/Qwen3-30B-A3B", "down"], ["google/gemma-4-26B-A4B", "gate_up"], ["google/gemma-4-26B-A4B", "down"], ["openai/gpt-oss-120b", "gate_up"], ["openai/gpt-oss-120b", "down"]],
+    "floor_cells": [["dev/Switch-Base-128", "gate_up"], ["dev/Switch-Base-128", "down"]],
+    "f1_floor": 0.55,
+    "f2_lo": 0.75,
+    "f2_hi": 1.35,
+    "f3_lo": 0.85,
+    "f3_hi": 1.18,
+    "p1_bar": 1.15,
+    "p1_min_cells": 6,
+    "p2_floor": 0.75,
+    "p2_min_cells_a5000": 6,
+    "p2_min_cells_a2000": 4,
+    "p2b_bar": 1.3,
+    "p2b_min_cells": 2,
+    "suite_expect": "44/44"
+  },
+  "frozen_verdict_criteria": {
+    "F1_no_catastrophe": "fused_routed median vs dequant >= 0.55 on EVERY decode cell, both devices. The v3 Switch class measured 0.24-0.35; same-code jitter on the A2000 measured as low as 0.57 on a single timing pair, so 0.55 at 3-rep median separates catastrophe from jitter.",
+    "F2_floor_identity_a5000": "On the two below-floor Switch cells, routed median vs dequant in [0.75, 1.35] on the A5000 (routing means running the dequant path; the band is measurement noise). A2000 floor cells are REPORTED only (tiny-cell jitter law).",
+    "F3_eligible_identity": "On every eligible (above-floor) decode cell, PAIRED routed vs fused median in [0.85, 1.18] both devices — dispatch must be a near-free wrapper where it chooses fused.",
+    "P1_prefill_config": "PAIRED new-config vs retired-config median >= 1.15 on >= 6/8 prefill census cells per device. Exploratory measured 1.22-1.82 on 16/16.",
+    "P2_prefill_floor": "fused vs dequant median >= 0.75 on >= 6/8 (A5000) / >= 4/8 (A2000) prefill cells — bars set from the exploratory's own distributions (A5000 7/8, A2000 4/8).",
+    "P2b_prefill_wins_a5000": "fused vs dequant median >= 1.3 on >= 2/8 prefill cells on the A5000 (exploratory: down-projections at 1.88/1.94).",
+    "E1_census_energy": "fused_routed J/token < dequant on 8/8 decode census cells per device (the replicated bandwidth-bound energy claim).",
+    "Q1_suite": "44/44 both devices.",
+    "no_tune_clause": "Failures reported at full volume; claims narrowed; no re-runs until green; no reduction changes after data exists."
+  }
+}
