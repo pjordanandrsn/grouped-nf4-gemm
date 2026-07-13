@@ -233,9 +233,16 @@ def gemm_4bit_grouped(a_cat, B, absmax, sizes, expert_ids, block_m: int | None =
     out = torch.empty(T, N, dtype=torch.bfloat16, device=dev)
     if max(sizes) == 1:
         # decode: every group is one token; the reduction path skips the M-tile.
-        # BLOCK_N=128/num_warps=4 measured best on sm_86 (~2x BN=64) — one N-row
-        # per warp keeps the codebook gather + reduction resident.
-        grid = (T, triton.cdiv(N, 128))
+        # Config from the sm_86 census sweep (kernel/sweep_winners.json):
+        # 128/4 wins 5 of 8 shapes; the three below want a wider tile. Exact
+        # (N, K) keys — census-tuned, honest about it; a proper cost model or
+        # fixed autotune is the follow-on for off-census shapes.
+        bn, warps = {
+            (1536, 2048): (256, 8),  # qwen gate_up
+            (1408, 2816): (256, 8),  # gemma gate_up
+            (2816, 704): (256, 8),  # gemma down
+        }.get((N, K), (128, 4))
+        grid = (T, triton.cdiv(N, bn))
         _gemv_nf4_grouped[grid](
             a_cat,
             B,
@@ -249,9 +256,9 @@ def gemm_4bit_grouped(a_cat, B, absmax, sizes, expert_ids, block_m: int | None =
             B.stride(1),
             absmax.stride(0),
             absmax.stride(1),
-            BLOCK_N=128,
+            BLOCK_N=bn,
             BLOCK_K=BLOCKSIZE,
-            num_warps=4,
+            num_warps=warps,
             num_stages=3,
         )
         return out
