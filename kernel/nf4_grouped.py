@@ -216,11 +216,20 @@ def _lut(device):
     return _LUT_CACHE[key]
 
 
-def gemm_4bit_grouped(a_cat, B, absmax, sizes, expert_ids, block_m: int | None = None):
+def gemm_4bit_grouped(
+    a_cat,
+    B,
+    absmax,
+    sizes,
+    expert_ids,
+    block_m: int | None = None,
+    decode_config: tuple | None = None,
+):
     """Single-launch grouped NF4 GEMM. ``a_cat [T,K]`` bf16/fp16 in group-sorted
     order, ``B [E,N,K//2]`` uint8, ``absmax [E,N,K//64]`` fp32, ``sizes`` the
     per-group token counts (all > 0), ``expert_ids [G]`` int32/list. Returns
-    ``[T, N]`` bf16 in the same group order."""
+    ``[T, N]`` bf16 in the same group order. ``decode_config`` overrides the
+    decode path's (BLOCK_N, num_warps) — benchmark/ablation support only."""
     E, N, _ = B.shape
     T, K = a_cat.shape
     assert sum(sizes) == T, (sum(sizes), T)
@@ -233,15 +242,16 @@ def gemm_4bit_grouped(a_cat, B, absmax, sizes, expert_ids, block_m: int | None =
     out = torch.empty(T, N, dtype=torch.bfloat16, device=dev)
     if max(sizes) == 1:
         # decode: every group is one token; the reduction path skips the M-tile.
-        # Config from the sm_86 census sweep (kernel/sweep_winners.json):
-        # 128/4 wins 5 of 8 shapes; the three below want a wider tile. Exact
-        # (N, K) keys — census-tuned, honest about it; a proper cost model or
-        # fixed autotune is the follow-on for off-census shapes.
-        bn, warps = {
-            (1536, 2048): (256, 8),  # qwen gate_up
-            (1408, 2816): (256, 8),  # gemma gate_up
-            (2816, 704): (256, 8),  # gemma down
-        }.get((N, K), (128, 4))
+        # Config is a single constant, (BLOCK_N=64, num_warps=2). Basis: a dense
+        # 360-cell (N, K, T) sweep x 14 configs on TWO sm_86 devices (A5000
+        # 64 SM + A2000 26 SM; bench/phase2/decode_config_sweep.py) — 64/2 is
+        # oracle on ~2/3 of cells and within a few % on ~90% (median regret
+        # 1.000 on both devices, p95 1.05/1.11, max 1.32/1.67), and within 10%
+        # of oracle on all 16 real model shapes measured. The previous
+        # exact-(N, K) dict (census-tuned, 8 shapes) had default-config regret
+        # up to 2.6x off-census and did not transfer across instances — the
+        # Gate-2 blind confirmatory caught it; this replaces it.
+        bn, warps = decode_config or (64, 2)
         grid = (T, triton.cdiv(N, bn))
         _gemv_nf4_grouped[grid](
             a_cat,

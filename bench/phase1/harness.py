@@ -375,6 +375,36 @@ def bk_fused_nf4(stack: QuantStack, groups):
     return _split(out, sizes)
 
 
+def bk_fused_nf4_v1cfg(stack: QuantStack, groups):
+    """Ablation backend: the fused kernel FORCED onto the retired v1 decode
+    config (the Gate-2 census dict: 256/8 on its three keyed shapes, 128/4
+    default). Exists so a confirmatory can state the new-config-vs-old-config
+    claim PAIRED — same process, same stack, same thermal context — which the
+    v1 blind confirmatory showed is the only instance-robust comparison."""
+    import sys
+
+    sys.path.insert(0, str(REPO / "kernel"))
+    from nf4_grouped import gemm_4bit_grouped
+
+    B, A = stack.fusedpack()
+    cache = getattr(stack, "_fused_asm", None)
+    if cache is None or cache[0] != id(groups):
+        a_cat = torch.cat([a for _, a in groups])
+        sizes = [a.shape[0] for _, a in groups]
+        ids = torch.tensor(
+            [e for e, _ in groups], dtype=torch.int32, device=a_cat.device
+        )
+        stack._fused_asm = (id(groups), a_cat, sizes, ids)
+    _, a_cat, sizes, ids = stack._fused_asm
+    v1 = {(1536, 2048): (256, 8), (1408, 2816): (256, 8), (2816, 704): (256, 8)}
+    out = gemm_4bit_grouped(
+        a_cat, B, A, sizes, ids,
+        decode_config=v1.get((stack.spec.N, stack.spec.K), (128, 4)),
+    )
+    IMPL_NOTE["fused_nf4_v1cfg"] = "gemm_4bit_grouped @ retired v1 census-dict config"
+    return _split(out, sizes)
+
+
 IMPL_NOTE: dict = {}
 
 BACKENDS = {
@@ -384,6 +414,7 @@ BACKENDS = {
     "unsloth": bk_unsloth,
     "marlin": bk_marlin,
     "fused_nf4": bk_fused_nf4,
+    "fused_nf4_v1cfg": bk_fused_nf4_v1cfg,
 }
 
 

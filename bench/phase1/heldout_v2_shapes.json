@@ -1,0 +1,10 @@
+[
+  {"model": "heldout2/DeepSeek-V3", "proj": "gate_up", "N": 4096, "K": 7168, "E": 256, "top_k": 8},
+  {"model": "heldout2/DeepSeek-V3", "proj": "down", "N": 7168, "K": 2048, "E": 256, "top_k": 8},
+  {"model": "heldout2/granite-3.1-3b-a800m", "proj": "gate_up", "N": 1024, "K": 1536, "E": 40, "top_k": 8},
+  {"model": "heldout2/granite-3.1-3b-a800m", "proj": "down", "N": 1536, "K": 512, "E": 40, "top_k": 8},
+  {"model": "heldout2/Llama-4-Scout-16E", "proj": "gate_up", "N": 16384, "K": 5120, "E": 16, "top_k": 1},
+  {"model": "heldout2/Llama-4-Scout-16E", "proj": "down", "N": 5120, "K": 8192, "E": 16, "top_k": 1},
+  {"model": "heldout2/Qwen3-Next-80B-A3B", "proj": "gate_up", "N": 1024, "K": 2048, "E": 512, "top_k": 10},
+  {"model": "heldout2/Qwen3-Next-80B-A3B", "proj": "down", "N": 2048, "K": 512, "E": 512, "top_k": 10}
+]
