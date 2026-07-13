@@ -1,0 +1,28 @@
+{
+  "registered_utc": "2026-07-13T21:35:00Z",
+  "purpose": "BLIND CONFIRMATORY for the Gate-2 decode claim. The iterative sessions (v1 -> v1.1-negative -> retune) selected the kernel and its config; this run exists so the final verdict is NOT the run that was iterated on. Code is FROZEN; results are reported as-is, pass or fail.",
+  "frozen_commit": "ad2bef0 (grouped-nf4-gemm main). No code, config-table, or harness changes are permitted between this stamp and the reported results. Any deviation voids the confirmatory and must be re-registered.",
+  "protocol": {
+    "devices": [
+      "FRESH RunPod SECURE A5000 (sm_86) — a pod provisioned AFTER this stamp, never used in tuning",
+      "home RTX A2000 12GB (sm_86, driver 575.64.05) — different physical system, different vendor path"
+    ],
+    "cells": "decode_bs1 x backends {dequant_grouped, gemv_4bit, fused_nf4} x shapes: the 8 census cells (per-(N,K) tuned config) + the 8 HELD-OUT cells in bench/phase1/heldout_shapes.json (DeepSeek-V2-Lite, Qwen2-57B-A14B, Phi-3.5-MoE, Mixtral-8x7B — real off-census expert shapes, ALL on the DEFAULT decode config 128/4; none appear in the tuned table).",
+    "reps": "n=3 independent harness invocations per device (fresh process each; separate --out files). Property suite (35 tests) runs once per device before any timing.",
+    "energy": "--energy-window 5.0 (>=4x the tuning runs' window); sampling method + count recorded per cell as always.",
+    "reduction": "per cell: WORST-rep speed ratio (min over reps of dequant_ms/fused_ms) and WORST-rep energy margin (max over reps of fused_J / dequant_J)."
+  },
+  "frozen_verdict_criteria": {
+    "C1_census_speed": "worst-rep ratio >= 1.3 on all 8 census cells, BOTH devices",
+    "C2_census_energy": "worst-rep fused J/token < dequant J/token on all 8 census cells, BOTH devices",
+    "C3_heldout_speed": "worst-rep ratio >= 1.3 on at least 6 of 8 held-out cells per device, AND >= 1.0 (never slower) on all 8. Rationale: held-out shapes run the DEFAULT config; the registered census bar should mostly transfer, but the claim being confirmed is 'not census-overfit', operationalized as no-regression everywhere + the bar holding on a strong majority.",
+    "C4_heldout_energy": "worst-rep fused J/token < dequant on at least 6 of 8 held-out cells per device",
+    "C5_suite": "property suite 35/35 on both devices",
+    "no_tune_clause": "If any criterion fails, the failure is reported at full volume and the Gate-2 claim is NARROWED accordingly (e.g., 'census shapes only' or 'A5000 only') — not re-run until green."
+  },
+  "notes": {
+    "gemv": "gemv_4bit is recorded per cell for context; no gemv-relative criterion is registered (the registered bar is vs the dequant path).",
+    "a2000_scope": "The A2000 shares sm_86 but is a 12 GB card; Mixtral/Phi held-out stacks fit (<=0.6 GB packed) but co-resident home services hold ~3 GB — if a held-out cell OOMs on the A2000 it is recorded as NOT-RUN (excluded from that device's C3/C4 denominator), never swapped for a smaller shape.",
+    "provenance": "This file is OTS-stamped before any confirmatory data exists; results JSONs and the results doc will be committed + stamped after."
+  }
+}
