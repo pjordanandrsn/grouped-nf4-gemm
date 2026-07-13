@@ -1,0 +1,8 @@
+{
+  "registered_utc": "2026-07-13T15:05:00Z",
+  "amends": "kernel/prereg_v2_confirmatory.json (stamped 2026-07-13T14:20:00Z, frozen 54492e8)",
+  "new_frozen_commit": "a235828",
+  "what_changed": "Fixture-only harness fixes, no measurement semantics, no criteria/bars/shapes/reducer changes (frozen_verdict_criteria_params byte-identical): (1) QuantStack built a monolithic [E,N,K] fp32 host tensor — ~30 GB for DeepSeek-V3 gate_up — and the pod OOM-killer SIGKILLed (rc=137) the A5000 rep before any JSON existed; generation is now one [N,K] draw per expert (~120 MB peak, same CPU generator stream). (2) QuantStack construction sat outside the per-cell try, so a device that cannot fit a stack killed the whole rep instead of producing the registered NOT-RUN cells; a failed stack build now records all that shape's cells as skipped-with-reason and the run continues.",
+  "blindness_status": "No confirmatory-v2 timing data was observed by anyone or anything before this amendment: the first A5000 attempt died mid-rep-1 with no output JSON (pod xujzstit5ny00f, torn down + 404-verified); the A2000 attempt was killed and its partial rep-1 output DELETED UNREAD. The held-out-v2 shapes remain unmeasured. The original stamp and its .ots are preserved untouched; this file is stamped separately.",
+  "protocol_delta": "Devices, cells, backends, reps, energy window, reduction, and every threshold are exactly as in the original prereg. The fresh A5000 pod will be provisioned AFTER this amendment's stamp."
+}
