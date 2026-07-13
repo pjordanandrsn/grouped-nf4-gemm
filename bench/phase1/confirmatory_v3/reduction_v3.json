@@ -1,0 +1,1005 @@
+{
+ "reduction": {
+  "A5000": [
+   {
+    "model": "Qwen/Qwen3-30B-A3B",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 2.1701496345159343,
+    "worst_speed_ratio": 1.7685743651661248,
+    "speed_ratios": [
+     1.769,
+     3.11,
+     2.17
+    ],
+    "b_rel_fused_max": 0.0016642790436175213,
+    "b_rel_dequant_max": 0.0022257244916793657,
+    "paired_v2cfg_median": 1.0693870277647322,
+    "paired_nosplit_median": 1.0107155301285515,
+    "worst_energy_margin": 0.4597367158035108
+   },
+   {
+    "model": "Qwen/Qwen3-30B-A3B",
+    "proj": "gate_up",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.9632796373033987,
+    "worst_speed_ratio": 1.7667539531272731,
+    "speed_ratios": [
+     1.963,
+     1.767,
+     1.986
+    ],
+    "b_rel_fused_max": 0.0016602205941338086,
+    "b_rel_dequant_max": 0.0022022972795921517,
+    "paired_v2cfg_median": 0.9665401871983742,
+    "paired_nosplit_median": 0.9539793542976238,
+    "worst_energy_margin": 0.6385642478531406
+   },
+   {
+    "model": "allenai/OLMoE-1B-7B-0924",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 2.4075987297301884,
+    "worst_speed_ratio": 2.3836443604409197,
+    "speed_ratios": [
+     2.408,
+     2.499,
+     2.384
+    ],
+    "b_rel_fused_max": 0.0016658579946689663,
+    "b_rel_dequant_max": 0.002246157148263326,
+    "paired_v2cfg_median": 0.8227961007301249,
+    "paired_nosplit_median": 0.8984870977448074,
+    "worst_energy_margin": 0.4885849856383612
+   },
+   {
+    "model": "allenai/OLMoE-1B-7B-0924",
+    "proj": "gate_up",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 2.725364899607571,
+    "worst_speed_ratio": 2.6897159377730544,
+    "speed_ratios": [
+     2.725,
+     2.736,
+     2.69
+    ],
+    "b_rel_fused_max": 0.0016565437999831911,
+    "b_rel_dequant_max": 0.002804976811387274,
+    "paired_v2cfg_median": 1.0910609431976068,
+    "paired_nosplit_median": 1.210147865621183,
+    "worst_energy_margin": 0.3252651487751325
+   },
+   {
+    "model": "google/gemma-4-26B-A4B",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 2.2445174255188185,
+    "worst_speed_ratio": 1.911749944032976,
+    "speed_ratios": [
+     1.912,
+     2.598,
+     2.245
+    ],
+    "b_rel_fused_max": 0.0016479648910872108,
+    "b_rel_dequant_max": 0.002219859267546392,
+    "paired_v2cfg_median": 1.1239006832567116,
+    "paired_nosplit_median": 1.0316579754705275,
+    "worst_energy_margin": 0.5659319223632155
+   },
+   {
+    "model": "google/gemma-4-26B-A4B",
+    "proj": "gate_up",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.4509384198537,
+    "worst_speed_ratio": 1.4270977027142668,
+    "speed_ratios": [
+     1.659,
+     1.427,
+     1.451
+    ],
+    "b_rel_fused_max": 0.001663922841253145,
+    "b_rel_dequant_max": 0.002257014790831582,
+    "paired_v2cfg_median": 1.0421732988738264,
+    "paired_nosplit_median": 1.46184685280412,
+    "worst_energy_margin": 0.5150616062257499
+   },
+   {
+    "model": "heldout2/DeepSeek-V3",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 0.9865703688818356,
+    "worst_speed_ratio": 0.9611031793286458,
+    "speed_ratios": [
+     0.987,
+     0.961,
+     0.991
+    ],
+    "b_rel_fused_max": 0.001669972774933058,
+    "b_rel_dequant_max": 0.002231033936057755,
+    "paired_v2cfg_median": 1.1201776946895892,
+    "paired_nosplit_median": 1.146950327171891,
+    "worst_energy_margin": 0.73363228515477
+   },
+   {
+    "model": "heldout2/DeepSeek-V3",
+    "proj": "gate_up",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.1195622423014957,
+    "worst_speed_ratio": 1.0884345776148452,
+    "speed_ratios": [
+     1.235,
+     1.12,
+     1.088
+    ],
+    "b_rel_fused_max": 0.0016525941993847779,
+    "b_rel_dequant_max": 0.0027908523062082197,
+    "paired_v2cfg_median": 0.9593270572206287,
+    "paired_nosplit_median": 0.9936077951470751,
+    "worst_energy_margin": 0.726270006954564
+   },
+   {
+    "model": "heldout2/Llama-4-Scout-16E",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 0.6144789468884282,
+    "worst_speed_ratio": 0.5972019203661247,
+    "speed_ratios": [
+     0.614,
+     0.597,
+     0.624
+    ],
+    "b_rel_fused_max": 0.0016848180545415538,
+    "b_rel_dequant_max": 0.0028323709524569747,
+    "paired_v2cfg_median": 1.2831462560604816,
+    "paired_nosplit_median": 1.461084794714507,
+    "worst_energy_margin": 1.466712488790715
+   },
+   {
+    "model": "heldout2/Llama-4-Scout-16E",
+    "proj": "gate_up",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 0.5910137725472421,
+    "worst_speed_ratio": 0.5493471418804826,
+    "speed_ratios": [
+     0.549,
+     0.832,
+     0.591
+    ],
+    "b_rel_fused_max": 0.0016522381216216998,
+    "b_rel_dequant_max": 0.0025360522307720105,
+    "paired_v2cfg_median": 0.9529327970868559,
+    "paired_nosplit_median": 0.8681276780481636,
+    "worst_energy_margin": 0.8059618702836943
+   },
+   {
+    "model": "heldout2/Qwen3-Next-80B-A3B",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.6945700872535452,
+    "worst_speed_ratio": 1.472130173732955,
+    "speed_ratios": [
+     1.472,
+     1.695,
+     1.767
+    ],
+    "b_rel_fused_max": 0.0016547210442636486,
+    "b_rel_dequant_max": 0.002232823327672417,
+    "paired_v2cfg_median": 0.9020907748134285,
+    "paired_nosplit_median": 1.048525479824021,
+    "worst_energy_margin": 0.6212448072245901
+   },
+   {
+    "model": "heldout2/Qwen3-Next-80B-A3B",
+    "proj": "gate_up",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.7552707307078892,
+    "worst_speed_ratio": 1.1041330588118738,
+    "speed_ratios": [
+     1.104,
+     1.755,
+     1.839
+    ],
+    "b_rel_fused_max": 0.0016535847601663032,
+    "b_rel_dequant_max": 0.002226902758823274,
+    "paired_v2cfg_median": 1.0562736986648291,
+    "paired_nosplit_median": 1.024925198562391,
+    "worst_energy_margin": 0.6995006610041843
+   },
+   {
+    "model": "heldout2/granite-3.1-3b-a800m",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.12622588823988,
+    "worst_speed_ratio": 1.1208265976851028,
+    "speed_ratios": [
+     1.126,
+     1.518,
+     1.121
+    ],
+    "b_rel_fused_max": 0.001672788388303053,
+    "b_rel_dequant_max": 0.00224476059019966,
+    "paired_v2cfg_median": 0.8427491382833235,
+    "paired_nosplit_median": 0.8601238559976945,
+    "worst_energy_margin": 0.7102188061779683
+   },
+   {
+    "model": "heldout2/granite-3.1-3b-a800m",
+    "proj": "gate_up",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.2917445110993664,
+    "worst_speed_ratio": 1.1156466955065751,
+    "speed_ratios": [
+     1.116,
+     1.424,
+     1.292
+    ],
+    "b_rel_fused_max": 0.001648803627834384,
+    "b_rel_dequant_max": 0.0022206530598921147,
+    "paired_v2cfg_median": 0.9617601067626383,
+    "paired_nosplit_median": 1.0068535257031785,
+    "worst_energy_margin": 0.6856718612134078
+   },
+   {
+    "model": "heldout3/Arctic",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 0.668593626776849,
+    "worst_speed_ratio": 0.47478342924761646,
+    "speed_ratios": [
+     0.669,
+     0.712,
+     0.475
+    ],
+    "b_rel_fused_max": 0.0016664129827278816,
+    "b_rel_dequant_max": 0.002504160725785958,
+    "paired_v2cfg_median": 0.9460436885060851,
+    "paired_nosplit_median": 1.0608580898555577,
+    "worst_energy_margin": 1.009689632348702
+   },
+   {
+    "model": "heldout3/Arctic",
+    "proj": "gate_up",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 0.8966147314854795,
+    "worst_speed_ratio": 0.8695878611005652,
+    "speed_ratios": [
+     0.929,
+     0.897,
+     0.87
+    ],
+    "b_rel_fused_max": 0.0016685300518554354,
+    "b_rel_dequant_max": 0.0025186581248224727,
+    "paired_v2cfg_median": 1.0766019301872027,
+    "paired_nosplit_median": 0.9746896165046278,
+    "worst_energy_margin": 0.7826597164628769
+   },
+   {
+    "model": "heldout3/Grok-1",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.1606268361501584,
+    "worst_speed_ratio": 1.109430590005187,
+    "speed_ratios": [
+     1.109,
+     1.161,
+     1.181
+    ],
+    "b_rel_fused_max": 0.001670928180683902,
+    "b_rel_dequant_max": 0.0047069478276462766,
+    "paired_v2cfg_median": 0.9483440486920244,
+    "paired_nosplit_median": 0.9955847369899228,
+    "worst_energy_margin": 0.7305145368191038
+   },
+   {
+    "model": "heldout3/Grok-1",
+    "proj": "gate_up",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.2446959309367092,
+    "worst_speed_ratio": 1.2383033483040644,
+    "speed_ratios": [
+     1.245,
+     1.238,
+     1.267
+    ],
+    "b_rel_fused_max": 0.0016520997519886191,
+    "b_rel_dequant_max": 0.0027878101851952454,
+    "paired_v2cfg_median": 1.0493227649153587,
+    "paired_nosplit_median": 1.005990183381369,
+    "worst_energy_margin": 0.7574196710842713
+   },
+   {
+    "model": "heldout3/Hunyuan-Large",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 0.9721663856432095,
+    "worst_speed_ratio": 0.9450295999817538,
+    "speed_ratios": [
+     1.081,
+     0.945,
+     0.972
+    ],
+    "b_rel_fused_max": 0.0016678809858690596,
+    "b_rel_dequant_max": 0.0022092407812043346,
+    "paired_v2cfg_median": 1.121624060152388,
+    "paired_nosplit_median": 1.1772015816696557,
+    "worst_energy_margin": 0.6048053957446011
+   },
+   {
+    "model": "heldout3/Hunyuan-Large",
+    "proj": "gate_up",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 0.9623218729507935,
+    "worst_speed_ratio": 0.8966526838358442,
+    "speed_ratios": [
+     1.047,
+     0.897,
+     0.962
+    ],
+    "b_rel_fused_max": 0.001654261615224246,
+    "b_rel_dequant_max": 0.0027764330851491005,
+    "paired_v2cfg_median": 0.9860365255376691,
+    "paired_nosplit_median": 0.9557295422626509,
+    "worst_energy_margin": 0.7885962450319323
+   },
+   {
+    "model": "heldout3/Mixtral-8x22B",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.0088893388289752,
+    "worst_speed_ratio": 1.0024589635670906,
+    "speed_ratios": [
+     1.009,
+     1.028,
+     1.002
+    ],
+    "b_rel_fused_max": 0.001628251736719198,
+    "b_rel_dequant_max": 0.0022049603877152845,
+    "paired_v2cfg_median": 1.0094205850809008,
+    "paired_nosplit_median": 0.9656296551522089,
+    "worst_energy_margin": 0.7263917631051243
+   },
+   {
+    "model": "heldout3/Mixtral-8x22B",
+    "proj": "gate_up",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.072026891466337,
+    "worst_speed_ratio": 1.0073891406384439,
+    "speed_ratios": [
+     1.072,
+     1.085,
+     1.007
+    ],
+    "b_rel_fused_max": 0.0016422753946643924,
+    "b_rel_dequant_max": 0.0027772595445579766,
+    "paired_v2cfg_median": 0.9811321989914391,
+    "paired_nosplit_median": 0.939336317764589,
+    "worst_energy_margin": 0.7677704827617604
+   },
+   {
+    "model": "heldout3/Switch-Base-128",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 0.35058802775628034,
+    "worst_speed_ratio": 0.31212699415153466,
+    "speed_ratios": [
+     0.37,
+     0.351,
+     0.312
+    ],
+    "b_rel_fused_max": 0.0015802951827232755,
+    "b_rel_dequant_max": 0.0022248337355003974,
+    "paired_v2cfg_median": 1.0555605902230345,
+    "paired_nosplit_median": 1.0388460698257547,
+    "worst_energy_margin": 6.760863226690372
+   },
+   {
+    "model": "heldout3/Switch-Base-128",
+    "proj": "gate_up",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 0.2678782932883244,
+    "worst_speed_ratio": 0.2664612161838191,
+    "speed_ratios": [
+     0.268,
+     0.297,
+     0.266
+    ],
+    "b_rel_fused_max": 0.0016812901781137941,
+    "b_rel_dequant_max": 0.0022407810163704964,
+    "paired_v2cfg_median": 0.5808074880717712,
+    "paired_nosplit_median": 0.6545307421359698,
+    "worst_energy_margin": 5.0650849849309845
+   },
+   {
+    "model": "openai/gpt-oss-120b",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 0.6864386395218769,
+    "worst_speed_ratio": 0.567520911157593,
+    "speed_ratios": [
+     0.686,
+     0.568,
+     2.251
+    ],
+    "b_rel_fused_max": 0.0016750234032556093,
+    "b_rel_dequant_max": 0.0022182259282227707,
+    "paired_v2cfg_median": 0.8067720203458167,
+    "paired_nosplit_median": 0.8142038744249176,
+    "worst_energy_margin": 1.0047810652101214
+   },
+   {
+    "model": "openai/gpt-oss-120b",
+    "proj": "gate_up",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.1822606236339197,
+    "worst_speed_ratio": 1.1668265662502386,
+    "speed_ratios": [
+     1.182,
+     1.253,
+     1.167
+    ],
+    "b_rel_fused_max": 0.0016820454608462985,
+    "b_rel_dequant_max": 0.0022668203376009282,
+    "paired_v2cfg_median": 0.9743704665179344,
+    "paired_nosplit_median": 0.9370032648610903,
+    "worst_energy_margin": 0.5953151287572129
+   }
+  ],
+  "A2000": [
+   {
+    "model": "Qwen/Qwen3-30B-A3B",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.964232562771455,
+    "worst_speed_ratio": 1.781699482509083,
+    "speed_ratios": [
+     1.782,
+     1.964,
+     2.079
+    ],
+    "b_rel_fused_max": 0.0016642790436175213,
+    "b_rel_dequant_max": 0.0022257244916793657,
+    "paired_v2cfg_median": 0.9576141210230452,
+    "paired_nosplit_median": 0.9237565354761521,
+    "worst_energy_margin": 0.4328149644127495
+   },
+   {
+    "model": "Qwen/Qwen3-30B-A3B",
+    "proj": "gate_up",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.461620517443775,
+    "worst_speed_ratio": 1.268181944916757,
+    "speed_ratios": [
+     1.268,
+     1.462,
+     1.531
+    ],
+    "b_rel_fused_max": 0.0016602205941338086,
+    "b_rel_dequant_max": 0.0022022563402125813,
+    "paired_v2cfg_median": 0.9590411022508607,
+    "paired_nosplit_median": 0.9933035746144347,
+    "worst_energy_margin": 0.7072959965465818
+   },
+   {
+    "model": "allenai/OLMoE-1B-7B-0924",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 2.075449385052034,
+    "worst_speed_ratio": 2.024908647070443,
+    "speed_ratios": [
+     2.837,
+     2.025,
+     2.075
+    ],
+    "b_rel_fused_max": 0.0016658579946689663,
+    "b_rel_dequant_max": 0.0022461272750481623,
+    "paired_v2cfg_median": 1.068222997656474,
+    "paired_nosplit_median": 1.1924745759937219,
+    "worst_energy_margin": 0.4127372778037064
+   },
+   {
+    "model": "allenai/OLMoE-1B-7B-0924",
+    "proj": "gate_up",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.6678075969143376,
+    "worst_speed_ratio": 1.5868627805059916,
+    "speed_ratios": [
+     1.671,
+     1.587,
+     1.668
+    ],
+    "b_rel_fused_max": 0.0016565437999831911,
+    "b_rel_dequant_max": 0.002232343280639039,
+    "paired_v2cfg_median": 1.026665122401398,
+    "paired_nosplit_median": 1.044439163181255,
+    "worst_energy_margin": 0.6720374176919296
+   },
+   {
+    "model": "google/gemma-4-26B-A4B",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 2.668878837612429,
+    "worst_speed_ratio": 2.5426465664936853,
+    "speed_ratios": [
+     2.669,
+     2.781,
+     2.543
+    ],
+    "b_rel_fused_max": 0.0016479648910872108,
+    "b_rel_dequant_max": 0.002219859267546392,
+    "paired_v2cfg_median": 1.1925212140200805,
+    "paired_nosplit_median": 1.0658529751921697,
+    "worst_energy_margin": 0.34937491227425116
+   },
+   {
+    "model": "google/gemma-4-26B-A4B",
+    "proj": "gate_up",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.1556705094649413,
+    "worst_speed_ratio": 1.1191722655707648,
+    "speed_ratios": [
+     1.119,
+     1.19,
+     1.156
+    ],
+    "b_rel_fused_max": 0.001663922841253145,
+    "b_rel_dequant_max": 0.002845931453754162,
+    "paired_v2cfg_median": 0.8879420993695902,
+    "paired_nosplit_median": 0.941544831343153,
+    "worst_energy_margin": 0.7740108183939108
+   },
+   {
+    "model": "heldout2/DeepSeek-V3",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.1474183102689723,
+    "worst_speed_ratio": 1.1418139925392257,
+    "speed_ratios": [
+     1.202,
+     1.147,
+     1.142
+    ],
+    "b_rel_fused_max": 0.001669972774933058,
+    "b_rel_dequant_max": 0.0022310338655105707,
+    "paired_v2cfg_median": 0.9905120134423576,
+    "paired_nosplit_median": 0.9980455266767677,
+    "worst_energy_margin": 0.8294341021823817
+   },
+   {
+    "model": "heldout2/DeepSeek-V3",
+    "proj": "gate_up",
+    "status": "NOT-RUN",
+    "reasons": [
+     "CUDA out of memory. Tried to allocate 112.00 MiB. GPU 0 has a total capacity of "
+    ]
+   },
+   {
+    "model": "heldout2/Llama-4-Scout-16E",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 0.7907996560800332,
+    "worst_speed_ratio": 0.6590932928273739,
+    "speed_ratios": [
+     0.811,
+     0.791,
+     0.659
+    ],
+    "b_rel_fused_max": 0.0016848180545415538,
+    "b_rel_dequant_max": 0.002225516506144745,
+    "paired_v2cfg_median": 0.9066151079371161,
+    "paired_nosplit_median": 1.0088127383605034,
+    "worst_energy_margin": 0.8732767974002593
+   },
+   {
+    "model": "heldout2/Llama-4-Scout-16E",
+    "proj": "gate_up",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 0.981151809192848,
+    "worst_speed_ratio": 0.9149757033382394,
+    "speed_ratios": [
+     1.028,
+     0.981,
+     0.915
+    ],
+    "b_rel_fused_max": 0.0016522381216216998,
+    "b_rel_dequant_max": 0.0022478001787351464,
+    "paired_v2cfg_median": 0.9871368572664166,
+    "paired_nosplit_median": 0.9309318280011217,
+    "worst_energy_margin": 0.8253169480175302
+   },
+   {
+    "model": "heldout2/Qwen3-Next-80B-A3B",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.3600662548019065,
+    "worst_speed_ratio": 0.8843842359605504,
+    "speed_ratios": [
+     0.884,
+     1.36,
+     1.36
+    ],
+    "b_rel_fused_max": 0.0016547210442636486,
+    "b_rel_dequant_max": 0.002232823327672417,
+    "paired_v2cfg_median": 1.0152721920782133,
+    "paired_nosplit_median": 0.878148492621057,
+    "worst_energy_margin": 0.8814074335088102
+   },
+   {
+    "model": "heldout2/Qwen3-Next-80B-A3B",
+    "proj": "gate_up",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.1812002642062682,
+    "worst_speed_ratio": 0.9192484162527969,
+    "speed_ratios": [
+     0.919,
+     1.246,
+     1.181
+    ],
+    "b_rel_fused_max": 0.0016535847601663032,
+    "b_rel_dequant_max": 0.002764350365300421,
+    "paired_v2cfg_median": 0.9404465374290711,
+    "paired_nosplit_median": 1.0746728115554978,
+    "worst_energy_margin": 0.5486901603499774
+   },
+   {
+    "model": "heldout2/granite-3.1-3b-a800m",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.6223337175258121,
+    "worst_speed_ratio": 1.41921207253112,
+    "speed_ratios": [
+     1.419,
+     1.622,
+     1.692
+    ],
+    "b_rel_fused_max": 0.001672788388303053,
+    "b_rel_dequant_max": 0.002244682033035895,
+    "paired_v2cfg_median": 0.8583959734304647,
+    "paired_nosplit_median": 1.0884084949198145,
+    "worst_energy_margin": 0.6333384701020899
+   },
+   {
+    "model": "heldout2/granite-3.1-3b-a800m",
+    "proj": "gate_up",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.5195998943254594,
+    "worst_speed_ratio": 1.0685018801984152,
+    "speed_ratios": [
+     1.52,
+     1.52,
+     1.069
+    ],
+    "b_rel_fused_max": 0.001648803627834384,
+    "b_rel_dequant_max": 0.0022206532235694676,
+    "paired_v2cfg_median": 0.9297813013962637,
+    "paired_nosplit_median": 0.8959554444583083,
+    "worst_energy_margin": 0.4678568516006124
+   },
+   {
+    "model": "heldout3/Arctic",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 0.8913153228858974,
+    "worst_speed_ratio": 0.8701337873342042,
+    "speed_ratios": [
+     0.87,
+     0.96,
+     0.891
+    ],
+    "b_rel_fused_max": 0.0016664129827278816,
+    "b_rel_dequant_max": 0.0022322240473754574,
+    "paired_v2cfg_median": 0.9115588025956197,
+    "paired_nosplit_median": 0.9679526804681968,
+    "worst_energy_margin": 0.8590371391796308
+   },
+   {
+    "model": "heldout3/Arctic",
+    "proj": "gate_up",
+    "status": "NOT-RUN",
+    "reasons": [
+     "CUDA out of memory. Tried to allocate 4.16 GiB. GPU 0 has a total capacity of 11"
+    ]
+   },
+   {
+    "model": "heldout3/Grok-1",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.2120332190368792,
+    "worst_speed_ratio": 1.2117077976146924,
+    "speed_ratios": [
+     1.212,
+     1.212,
+     1.218
+    ],
+    "b_rel_fused_max": 0.0016709281806839007,
+    "b_rel_dequant_max": 0.0022455452875390805,
+    "paired_v2cfg_median": 0.9942715171813368,
+    "paired_nosplit_median": 1.0130163948155266,
+    "worst_energy_margin": 0.7881113754154478
+   },
+   {
+    "model": "heldout3/Grok-1",
+    "proj": "gate_up",
+    "status": "NOT-RUN",
+    "reasons": [
+     "CUDA out of memory. Tried to allocate 3.00 GiB. GPU 0 has a total capacity of 11"
+    ]
+   },
+   {
+    "model": "heldout3/Hunyuan-Large",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.3236007242845844,
+    "worst_speed_ratio": 1.0772628327729337,
+    "speed_ratios": [
+     1.324,
+     1.325,
+     1.077
+    ],
+    "b_rel_fused_max": 0.0016678809858690596,
+    "b_rel_dequant_max": 0.0022092889125483323,
+    "paired_v2cfg_median": 0.9407876493055521,
+    "paired_nosplit_median": 0.9497253697567691,
+    "worst_energy_margin": 0.5675777163227556
+   },
+   {
+    "model": "heldout3/Hunyuan-Large",
+    "proj": "gate_up",
+    "status": "NOT-RUN",
+    "reasons": [
+     "CUDA out of memory. Tried to allocate 894.00 MiB. GPU 0 has a total capacity of "
+    ]
+   },
+   {
+    "model": "heldout3/Mixtral-8x22B",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.148800341650811,
+    "worst_speed_ratio": 1.1418897843349212,
+    "speed_ratios": [
+     1.142,
+     1.151,
+     1.149
+    ],
+    "b_rel_fused_max": 0.001628251736719198,
+    "b_rel_dequant_max": 0.0022049502485302886,
+    "paired_v2cfg_median": 1.0004407254241978,
+    "paired_nosplit_median": 1.0134399181670946,
+    "worst_energy_margin": 0.7923655407948968
+   },
+   {
+    "model": "heldout3/Mixtral-8x22B",
+    "proj": "gate_up",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.1570007727239884,
+    "worst_speed_ratio": 1.1524365288111103,
+    "speed_ratios": [
+     1.152,
+     1.162,
+     1.157
+    ],
+    "b_rel_fused_max": 0.0016422753946643924,
+    "b_rel_dequant_max": 0.0022110579174512827,
+    "paired_v2cfg_median": 0.9354839633119969,
+    "paired_nosplit_median": 0.9994007455324372,
+    "worst_energy_margin": 0.8189826190600841
+   },
+   {
+    "model": "heldout3/Switch-Base-128",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 0.23608163865821064,
+    "worst_speed_ratio": 0.1787566161391678,
+    "speed_ratios": [
+     0.236,
+     0.238,
+     0.179
+    ],
+    "b_rel_fused_max": 0.0015802951827232755,
+    "b_rel_dequant_max": 0.002868037166607185,
+    "paired_v2cfg_median": 1.2966204196452897,
+    "paired_nosplit_median": 1.5863836593499634,
+    "worst_energy_margin": 4.787090724118882
+   },
+   {
+    "model": "heldout3/Switch-Base-128",
+    "proj": "gate_up",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 0.29415055002122575,
+    "worst_speed_ratio": 0.2741953961039239,
+    "speed_ratios": [
+     0.274,
+     0.294,
+     0.406
+    ],
+    "b_rel_fused_max": 0.0016812901781137941,
+    "b_rel_dequant_max": 0.0022401428679059967,
+    "paired_v2cfg_median": 1.439999983942714,
+    "paired_nosplit_median": 1.2814560824040497,
+    "worst_energy_margin": 4.262718520422235
+   },
+   {
+    "model": "openai/gpt-oss-120b",
+    "proj": "down",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.2278001859074616,
+    "worst_speed_ratio": 1.1572424285065865,
+    "speed_ratios": [
+     1.228,
+     1.414,
+     1.157
+    ],
+    "b_rel_fused_max": 0.0016750234032556093,
+    "b_rel_dequant_max": 0.0022187487294649433,
+    "paired_v2cfg_median": 0.7931820501110596,
+    "paired_nosplit_median": 0.8846582053798037,
+    "worst_energy_margin": 0.5089761451124061
+   },
+   {
+    "model": "openai/gpt-oss-120b",
+    "proj": "gate_up",
+    "status": "ok",
+    "n_reps": 3,
+    "median_speed_ratio": 1.6310207152937417,
+    "worst_speed_ratio": 1.624423483444629,
+    "speed_ratios": [
+     1.624,
+     1.793,
+     1.631
+    ],
+    "b_rel_fused_max": 0.0016820454608462985,
+    "b_rel_dequant_max": 0.0022668241252452328,
+    "paired_v2cfg_median": 0.9351874685728998,
+    "paired_nosplit_median": 1.001206873877848,
+    "worst_energy_margin": 0.5108653979828823
+   }
+  ]
+ },
+ "suites": {
+  "A5000": "41/41",
+  "A2000": "41/41"
+ },
+ "params": {
+  "a2000_name": "A2000",
+  "x1_named_recovery_cells": [
+   [
+    "allenai/OLMoE-1B-7B-0924",
+    "down"
+   ],
+   [
+    "Qwen/Qwen3-30B-A3B",
+    "down"
+   ],
+   [
+    "heldout2/granite-3.1-3b-a800m",
+    "gate_up"
+   ],
+   [
+    "heldout2/Qwen3-Next-80B-A3B",
+    "gate_up"
+   ]
+  ],
+  "x1_recovery_bar": 1.1,
+  "x1_recovery_min_cells": 3,
+  "x1_global_floor": 0.8,
+  "split_cells_a5000": [
+   [
+    "heldout2/Llama-4-Scout-16E",
+    "down"
+   ],
+   [
+    "heldout3/Hunyuan-Large",
+    "down"
+   ],
+   [
+    "heldout3/Switch-Base-128",
+    "gate_up"
+   ],
+   [
+    "heldout3/Switch-Base-128",
+    "down"
+   ]
+  ],
+  "split_cells_a2000": [
+   [
+    "heldout2/Llama-4-Scout-16E",
+    "down"
+   ],
+   [
+    "heldout3/Hunyuan-Large",
+    "down"
+   ],
+   [
+    "heldout3/Switch-Base-128",
+    "gate_up"
+   ],
+   [
+    "heldout3/Switch-Base-128",
+    "down"
+   ]
+  ],
+  "scout_down_cell": [
+   "heldout2/Llama-4-Scout-16E",
+   "down"
+  ],
+  "x2_scout_bar": 1.3,
+  "x2_blind_bar": 1.15,
+  "x2_blind_min_cells": 2,
+  "x2_a2000_floor": 0.95,
+  "x3_scout_dequant_bar": 1.0,
+  "x4_min_cells": 24,
+  "x4_total_cells": 26,
+  "suite_expect": "41/41"
+ },
+ "verdicts": {
+  "_detail_A5000": {
+   "notrun": 0,
+   "X1a": true,
+   "X1b": true,
+   "X2": false,
+   "X3": false,
+   "X4": false
+  },
+  "_detail_A2000": {
+   "notrun": 4,
+   "X1a": false,
+   "X1b": false,
+   "X2": false,
+   "X3": false,
+   "X4": true
+  },
+  "X1a": false,
+  "X1b": false,
+  "X2": false,
+  "X3": false,
+  "X4": false,
+  "X5_suite": true,
+  "V3_CONFIRMED": false
+ }
+}
