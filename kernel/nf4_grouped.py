@@ -273,29 +273,62 @@ def _sm_count(device) -> int:
     return _SM_CACHE[key]
 
 
+# v4 dispatch constants (each carries its measured basis; see the prereg/results
+# docs for the runs behind the numbers):
+# - DECODE_MIN_FUSED_BYTES: below this per-call weight+absmax traffic the fused
+#   launch loses OUTRIGHT to the dequant path (v3 blind: Switch-Base cells at
+#   1.3-2.7 MB ran 0.24-0.35x speed and 4-7x energy on both devices, while
+#   granite down at 3.5 MB kept a 1.13-1.97x win). Product integrations should
+#   route below-floor calls to the dequant path via decode_dispatch().
+# - SPLITK_MIN_BLOCKS: a split must own at least this many absmax blocks —
+#   v3 blind showed the starvation-only trigger splitting 12-block cells hurt
+#   (Switch gu paired 0.655 on the A5000) while >=32-block splits helped
+#   (Scout down 1.46x, Hunyuan down 1.18x paired).
+DECODE_MIN_FUSED_BYTES = 3_000_000
+SPLITK_MIN_BLOCKS = 32
+
+
 def _decode_plan(N: int, K: int, T: int, sm_count: int):
     """Decode launch plan: (BLOCK_N, num_warps, split_k).
 
-    Constant: (64, 2) on >=48-SM parts, (128, 4) below. Bases: the dense
-    2-device (N, K, T) config sweeps (bench/phase2/sweeps/ — 64/2 median
-    regret 1.000 on both grids) and the v2 confirmatory's PAIRED result that
-    the 26-SM A2000 consistently prefers the old 128/4 on several cells
-    (RESULTS-v2-confirmatory.md).
+    Config is the universal constant (64, 2) — dense 2-device (N, K, T)
+    sweeps put it at median regret 1.000 on both grids
+    (bench/phase2/sweeps/); the v3 confirmatory showed the v2-era A2000
+    preference for 128/4 did not reproduce (config deltas on the 26-SM card
+    are run-context noise), so the SM-conditional branch is reverted.
 
-    Split-K: when the (groups x n-tiles) grid can't put ~4 programs on every
-    SM (the top_k=1 starvation class v2 quantified: 0.47-0.83x speed AND the
-    only energy miss ever), split the reduction over whole absmax blocks to
-    restore parallelism; host reduces the fp32 partials. Power-of-2, capped
-    at 8 and at one block per split."""
-    bn, warps = (64, 2) if sm_count >= 48 else (128, 4)
+    Split-K engages only for truly starved grids (programs < 2*SM — census
+    cells never split) AND only when each split owns >= SPLITK_MIN_BLOCKS
+    absmax blocks (v3: splitting tiny-K cells hurt). fp32 partials are
+    host-reduced; power-of-2, capped at 8."""
+    bn, warps = 64, 2
     programs = T * -(-N // bn)
     split_k = 1
-    if programs < 2 * sm_count:  # true starvation only — census cells never split
+    if programs < 2 * sm_count:
         want = -(-(4 * sm_count) // programs)
         while split_k < want and split_k < 8:
             split_k *= 2
-        split_k = min(split_k, max(K // BLOCKSIZE, 1))
+        kblocks = max(K // BLOCKSIZE, 1)
+        while split_k > 1 and kblocks // split_k < SPLITK_MIN_BLOCKS:
+            split_k //= 2
     return bn, warps, split_k
+
+
+def decode_dispatch(N: int, K: int, T: int, sm_count: int):
+    """Product-layer path choice for one decode call: ``("dequant",)`` when
+    the call is below the fused floor (tiny cells belong to the dequant
+    path — v3 measured them losing outright), else
+    ``("fused", BLOCK_N, num_warps, split_k)``.
+
+    The op itself (gemm_4bit_grouped) always runs fused — an op that
+    silently ran a different algorithm would be a contract violation — so
+    integrations consult this helper and call the dequant path themselves
+    for below-floor cells. The benchmark's ``fused_routed`` backend does
+    exactly that."""
+    traffic = T * N * (K // 2 + K // 16)  # packed nibbles + fp32 absmax bytes
+    if traffic < DECODE_MIN_FUSED_BYTES:
+        return ("dequant",)
+    return ("fused", *_decode_plan(N, K, T, sm_count))
 
 
 def _lut(device):

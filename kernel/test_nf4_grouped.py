@@ -209,22 +209,40 @@ class TestSplitK:
     def test_plan_thresholds(self):
         from nf4_grouped import _decode_plan
 
-        # 64-SM part: constant is 64/2; Scout-down-like starved cell splits
+        # universal constant (v3: the SM-conditional premise didn't reproduce)
+        for sm in (26, 64):
+            bn, w, _ = _decode_plan(2048, 768, 8, sm)
+            assert (bn, w) == (64, 2)
+        # Scout-down-like starved cell splits (128 blocks / sk4 = 32 >= floor)
         bn, w, sk = _decode_plan(5120, 8192, 1, 64)
-        assert (bn, w) == (64, 2) and sk == 4  # 80 programs -> want 4/SM
-        # 26-SM part: constant flips to 128/4 (v2 paired A2000 result)
-        bn, w, sk = _decode_plan(2048, 768, 8, 26)
-        assert (bn, w) == (128, 4) and sk == 1  # 128 programs >= 4*26
+        assert (bn, w) == (64, 2) and sk == 4
         # census-class cells never split on either device class
         for N, K in ((2048, 2048), (1408, 2816), (1536, 2048), (2880, 2880)):
             for sm in (26, 64):
                 *_, sk = _decode_plan(N, K, 8, sm)
                 assert sk == 1, (N, K, sm)
-        # split is capped at 8 and at one absmax block per split
+        # per-split work floor: tiny-K cells never split even when starved
         *_, sk = _decode_plan(64, 64, 1, 64)
-        assert sk == 1  # K//64 == 1 caps it
+        assert sk == 1
+        *_, sk = _decode_plan(6144, 768, 1, 64)  # Switch gu: 12 blocks
+        assert sk == 1
+        # floor caps the want: 128 blocks -> sk4 (32/split), not sk8 (16/split)
         *_, sk = _decode_plan(64, 8192, 1, 64)
-        assert sk == 8
+        assert sk == 4
+
+    def test_dispatch_floor(self):
+        from nf4_grouped import decode_dispatch
+
+        # Switch-Base cells (v3: 0.24-0.35x, 4-7x energy) route to dequant
+        assert decode_dispatch(6144, 768, 1, 64) == ("dequant",)
+        assert decode_dispatch(768, 3072, 1, 64) == ("dequant",)
+        # granite down (3.5 MB, measured winner) stays fused
+        d = decode_dispatch(1536, 512, 8, 64)
+        assert d[0] == "fused" and d[1:3] == (64, 2)
+        # census cells stay fused with no split
+        assert decode_dispatch(2048, 2048, 8, 64) == ("fused", 64, 2, 1)
+        # Scout down: fused with sk4
+        assert decode_dispatch(5120, 8192, 1, 64) == ("fused", 64, 2, 4)
 
     def test_forced_split_matches_single_pass(self):
         B, A, packed, states = make_stack(8, 512, 2048)

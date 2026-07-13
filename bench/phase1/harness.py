@@ -462,6 +462,30 @@ def bk_fused_nf4_nosplit(stack: QuantStack, groups):
     return _split(out, sizes)
 
 
+def bk_fused_routed(stack: QuantStack, groups):
+    """The PRODUCT path: consult decode_dispatch and run the fused kernel only
+    where it wins — below the bytes floor the call goes to the dequant path
+    (v3 measured tiny cells losing outright at 0.24-0.35x speed / 4-7x
+    energy, so the correct product behavior is to not run fused there). At
+    prefill (any group > 1 token) this is just the fused kernel."""
+    import sys
+
+    sys.path.insert(0, str(REPO / "kernel"))
+    from nf4_grouped import decode_dispatch
+
+    sizes = [a.shape[0] for _, a in groups]
+    if max(sizes) == 1:
+        sm = torch.cuda.get_device_properties(0).multi_processor_count
+        route = decode_dispatch(stack.spec.N, stack.spec.K, len(groups), sm)
+        if route[0] == "dequant":
+            out = bk_dequant_grouped(stack, groups)
+            IMPL_NOTE["fused_routed"] = "below-floor: dequant path (decode_dispatch)"
+            return out
+    out = bk_fused_nf4(stack, groups)
+    IMPL_NOTE["fused_routed"] = "fused kernel (decode_dispatch: eligible)"
+    return out
+
+
 IMPL_NOTE: dict = {}
 
 BACKENDS = {
@@ -474,6 +498,7 @@ BACKENDS = {
     "fused_nf4_v1cfg": bk_fused_nf4_v1cfg,
     "fused_nf4_v2cfg": bk_fused_nf4_v2cfg,
     "fused_nf4_nosplit": bk_fused_nf4_nosplit,
+    "fused_routed": bk_fused_routed,
 }
 
 
