@@ -1,0 +1,49 @@
+{
+  "registered_utc": "2026-07-13T17:10:00Z",
+  "purpose": "BLIND CONFIRMATORY v3. Tests the two post-v2 changes — (1) SM-conditional decode constant (64/2 at >=48 SMs, 128/4 below), (2) split-K decode for occupancy-starved grids (top_k=1 class) — against v2's failures: the A2000 paired config losses (P1a) and the quantified T=1 speed+energy loss. v1/v2 verdicts stand; nothing here re-adjudicates them.",
+  "frozen_commit": "591020d (grouped-nf4-gemm main). No code/config/harness/reducer changes between this stamp and reported results; deviations void and re-register.",
+  "provenance_of_bars": "Every threshold derives from pre-stamp data: the v2 confirmatory reps (paired A2000 config data; Scout losses), the two committed config sweeps, and a pre-registration exploratory calibration on the DEVELOPMENT Scout cells only (committed as bench/phase1/confirmatory_v3/explore_scout_{a5000,a2000}.json): A5000 split-K paired 1.67x on Scout-down (vs-dequant 0.47x -> 1.11x), A2000 split neutral 0.99x with the constant alone lifting Scout-down 0.84x -> 1.13x. The heldout3 shapes (Grok-1, Mixtral-8x22B, Hunyuan-Large, Arctic, Switch-Base-128 — config-derived) have NEVER been measured. Known trade registered up front: v2's own data says the A2000 128/4 constant COSTS ~15-18% on gpt-oss gate_up and ~4% on OLMoE gate_up while recovering 17-24% on four named cells — X1 is written to that trade, not to a uniform win.",
+  "protocol": {
+    "devices": [
+      "FRESH RunPod SECURE A5000 (sm_86, 64 SM) provisioned AFTER this stamp",
+      "home RTX A2000 12GB (sm_86, 26 SM), co-resident services"
+    ],
+    "cells": "decode_bs1 x backends {dequant_grouped, fused_nf4, fused_nf4_v2cfg, fused_nf4_nosplit} x 26 shapes: 8 census + 8 held-out-v2 (now development/continuity) + 10 held-out-v3 (bench/phase1/heldout_v3_shapes.json, blind). fused_nf4_v2cfg = exact v2 semantics (64/2, no split); fused_nf4_nosplit = current plan config with split forced off. Both paired in-process.",
+    "plan_split_cells": "Cells where the frozen plan splits (registered from _decode_plan, unit-tested): A5000 -> Scout down sk4, Hunyuan-Large down sk4, Switch gu sk2, Switch down sk8. A2000 -> Scout down sk4, Hunyuan-Large down sk4, Switch gu sk4, Switch down sk8. Census cells never split (unit-tested).",
+    "reps": "n=3 fresh-process harness invocations per device; property suite (41 tests) once per device before timing.",
+    "energy": "--energy-window 5.0; method + samples recorded.",
+    "reduction": "bench/phase1/reduce_confirmatory_v3.py reading frozen_verdict_criteria_params from THIS file. NOT-RUN cells (e.g. A2000 VRAM OOM on Arctic/Grok gate_up stacks) excluded, thresholds scale one-for-one.",
+    "expected_notrun": "A2000: Arctic gate_up (~9 GB packed x2) very likely; DeepSeek-V3 gate_up (known from v2); Grok-1 gate_up fidelity ref (3.2 GB fp64) possible. Recorded, never substituted."
+  },
+  "frozen_verdict_criteria_params": {
+    "a2000_name": "A2000",
+    "x1_named_recovery_cells": [["allenai/OLMoE-1B-7B-0924", "down"], ["Qwen/Qwen3-30B-A3B", "down"], ["heldout2/granite-3.1-3b-a800m", "gate_up"], ["heldout2/Qwen3-Next-80B-A3B", "gate_up"]],
+    "x1_recovery_bar": 1.10,
+    "x1_recovery_min_cells": 3,
+    "x1_global_floor": 0.80,
+    "split_cells_a5000": [["heldout2/Llama-4-Scout-16E", "down"], ["heldout3/Hunyuan-Large", "down"], ["heldout3/Switch-Base-128", "gate_up"], ["heldout3/Switch-Base-128", "down"]],
+    "split_cells_a2000": [["heldout2/Llama-4-Scout-16E", "down"], ["heldout3/Hunyuan-Large", "down"], ["heldout3/Switch-Base-128", "gate_up"], ["heldout3/Switch-Base-128", "down"]],
+    "scout_down_cell": ["heldout2/Llama-4-Scout-16E", "down"],
+    "x2_scout_bar": 1.30,
+    "x2_blind_bar": 1.15,
+    "x2_blind_min_cells": 2,
+    "x2_a2000_floor": 0.95,
+    "x3_scout_dequant_bar": 1.0,
+    "x4_min_cells": 24,
+    "x4_total_cells": 26,
+    "suite_expect": "41/41"
+  },
+  "frozen_verdict_criteria": {
+    "X1a_config_recovery_a2000": "PAIRED median v2cfg_ms/fused_ms >= 1.10 on >= 3 of the 4 named v2-loss cells (v2 measured the v2-constant losing 0.76-0.85 to 128/4 there; inversion predicts 1.18-1.32).",
+    "X1b_config_trade_bounded_a2000": "PAIRED median >= 0.80 on ALL run cells (the registered known cost: gpt-oss gate_up ~0.85 predicted) AND median-of-medians >= 1.00 (net neutral-or-better).",
+    "X2_splitk": "A5000: paired median nosplit_ms/fused_ms >= 1.30 on Scout down (dev-calibrated 1.67) AND >= 1.15 on >= 2 of the 3 BLIND plan-split cells (Hunyuan down, Switch gu, Switch down). A2000: >= 0.95 on all plan-split cells (dev-calibrated 0.99 — the registered claim there is 'no harm').",
+    "X3_scout_recovery": "Scout down median vs dequant >= 1.0 on BOTH devices (dev-calibrated 1.11-1.13; was 0.47/0.84 in v2). The named T=1 loser stops losing.",
+    "X4_energy": "fused J/token < dequant on >= 24 of 26 run cells per device (NOT-RUN-scaled) AND Scout down energy margin < 1.0 on both devices (v2's only-ever energy miss).",
+    "X5_suite": "41/41 both devices.",
+    "no_tune_clause": "Failures reported at full volume; claims narrowed; no re-runs until green; no reduction changes after data exists."
+  },
+  "notes": {
+    "scout_gu_disclosure": "Scout gate_up does NOT split under the frozen plan (256 programs) and its v2->today swing on identical code (0.83x -> 1.22x vs dequant across A5000 instances) is instance variance — recorded so nobody attributes it to v3's changes.",
+    "a5000_v2cfg_identity": "On the A5000, plan == v2 constant on every non-split cell, so paired v2cfg ratios there are identity checks (~1.0), reported not judged."
+  }
+}
