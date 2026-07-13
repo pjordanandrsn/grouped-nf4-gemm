@@ -1,0 +1,10 @@
+[
+  {"model": "heldout/DeepSeek-V2-Lite", "proj": "gate_up", "N": 2816, "K": 2048, "E": 64, "top_k": 6},
+  {"model": "heldout/DeepSeek-V2-Lite", "proj": "down", "N": 2048, "K": 1408, "E": 64, "top_k": 6},
+  {"model": "heldout/Qwen2-57B-A14B", "proj": "gate_up", "N": 5120, "K": 3584, "E": 64, "top_k": 8},
+  {"model": "heldout/Qwen2-57B-A14B", "proj": "down", "N": 3584, "K": 2560, "E": 64, "top_k": 8},
+  {"model": "heldout/Phi-3.5-MoE", "proj": "gate_up", "N": 12800, "K": 4096, "E": 16, "top_k": 2},
+  {"model": "heldout/Phi-3.5-MoE", "proj": "down", "N": 4096, "K": 6400, "E": 16, "top_k": 2},
+  {"model": "heldout/Mixtral-8x7B", "proj": "gate_up", "N": 28672, "K": 4096, "E": 8, "top_k": 2},
+  {"model": "heldout/Mixtral-8x7B", "proj": "down", "N": 4096, "K": 14336, "E": 8, "top_k": 2}
+]

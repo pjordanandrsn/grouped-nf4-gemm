@@ -92,8 +92,20 @@ class QuantStack:
         return F.dequantize_4bit(self.packed[e], self.states[e])
 
     def ref64(self, e: int) -> torch.Tensor:
-        """fp64 view of the values every NF4 path computes with (on demand)."""
-        return self.dequant_bf16(e).to(torch.float64)
+        """fp64 of the exact decode values (fp32 LUT x absmax — the contract's
+        reference, TOLERANCE_CONTRACT.md), computed on demand. NOT the
+        bf16-materialized copy: a bf16 reference makes the materialize-then-GEMM
+        path's rounding invisible (its own error becomes the ground truth) and
+        mis-scores fp32-input kernels. This aligns the harness fidelity with the
+        property suite's; the dequant path's b_rel rises accordingly — that is
+        its real error, now visible."""
+        import sys
+
+        sys.path.insert(0, str(REPO / "kernel"))
+        from nf4_grouped import dequant_ref
+
+        B, A = self.fusedpack()
+        return dequant_ref(B[e], A[e], self.spec.N, self.spec.K).to(torch.float64)
 
     def fusedpack(self):
         """Lazy expert-major repack for the Phase-2 fused kernel (same NF4 bytes;
@@ -191,14 +203,21 @@ def bk_dequant_grouped(stack: QuantStack, groups):
 
 def bk_gemv4bit(stack: QuantStack, groups):
     """bnb's NF4-aware gemv at M=1 — dequantizes inside the kernel; the closest
-    existing point to the fused claim. bs1 only (gemv semantics)."""
+    existing point to the fused claim. bs1 only (gemv semantics).
+
+    Strongest-self treatment, symmetric with the fused op's cached assembly:
+    the per-call ``.t()`` views (pure metadata, but python-per-expert-per-call)
+    are built once and cached, so the baseline pays only its genuine kernel
+    launches inside the timed region."""
     from bitsandbytes import functional as F
 
+    if getattr(stack, "_gemv_t", None) is None:
+        stack._gemv_t = [p.t() for p in stack.packed]
     outs = []
     for e, a in groups:
         if a.shape[0] != 1:
             raise RuntimeError("gemv_4bit is M=1 only")
-        outs.append(F.gemv_4bit(a, stack.packed[e].t(), state=stack.states[e]))
+        outs.append(F.gemv_4bit(a, stack._gemv_t[e], state=stack.states[e]))
     return outs
 
 
@@ -506,6 +525,17 @@ def main():
         help="routing_hist.py JSON(s); enables prefill_measured, matched to a spec by E+k",
     )
     ap.add_argument(
+        "--extra-shapes",
+        default=None,
+        help="JSON file of additional GemmSpec dicts (held-out shapes)",
+    )
+    ap.add_argument(
+        "--energy-window",
+        type=float,
+        default=1.2,
+        help="power-sampling window seconds per cell",
+    )
+    ap.add_argument(
         "--routing-layer",
         default="rep",
         help="prefill_measured histogram layer: rep (median-occupancy) | all | <int>",
@@ -518,6 +548,9 @@ def main():
     assert torch.cuda.is_available(), "Phase-1 baselines are GPU measurements"
     device = "cuda"
     specs = census_specs(REPO / "census" / "shape_census.json", args.models)
+    if args.extra_shapes:
+        for s in json.loads(Path(args.extra_shapes).read_text()):
+            specs.append(GemmSpec(**s))
     if args.smoke:
         specs = [GemmSpec("smoke", "gate_up", 256, 128, 8, 2)]
         args.iters = 3
@@ -607,7 +640,7 @@ def main():
                     cell["tok_per_s"] = tokens / (cell["ms_median"] / 1e3)
                     if not args.no_energy:
                         watts, j_call, method, n = energy_window(
-                            fn, stack, groups, device
+                            fn, stack, groups, device, min_s=args.energy_window
                         )
                         cell.update(
                             {
