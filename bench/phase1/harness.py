@@ -128,14 +128,15 @@ class QuantStack:
 
 
 def make_activations(
-    spec: GemmSpec, regime: str, device: str, seed: int = 7, routing=None
+    spec: GemmSpec, regime: str, device: str, seed: int = 7, routing=None, layer=None
 ):
     """Per-regime grouped problem: list of (expert_id, A[M,K] bf16).
 
     ``prefill_measured`` replays a MEASURED group-size vector (per-expert token
-    counts from routing_hist.py's representative layer) instead of the uniform
-    2048*k/E — so empty/cold experts and hot experts appear as they really do.
-    Empty groups are dropped (a grouped GEMM never launches a 0-row tile)."""
+    counts) instead of the uniform 2048*k/E — so empty/cold experts and hot
+    experts appear as they really do. Empty groups are dropped (a grouped GEMM
+    never launches a 0-row tile). ``layer`` selects the histogram layer: None =
+    the representative (median-occupancy) layer, an int = that layer index."""
     g = torch.Generator(device="cpu").manual_seed(seed)
 
     def act(m):
@@ -152,7 +153,11 @@ def make_activations(
     if regime == "prefill_measured":
         if routing is None:
             raise RuntimeError("prefill_measured needs --routing <histogram.json>")
-        counts = routing["representative_counts"]
+        counts = (
+            routing["representative_counts"]
+            if layer is None
+            else routing["per_layer_counts"][layer]
+        )
         if len(counts) != spec.E:
             raise RuntimeError(f"routing E={len(counts)} != census E={spec.E}")
         return [(e, act(int(c))) for e, c in enumerate(counts) if c > 0]
@@ -450,6 +455,11 @@ def main():
         help="routing_hist.py JSON(s); enables prefill_measured, matched to a spec by E+k",
     )
     ap.add_argument(
+        "--routing-layer",
+        default="rep",
+        help="prefill_measured histogram layer: rep (median-occupancy) | all | <int>",
+    )
+    ap.add_argument(
         "--smoke", action="store_true", help="tiny E/N/K, iters=3 (still needs CUDA)"
     )
     args = ap.parse_args()
@@ -493,10 +503,27 @@ def main():
         )
         stack = QuantStack(spec, device)
         routing = routings.get((spec.E, spec.top_k))
+        # (regime, layer) work items; prefill_measured expands to per-layer when
+        # --routing-layer all, else the representative (None) or a fixed int.
+        variants = []
         for regime in args.regimes:
-            if regime == "prefill_measured" and routing is None:
+            if regime != "prefill_measured":
+                variants.append((regime, None))
+                continue
+            if routing is None:
                 continue  # no matching histogram for this shape; skip quietly
-            groups = make_activations(spec, regime, device, routing=routing)
+            if args.routing_layer == "all":
+                variants += [
+                    (regime, L) for L in range(len(routing["per_layer_counts"]))
+                ]
+            elif args.routing_layer == "rep":
+                variants.append((regime, None))
+            else:
+                variants.append((regime, int(args.routing_layer)))
+        for regime, layer in variants:
+            groups = make_activations(
+                spec, regime, device, routing=routing, layer=layer
+            )
             tokens = sum(a.shape[0] for _, a in groups)
             for name in args.backends:
                 fn = BACKENDS[name]
@@ -510,8 +537,10 @@ def main():
                     "n_groups": len(groups),
                 }
                 if regime == "prefill_measured":
+                    L = routing["representative_layer"] if layer is None else layer
                     cell["routing_src"] = routing["model"]
-                    cell["routing_layer"] = routing["representative_layer"]
+                    cell["routing_layer"] = L
+                    cell["routing_occupancy"] = routing["layer_summary"][L]["occupancy"]
                 try:
                     if name == "gemv_4bit" and regime != "decode_bs1":
                         raise RuntimeError("gemv_4bit is bs1-only by definition")
