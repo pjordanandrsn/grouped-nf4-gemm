@@ -65,3 +65,12 @@ public repo lands into a conversation you've opened, not cold.
 No repo made public, no comment posted, no README rewrite for public scope — all
 of that waits on your word. Prefill parity and the decode cost model are the
 queued engineering, independent of these decisions.
+
+---
+
+**ADDENDUM 2026-07-13 (post-blind-confirmatory):** the exploratory 8/8 above did
+NOT fully survive the registered blind confirmatory — see
+`RESULTS-gate2-confirmatory.md` (GATE2_CONFIRMED=FALSE; energy 32/32 and
+fidelity survived everywhere; the ≥1.3× worst-rep speed floor held 13/16 and
+held-out default-config speed is parity). Read that doc, not this memo, as the
+claim basis for the flip-public decision; the #1949-comment call is unaffected.
