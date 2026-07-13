@@ -298,3 +298,24 @@ class TestSplitK:
         a, sizes, ids = groups_for(E, 1, 1, K)
         out = gemm_4bit_grouped(a, B, A, sizes, ids)  # auto plan
         assert err_vs_fp64(out, a, sizes, ids, B, A, N, K) < 1e-2
+
+
+@cuda
+class TestPrefillConfig:
+    def test_block_m_rule(self):
+        from nf4_grouped import _prefill_block_m
+
+        assert [_prefill_block_m(m) for m in (1, 16, 17, 32, 33, 64, 65, 128, 256)] == \
+            [16, 16, 32, 32, 64, 64, 128, 128, 128]
+
+    def test_new_config_correct_and_matches_old(self):
+        # the new group-size-keyed config must produce the same math as the
+        # retired config at bf16 output precision (config != semantics)
+        B, A, packed, states = make_stack(8, 256, 512)
+        a, sizes, ids = groups_for(8, 4, 128, 512)
+        new = gemm_4bit_grouped(a, B, A, sizes, ids)
+        old = gemm_4bit_grouped(a, B, A, sizes, ids,
+                                block_m=64, prefill_config=(64, 4, 3))
+        d = (new.to(torch.float32) - old.to(torch.float32)).abs().max().item()
+        assert d <= 2 * 2**-8 * old.to(torch.float32).abs().max().item()
+        assert err_vs_fp64(new, a, sizes, ids, B, A, 256, 512) < 1e-2

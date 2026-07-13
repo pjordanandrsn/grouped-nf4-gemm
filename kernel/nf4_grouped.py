@@ -338,6 +338,17 @@ def _lut(device):
     return _LUT_CACHE[key]
 
 
+def _prefill_block_m(max_rows: int) -> int:
+    """Group-size-keyed M-tile height (sweep basis in the wrapper comment)."""
+    if max_rows <= 16:
+        return 16
+    if max_rows <= 32:
+        return 32
+    if max_rows <= 64:
+        return 64
+    return 128
+
+
 def gemm_4bit_grouped(
     a_cat,
     B,
@@ -347,13 +358,16 @@ def gemm_4bit_grouped(
     block_m: int | None = None,
     decode_config: tuple | None = None,
     split_k: int | None = None,
+    prefill_config: tuple | None = None,
 ):
     """Single-launch grouped NF4 GEMM. ``a_cat [T,K]`` bf16/fp16 in group-sorted
     order, ``B [E,N,K//2]`` uint8, ``absmax [E,N,K//64]`` fp32, ``sizes`` the
     per-group token counts (all > 0), ``expert_ids [G]`` int32/list. Returns
     ``[T, N]`` bf16 in the same group order. ``decode_config`` overrides the
     decode path's (BLOCK_N, num_warps); ``split_k`` overrides the decode
-    split-K factor (None = plan, 1 = off) — benchmark/ablation support only."""
+    split-K factor (None = plan, 1 = off); ``prefill_config`` overrides the
+    M-tile path's (BLOCK_N, num_warps, num_stages) — benchmark/ablation
+    support only."""
     E, N, _ = B.shape
     T, K = a_cat.shape
     assert sum(sizes) == T, (sum(sizes), T)
@@ -422,9 +436,22 @@ def gemm_4bit_grouped(
         out.copy_(ws.sum(dim=0))  # fp32 partial reduce, single bf16 downcast
         return out
     if block_m is None:
-        block_m = 16 if max(sizes) <= 16 else 64
+        block_m = _prefill_block_m(max(sizes))
+    if prefill_config is not None:
+        block_n, warps, stages = prefill_config
+    else:
+        # Group-size-keyed config from the 2-device M-tile sweeps
+        # (bench/phase2/sweeps/v4_prefill_*.json): 128/128/w8/s3 for m >= 128
+        # groups, 64-and-below groups want the narrower 64-row tile at w4/s2.
+        # Rule regret vs per-cell oracle: worst 1.058, 13/16 cells at 1.00-1.02.
+        # Lifts the M-tile path 1.22-1.82x over the old 64-row/BLOCK_N=64
+        # default — down-projections now run 1.9x the dequant path at prefill
+        # on the A5000 and gate_up sits at 0.4-1.0x (mainloop rewrite still
+        # the path to full parity there).
+        block_n = 128
+        warps = 8 if block_m >= 128 else 4
+        stages = 3 if block_m >= 128 else 2
     t_row0, t_rows, t_group = build_group_tiles(sizes, block_m, dev)
-    block_n = 64
     grid = (t_row0.numel(), triton.cdiv(N, block_n))
     _gemm_nf4_grouped[grid](
         a_cat,
@@ -445,8 +472,8 @@ def gemm_4bit_grouped(
         BLOCK_M=block_m,
         BLOCK_N=block_n,
         BLOCK_K=BLOCKSIZE,
-        num_warps=4,
-        num_stages=3,
+        num_warps=warps,
+        num_stages=stages,
     )
     return out
 

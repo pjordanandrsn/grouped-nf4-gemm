@@ -1,0 +1,7 @@
+[
+  {"model": "dev/Switch-Base-128", "proj": "gate_up", "N": 6144, "K": 768, "E": 128, "top_k": 1},
+  {"model": "dev/Switch-Base-128", "proj": "down", "N": 768, "K": 3072, "E": 128, "top_k": 1},
+  {"model": "dev/granite-3.1-3b-a800m", "proj": "down", "N": 1536, "K": 512, "E": 40, "top_k": 8},
+  {"model": "dev/Llama-4-Scout-16E", "proj": "down", "N": 5120, "K": 8192, "E": 16, "top_k": 1},
+  {"model": "dev/Hunyuan-Large", "proj": "down", "N": 6400, "K": 18304, "E": 16, "top_k": 1}
+]

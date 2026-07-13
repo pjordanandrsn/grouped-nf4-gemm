@@ -486,6 +486,34 @@ def bk_fused_routed(stack: QuantStack, groups):
     return out
 
 
+def bk_fused_nf4_v3prefill(stack: QuantStack, groups):
+    """Ablation backend: the M-tile path forced onto the RETIRED pre-v4
+    prefill config (block_m 16/64 by group size, BLOCK_N=64, w4/s3) — the
+    paired comparator for the v4 prefill-config claim."""
+    import sys
+
+    sys.path.insert(0, str(REPO / "kernel"))
+    from nf4_grouped import gemm_4bit_grouped
+
+    B, A = stack.fusedpack()
+    cache = getattr(stack, "_fused_asm", None)
+    if cache is None or cache[0] != id(groups):
+        a_cat = torch.cat([a for _, a in groups])
+        sizes = [a.shape[0] for _, a in groups]
+        ids = torch.tensor(
+            [e for e, _ in groups], dtype=torch.int32, device=a_cat.device
+        )
+        stack._fused_asm = (id(groups), a_cat, sizes, ids)
+    _, a_cat, sizes, ids = stack._fused_asm
+    out = gemm_4bit_grouped(
+        a_cat, B, A, sizes, ids,
+        block_m=16 if max(sizes) <= 16 else 64,
+        prefill_config=(64, 4, 3),
+    )
+    IMPL_NOTE["fused_nf4_v3prefill"] = "M-tile @ retired pre-v4 config (64-row/BN64/w4/s3)"
+    return _split(out, sizes)
+
+
 IMPL_NOTE: dict = {}
 
 BACKENDS = {
@@ -499,6 +527,7 @@ BACKENDS = {
     "fused_nf4_v2cfg": bk_fused_nf4_v2cfg,
     "fused_nf4_nosplit": bk_fused_nf4_nosplit,
     "fused_routed": bk_fused_routed,
+    "fused_nf4_v3prefill": bk_fused_nf4_v3prefill,
 }
 
 
