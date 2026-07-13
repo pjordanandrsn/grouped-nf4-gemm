@@ -157,6 +157,55 @@ def _gemm_nf4_grouped(
     tl.store(out_ptrs, acc.to(tl.bfloat16), mask=m_mask[:, None] & n_mask[None, :])
 
 
+@triton.jit
+def _gemv_nf4_grouped(
+    a_ptr,
+    b_ptr,
+    amax_ptr,
+    out_ptr,
+    lut_ptr,
+    expert_ids_ptr,
+    K,
+    N,
+    stride_be,
+    stride_bn,
+    stride_ae,
+    stride_an,
+    BLOCK_N: tl.constexpr,
+    BLOCK_K: tl.constexpr,
+):
+    """Decode-specialized path: one token per group (M==1 everywhere), so a
+    tensor-core M-tile would waste 15/16 of its lanes. Straight reduction:
+    program (g, n-tile) accumulates out[g, n] = sum_k a[g,k] * w[n,k]."""
+    g = tl.program_id(0)
+    pid_n = tl.program_id(1)
+    eid = tl.load(expert_ids_ptr + g)
+
+    offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
+    n_mask = offs_n < N
+    offs_k = tl.arange(0, BLOCK_K)
+    b_base = b_ptr + eid * stride_be + offs_n[:, None] * stride_bn
+    a_base = a_ptr + g * K
+
+    acc = tl.zeros((BLOCK_N,), dtype=tl.float32)
+    for k0 in range(0, K, BLOCK_K):
+        kk = k0 + offs_k
+        bytes_ = tl.load(b_base + (kk[None, :] // 2), mask=n_mask[:, None], other=0).to(
+            tl.int32
+        )
+        nib = tl.where((kk[None, :] % 2) == 0, (bytes_ >> 4) & 0xF, bytes_ & 0xF)
+        w = tl.load(lut_ptr + nib)
+        am = tl.load(
+            amax_ptr + eid * stride_ae + offs_n * stride_an + (k0 // BLOCK_K),
+            mask=n_mask,
+            other=0.0,
+        )
+        a = tl.load(a_base + kk).to(tl.float32)
+        acc += tl.sum(w * a[None, :], axis=1) * am
+
+    tl.store(out_ptr + g * N + offs_n, acc.to(tl.bfloat16), mask=n_mask)
+
+
 _LUT_CACHE: dict = {}
 
 
@@ -176,15 +225,39 @@ def gemm_4bit_grouped(a_cat, B, absmax, sizes, expert_ids, block_m: int | None =
     T, K = a_cat.shape
     assert sum(sizes) == T, (sum(sizes), T)
     dev = a_cat.device
-    if block_m is None:
-        block_m = 16 if max(sizes) <= 16 else 64
-    t_row0, t_rows, t_group = build_group_tiles(sizes, block_m, dev)
     eids = (
         expert_ids
         if torch.is_tensor(expert_ids)
         else torch.tensor(expert_ids, dtype=torch.int32, device=dev)
     ).to(torch.int32)
     out = torch.empty(T, N, dtype=torch.bfloat16, device=dev)
+    if max(sizes) == 1:
+        # decode: every group is one token; the reduction path skips the M-tile.
+        # BLOCK_N=128/num_warps=4 measured best on sm_86 (~2x BN=64) — one N-row
+        # per warp keeps the codebook gather + reduction resident.
+        grid = (T, triton.cdiv(N, 128))
+        _gemv_nf4_grouped[grid](
+            a_cat,
+            B,
+            absmax,
+            out,
+            _lut(dev),
+            eids,
+            K,
+            N,
+            B.stride(0),
+            B.stride(1),
+            absmax.stride(0),
+            absmax.stride(1),
+            BLOCK_N=128,
+            BLOCK_K=BLOCKSIZE,
+            num_warps=4,
+            num_stages=3,
+        )
+        return out
+    if block_m is None:
+        block_m = 16 if max(sizes) <= 16 else 64
+    t_row0, t_rows, t_group = build_group_tiles(sizes, block_m, dev)
     block_n = 64
     grid = (t_row0.numel(), triton.cdiv(N, block_n))
     _gemm_nf4_grouped[grid](
