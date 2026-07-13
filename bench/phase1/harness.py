@@ -95,6 +95,20 @@ class QuantStack:
         """fp64 view of the values every NF4 path computes with (on demand)."""
         return self.dequant_bf16(e).to(torch.float64)
 
+    def fusedpack(self):
+        """Lazy expert-major repack for the Phase-2 fused kernel (same NF4 bytes;
+        [E,N,K//2] + fp32 absmax [E,N,K//64] per KERNEL_CONTRACT)."""
+        if getattr(self, "_fusedpack", None) is None:
+            import sys
+
+            sys.path.insert(0, str(REPO / "kernel"))
+            from nf4_grouped import repack_from_bnb
+
+            self._fusedpack = repack_from_bnb(
+                self.packed, self.states, self.spec.N, self.spec.K
+            )
+        return self._fusedpack
+
     def marlin(self):
         """Lazy GPTQ-int4 repack of the SAME bf16 source values via vLLM's marlin
         utilities. Marlin quantizes to a different format, so its fidelity reference
@@ -306,6 +320,24 @@ def bk_marlin(stack, groups):  # pragma: no cover - optional dependency
     return outs
 
 
+def bk_fused_nf4(stack: QuantStack, groups):
+    """The Phase-2 kernel: ONE launch, dequant inside the mainloop, no bf16
+    weight materialization. Cat + descriptor build are the honest per-call host
+    cost (lighter than the grouped path's dequant + b-stack)."""
+    import sys
+
+    sys.path.insert(0, str(REPO / "kernel"))
+    from nf4_grouped import gemm_4bit_grouped
+
+    B, A = stack.fusedpack()
+    a_cat = torch.cat([a for _, a in groups])
+    sizes = [a.shape[0] for _, a in groups]
+    ids = [e for e, _ in groups]
+    out = gemm_4bit_grouped(a_cat, B, A, sizes, ids)
+    IMPL_NOTE["fused_nf4"] = "gemm_4bit_grouped (triton, tf32-dot, single launch)"
+    return _split(out, sizes)
+
+
 IMPL_NOTE: dict = {}
 
 BACKENDS = {
@@ -314,6 +346,7 @@ BACKENDS = {
     "dequant_grouped_mm": bk_dequant_grouped_mm,
     "unsloth": bk_unsloth,
     "marlin": bk_marlin,
+    "fused_nf4": bk_fused_nf4,
 }
 
 
