@@ -100,6 +100,7 @@ class QuantStack:
         utilities. Marlin quantizes to a different format, so its fidelity reference
         is its OWN dequantized values (w_ref), not the NF4 ones — recorded per cell."""
         if self._marlin is None:
+            from vllm.model_executor.layers.quantization.utils import marlin_utils as mu
             from vllm.model_executor.layers.quantization.utils.marlin_utils_test import (
                 marlin_quantize,
             )
@@ -113,12 +114,28 @@ class QuantStack:
                 )
                 qs.append((q_w, s, g_idx, sort_idx))
                 refs.append(w_ref)  # [K,N] fp16, marlin's own dequant
-            self._marlin = {"q": qs, "ref": refs, "qtype": scalar_types.uint4b8}
+            dev = torch.device(self.device)
+            self._marlin = {
+                "q": qs,
+                "ref": refs,
+                "qtype": scalar_types.uint4b8,
+                # setup state real deployments cache: workspace + the empty zp of the
+                # symmetric-gptq path (vllm 0.25 surface: marlin_make_workspace_new)
+                "ws": mu.marlin_make_workspace_new(dev),
+                "zp": mu.marlin_make_empty_g_idx(dev),
+            }
         return self._marlin
 
 
-def make_activations(spec: GemmSpec, regime: str, device: str, seed: int = 7):
-    """Per-regime grouped problem: list of (expert_id, A[M,K] bf16)."""
+def make_activations(
+    spec: GemmSpec, regime: str, device: str, seed: int = 7, routing=None
+):
+    """Per-regime grouped problem: list of (expert_id, A[M,K] bf16).
+
+    ``prefill_measured`` replays a MEASURED group-size vector (per-expert token
+    counts from routing_hist.py's representative layer) instead of the uniform
+    2048*k/E — so empty/cold experts and hot experts appear as they really do.
+    Empty groups are dropped (a grouped GEMM never launches a 0-row tile)."""
     g = torch.Generator(device="cpu").manual_seed(seed)
 
     def act(m):
@@ -132,6 +149,13 @@ def make_activations(spec: GemmSpec, regime: str, device: str, seed: int = 7):
     if regime == "prefill_s2048":
         m = max(1, round(2048 * spec.top_k / spec.E))  # uniform routing, census note
         return [(e, act(m)) for e in range(spec.E)]
+    if regime == "prefill_measured":
+        if routing is None:
+            raise RuntimeError("prefill_measured needs --routing <histogram.json>")
+        counts = routing["representative_counts"]
+        if len(counts) != spec.E:
+            raise RuntimeError(f"routing E={len(counts)} != census E={spec.E}")
+        return [(e, act(int(c))) for e, c in enumerate(counts) if c > 0]
     raise ValueError(regime)
 
 
@@ -250,33 +274,30 @@ def bk_marlin(stack, groups):  # pragma: no cover - optional dependency
 
     if importlib.util.find_spec("vllm") is None:
         raise ImportError("vllm (marlin) not installed")
-    import vllm._custom_ops as ops
-    from vllm.model_executor.layers.quantization.utils.marlin_utils import (
-        MARLIN_SUPPORTED_GROUP_SIZES,  # noqa: F401  (import proves utils layout)
-        marlin_make_workspace,
-    )
+    from vllm.model_executor.layers.quantization.utils import marlin_utils as mu
 
     m = stack.marlin()
     outs = []
     for e, a in groups:
         q_w, s, g_idx, sort_idx = m["q"][e]
         a16 = a.to(torch.float16)
-        ws = marlin_make_workspace(stack.spec.N, a.device)
-        out = ops.gptq_marlin_gemm(
+        out = mu.apply_gptq_marlin_linear(
             a16,
             q_w,
             s,
+            m["zp"],
             g_idx,
             sort_idx,
-            ws,
+            m["ws"],
             m["qtype"],
-            a16.shape[0],
             stack.spec.N,
             stack.spec.K,
             is_k_full=True,
         )
         outs.append(out)
-    IMPL_NOTE["marlin"] = "vllm ops.gptq_marlin_gemm (fp16, group=128)"
+    IMPL_NOTE["marlin"] = (
+        "vllm mu.apply_gptq_marlin_linear (fp16, group=128, fp32_reduce)"
+    )
     return outs
 
 
@@ -423,6 +444,12 @@ def main():
     ap.add_argument("--no-energy", action="store_true")
     ap.add_argument("--out", default=None)
     ap.add_argument(
+        "--routing",
+        nargs="*",
+        default=None,
+        help="routing_hist.py JSON(s); enables prefill_measured, matched to a spec by E+k",
+    )
+    ap.add_argument(
         "--smoke", action="store_true", help="tiny E/N/K, iters=3 (still needs CUDA)"
     )
     args = ap.parse_args()
@@ -433,6 +460,14 @@ def main():
     if args.smoke:
         specs = [GemmSpec("smoke", "gate_up", 256, 128, 8, 2)]
         args.iters = 3
+
+    # routing histograms keyed by (E,k); a spec picks the one that matches its shape
+    routings = {}
+    for p in args.routing or []:
+        r = json.loads(Path(p).read_text())
+        routings[(r["E"], r["k"])] = r
+    if routings and "prefill_measured" not in args.regimes:
+        args.regimes = list(args.regimes) + ["prefill_measured"]
 
     env = {
         "gpu": torch.cuda.get_device_name(0),
@@ -457,8 +492,11 @@ def main():
             f"== {spec.model} {spec.proj} N={spec.N} K={spec.K} E={spec.E} k={spec.top_k}"
         )
         stack = QuantStack(spec, device)
+        routing = routings.get((spec.E, spec.top_k))
         for regime in args.regimes:
-            groups = make_activations(spec, regime, device)
+            if regime == "prefill_measured" and routing is None:
+                continue  # no matching histogram for this shape; skip quietly
+            groups = make_activations(spec, regime, device, routing=routing)
             tokens = sum(a.shape[0] for _, a in groups)
             for name in args.backends:
                 fn = BACKENDS[name]
@@ -469,7 +507,11 @@ def main():
                     "backend": name,
                     **{k: getattr(spec, k) for k in ("N", "K", "E", "top_k")},
                     "tokens_per_call": tokens,
+                    "n_groups": len(groups),
                 }
+                if regime == "prefill_measured":
+                    cell["routing_src"] = routing["model"]
+                    cell["routing_layer"] = routing["representative_layer"]
                 try:
                     if name == "gemv_4bit" and regime != "decode_bs1":
                         raise RuntimeError("gemv_4bit is bs1-only by definition")
