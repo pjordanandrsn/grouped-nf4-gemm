@@ -26,27 +26,39 @@ dequantize-then-matmul baseline on the same stacks:
 
 - **Fidelity:** property suite 35/35 on every device; fused output error is
   **below the baseline's in all 96+ measured cells** (fp32 accumulate).
-- **Energy:** fused J/token **below the baseline in 61 of 62
-  confirmatory-grade cells** — census and off-census, both devices. The one
-  exception is the `top_k=1` occupancy-starved class (named below).
+- **Energy:** fused J/token **below the baseline in 104 of 112
+  confirmatory-grade cells across v1–v3**. Six of the eight misses are the
+  `top_k=1`/tiny class (named below); the other two are parity-margin
+  readings (1.005, 1.010) on a single instance. On bandwidth-bound cells the
+  energy win has never failed to replicate.
 - **Speed:** census MoE shapes (OLMoE, Qwen3-30B, Gemma-4, GPT-OSS-120B,
-  gate_up + down) run **1.3–2.5× at median** (one census cell —
-  gpt-oss `down`, 2880×2880 — is instance-sensitive: 1.0–2.0× across three
-  A5000 instances). Fresh off-census shapes with `top_k ≥ 6` (DeepSeek-V3,
-  granite-3.1, Qwen3-Next) run **1.2–2.0× at median**.
-- **Known loser:** `top_k=1` shapes (e.g. Llama-4-Scout) currently run
-  0.5–1.1× and can cost more energy — one token × one expert starves the
-  `(groups, N-tiles)` grid. Split-K is the planned fix, not yet landed.
-- **Prefill** (compute-bound M): not at parity; decode is the product
-  surface today.
+  gate_up + down) run **1.16–2.73× at median** (one census cell —
+  gpt-oss `down`, 2880×2880 — is instance-sensitive: 0.7–2.0× across five
+  instances). Fresh off-census shapes with `top_k ≥ 6` (DeepSeek-V3,
+  granite-3.1, Qwen3-Next) run **1.0–1.8× at median**; `k=2`-large shapes
+  (Grok-1, Mixtral-8x22B) 1.0–1.24×, never slower.
+- **Known losers:** `top_k=1` cells are **instance-unstable in both
+  directions** (Scout `down` measured 0.47–1.12 across six contexts on
+  identical code — split-K helps paired but can't stabilize the class), and
+  **tiny shapes (≲5 M weight elements) lose outright** (0.24–0.35× speed,
+  4–7× energy). v4 adds a dispatch floor that routes tiny cells back to the
+  dequant path.
+- **Prefill** (compute-bound M): after a group-size-keyed config pass,
+  down-projections run **~1.9×** the dequant path and Qwen gate_up hits
+  parity on the A5000; remaining gate_up cells sit at 0.4–0.8× pending a
+  mainloop rewrite. Decode is still the primary product surface.
 
-Two blind confirmatories have run; **neither fully passed as registered**,
+Three blind confirmatories have run; **none fully passed as registered**,
 and both results docs say exactly what failed and why:
 [v1](kernel/RESULTS-gate2-confirmatory.md) (caught the original per-shape
 config table overfitting its census), [v2](kernel/RESULTS-v2-confirmatory.md)
 (validated the replacement single-constant config on 64-SM parts and the
-off-census `k≥6` wins; falsified "one constant for all sm_86" at the low-SM
-end; quantified the `top_k=1` class). The preregs, amendments, evidence
+off-census `k≥6` wins), [v3](kernel/RESULTS-v3-confirmatory.md) (found the
+v2-era SM-conditional premise was measurement noise, quantified the
+`top_k=1` and tiny-shape loss classes, and established the methodology rule
+that latency-bound cells only support paired claims). A fourth (v4: dispatch
+floor + prefill config) is registered and running as of 2026-07-13; its
+verdict will be committed either way. The preregs, amendments, evidence
 JSONs, sweeps, and mechanical reducers are all committed; `.ots` files
 anchor the protocols to Bitcoin before the data existed.
 
@@ -86,11 +98,13 @@ python3 roofline/roofline.py      # roofline/ceilings.json
 
 ## Status / roadmap
 
-Follow-ons, in the order the data motivates: split-K decode for the
-`top_k=1` class; SM-conditional decode constant (the 26-SM A2000 measurably
-prefers 128/4 where 64-SM parts want 64/2); prefill mainloop parity; sm_120.
-Ecosystem landing is calendar-gated on the bitsandbytes v0.50.0 release; see
-the coordination note on #1949.
+Landed through v4: universal decode constant (the dense-sweep result),
+split-K for starved grids (with a per-split work floor), a min-bytes
+dispatch floor (tiny cells route to the dequant path via
+`decode_dispatch()`), and the group-size-keyed prefill config. In flight:
+the v4 blind confirmatory. Next: prefill mainloop rewrite for gate_up
+parity; sm_120. Ecosystem landing is calendar-gated on the bitsandbytes
+v0.50.0 release; see the coordination note on #1949.
 
 ## License & attribution
 
