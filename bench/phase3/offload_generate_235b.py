@@ -262,6 +262,11 @@ def main():
 
     pred_ids_buf = [torch.full((K_TOP,), -1, dtype=torch.int32, device=dev)
                     for _ in range(2)]
+    # pred_ready[b] orders the prefetch-stream gather AFTER the main-stream
+    # write of pred_ids_buf[b] (smoke caught the race: the gather could read
+    # stale ids — or the -1 reset — before copy_ landed; corrections then
+    # trusted slots the speculative pass never actually fetched).
+    pred_ready = [torch.cuda.Event(), torch.cuda.Event()]
     hit_counter = torch.zeros(1, dtype=torch.int64, device=dev)
     opp_counter = [0]
 
@@ -417,7 +422,9 @@ def main():
             if mode == "gpu_early":
                 pids = early_route_gpu(0, rmsnorm(h, norms[0][1]))
                 pred_ids_buf[0].copy_(pids)
+                pred_ready[0].record()
                 with torch.cuda.stream(prefetch_stream):
+                    prefetch_stream.wait_event(pred_ready[0])
                     prefetch_stream.wait_event(moe_done[0])
                     gather_buf(0, 0, pred_ids_buf[0])
                     copy_done[0].record(prefetch_stream)
@@ -439,7 +446,9 @@ def main():
                     nb = (lay + 1) % 2
                     pids = early_route_gpu(lay + 1, rmsnorm(h, norms[lay + 1][1]))
                     pred_ids_buf[nb].copy_(pids)
+                    pred_ready[nb].record()
                     with torch.cuda.stream(prefetch_stream):
+                        prefetch_stream.wait_event(pred_ready[nb])
                         prefetch_stream.wait_event(moe_done[nb])
                         gather_buf(nb, lay + 1, pred_ids_buf[nb], stream=None)
                         copy_done[nb].record(prefetch_stream)
