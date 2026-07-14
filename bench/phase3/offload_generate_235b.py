@@ -157,7 +157,7 @@ def main():
     ap.add_argument("--cache", default="/dev/shm/hf")
     ap.add_argument("--layers", type=int, default=L_TOT)
     ap.add_argument("--max-new", type=int, default=128)
-    ap.add_argument("--prefetch-mode", choices=["spec", "early"], default="early",
+    ap.add_argument("--prefetch-mode", choices=["spec", "early", "early2"], default="early2",
                     help="ON-mode strategy: spec = last-token speculation (B2), early = pre-attention router prediction (B3)")
     ap.add_argument("--paired-tokens", type=int, default=64,
                     help="tokens for the prefetch-off paired run + identity check")
@@ -221,6 +221,51 @@ def main():
     corr_stream = torch.cuda.Stream(priority=-1)  # corrections never queue behind next-layer bytes
     copy_done = [torch.cuda.Event() for _ in range(2)]
     corr_done = [torch.cuda.Event() for _ in range(2)]
+
+    # --- B4: sync-free prefetch issuance -----------------------------------
+    # B3 proved the predictor (93% agreement) but paid ~94 added GPU->CPU
+    # syncs/token (.tolist() on the early router), collapsing the CPU's
+    # run-ahead. B4 keeps the MAIN thread sync-parity with prefetch-off
+    # (exactly one true-router .tolist() per layer): early-router ids go
+    # GPU -> pinned ring via async D2H, and a dedicated ISSUER THREAD waits
+    # on that event (off the main thread), reads the ids, and issues the
+    # prefetch copies on its own stream.
+    import queue as _queue
+    import threading as _threading
+
+    pin_ids = [torch.empty(K_TOP, dtype=torch.int32).pin_memory() for _ in range(2)]
+    ids_d2h_ev = [torch.cuda.Event() for _ in range(2)]
+    ids_ready = [_threading.Event(), _threading.Event()]
+    work_q = _queue.Queue()
+    prefetch_stream = torch.cuda.Stream()
+
+    def _issuer():
+        while True:
+            item = work_q.get()
+            if item is None:
+                return
+            buf, lay = item
+            ids_d2h_ev[buf].synchronize()          # blocks THIS thread only
+            eids = [int(x) for x in pin_ids[buf]]
+            with torch.cuda.stream(prefetch_stream):
+                prefetch_stream.wait_event(moe_done[buf])  # don't clobber in-flight MoE
+                for j, e in enumerate(eids):
+                    copy_slot(buf, j, lay, e)
+                copy_done[buf].record(prefetch_stream)
+            ids_ready[buf].set()
+
+    issuer = _threading.Thread(target=_issuer, daemon=True)
+    issuer.start()
+
+    def early2_predict(buf, lay, h):
+        """Enqueue L's early prediction with ZERO main-thread blocking:
+        router matmul + topk stay on GPU; ids stream to the pinned ring."""
+        logits = h.float() @ router_w[lay].t()
+        idx = torch.topk(logits[0], K_TOP).indices.to(torch.int32)
+        pin_ids[buf].copy_(idx, non_blocking=True)
+        ids_d2h_ev[buf].record()
+        ids_ready[buf].clear()
+        work_q.put((buf, lay))
     from nf4_grouped import gemm_4bit_grouped
 
     ids_dev = torch.arange(K_TOP, dtype=torch.int32, device=dev)
@@ -273,8 +318,10 @@ def main():
                 copy_slot(buf, j, lay, e)
             copy_done[buf].record(copy_stream)
 
-    def resolve(buf, lay, eids, wts, prefetch):
+    def resolve(buf, lay, eids, wts, prefetch, threaded=False):
         """Make slots hold exactly `eids`; return slot-aligned weights + hit count."""
+        if threaded:
+            ids_ready[buf].wait()                   # no-op in the common case
         torch.cuda.current_stream().wait_event(copy_done[buf])
         cur = buf_ids[buf]
         if not prefetch:
@@ -332,6 +379,8 @@ def main():
             if mode == "early":
                 pred, _ = route(0, rmsnorm(h, norms[0][1]))
                 issue_copy(0, pred, 0, guard_moe=True)
+            elif mode == "early2":
+                early2_predict(0, 0, rmsnorm(h, norms[0][1]))
             else:
                 issue_copy(0, prev_eids[0], 0, guard_moe=True)
         for lay in range(layers):
@@ -343,16 +392,20 @@ def main():
                 issue_copy((lay + 1) % 2, prev_eids[lay + 1], lay + 1, guard_moe=True)
             if not prefetch:
                 issue_copy(buf, eids, lay)
-            slot_w, hits = resolve(buf, lay, eids, wts, prefetch)
+            slot_w, hits = resolve(buf, lay, eids, wts, prefetch,
+                                   threaded=(prefetch and mode == "early2"))
             if prefetch:
                 hits_total[0] += hits
                 hits_total[1] += K_TOP
                 prev_eids[lay] = list(eids)
             h = h + moe(buf, hn, slot_w)
             moe_done[buf].record()
-            if prefetch and mode == "early" and lay + 1 < layers:
-                pred, _ = route(lay + 1, rmsnorm(h, norms[lay + 1][1]))
-                issue_copy((lay + 1) % 2, pred, lay + 1, guard_moe=True)
+            if prefetch and lay + 1 < layers:
+                if mode == "early":
+                    pred, _ = route(lay + 1, rmsnorm(h, norms[lay + 1][1]))
+                    issue_copy((lay + 1) % 2, pred, lay + 1, guard_moe=True)
+                elif mode == "early2":
+                    early2_predict((lay + 1) % 2, lay + 1, rmsnorm(h, norms[lay + 1][1]))
         h = rmsnorm(h, final_norm)
         return (h @ lm_head.t()).float()
 
