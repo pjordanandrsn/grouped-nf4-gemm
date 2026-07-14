@@ -219,7 +219,7 @@ def main():
         return (weights[:, None] * down).sum(0, keepdim=True)
 
     def step(tok_id, t):
-        h = embed[tok_id].to(dev, torch.bfloat16).view(1, -1)
+        h = embed[int(tok_id)].to(dev, torch.bfloat16).view(1, -1)
         # route layer 0 on the pre-attention hidden? Router input is the
         # post-attention normed hidden — must route AFTER attention. So the
         # copy for layer L can only be issued once layer L's router runs:
@@ -245,7 +245,14 @@ def main():
     results = []
     for prompt in prompts:
         msgs = [{"role": "user", "content": prompt}]
-        toks = tokenizer.apply_chat_template(msgs, add_generation_prompt=True)
+        enc = tokenizer.apply_chat_template(msgs, add_generation_prompt=True, tokenize=True)
+        if isinstance(enc, dict):
+            enc = enc["input_ids"]
+        if hasattr(enc, "tolist"):
+            enc = enc.tolist()
+        while enc and isinstance(enc[0], (list, tuple)):  # unwrap batch dim
+            enc = enc[0]
+        toks = [int(x) for x in enc]
         t = 0
         for tid in toks:  # prompt pass, token by token (decode-path prefill)
             logits = step(tid, t)
