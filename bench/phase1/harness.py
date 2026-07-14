@@ -528,6 +528,36 @@ def bk_fused_nf4_v3prefill(stack: QuantStack, groups):
 
 IMPL_NOTE: dict = {}
 
+def bk_fused_v5loop(stack: QuantStack, groups):
+    """Ablation backend for the v6 confirmatory: the fused kernel FORCED onto
+    the v5 M-tile mainloop (prefill_variant=0, per-element L1 codebook gather)
+    so the register-LUT rewrite can be adjudicated as a same-instance paired
+    ratio — instance-robust, unlike dequant-relative ratios (the dequant
+    baseline swung ~25% between two A5000 hosts in the v6 exploratory while
+    the fused kernel held within 0.2 ms). Same assembly caching as
+    bk_fused_nf4; decode cells take the identical decode path (variant is a
+    prefill-only knob), so this backend is only meaningful at prefill."""
+    import sys
+    sys.path.insert(0, str(REPO / "kernel"))
+    from nf4_grouped import gemm_4bit_grouped
+
+    B, A = stack.fusedpack()
+    cache = getattr(stack, "_fused_asm", None)
+    if cache is None or cache[0] != id(groups):
+        a_cat = torch.cat([a for _, a in groups])
+        sizes = [a.shape[0] for _, a in groups]
+        ids = torch.tensor(
+            [e for e, _ in groups], dtype=torch.int32, device=a_cat.device
+        )
+        stack._fused_asm = (id(groups), a_cat, sizes, ids)
+    _, a_cat, sizes, ids = stack._fused_asm
+    out = gemm_4bit_grouped(a_cat, B, A, sizes, ids, prefill_variant=0)
+    IMPL_NOTE["fused_v5loop"] = (
+        "gemm_4bit_grouped with prefill_variant=0 (v5 M-tile mainloop forced)"
+    )
+    return _split(out, sizes)
+
+
 BACKENDS = {
     "dequant_grouped": bk_dequant_grouped,
     "gemv_4bit": bk_gemv4bit,
@@ -540,6 +570,7 @@ BACKENDS = {
     "fused_nf4_nosplit": bk_fused_nf4_nosplit,
     "fused_routed": bk_fused_routed,
     "fused_nf4_v3prefill": bk_fused_nf4_v3prefill,
+    "fused_v5loop": bk_fused_v5loop,
 }
 
 

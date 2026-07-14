@@ -1,0 +1,39 @@
+{
+  "registered_utc": "2026-07-14T18:55:00Z",
+  "purpose": "BLIND CONFIRMATORY v6: the prefill/M-tile mainloop rewrite. v1 measured the M-tile path at 0.22-0.85x dequant; v1.1 registered that the gap is NOT the dot dtype and hypothesized the per-element codebook gather + K-pipelining; v4's config pass lifted the path but left gate_up 'pending a mainloop rewrite'. The v6 exploratory matrix (bench/phase2/v6_prefill_matrix.py, receipts committed at bench/phase2/sweeps/v6e_matrix_a5000.json) tested three ISOLATED candidates per the v1.1 one-change-at-a-time law: register-resident codebook via tl.gather (V1) won every census prefill cell with fidelity IDENTICAL to the shipped loop (same LUT values, same TF32 dot; err/dequant 0.67-0.76 unchanged); BLOCK_K=128 died on sm_86 SMEM (181KB required); opt-in bf16 MMA was slower than V1 everywhere AND costs the fidelity edge (v1.1's bundle suspicion now attributed). The shipping change under adjudication: VARIANT=1 register-LUT mainloop as the M-tile default with rule (BLOCK_N=128, warps=4, stages=3, group-size-keyed BLOCK_M unchanged). Decode paths byte-untouched; a decode guard protects against interactions anyway.",
+  "frozen_commit": "the commit carrying this file. No code/config/harness/reducer changes between this stamp and reported results.",
+  "provenance_of_bars": "TWO fresh SECURE A5000 instances measured pre-stamp. Instance e1 (v6e matrix, raw-kernel fused timings): rule-config fused vs harness dequant = OLMoE gu 0.62 / OLMoE dn 1.20 / Qwen gu 1.62 / Qwen dn 2.87 / gemma gu 1.33 / gemma dn 2.88 / gptoss gu 1.31 / gptoss dn 1.44. Instance e2 (dress rehearsal, end-to-end harness both sides, host 194.68.245.155): 0.55 / 0.94 / 1.21 / 2.24 / 0.95 / 2.28 / 1.28 / 1.39; suite 44/44 with the V1 default. FINDING THAT SHAPED THE BARS: the dequant BASELINE is instance-unstable (Qwen deq 8.26 -> 6.45 ms, gemma deq 8.56 -> 6.32 ms across the two hosts, ~25%) while the fused kernel is instance-stable (every cell within 0.2 ms + ~0.2 ms wrapper overhead between raw-kernel and end-to-end measurement). Dequant-relative bars therefore inherit a host lottery the kernel does not control; the PRIMARY criterion is the same-instance paired rewrite effect fused_v5loop/fused_nf4 (e1 basis, boundary-consistent raw-kernel V0-best vs V1-rule: 1.63 / 1.55 / 1.49 / 1.61 / 1.46 / 1.42 / 1.66 / 1.69; the ~0.2 ms wrapper overhead common to both sides shifts these < 0.03). Dequant-relative criteria are registered as FLOORS that both observed instances satisfy with margin. A2000 has ZERO v6 exploratory basis and is REPORT-ONLY.",
+  "protocol": {
+    "devices": ["FRESH RunPod SECURE A5000 (sm_86) provisioned AFTER this stamp - all bars", "home RTX A2000 12GB, quiet-window 02:00-06:00 launch, VRAM-gated >= 8400 MiB - REPORT-ONLY"],
+    "runs_per_rep": "bench/phase1/harness.py --regimes prefill_s2048 decode_bs1 --backends dequant_grouped fused_nf4 fused_v5loop --iters 20 --no-energy (energy claims remain v1-v3's; not re-adjudicated here)",
+    "reps": "n=3 fresh-process per device; property suite (44) once per device.",
+    "reduction": "bench/phase1/reduce_confirmatory_v6.py with THIS file as --spec. Cell value = median across reps of the per-rep paired ratio.",
+    "verdict_key": "V6_CONFIRMED = W1 AND W2 AND W3 AND W4 AND Q1."
+  },
+  "frozen_verdict_criteria_params": {
+    "gate_up_parity_cells": [["Qwen/Qwen3-30B-A3B", "gate_up"], ["google/gemma-4-26B-A4B", "gate_up"], ["openai/gpt-oss-120b", "gate_up"]],
+    "barred_prefill_cells": [["allenai/OLMoE-1B-7B-0924", "down"], ["Qwen/Qwen3-30B-A3B", "gate_up"], ["Qwen/Qwen3-30B-A3B", "down"], ["google/gemma-4-26B-A4B", "gate_up"], ["google/gemma-4-26B-A4B", "down"], ["openai/gpt-oss-120b", "gate_up"], ["openai/gpt-oss-120b", "down"]],
+    "report_only_cells": [["allenai/OLMoE-1B-7B-0924", "gate_up"]],
+    "census_cells": [["allenai/OLMoE-1B-7B-0924", "gate_up"], ["allenai/OLMoE-1B-7B-0924", "down"], ["Qwen/Qwen3-30B-A3B", "gate_up"], ["Qwen/Qwen3-30B-A3B", "down"], ["google/gemma-4-26B-A4B", "gate_up"], ["google/gemma-4-26B-A4B", "down"], ["openai/gpt-oss-120b", "gate_up"], ["openai/gpt-oss-120b", "down"]],
+    "w1_bar": 1.25,
+    "w1_median_bar": 1.4,
+    "w2_floor": 0.85,
+    "w2_bar": 1.05,
+    "w2_min_cells": 5,
+    "w3_floor": 0.85,
+    "w3_bar": 1.15,
+    "w3_min_cells": 2,
+    "w4_min_cells": 7,
+    "suite_expect": "44/44"
+  },
+  "frozen_verdict_criteria": {
+    "W1_rewrite_effect": "PRIMARY. Same-instance paired fused_v5loop/fused_nf4 (median of 3 reps) >= 1.25 on ALL 8 census prefill cells AND median across the 8 >= 1.40, on the A5000. This adjudicates what the rewrite did, on the quantity that is instance-stable (exploratory basis 1.42-1.69).",
+    "W2_dequant_floor": "dequant/fused >= 0.85 on all 7 barred prefill cells AND >= 1.05 on at least 5 of the 7 (both observed instances satisfy: e1 7/7 at >= 1.05, e2 5/7 with min 0.94).",
+    "W3_gate_up": "dequant/fused >= 0.85 on all 3 big gate_ups AND >= 1.15 on at least 2 of 3. The honest headline: gate_up moves from the v5 loop's 0.4-0.8x class to parity-or-better, with the baseline's own instance variance disclosed rather than laundered into a cherry-picked bar.",
+    "W4_decode_guard": "decode_bs1 census cells fused-vs-dequant >= 1.0 on >= 7 of 8 cells (median rep) on the A5000 - the documented gpt-oss down instance-lottery cell may take its lottery. Decode code is untouched; this guards interactions.",
+    "Q1_suite": "property suite 44/44 on both devices (the suite's M-tile PFID gates - fused err <= 2x dequant err and <= 1e-2 absolute - exercise the v6 default loop; fidelity is adjudicated there).",
+    "R1_report": "OLMoE gate_up dequant-ratio reported unbarred (0.55-0.62 observed; smallest-expert census shape, remaining known loser) alongside its W1 rewrite ratio, which IS barred.",
+    "R2_report": "All A2000 rows reported unbarred (zero exploratory basis; contended-card history per v5).",
+    "no_tune_clause": "Failures reported at full volume; claims narrowed; no re-runs until green."
+  }
+}
