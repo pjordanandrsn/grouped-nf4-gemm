@@ -106,7 +106,7 @@ def main():
     ap.add_argument("--head-dim", type=int, default=128)
     ap.add_argument("--tokens", type=int, default=64)
     ap.add_argument("--warmup-tokens", type=int, default=4)
-    ap.add_argument("--moe", choices=["fused", "dequant", "none"], default="fused")
+    ap.add_argument("--moe", choices=["fused", "dequant", "bnb_dequant", "none"], default="fused")
     ap.add_argument("--vram-cap-gb", type=float, default=20.0)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
@@ -120,6 +120,31 @@ def main():
                              + N_dn * K_dn // 2 + N_dn * (K_dn // 64) * 4)
 
     from nf4_grouped import gemm_4bit_grouped, dequant_ref
+
+    def bnb_dq(packed_2d, absmax_2d, N, K):
+        """bnb CUDA dequant straight from the staged (fused-layout) bytes."""
+        import bitsandbytes.functional as BF
+        qs = BF.QuantState(
+            absmax=absmax_2d.reshape(-1), shape=(N, K), code=_nf4_code,
+            blocksize=64, quant_type="nf4", dtype=torch.bfloat16,
+        )
+        return BF.dequantize_4bit(packed_2d.reshape(-1, 1), qs)
+
+    _nf4_code = None
+    if args.moe == "bnb_dequant":
+        import bitsandbytes.functional as BF
+        _nf4_code = BF.get_4bit_type("nf4", device=dev)
+        # SELF-CHECK (gates the run): bnb kernel from staged bytes must match
+        # the torch reference decode on a random expert-sized stack.
+        _w = torch.randn(N_dn, K_dn, device=dev, dtype=torch.bfloat16)
+        _pk, _st = BF.quantize_4bit(_w, blocksize=64, quant_type="nf4")
+        from nf4_grouped import repack_from_bnb
+        _B, _A = repack_from_bnb([_pk], [_st], N_dn, K_dn)
+        _ref = dequant_ref(_B[0], _A[0], N_dn, K_dn).to(torch.bfloat16)
+        _bnb = bnb_dq(_B[0], _A[0], N_dn, K_dn)
+        assert torch.allclose(_ref, _bnb, atol=1e-2), "bnb/self-check mismatch"
+        print("bnb_dequant self-check: PASS", flush=True)
+        del _w, _pk, _B, _A, _ref, _bnb
 
     # --- link microbench (pinned H2D, 1 GiB x 10) --------------------------
     pin = torch.empty(1 << 30, dtype=torch.uint8).pin_memory()
@@ -198,6 +223,20 @@ def main():
             gate, upv = up[:, : args.inter], up[:, args.inter:]
             act = (torch.nn.functional.silu(gate.float()) * upv.float()).to(torch.bfloat16)
             down = gemm_4bit_grouped(act, s["dn_b"], s["dn_a"], sizes, ids_dev)
+        elif args.moe == "bnb_dequant":
+            # the STANDARD ecosystem path: bnb's CUDA dequant kernel
+            # materializes bf16 weights, then cuBLAS. Staged bytes/absmax are
+            # bnb's own flat layouts reshaped (repack_from_bnb docstring);
+            # the build-time self-check asserts equivalence before timing.
+            outs = []
+            for j in range(k):
+                w_gu = bnb_dq(s["gu_b"][j], s["gu_a"][j], N_gu, K_gu)
+                u = h @ w_gu.t()
+                gate, upv = u[:, : args.inter], u[:, args.inter:]
+                a = (torch.nn.functional.silu(gate.float()) * upv.float()).to(torch.bfloat16)
+                w_dn = bnb_dq(s["dn_b"][j], s["dn_a"][j], N_dn, K_dn)
+                outs.append(a @ w_dn.t())
+            down = torch.cat(outs)
         else:  # dequant baseline: torch LUT decode + bf16 matmul per expert
             outs = []
             for j in range(k):
@@ -209,6 +248,21 @@ def main():
                 outs.append(a @ w_dn.t())
             down = torch.cat(outs)
         return h + down.mean(0, keepdim=True)  # uniform router weights (synthetic)
+
+    # --- energy sampler (50 ms pynvml, timed window only) --------------------
+    import threading
+    _pwr = {"samples": [], "run": True}
+    def _sampler():
+        try:
+            import pynvml
+            pynvml.nvmlInit()
+            hnd = pynvml.nvmlDeviceGetHandleByIndex(0)
+            while _pwr["run"]:
+                _pwr["samples"].append(pynvml.nvmlDeviceGetPowerUsage(hnd) / 1000.0)
+                time.sleep(0.05)
+        except Exception as e:
+            _pwr["err"] = str(e)
+    _sth = threading.Thread(target=_sampler, daemon=True)
 
     # --- pipelined decode loop ----------------------------------------------
     torch.cuda.reset_peak_memory_stats()
@@ -231,9 +285,14 @@ def main():
             times.append(dt)
         if tok % 8 == 0:
             print(f"  tok {tok}/{T}: {dt*1e3:.0f} ms", flush=True)
+        if tok == args.warmup_tokens - 1 and not _sth.is_alive():
+            _sth.start()
 
+    _pwr["run"] = False
     med = statistics.median(times)
     peak_gb = torch.cuda.max_memory_allocated() / 1e9
+    mean_w = (statistics.mean(_pwr["samples"]) if _pwr["samples"] else None)
+    j_per_tok = (mean_w * med) if mean_w else None
     out = {
         "config": vars(args),
         "per_token_gb": per_tok_bytes / 1e9,
@@ -244,6 +303,10 @@ def main():
         "toks_per_s": 1.0 / med,
         "achieved_fraction_of_waterfall": (1.0 / med) / waterfall_toks,
         "vram_peak_gb": peak_gb,
+        "mean_power_w": mean_w,
+        "joules_per_token": j_per_tok,
+        "power_samples": len(_pwr["samples"]),
+        "power_err": _pwr.get("err"),
         "gpu": torch.cuda.get_device_name(0),
     }
     Path(args.out).write_text(json.dumps(out, indent=1))

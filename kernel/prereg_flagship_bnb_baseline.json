@@ -1,0 +1,20 @@
+{
+  "registered_utc": "2026-07-14T19:40:00Z",
+  "purpose": "FLAGSHIP FOLLOW-UP (registered in the Phase A results doc): is Phase A's 3x dequant-path gap (fused 5.57 tok/s = 103% of waterfall vs torch-dequant 1.81 = 34%) an IMPLEMENTATION artifact of the torch LUT decode, or an ARCHITECTURAL property of dequantize-then-matmul? The standard ecosystem path is bnb's CUDA dequant kernel + cuBLAS. REGISTERED PREDICTION (X2): at bs=1 decode with k=8 over a ~45 GB/s link, the per-token copy shadow (~180 ms) is deep enough that the bnb-CUDA dequant path ALSO hides its compute and lands near the waterfall ceiling. If X2 confirms, Phase A's 3x speed gap is attributed to the torch implementation, NOT the dequant architecture, and the fused kernel's offload-pipeline differentiators NARROW to: J/token (the dequant path pays an extra HBM materialization round-trip), VRAM transients, and zero-materialization single-launch simplicity. This prereg narrows OUR OWN product claim if confirmed; that is the point of registering it.",
+  "frozen_commit": "the commit carrying this file (bnb_dequant harness mode + energy sampler committed alongside). NOTE ON PUSH TIMING: this commit is OTS-stamped at registration and intentionally NOT pushed until the in-flight v6 confirmatory's results land (its freeze clause). The .ots receipt is the pre-data clock; the push carries commit + receipt together afterwards.",
+  "protocol": {
+    "host": "FRESH RunPod SECURE H100 (NVIDIA H100 80GB HBM3) provisioned AFTER this stamp. Runner checks host RAM >= 140 GB before building (the 94-layer NF4 pinned store is ~128 GB); insufficient RAM = documented ABORT, not data.",
+    "pipeline": "bench/phase3/offload_decode_235b.py Phase-A synthetic pipeline, 94L/E128/k8 Qwen3-235B geometry, real GQA attention, uniform synthetic routing, double-buffered H2D staging; on-box 1GiBx10 pinned link microbench defines the waterfall per run.",
+    "runs": "A-B-C-A sequence, fresh process each: fused -> bnb_dequant -> dequant(torch, Phase-A continuity) -> fused. 64 timed tokens (4 warmup) per run; pynvml 50 ms power sampling over the timed window.",
+    "self_check": "bnb_dequant mode gates itself at build: bnb's CUDA dequant applied to the staged fused-layout bytes must allclose(atol 1e-2) the torch reference decode on a random expert stack. Mismatch = ABORT (layout equivalence broken), not data."
+  },
+  "frozen_verdict_criteria": {
+    "X1_selfcheck": "bnb-vs-reference decode self-check passes (gate; abort otherwise).",
+    "X2_prediction": "bnb_dequant achieves >= 0.90 x the on-box waterfall ceiling (the registered prediction; CONFIRMED narrows our speed claim to the torch-path comparison and re-attributes the flagship advantage to energy/VRAM/simplicity).",
+    "X3_energy": "fused J/token <= 0.90 x bnb_dequant J/token (the HBM materialization round-trip must show up as power; if both modes converge to copy-dominated power this FAILS and is reported at full volume).",
+    "X4_drift": "the two fused runs' tok/s within 5% of each other (pod thermal/clock drift guard).",
+    "X5_vram": "VRAM peaks reported all modes; fused peak <= bnb_dequant peak expected (transient materialization) - report, not bar.",
+    "REPORT": "torch-dequant mode tok/s + waterfall fraction for Phase-A continuity; absolute tok/s all modes; link GB/s; power sample counts.",
+    "no_tune_clause": "Failures reported at full volume; claims narrowed; no re-runs until green."
+  }
+}
