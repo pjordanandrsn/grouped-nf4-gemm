@@ -98,6 +98,7 @@ def main():
                         spec.K, spec.N,
                         B.stride(0), B.stride(1), A.stride(0), A.stride(1),
                         BLOCK_M=bm, BLOCK_N=bn, BLOCK_K=BLOCKSIZE,
+                        GROUPS=1, VARIANT=0,
                         num_warps=w, num_stages=s,
                     )
                 r["ms"] = time_launch(fn)

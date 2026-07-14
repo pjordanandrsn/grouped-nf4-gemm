@@ -114,6 +114,9 @@ def _gemm_nf4_grouped(
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
     BLOCK_K: tl.constexpr,
+    GROUPS: tl.constexpr,   # quant groups per K-step (BLOCK_K // 64)
+    VARIANT: tl.constexpr,  # 0 = v5 mainloop; 1 = register-LUT tl.gather;
+                            # 3 = OPT-IN bf16 MMA (documented looser P-fid)
 ):
     pid_m = tl.program_id(0)
     pid_n = tl.program_id(1)
@@ -132,6 +135,8 @@ def _gemm_nf4_grouped(
     offs_k = tl.arange(0, BLOCK_K)
     b_base = b_ptr + eid * stride_be + offs_n[:, None] * stride_bn
     a_base = a_ptr + (row0 + offs_m)[:, None] * K
+    if VARIANT == 1:
+        lut_reg = tl.load(lut_ptr + tl.arange(0, 16))  # codebook in registers
 
     for k0 in range(0, K, BLOCK_K):
         kk = k0 + offs_k
@@ -140,17 +145,46 @@ def _gemm_nf4_grouped(
         )
         # bnb packs element 2j into the HIGH nibble, 2j+1 into the LOW nibble
         nib = tl.where((kk[None, :] % 2) == 0, (bytes_ >> 4) & 0xF, bytes_ & 0xF)
-        w = tl.load(lut_ptr + nib)  # [BN, BK] fp32 codebook gather
-        am = tl.load(
-            amax_ptr + eid * stride_ae + offs_n * stride_an + (k0 // BLOCK_K),
-            mask=n_mask,
-            other=0.0,
-        )
-        w = w * am[:, None]
-        a = tl.load(a_base + kk[None, :], mask=m_mask[:, None], other=0.0).to(
-            tl.float32
-        )
-        acc += tl.dot(a, tl.trans(w))  # TF32 tensor cores on sm_86, fp32 acc
+        if VARIANT == 1:
+            # register-resident codebook: shuffle-gather, no per-element L1 LDG
+            w = tl.reshape(
+                tl.gather(lut_reg, tl.reshape(nib, [BLOCK_N * BLOCK_K]), 0),
+                [BLOCK_N, BLOCK_K],
+            )
+        else:
+            w = tl.load(lut_ptr + nib)  # [BN, BK] fp32 codebook gather
+        g0 = k0 // 64
+        if GROUPS == 1:
+            am = tl.load(
+                amax_ptr + eid * stride_ae + offs_n * stride_an + g0,
+                mask=n_mask,
+                other=0.0,
+            )
+            scale = am[:, None]
+        else:  # two quant groups per K-step (wrapper guarantees K % BLOCK_K == 0)
+            am0 = tl.load(
+                amax_ptr + eid * stride_ae + offs_n * stride_an + g0,
+                mask=n_mask,
+                other=0.0,
+            )
+            am1 = tl.load(
+                amax_ptr + eid * stride_ae + offs_n * stride_an + (g0 + 1),
+                mask=n_mask,
+                other=0.0,
+            )
+            scale = tl.where(offs_k[None, :] < 64, am0[:, None], am1[:, None])
+        if VARIANT == 3:
+            # OPT-IN bf16 MMA: weight rounding matches the dequant baseline
+            # (P-fid parity, not the fp32/TF32 edge); full-rate HMMA on sm_86.
+            wb = (w * scale).to(tl.bfloat16)
+            a = tl.load(a_base + kk[None, :], mask=m_mask[:, None], other=0.0)
+            acc += tl.dot(a, tl.trans(wb))
+        else:
+            w = w * scale
+            a = tl.load(a_base + kk[None, :], mask=m_mask[:, None], other=0.0).to(
+                tl.float32
+            )
+            acc += tl.dot(a, tl.trans(w))  # TF32 tensor cores on sm_86, fp32 acc
 
     out_ptrs = out_ptr + (row0 + offs_m)[:, None] * N + offs_n[None, :]
     tl.store(out_ptrs, acc.to(tl.bfloat16), mask=m_mask[:, None] & n_mask[None, :])
@@ -359,6 +393,8 @@ def gemm_4bit_grouped(
     decode_config: tuple | None = None,
     split_k: int | None = None,
     prefill_config: tuple | None = None,
+    prefill_variant: int = 0,
+    prefill_groups: int = 1,
 ):
     """Single-launch grouped NF4 GEMM. ``a_cat [T,K]`` bf16/fp16 in group-sorted
     order, ``B [E,N,K//2]`` uint8, ``absmax [E,N,K//64]`` fp32, ``sizes`` the
@@ -367,7 +403,10 @@ def gemm_4bit_grouped(
     decode path's (BLOCK_N, num_warps); ``split_k`` overrides the decode
     split-K factor (None = plan, 1 = off); ``prefill_config`` overrides the
     M-tile path's (BLOCK_N, num_warps, num_stages) — benchmark/ablation
-    support only."""
+    support only. ``prefill_variant``: 0 = shipped v5 mainloop, 1 =
+    register-LUT tl.gather, 3 = OPT-IN bf16 MMA (P-fid parity with the
+    dequant baseline, not the fp32/TF32 edge — see RESULTS-phase2-v1.1).
+    ``prefill_groups``: quant groups per K-step (2 requires K % 128 == 0)."""
     E, N, _ = B.shape
     T, K = a_cat.shape
     assert sum(sizes) == T, (sum(sizes), T)
@@ -451,6 +490,11 @@ def gemm_4bit_grouped(
         block_n = 128
         warps = 8 if block_m >= 128 else 4
         stages = 3 if block_m >= 128 else 2
+    if prefill_variant == 1 and not hasattr(tl, "gather"):
+        raise RuntimeError("prefill_variant=1 needs triton with tl.gather")
+    block_k = BLOCKSIZE * prefill_groups
+    if prefill_groups != 1:
+        assert prefill_groups == 2 and K % block_k == 0, (prefill_groups, K)
     t_row0, t_rows, t_group = build_group_tiles(sizes, block_m, dev)
     grid = (t_row0.numel(), triton.cdiv(N, block_n))
     _gemm_nf4_grouped[grid](
@@ -471,7 +515,9 @@ def gemm_4bit_grouped(
         absmax.stride(1),
         BLOCK_M=block_m,
         BLOCK_N=block_n,
-        BLOCK_K=BLOCKSIZE,
+        BLOCK_K=block_k,
+        GROUPS=prefill_groups,
+        VARIANT=prefill_variant,
         num_warps=warps,
         num_stages=stages,
     )
