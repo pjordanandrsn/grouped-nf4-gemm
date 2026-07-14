@@ -1,0 +1,83 @@
+{
+ "model": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+ "layers": 4,
+ "h2d_gbps": 48.773004863496595,
+ "per_token_gb": 0.339738624,
+ "waterfall_toks": 143.56037676627724,
+ "results": [
+  {
+   "prompt": "The key difference between mixture-of-experts and dense transformer models is",
+   "text": " bil\u623e\u623e\u623e\u623e\u623e\u623e\u623e",
+   "n_tokens": 8,
+   "mode": "gpu",
+   "toks_per_s_off": 95.17863883449223,
+   "toks_per_s_on": 93.91761077726676,
+   "prefetch_speedup": 0.9867509341101388,
+   "hit_rate": null,
+   "greedy_identical": true,
+   "distinct2": 0.2857142857142857
+  },
+  {
+   "prompt": "The key difference between mixture-of-experts and dense transformer models is",
+   "text": " bil\u623e\u623e\u623e\u623e\u623e\u623e\u623e",
+   "n_tokens": 8,
+   "mode": "gpu_early",
+   "toks_per_s_off": 95.17863883449223,
+   "toks_per_s_on": 72.85249555706648,
+   "prefetch_speedup": 0.7654290547666996,
+   "hit_rate": 0.4892241379310345,
+   "greedy_identical": true,
+   "distinct2": 0.2857142857142857
+  },
+  {
+   "prompt": "Write a haiku about memory bandwidth.",
+   "text": " bil\u623e\u623e\u623e\u623e\u623e\u623e\u623e",
+   "n_tokens": 8,
+   "mode": "gpu",
+   "toks_per_s_off": 95.10973457206494,
+   "toks_per_s_on": 93.66901049615599,
+   "prefetch_speedup": 0.9848519808998383,
+   "hit_rate": null,
+   "greedy_identical": true,
+   "distinct2": 0.2857142857142857
+  },
+  {
+   "prompt": "Write a haiku about memory bandwidth.",
+   "text": " bil\u623e\u623e\u623e\u623e\u623e\u623e\u623e",
+   "n_tokens": 8,
+   "mode": "gpu_early",
+   "toks_per_s_off": 95.10973457206494,
+   "toks_per_s_on": 65.0346528467709,
+   "prefetch_speedup": 0.68378545202956,
+   "hit_rate": 0.4049479166666667,
+   "greedy_identical": true,
+   "distinct2": 0.2857142857142857
+  },
+  {
+   "prompt": "Explain, in two sentences, why quantization reduces energy per token:",
+   "text": " bil\u623e\u623e\u623e\u623e\u623e\u623e\u623e",
+   "n_tokens": 8,
+   "mode": "gpu",
+   "toks_per_s_off": 95.05782516663464,
+   "toks_per_s_on": 93.44674008728144,
+   "prefetch_speedup": 0.9830515259892701,
+   "hit_rate": null,
+   "greedy_identical": true,
+   "distinct2": 0.2857142857142857
+  },
+  {
+   "prompt": "Explain, in two sentences, why quantization reduces energy per token:",
+   "text": " bil\u623e\u623e\u623e\u623e\u623e\u623e\u623e",
+   "n_tokens": 8,
+   "mode": "gpu_early",
+   "toks_per_s_off": 95.05782516663464,
+   "toks_per_s_on": 74.08619538218866,
+   "prefetch_speedup": 0.7793802903897381,
+   "hit_rate": 0.5211693548387096,
+   "greedy_identical": true,
+   "distinct2": 0.2857142857142857
+  }
+ ],
+ "vram_peak_gb": 2.036133888,
+ "gpu": "NVIDIA H100 80GB HBM3"
+}

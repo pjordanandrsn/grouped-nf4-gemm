@@ -1,0 +1,46 @@
+/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[16:44:09] downloading Qwen/Qwen3-235B-A22B-Instruct-2507 -> /workspace/hf
+Fetching 125 files:   0%|          | 0/125 [00:00<?, ?it/s]Fetching 125 files: 100%|██████████| 125/125 [00:00<00:00, 2022.58it/s]
+[16:44:09] download complete
+[16:44:11] prompts encoded: lengths [21, 16, 23]
+[16:44:13] link 45.0 GB/s; 7.98 GB/token -> waterfall 5.63 tok/s
+[16:45:19]   built layer 8/94 (66s)
+[16:46:40]   built layer 16/94 (148s)
+[16:48:04]   built layer 24/94 (231s)
+[16:49:27]   built layer 32/94 (314s)
+[16:50:54]   built layer 40/94 (401s)
+[16:52:24]   built layer 48/94 (491s)
+[16:53:51]   built layer 56/94 (578s)
+[16:55:23]   built layer 64/94 (670s)
+[16:56:50]   built layer 72/94 (757s)
+[16:58:13]   built layer 80/94 (840s)
+[16:59:43]   built layer 88/94 (931s)
+[17:00:51] build complete in 998s
+[17:01:45] PROMPT[gpu]: 'The key difference between mixture-of-experts and dense transformer models is'
+  off 4.34 -> on 4.41 tok/s (x1.015, hit -1.00, identical=True)
+  The key difference between **Mixture-of-Experts (MoE)** and **dense (or dense) transformer models** lies in how they utilize their parameters during inference:
+
+### 1. **Parameter Usage During Inferen
+[17:02:26] PROMPT[gpu_early]: 'The key difference between mixture-of-experts and dense transformer models is'
+  off 4.34 -> on 3.64 tok/s (x0.838, hit 0.78, identical=True)
+  The key difference between **Mixture-of-Experts (MoE)** and **dense (or dense) transformer models** lies in how they utilize their parameters during inference:
+
+### 1. **Parameter Usage During Inferen
+[17:02:43] PROMPT[gpu]: 'Write a haiku about memory bandwidth.'
+  off 4.33 -> on 4.39 tok/s (x1.014, hit -1.00, identical=True)
+  Data streams flow fast—  
+silicon whispers, vast and deep,  
+cache holds the fleeting thought.
+[17:02:54] PROMPT[gpu_early]: 'Write a haiku about memory bandwidth.'
+  off 4.33 -> on 3.65 tok/s (x0.844, hit 0.80, identical=True)
+  Data streams flow fast—  
+silicon whispers, vast and deep,  
+cache holds the fleeting thought.
+[17:03:25] PROMPT[gpu]: 'Explain, in two sentences, why quantization reduces energy per token:'
+  off 4.33 -> on 4.40 tok/s (x1.016, hit -1.00, identical=True)
+  Quantization reduces energy per token by decreasing the precision of model weights and activations (e.g., from 32 to int8 or lower reduces the computational and memory requirements, enabling faster in
+[17:03:43] PROMPT[gpu_early]: 'Explain, in two sentences, why quantization reduces energy per token:'
+  off 4.33 -> on 3.68 tok/s (x0.851, hit 0.79, identical=True)
+  Quantization reduces energy per token by decreasing the precision of model weights and activations (e.g., from 32 to int8 or lower reduces the computational and memory requirements, enabling faster in
+[17:03:43] wrote /workspace/phaseB5.json; VRAM peak 15.2 GB

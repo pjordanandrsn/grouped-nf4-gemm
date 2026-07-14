@@ -1,0 +1,27 @@
+/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[16:43:28] downloading Qwen/Qwen3-235B-A22B-Instruct-2507 -> /workspace/hf
+Fetching 125 files:   0%|          | 0/125 [00:00<?, ?it/s]Fetching 125 files: 100%|██████████| 125/125 [00:00<00:00, 1880.59it/s]
+[16:43:29] download complete
+[16:43:31] prompts encoded: lengths [21, 16, 23]
+[16:43:33] link 48.8 GB/s; 0.34 GB/token -> waterfall 143.56 tok/s
+[16:44:01] build complete in 28s
+[16:44:02] PROMPT[gpu]: 'The key difference between mixture-of-experts and dense transformer models is'
+  off 95.18 -> on 93.92 tok/s (x0.987, hit -1.00, identical=True)
+   bil戾戾戾戾戾戾戾
+[16:44:03] PROMPT[gpu_early]: 'The key difference between mixture-of-experts and dense transformer models is'
+  off 95.18 -> on 72.85 tok/s (x0.765, hit 0.49, identical=True)
+   bil戾戾戾戾戾戾戾
+[16:44:03] PROMPT[gpu]: 'Write a haiku about memory bandwidth.'
+  off 95.11 -> on 93.67 tok/s (x0.985, hit -1.00, identical=True)
+   bil戾戾戾戾戾戾戾
+[16:44:03] PROMPT[gpu_early]: 'Write a haiku about memory bandwidth.'
+  off 95.11 -> on 65.03 tok/s (x0.684, hit 0.40, identical=True)
+   bil戾戾戾戾戾戾戾
+[16:44:04] PROMPT[gpu]: 'Explain, in two sentences, why quantization reduces energy per token:'
+  off 95.06 -> on 93.45 tok/s (x0.983, hit -1.00, identical=True)
+   bil戾戾戾戾戾戾戾
+[16:44:05] PROMPT[gpu_early]: 'Explain, in two sentences, why quantization reduces energy per token:'
+  off 95.06 -> on 74.09 tok/s (x0.779, hit 0.52, identical=True)
+   bil戾戾戾戾戾戾戾
+[16:44:05] wrote /workspace/phaseB5_smoke2.json; VRAM peak 2.0 GB

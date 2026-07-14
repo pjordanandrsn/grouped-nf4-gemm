@@ -1,0 +1,35 @@
+/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[15:39:30] downloading Qwen/Qwen3-235B-A22B-Instruct-2507 -> /workspace/hf
+Fetching 125 files:   0%|          | 0/125 [00:00<?, ?it/s]Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 125 files:   1%|          | 1/125 [00:00<00:30,  4.08it/s]Fetching 125 files:   3%|▎         | 4/125 [00:15<08:21,  4.14s/it]Fetching 125 files:   4%|▍         | 5/125 [00:19<08:27,  4.23s/it]Fetching 125 files:   8%|▊         | 10/125 [00:20<02:48,  1.47s/it]Fetching 125 files:  10%|▉         | 12/125 [00:27<03:52,  2.05s/it]Fetching 125 files:  10%|█         | 13/125 [00:34<05:18,  2.84s/it]Fetching 125 files:  14%|█▍        | 18/125 [00:36<02:42,  1.52s/it]Fetching 125 files:  16%|█▌        | 20/125 [00:40<02:53,  1.65s/it]Fetching 125 files:  17%|█▋        | 21/125 [00:46<04:01,  2.32s/it]Fetching 125 files:  19%|█▉        | 24/125 [00:51<03:28,  2.06s/it]Fetching 125 files:  20%|██        | 25/125 [00:55<03:48,  2.29s/it]Fetching 125 files:  21%|██        | 26/125 [01:00<04:46,  2.89s/it]Fetching 125 files:  22%|██▏       | 27/125 [01:03<04:47,  2.94s/it]Fetching 125 files:  22%|██▏       | 28/125 [01:12<06:55,  4.29s/it]Fetching 125 files:  23%|██▎       | 29/125 [01:19<07:49,  4.90s/it]Fetching 125 files:  24%|██▍       | 30/125 [01:35<12:19,  7.78s/it]Fetching 125 files:  27%|██▋       | 34/125 [01:36<05:02,  3.33s/it]Fetching 125 files:  28%|██▊       | 35/125 [01:40<05:00,  3.34s/it]Fetching 125 files:  29%|██▉       | 36/125 [01:45<05:21,  3.62s/it]Fetching 125 files:  30%|██▉       | 37/125 [02:12<12:57,  8.84s/it]Fetching 125 files:  30%|███       | 38/125 [02:56<25:07, 17.33s/it]Fetching 125 files:  31%|███       | 39/125 [13:01<4:01:04, 168.19s/it]Fetching 125 files:  45%|████▍     | 56/125 [14:19<31:16, 27.20s/it]   Fetching 125 files:  58%|█████▊    | 72/125 [16:56<15:47, 17.87s/it]Fetching 125 files:  58%|█████▊    | 73/125 [17:06<15:10, 17.50s/it]Fetching 125 files:  60%|██████    | 75/125 [17:08<13:00, 15.61s/it]Fetching 125 files:  61%|██████    | 76/125 [20:22<23:50, 29.19s/it]Fetching 125 files:  62%|██████▏   | 78/125 [29:01<55:11, 70.46s/it]Fetching 125 files:  70%|███████   | 88/125 [30:39<22:27, 36.43s/it]Fetching 125 files:  72%|███████▏  | 90/125 [33:04<24:07, 41.36s/it]Fetching 125 files:  74%|███████▎  | 92/125 [34:18<22:22, 40.69s/it]Fetching 125 files:  76%|███████▌  | 95/125 [42:47<37:09, 74.30s/it]Fetching 125 files:  86%|████████▌ | 107/125 [44:21<10:21, 34.52s/it]Fetching 125 files:  92%|█████████▏| 115/125 [46:44<04:44, 28.48s/it]Fetching 125 files:  95%|█████████▌| 119/125 [47:35<02:31, 25.22s/it]Fetching 125 files:  96%|█████████▌| 120/125 [58:03<05:32, 66.53s/it]Fetching 125 files:  97%|█████████▋| 121/125 [58:19<04:08, 62.10s/it]Fetching 125 files: 100%|██████████| 125/125 [58:19<00:00, 28.00s/it]
+[16:37:51] download complete
+[16:37:54] prompts encoded: lengths [21, 16, 23]
+[16:37:55] link 44.7 GB/s; 0.34 GB/token -> waterfall 131.50 tok/s
+[16:38:37] build complete in 42s
+[16:38:40] PROMPT[gpu]: 'The key difference between mixture-of-experts and dense transformer models is'
+  off 95.10 -> on 93.33 tok/s (x0.981, hit -1.00, identical=True)
+   bil戾戾戾戾戾戾戾
+[16:38:40] PROMPT[gpu_early]: 'The key difference between mixture-of-experts and dense transformer models is'
+  off 95.10 -> on 76.43 tok/s (x0.804, hit 0.49, identical=False)
+  视角视角视角视角视角视角视角视角
+[16:38:41] PROMPT[gpu]: 'Write a haiku about memory bandwidth.'
+  off 95.06 -> on 93.28 tok/s (x0.981, hit -1.00, identical=True)
+   bil戾戾戾戾戾戾戾
+Traceback (most recent call last):
+  File "/workspace/g/bench/phase3/offload_generate_235b.py", line 546, in <module>
+    main()
+  File "/workspace/g/bench/phase3/offload_generate_235b.py", line 518, in main
+    g_on, med_on, hr = generate(toks, args.max_new, prefetch=True, mode=m_)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/g/bench/phase3/offload_generate_235b.py", line 492, in generate
+    logits = step(tid, t, prefetch, mode)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/g/bench/phase3/offload_generate_235b.py", line 412, in step
+    h = embed[int(tok_id)].to(dev, torch.bfloat16).view(1, -1)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.AcceleratorError: CUDA error: an illegal memory access was encountered
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
