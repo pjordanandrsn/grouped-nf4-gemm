@@ -1,0 +1,8 @@
+[
+  {"model": "giant/Qwen3-235B-A22B", "proj": "gate_up", "N": 3072, "K": 4096, "E": 128, "top_k": 8},
+  {"model": "giant/Qwen3-235B-A22B", "proj": "down", "N": 4096, "K": 1536, "E": 128, "top_k": 8},
+  {"model": "giant/Qwen3-Coder-480B-A35B", "proj": "gate_up", "N": 5120, "K": 6144, "E": 160, "top_k": 8},
+  {"model": "giant/Qwen3-Coder-480B-A35B", "proj": "down", "N": 6144, "K": 2560, "E": 160, "top_k": 8},
+  {"model": "giant/Llama-4-Maverick-128E", "proj": "gate_up", "N": 16384, "K": 5120, "E": 128, "top_k": 1},
+  {"model": "giant/Llama-4-Maverick-128E", "proj": "down", "N": 5120, "K": 8192, "E": 128, "top_k": 1}
+]
