@@ -1,0 +1,18 @@
+{
+  "registered_utc": "2026-07-14T16:20:00Z",
+  "purpose": "FLAGSHIP B4: sync-free early routing. B3 validated the predictor (pre/post-attention router agreement 92.6-93.1% on the real 235B) but added ~94 GPU->CPU syncs/token (.tolist() on the early router), collapsing the CPU's launch run-ahead and giving the win back (0.87-1.07x). B4 removes every ADDED main-thread sync: early-router ids go GPU -> pinned ring via async D2H; a dedicated issuer thread waits on that event off the main thread and issues prefetch copies on its own stream; the main thread keeps exactly the one sync per layer that prefetch-off pays. Registered question: with the predictor proven and the sync tax removed, does early-fetch finally beat the serialized baseline?",
+  "frozen_commit": "the commit carrying this file (harness committed alongside).",
+  "protocol": {
+    "host": "RunPod SECURE H100 class (>=150 GB RAM, >=600 GB volume); on-box link microbench.",
+    "runs": "SMOKE (--layers 4, paired off/early2, 8 tokens) gates the full build; then full 94-layer: per prompt (3 fixed), OFF (64 greedy tokens) then EARLY2 (128), same process, state reset between.",
+    "reduction": "median s/token per mode; agreement A reported."
+  },
+  "frozen_verdict_criteria": {
+    "F1_identity": "EARLY2 greedy tokens identical to OFF for the paired prefix, all 3 prompts.",
+    "F2_paired": "median tok/s(EARLY2) >= 1.05 x tok/s(OFF) on every prompt.",
+    "F3_waterfall": "tok/s(EARLY2) >= 0.80 x the on-box waterfall ceiling on every prompt.",
+    "F4_vram": "torch peak allocated <= 20.0 GB.",
+    "REPORT": "agreement A; absolute tok/s; off-baseline (now replicated on 3 pods at 4.30-4.33); texts + distinct-2.",
+    "no_tune_clause": "Failures reported at full volume; claims narrowed; no re-runs until green."
+  }
+}
