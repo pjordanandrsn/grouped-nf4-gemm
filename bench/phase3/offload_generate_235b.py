@@ -157,6 +157,8 @@ def main():
     ap.add_argument("--cache", default="/dev/shm/hf")
     ap.add_argument("--layers", type=int, default=L_TOT)
     ap.add_argument("--max-new", type=int, default=128)
+    ap.add_argument("--prefetch-mode", choices=["spec", "early"], default="early",
+                    help="ON-mode strategy: spec = last-token speculation (B2), early = pre-attention router prediction (B3)")
     ap.add_argument("--paired-tokens", type=int, default=64,
                     help="tokens for the prefetch-off paired run + identity check")
     ap.add_argument("--out", required=True)
@@ -216,7 +218,9 @@ def main():
         dn_a=torch.empty(K_TOP, H, I // 64, dtype=torch.float32, device=dev),
     ) for _ in range(2)]
     copy_stream = torch.cuda.Stream()
+    corr_stream = torch.cuda.Stream(priority=-1)  # corrections never queue behind next-layer bytes
     copy_done = [torch.cuda.Event() for _ in range(2)]
+    corr_done = [torch.cuda.Event() for _ in range(2)]
     from nf4_grouped import gemm_4bit_grouped
 
     ids_dev = torch.arange(K_TOP, dtype=torch.int32, device=dev)
@@ -283,12 +287,13 @@ def main():
         misses = [e for e in need if e not in hit_slots]
         free = [j for j in range(K_TOP) if cur[j] not in need]
         if misses:
-            with torch.cuda.stream(copy_stream):
+            with torch.cuda.stream(corr_stream):
+                corr_stream.wait_event(copy_done[buf])  # after the predicted set lands
                 for e, j in zip(misses, free):
                     copy_slot(buf, j, lay, e)
                     hit_slots[e] = j
-                copy_done[buf].record(copy_stream)
-            torch.cuda.current_stream().wait_event(copy_done[buf])
+                corr_done[buf].record(corr_stream)
+            torch.cuda.current_stream().wait_event(corr_done[buf])
         slot_w = torch.zeros(K_TOP, dtype=torch.bfloat16, device=wts.device)
         for e, w in zip(eids, wts):
             slot_w[hit_slots[e]] = w
@@ -309,23 +314,32 @@ def main():
         down = gemm_4bit_grouped(act, s["dn_b"], s["dn_a"], sizes, ids_dev)
         return (weights[:, None] * down).sum(0, keepdim=True)
 
-    def step(tok_id, t, prefetch):
-        """One decode step. prefetch=False: copy after each layer's router
-        resolves (the serialized Phase-B baseline). prefetch=True: while
-        layer L computes, speculatively stream layer L+1's experts using
-        LAST TOKEN'S routing for L+1 (real routers are sticky); on resolve,
-        only mispredicted experts are fetched. Slot permutation is absorbed
-        by slot-aligned router weights, so outputs are bit-identical to the
-        non-speculative path (asserted by the paired identity check)."""
+    def step(tok_id, t, prefetch, mode="early"):
+        """One decode step.
+        prefetch=False: copy after each layer's true router resolves (the
+          serialized Phase-B baseline).
+        mode="spec" (B2): while L computes, stream L+1's experts from LAST
+          TOKEN'S routing; measured NEGATIVE at Qwen's 44% stickiness.
+        mode="early" (B3): the moment L's MoE lands, run L+1's REAL router
+          weights on L+1's PRE-attention hidden (the residual stream before
+          L+1's attention adds to it) and stream that prediction — it
+          overlaps L+1's attention; the true (post-attention) router still
+          adjudicates and only mispredictions are fetched, on a
+          high-priority stream. Slot permutation is absorbed by slot-aligned
+          weights: outputs are bit-identical to prefetch-off (asserted)."""
         h = embed[int(tok_id)].to(dev, torch.bfloat16).view(1, -1)
         if prefetch:
-            issue_copy(0, prev_eids[0], 0, guard_moe=True)
+            if mode == "early":
+                pred, _ = route(0, rmsnorm(h, norms[0][1]))
+                issue_copy(0, pred, 0, guard_moe=True)
+            else:
+                issue_copy(0, prev_eids[0], 0, guard_moe=True)
         for lay in range(layers):
             buf = lay % 2
             h = h + attention(lay, rmsnorm(h, norms[lay][0]), t)
             hn = rmsnorm(h, norms[lay][1])
             eids, wts = route(lay, hn)
-            if prefetch and lay + 1 < layers:
+            if prefetch and mode == "spec" and lay + 1 < layers:
                 issue_copy((lay + 1) % 2, prev_eids[lay + 1], lay + 1, guard_moe=True)
             if not prefetch:
                 issue_copy(buf, eids, lay)
@@ -336,24 +350,27 @@ def main():
                 prev_eids[lay] = list(eids)
             h = h + moe(buf, hn, slot_w)
             moe_done[buf].record()
+            if prefetch and mode == "early" and lay + 1 < layers:
+                pred, _ = route(lay + 1, rmsnorm(h, norms[lay + 1][1]))
+                issue_copy((lay + 1) % 2, pred, lay + 1, guard_moe=True)
         h = rmsnorm(h, final_norm)
         return (h @ lm_head.t()).float()
 
-    def generate(toks, n_new, prefetch):
+    def generate(toks, n_new, prefetch, mode="early"):
         """Prompt pass + greedy generation; returns (ids, median s/tok, hit_rate)."""
         for lay in range(layers):
             prev_eids[lay] = list(range(K_TOP))  # reset speculation state
         hits_total[0] = hits_total[1] = 0
         t = 0
         for tid in toks:
-            logits = step(tid, t, prefetch)
+            logits = step(tid, t, prefetch, mode)
             t += 1
         gen, times = [], []
         cur = int(logits.argmax())
         for _ in range(n_new):
             gen.append(cur)
             a = time.perf_counter()
-            logits = step(cur, t, prefetch)
+            logits = step(cur, t, prefetch, mode)
             torch.cuda.synchronize()
             times.append(time.perf_counter() - a)
             t += 1
@@ -367,13 +384,14 @@ def main():
     results = []
     for prompt, toks in zip(prompts, prompt_toks):
         g_off, med_off, _ = generate(toks, args.paired_tokens, prefetch=False)
-        g_on, med_on, hr = generate(toks, args.max_new, prefetch=True)
+        g_on, med_on, hr = generate(toks, args.max_new, prefetch=True, mode=args.prefetch_mode)
         identical = g_off == g_on[: len(g_off)]
         text = tokenizer.decode(g_on, skip_special_tokens=True)
         bigrams = list(zip(g_on, g_on[1:]))
         d2 = len(set(bigrams)) / max(len(bigrams), 1)
         results.append({
             "prompt": prompt, "text": text, "n_tokens": len(g_on),
+            "mode": args.prefetch_mode,
             "toks_per_s_off": 1.0 / med_off, "toks_per_s_on": 1.0 / med_on,
             "prefetch_speedup": med_off / med_on, "hit_rate": hr,
             "greedy_identical": identical, "distinct2": d2,
