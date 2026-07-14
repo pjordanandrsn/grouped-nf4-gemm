@@ -95,7 +95,11 @@ in-repo):
   weights, real GQA attention + router): **5.57 tok/s = 102–103% of the
   measured 44.3 GB/s link's waterfall ceiling** — the stream fully hides
   compute — on a **13.6 GB** working set. The dequantize-then-matmul path on
-  the identical pipeline: 1.81 tok/s (34% of ceiling). ALL PASS.
+  the identical pipeline: 1.81 tok/s (34% of ceiling). ALL PASS. (Fractions
+  marginally above 100% are microbench conservatism: the 1 GiB×10 ceiling
+  measurement brackets every copy with a host sync, paying launch +
+  sync-return latency the pipeline's continuously-queued copy stream never
+  pays.)
 - **[The gap is architectural](bench/phase3/flagship/RESULTS-flagship-bnb-baseline.md)** —
   we registered the prediction that bnb's own CUDA dequant kernel would
   also hide under the copy shadow (which would have narrowed our claim),
@@ -173,12 +177,12 @@ split-K for starved grids (with a per-split work floor), a load-time
 min-bytes dispatch floor (tiny cells route to the dequant path via
 `decode_dispatch()`), the register-LUT prefill mainloop (v6, confirmed),
 and the flagship offload pipeline (Phase A/B + the closed prefetch program
-+ the UVA gather path). In flight: sm_120 census; the bnb-CUDA-dequant
-pipeline baseline (registered prediction: the standard path also hides
-under the PCIe shadow at decode, narrowing our speed claim to
-energy/VRAM/simplicity — run blind either way). Ecosystem landing is
-calendar-gated on the bitsandbytes v0.50.0 release; see the coordination
-note on #1949.
++ the UVA gather path + the bnb-CUDA-dequant baseline, whose registered
+prediction was refuted — see the flagship section). Pending: the v6 A2000
+report-only addendum; a bare-metal gen4 replication when stock returns.
+Parked: sm_120 (three consecutive cloud provisioning failures on 5090s —
+availability, not code). Ecosystem landing is calendar-gated on the
+bitsandbytes v0.50.0 release; see the coordination note on #1949.
 
 ## License & attribution
 
