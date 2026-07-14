@@ -1,0 +1,18 @@
+{
+  "registered_utc": "2026-07-14T14:35:00Z",
+  "purpose": "FLAGSHIP B3: EARLY ROUTING on the real-checkpoint offload pipeline. B2 measured Qwen3-235B's token-to-token expert stickiness at 0.43-0.45 and established the bandwidth law (full-k speculation at hit rate H costs (2-H)x bytes -> negative below H~0.6-0.7). B3 replaces the predictor: layer L+1's REAL router weights applied to L+1's PRE-ATTENTION hidden (available the moment L's MoE lands; same token, same residual stream). Registered questions: (1) the pre/post-attention top-8 agreement rate A of a production 235B router (the science, reported unbarred), (2) whether the copy now overlaps attention enough to beat the serialized baseline, (3) math untouched.",
+  "frozen_commit": "5f17cd4 (grouped-nf4-gemm main). No changes between stamp and results.",
+  "protocol": {
+    "host": "RunPod SECURE H100 class (>=150 GB RAM, >=600 GB volume); on-box link microbench as in B2.",
+    "runs": "SMOKE first (--layers 4, real checkpoint, paired off/early, 8 tokens) to validate the loop without burning a full build; then full 94-layer: per prompt (3 fixed), prefetch-OFF (64 greedy tokens) then EARLY (128), same process, KV+state reset between. Corrections ride a priority CUDA stream (the owned B2 queueing flaw, fixed).",
+    "reduction": "median s/token per mode; agreement A = fraction of expert-slots correctly predicted across all EARLY steps."
+  },
+  "frozen_verdict_criteria": {
+    "E1_identity": "EARLY greedy tokens identical to OFF for the paired 64-token prefix, all 3 prompts.",
+    "E2_paired": "median tok/s(EARLY) >= 1.05 x tok/s(OFF) on every prompt.",
+    "E3_waterfall": "tok/s(EARLY) >= 0.80 x the on-box waterfall ceiling on every prompt.",
+    "E4_vram": "torch peak allocated <= 20.0 GB.",
+    "REPORT": "agreement rate A per prompt (pre-attention router vs true router, top-8); bytes overhead (2-A); absolute tok/s; verbatim texts + distinct-2.",
+    "no_tune_clause": "Failures reported at full volume; claims narrowed; no re-runs until green."
+  }
+}
