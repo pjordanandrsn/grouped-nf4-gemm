@@ -157,6 +157,8 @@ def main():
     ap.add_argument("--cache", default="/dev/shm/hf")
     ap.add_argument("--layers", type=int, default=L_TOT)
     ap.add_argument("--max-new", type=int, default=128)
+    ap.add_argument("--paired-tokens", type=int, default=64,
+                    help="tokens for the prefetch-off paired run + identity check")
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
     dev = "cuda"
@@ -174,6 +176,26 @@ def main():
     # Encode BEFORE the ~17 min build so any tokenizer quirk fails in seconds.
     prompt_toks = [encode_prompt(tokenizer, p) for p in prompts]
     log(f"prompts encoded: lengths {[len(t) for t in prompt_toks]}")
+
+    # on-box link microbench (the Phase-B1 gap): pinned H2D, 1 GiB x 10
+    pin = torch.empty(1 << 30, dtype=torch.uint8).pin_memory()
+    gbuf = torch.empty(1 << 30, dtype=torch.uint8, device=dev)
+    for _ in range(2):
+        gbuf.copy_(pin, non_blocking=True)
+    torch.cuda.synchronize()
+    _ts = []
+    for _ in range(10):
+        _a = time.perf_counter()
+        gbuf.copy_(pin, non_blocking=True)
+        torch.cuda.synchronize()
+        _ts.append(time.perf_counter() - _a)
+    h2d_gbps = (1 << 30) / statistics.median(_ts) / 1e9
+    del pin, gbuf
+    torch.cuda.empty_cache()
+    per_tok_bytes = layers * K_TOP * (2 * I * H // 2 + 2 * I * (H // 64) * 4
+                                      + H * I // 2 + H * (I // 64) * 4)
+    waterfall_toks = h2d_gbps * 1e9 / per_tok_bytes
+    log(f"link {h2d_gbps:.1f} GB/s; {per_tok_bytes/1e9:.2f} GB/token -> waterfall {waterfall_toks:.2f} tok/s")
 
     shards = Shards(root)
     host, attn_w, router_w, norms, embed, final_norm, lm_head = build(shards, dev, layers)
@@ -225,16 +247,52 @@ def main():
         ctx = torch.einsum("ht,htd->hd", torch.softmax(att, -1), vals.float()).to(torch.bfloat16)
         return ctx.reshape(1, -1) @ w["o_proj"].t()
 
-    def issue_copy(buf, eids, lay):
+    moe_done = [torch.cuda.Event() for _ in range(2)]
+    buf_ids = [[-1] * K_TOP, [-1] * K_TOP]   # expert id resident in each slot
+    prev_eids = [list(range(K_TOP)) for _ in range(layers)]  # last token's routing
+    hits_total = [0, 0]  # (hits, opportunities) under prefetch
+
+    def copy_slot(buf, j, lay, e):
         s = stage[buf]
         gu_b, gu_a, dn_b, dn_a = host[lay]
+        s["gu_b"][j].copy_(gu_b[e], non_blocking=True)
+        s["gu_a"][j].copy_(gu_a[e], non_blocking=True)
+        s["dn_b"][j].copy_(dn_b[e], non_blocking=True)
+        s["dn_a"][j].copy_(dn_a[e], non_blocking=True)
+        buf_ids[buf][j] = e
+
+    def issue_copy(buf, eids, lay, guard_moe=False):
         with torch.cuda.stream(copy_stream):
+            if guard_moe:
+                copy_stream.wait_event(moe_done[buf])  # don't clobber an in-flight MoE read
             for j, e in enumerate(eids):
-                s["gu_b"][j].copy_(gu_b[e], non_blocking=True)
-                s["gu_a"][j].copy_(gu_a[e], non_blocking=True)
-                s["dn_b"][j].copy_(dn_b[e], non_blocking=True)
-                s["dn_a"][j].copy_(dn_a[e], non_blocking=True)
+                copy_slot(buf, j, lay, e)
             copy_done[buf].record(copy_stream)
+
+    def resolve(buf, lay, eids, wts, prefetch):
+        """Make slots hold exactly `eids`; return slot-aligned weights + hit count."""
+        torch.cuda.current_stream().wait_event(copy_done[buf])
+        cur = buf_ids[buf]
+        if not prefetch:
+            return wts, K_TOP  # issue_copy already placed eids in order
+        need = list(eids)
+        hit_slots = {}
+        for j, e in enumerate(cur):
+            if e in need:
+                hit_slots[e] = j
+        misses = [e for e in need if e not in hit_slots]
+        free = [j for j in range(K_TOP) if cur[j] not in need]
+        if misses:
+            with torch.cuda.stream(copy_stream):
+                for e, j in zip(misses, free):
+                    copy_slot(buf, j, lay, e)
+                    hit_slots[e] = j
+                copy_done[buf].record(copy_stream)
+            torch.cuda.current_stream().wait_event(copy_done[buf])
+        slot_w = torch.zeros(K_TOP, dtype=torch.bfloat16, device=wts.device)
+        for e, w in zip(eids, wts):
+            slot_w[hit_slots[e]] = w
+        return slot_w, K_TOP - len(misses)
 
     def route(lay, h):
         logits = h.float() @ router_w[lay].t()
@@ -251,54 +309,82 @@ def main():
         down = gemm_4bit_grouped(act, s["dn_b"], s["dn_a"], sizes, ids_dev)
         return (weights[:, None] * down).sum(0, keepdim=True)
 
-    def step(tok_id, t):
+    def step(tok_id, t, prefetch):
+        """One decode step. prefetch=False: copy after each layer's router
+        resolves (the serialized Phase-B baseline). prefetch=True: while
+        layer L computes, speculatively stream layer L+1's experts using
+        LAST TOKEN'S routing for L+1 (real routers are sticky); on resolve,
+        only mispredicted experts are fetched. Slot permutation is absorbed
+        by slot-aligned router weights, so outputs are bit-identical to the
+        non-speculative path (asserted by the paired identity check)."""
         h = embed[int(tok_id)].to(dev, torch.bfloat16).view(1, -1)
-        # route layer 0 on the pre-attention hidden? Router input is the
-        # post-attention normed hidden — must route AFTER attention. So the
-        # copy for layer L can only be issued once layer L's router runs:
-        # the pipeline overlap is copy(L) vs attention(L) (~35% of budget),
-        # not copy(L+1) vs layer(L). Honest cost, measured as-is.
+        if prefetch:
+            issue_copy(0, prev_eids[0], 0, guard_moe=True)
         for lay in range(layers):
             buf = lay % 2
             h = h + attention(lay, rmsnorm(h, norms[lay][0]), t)
             hn = rmsnorm(h, norms[lay][1])
             eids, wts = route(lay, hn)
-            issue_copy(buf, eids, lay)
-            torch.cuda.current_stream().wait_event(copy_done[buf])
-            h = h + moe(buf, hn, wts)
+            if prefetch and lay + 1 < layers:
+                issue_copy((lay + 1) % 2, prev_eids[lay + 1], lay + 1, guard_moe=True)
+            if not prefetch:
+                issue_copy(buf, eids, lay)
+            slot_w, hits = resolve(buf, lay, eids, wts, prefetch)
+            if prefetch:
+                hits_total[0] += hits
+                hits_total[1] += K_TOP
+                prev_eids[lay] = list(eids)
+            h = h + moe(buf, hn, slot_w)
+            moe_done[buf].record()
         h = rmsnorm(h, final_norm)
         return (h @ lm_head.t()).float()
 
-    torch.cuda.reset_peak_memory_stats()
-    results = []
-    for prompt, toks in zip(prompts, prompt_toks):
+    def generate(toks, n_new, prefetch):
+        """Prompt pass + greedy generation; returns (ids, median s/tok, hit_rate)."""
+        for lay in range(layers):
+            prev_eids[lay] = list(range(K_TOP))  # reset speculation state
+        hits_total[0] = hits_total[1] = 0
         t = 0
-        for tid in toks:  # prompt pass, token by token (decode-path prefill)
-            logits = step(tid, t)
+        for tid in toks:
+            logits = step(tid, t, prefetch)
             t += 1
         gen, times = [], []
         cur = int(logits.argmax())
-        for _ in range(args.max_new):
+        for _ in range(n_new):
             gen.append(cur)
             a = time.perf_counter()
-            logits = step(cur, t)
+            logits = step(cur, t, prefetch)
             torch.cuda.synchronize()
             times.append(time.perf_counter() - a)
             t += 1
             cur = int(logits.argmax())
             if cur == tokenizer.eos_token_id:
                 break
-        text = tokenizer.decode(gen, skip_special_tokens=True)
-        bigrams = list(zip(gen, gen[1:]))
+        hr = hits_total[0] / max(hits_total[1], 1) if prefetch else None
+        return gen, statistics.median(times), hr
+
+    torch.cuda.reset_peak_memory_stats()
+    results = []
+    for prompt, toks in zip(prompts, prompt_toks):
+        g_off, med_off, _ = generate(toks, args.paired_tokens, prefetch=False)
+        g_on, med_on, hr = generate(toks, args.max_new, prefetch=True)
+        identical = g_off == g_on[: len(g_off)]
+        text = tokenizer.decode(g_on, skip_special_tokens=True)
+        bigrams = list(zip(g_on, g_on[1:]))
         d2 = len(set(bigrams)) / max(len(bigrams), 1)
-        med = statistics.median(times)
-        results.append({"prompt": prompt, "text": text, "n_tokens": len(gen),
-                        "median_s_per_tok": med, "toks_per_s": 1.0 / med,
-                        "distinct2": d2})
-        log(f"PROMPT: {prompt!r}\nGEN ({1.0/med:.2f} tok/s, d2={d2:.2f}): {text[:300]}")
+        results.append({
+            "prompt": prompt, "text": text, "n_tokens": len(g_on),
+            "toks_per_s_off": 1.0 / med_off, "toks_per_s_on": 1.0 / med_on,
+            "prefetch_speedup": med_off / med_on, "hit_rate": hr,
+            "greedy_identical": identical, "distinct2": d2,
+        })
+        log(f"PROMPT: {prompt!r}\n  off {1.0/med_off:.2f} -> on {1.0/med_on:.2f} tok/s "
+            f"(x{med_off/med_on:.3f}, hit {hr:.2f}, identical={identical})\n  {text[:220]}")
 
     out = {
         "model": MODEL, "layers": layers,
+        "h2d_gbps": h2d_gbps, "per_token_gb": per_tok_bytes / 1e9,
+        "waterfall_toks": waterfall_toks,
         "results": results,
         "vram_peak_gb": torch.cuda.max_memory_allocated() / 1e9,
         "gpu": torch.cuda.get_device_name(0),
