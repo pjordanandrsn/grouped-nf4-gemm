@@ -1,0 +1,24 @@
+{
+  "registered_utc": "2026-07-14T18:10:00Z",
+  "purpose": "FLAGSHIP B5: GPU-driven zero-copy gather. B2-B4 fully characterized prefetch: the predictor is right (92.6-93.1% pre/post-attention router agreement), the bytes are nearly free (2-A = 1.07x), and every CPU-mediated way of ISSUING the copies loses - B3 paid ~94 added GPU->CPU syncs/token (0.87-1.07x), B4 paid GIL contention (0.57x). B5 is the identified endgame shape: the copy IS a kernel (kernel/host_gather.py) reading the pinned host expert store directly over UVA (zero-copy PCIe), indexed by GPU-RESIDENT router ids. No CPU ever knows the ids; the token loop enqueues bounded work and never synchronizes. Two ON modes adjudicated against the same OFF baseline: 'gpu' = true post-attention ids, gather serialized on the main stream (removes the baseline's ~94 router syncs/token AND its 32-small-memcpy/layer pattern, no speculation); 'gpu_early' = pre-attention early-router ids gathered speculatively on a prefetch stream overlapping attention, then a post-attention correction gather that skips matched slots (only mispredictions re-fetch).",
+  "frozen_commit": "3305a83 (kernel + harness modes committed at freeze; this file committed alongside).",
+  "protocol": {
+    "host": "RunPod SECURE H100 (NVIDIA H100 80GB HBM3), >=600 GB network volume at /workspace; on-box 1GiBx10 pinned H2D microbench defines the waterfall ceiling.",
+    "runs": "SMOKE first (--layers 4, --prefetch-mode gpu,gpu_early, 8 tokens): validates the triton int64->pointer bitcast primitive and both mode loops in minutes, gating the ~17-min full build. Then full 94-layer: per prompt (3 fixed prompts), OFF (64 greedy tokens) then GPU (128) then GPU_EARLY (128), all in ONE process against the same build; model state reset between generations.",
+    "reduction": "median s/token per mode per prompt; positional hit rate for gpu_early from the GPU counter."
+  },
+  "declared_risks_and_accounting": {
+    "primitive": "tl.cast(int64 -> tl.pointer_type) reading cudaHostAlloc'd memory from device code is not previously exercised in this program; the smoke run gates on it. If the smoke fails on the primitive the arc ABORTS and is reported as such (no silent retry with a different design).",
+    "uva_bandwidth": "SM-issued UVA reads over PCIe may not saturate the link the way the DMA copy engines do. In 'gpu' mode the gather is on the critical path, so a substrate bandwidth deficit would show as a paired LOSS there even though the sync-removal idea is sound. The gpu vs gpu_early vs baseline triangle is the declared attribution instrument; a substrate deficit is reported as the finding, not tuned around.",
+    "hit_accounting": "ids are SORTED and matching is POSITIONAL: a single substituted expert can shift sorted alignment, so the measured hit_rate LOWER-BOUNDS top-8 set intersection. The correction gather skips slots by the same positional test, so hit_rate EQUALS the fraction of PCIe row-traffic actually avoided - the number reported is exactly the number that matters.",
+    "confound": "'gpu' changes both the sync structure AND the copy substrate (memcpyAsync -> gather kernel) relative to OFF; it is not a pure sync ablation. Interpretation uses all three arms."
+  },
+  "frozen_verdict_criteria": {
+    "G1_identity": "GPU and GPU_EARLY greedy tokens each identical to OFF for the paired prefix, all 3 prompts (6/6 checks).",
+    "G2_gpu": "median tok/s(GPU) >= 1.05 x tok/s(OFF) on every prompt.",
+    "G3_gpu_early": "median tok/s(GPU_EARLY) >= 1.15 x tok/s(OFF) on every prompt AND >= 0.80 x the on-box waterfall ceiling on every prompt.",
+    "G4_vram": "torch peak allocated <= 20.0 GB.",
+    "REPORT": "positional hit rate; absolute tok/s all arms; link GB/s + waterfall; off-baseline vs the 4.30-4.36 four-pod replication band; texts + distinct-2.",
+    "no_tune_clause": "Failures reported at full volume; claims narrowed; no re-runs until green."
+  }
+}
