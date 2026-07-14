@@ -1,0 +1,18 @@
+{
+  "registered_utc": "2026-07-14T09:05:00Z",
+  "purpose": "FLAGSHIP PHASE B2: speculative expert prefetch on the real-checkpoint offload pipeline. Phase B measured 4.32 tok/s with NO cross-layer overlap (the real router serializes expert-id knowledge behind each layer's attention). B2 speculates layer L+1's experts from LAST TOKEN'S routing while L computes, then fetches only mispredictions. The registered questions: (1) does real Qwen3-235B routing have enough token-to-token stickiness for speculation to pay, (2) does the pipeline now reach the waterfall band, (3) is the math untouched (speculation may only change WHEN bytes move).",
+  "frozen_commit": "e765cad (grouped-nf4-gemm main). No changes between stamp and results.",
+  "protocol": {
+    "host": "RunPod SECURE H100 class (>=150 GB RAM, >=600 GB volume). This harness now measures its OWN link (1 GiB pinned H2D x10) — the Phase-B B1 gap is closed.",
+    "runs": "per prompt (3 fixed prompts): prefetch-OFF generation (64 greedy tokens, timed) then prefetch-ON (128 greedy tokens, timed), same process, KV reset between. Speculation state resets per generation (cold first token).",
+    "reduction": "median s/token per mode; hit_rate = fraction of expert-slots correctly speculated across all ON-mode steps."
+  },
+  "frozen_verdict_criteria": {
+    "S1_identity": "prefetch-ON greedy tokens are IDENTICAL to prefetch-OFF for the paired 64-token prefix, every prompt (speculation must not change the math).",
+    "S2_paired_speedup": "median tok/s(ON) >= 1.05 x tok/s(OFF) on every prompt — speculation must pay for itself.",
+    "S3_waterfall": "tok/s(ON) >= 0.80 x the ON-BOX measured waterfall ceiling on every prompt (the re-registered B1, now adjudicable).",
+    "S4_vram": "torch peak allocated <= 20.0 GB.",
+    "REPORT": "hit_rate per prompt (the routing-stickiness measurement — no bar: it is the experiment); text quality (distinct-2, verbatim continuations); absolute tok/s.",
+    "no_tune_clause": "Failures reported at full volume; claims narrowed; no re-runs until green."
+  }
+}
