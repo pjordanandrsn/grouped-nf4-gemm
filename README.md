@@ -87,6 +87,13 @@ in-repo):
   measured 44.3 GB/s link's waterfall ceiling** — the stream fully hides
   compute — on a **13.6 GB** working set. The dequantize-then-matmul path on
   the identical pipeline: 1.81 tok/s (34% of ceiling). ALL PASS.
+- **[The gap is architectural](bench/phase3/flagship/RESULTS-flagship-bnb-baseline.md)** —
+  we registered the prediction that bnb's own CUDA dequant kernel would
+  also hide under the copy shadow (which would have narrowed our claim),
+  and it was **refuted**: the standard path reaches **40% of waterfall**
+  (per-expert dequant+GEMM compute outlasts the shadow), versus 93–94%
+  fused on the same pod. Against the strongest standard comparator the
+  fused path is **2.33× tokens/s and 2.21× J/token**.
 - **[Phase B](bench/phase3/flagship/RESULTS-flagship-phaseB.md)** (the real
   438 GB checkpoint, stream-quantized to NF4 in place): **coherent greedy
   text at 4.3–4.4 tok/s on 15.2 GB VRAM**, replicated across five pods.
