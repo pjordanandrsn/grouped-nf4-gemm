@@ -1,0 +1,47 @@
+{
+ "model": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+ "layers": 94,
+ "h2d_gbps": 51.78201103435465,
+ "per_token_gb": 7.983857664,
+ "waterfall_toks": 6.485838452236547,
+ "results": [
+  {
+   "prompt": "The key difference between mixture-of-experts and dense transformer models is",
+   "text": "The key difference between **Mixture-of-Experts (MoE)** and **dense (or dense) transformer models** lies in how they utilize their parameters during inference:\n\n### 1. **Parameter Usage During Inference**:\n- **Mixture-of-Experts (MoE)**:\n  - **Sparse Activation**: Only a subset of the model's parameters are activated per input.\n  - **Dense (Dense) Transformers**:\n\n- **Mixture-of-Experts (MoE)**:\n  - **Sparse Activation**: Only a subset of experts (e.g., a few experts are active for each input.\n  - **",
+   "n_tokens": 128,
+   "mode": "early2",
+   "toks_per_s_off": 4.345233698109459,
+   "toks_per_s_on": 2.506561472719248,
+   "prefetch_speedup": 0.5768530870525589,
+   "hit_rate": 0.9264690132800228,
+   "greedy_identical": true,
+   "distinct2": 0.7086614173228346
+  },
+  {
+   "prompt": "Write a haiku about memory bandwidth.",
+   "text": "Data streams flow fast\u2014  \nsilicon whispers, vast and deep,  \ncache holds the fleeting thought.",
+   "n_tokens": 21,
+   "mode": "early2",
+   "toks_per_s_off": 4.357022184462203,
+   "toks_per_s_on": 2.476546559921127,
+   "prefetch_speedup": 0.5684034772080953,
+   "hit_rate": 0.9314620471535365,
+   "greedy_identical": true,
+   "distinct2": 1.0
+  },
+  {
+   "prompt": "Explain, in two sentences, why quantization reduces energy per token:",
+   "text": "Quantization reduces energy per token by decreasing the precision of model weights and activations (e.g., from 32 to int8 or lower reduces the computational and memory requirements, enabling faster inference and lower power consumption per token.",
+   "n_tokens": 45,
+   "mode": "early2",
+   "toks_per_s_off": 4.350863500725067,
+   "toks_per_s_on": 2.4693195353521884,
+   "prefetch_speedup": 0.5675470018631195,
+   "hit_rate": 0.9299906132665833,
+   "greedy_identical": true,
+   "distinct2": 0.9772727272727273
+  }
+ ],
+ "vram_peak_gb": 15.164226048,
+ "gpu": "NVIDIA H100 80GB HBM3"
+}
