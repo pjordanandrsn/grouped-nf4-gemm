@@ -1,0 +1,31 @@
+/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[07:20:47] downloading Qwen/Qwen3-235B-A22B-Instruct-2507 -> /workspace/hf
+Fetching 125 files:   0%|          | 0/125 [00:00<?, ?it/s]Fetching 125 files: 100%|██████████| 125/125 [00:00<00:00, 2040.84it/s]
+[07:20:48] download complete
+[07:20:50] prompts encoded: lengths [21, 16, 23]
+[07:22:14]   built layer 8/94 (85s)
+[07:23:31]   built layer 16/94 (161s)
+[07:24:54]   built layer 24/94 (244s)
+[07:26:12]   built layer 32/94 (322s)
+[07:27:30]   built layer 40/94 (400s)
+[07:28:57]   built layer 48/94 (487s)
+[07:30:25]   built layer 56/94 (575s)
+[07:31:59]   built layer 64/94 (669s)
+[07:33:31]   built layer 72/94 (761s)
+[07:35:02]   built layer 80/94 (852s)
+[07:36:31]   built layer 88/94 (941s)
+[07:37:40] build complete in 1010s
+[07:38:16] PROMPT: 'The key difference between mixture-of-experts and dense transformer models is'
+GEN (4.32 tok/s, d2=0.74): The key difference between **Mixture-of-Experts (MoE)** and **dense (or dense) transformer models** lies in how they utilize their parameters during inference:
+
+### 1. **Parameter Usage During Inference**:
+- **Mixture-of-Experts (MoE)**:
+  - **Sparse Activation**: Only a subset of experts (e.g., a f
+[07:38:25] PROMPT: 'Write a haiku about memory bandwidth.'
+GEN (4.33 tok/s, d2=1.00): Data streams flow fast—  
+silicon whispers, vast and deep,  
+cache holds the fleeting thought.
+[07:38:41] PROMPT: 'Explain, in two sentences, why quantization reduces energy per token:'
+GEN (4.32 tok/s, d2=0.98): Quantization reduces energy per token by decreasing the precision of model weights and activations (e.g., from 32 to int8 or lower reduces the computational and memory requirements, enabling faster inference and lower power consumption per token.
+[07:38:41] wrote /workspace/phaseB.json; VRAM peak 15.2 GB

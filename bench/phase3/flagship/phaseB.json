@@ -1,0 +1,32 @@
+{
+ "model": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+ "layers": 94,
+ "results": [
+  {
+   "prompt": "The key difference between mixture-of-experts and dense transformer models is",
+   "text": "The key difference between **Mixture-of-Experts (MoE)** and **dense (or dense) transformer models** lies in how they utilize their parameters during inference:\n\n### 1. **Parameter Usage During Inference**:\n- **Mixture-of-Experts (MoE)**:\n  - **Sparse Activation**: Only a subset of experts (e.g., a few experts) are activated per input.\n  - **Computation**: Only the active experts process the input.\n  - **Mixture-of-Experts (MoE)**:\n  - **Sparse Activation**: At any given input, only a **subset of experts** (",
+   "n_tokens": 128,
+   "median_s_per_tok": 0.23142677731812,
+   "toks_per_s": 4.321021152299056,
+   "distinct2": 0.7401574803149606
+  },
+  {
+   "prompt": "Write a haiku about memory bandwidth.",
+   "text": "Data streams flow fast\u2014  \nsilicon whispers, vast and deep,  \ncache holds the fleeting thought.",
+   "n_tokens": 21,
+   "median_s_per_tok": 0.23081244714558125,
+   "toks_per_s": 4.332521977765203,
+   "distinct2": 1.0
+  },
+  {
+   "prompt": "Explain, in two sentences, why quantization reduces energy per token:",
+   "text": "Quantization reduces energy per token by decreasing the precision of model weights and activations (e.g., from 32 to int8 or lower reduces the computational and memory requirements, enabling faster inference and lower power consumption per token.",
+   "n_tokens": 45,
+   "median_s_per_tok": 0.2312336377799511,
+   "toks_per_s": 4.324630315904255,
+   "distinct2": 0.9772727272727273
+  }
+ ],
+ "vram_peak_gb": 15.164225536,
+ "gpu": "NVIDIA H100 80GB HBM3"
+}
