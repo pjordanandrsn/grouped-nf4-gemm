@@ -1,0 +1,621 @@
+{
+ "params": {
+  "gate_up_parity_cells": [
+   [
+    "Qwen/Qwen3-30B-A3B",
+    "gate_up"
+   ],
+   [
+    "google/gemma-4-26B-A4B",
+    "gate_up"
+   ],
+   [
+    "openai/gpt-oss-120b",
+    "gate_up"
+   ]
+  ],
+  "barred_prefill_cells": [
+   [
+    "allenai/OLMoE-1B-7B-0924",
+    "down"
+   ],
+   [
+    "Qwen/Qwen3-30B-A3B",
+    "gate_up"
+   ],
+   [
+    "Qwen/Qwen3-30B-A3B",
+    "down"
+   ],
+   [
+    "google/gemma-4-26B-A4B",
+    "gate_up"
+   ],
+   [
+    "google/gemma-4-26B-A4B",
+    "down"
+   ],
+   [
+    "openai/gpt-oss-120b",
+    "gate_up"
+   ],
+   [
+    "openai/gpt-oss-120b",
+    "down"
+   ]
+  ],
+  "report_only_cells": [
+   [
+    "allenai/OLMoE-1B-7B-0924",
+    "gate_up"
+   ]
+  ],
+  "census_cells": [
+   [
+    "allenai/OLMoE-1B-7B-0924",
+    "gate_up"
+   ],
+   [
+    "allenai/OLMoE-1B-7B-0924",
+    "down"
+   ],
+   [
+    "Qwen/Qwen3-30B-A3B",
+    "gate_up"
+   ],
+   [
+    "Qwen/Qwen3-30B-A3B",
+    "down"
+   ],
+   [
+    "google/gemma-4-26B-A4B",
+    "gate_up"
+   ],
+   [
+    "google/gemma-4-26B-A4B",
+    "down"
+   ],
+   [
+    "openai/gpt-oss-120b",
+    "gate_up"
+   ],
+   [
+    "openai/gpt-oss-120b",
+    "down"
+   ]
+  ],
+  "w1_bar": 1.25,
+  "w1_median_bar": 1.4,
+  "w2_floor": 0.85,
+  "w2_bar": 1.05,
+  "w2_min_cells": 5,
+  "w3_floor": 0.85,
+  "w3_bar": 1.15,
+  "w3_min_cells": 2,
+  "w4_min_cells": 7,
+  "suite_expect": "44/44"
+ },
+ "devices": {
+  "A5000": [
+   {
+    "regime": "decode_bs1",
+    "model": "Qwen/Qwen3-30B-A3B",
+    "proj": "down",
+    "reps": 3,
+    "numerator": "dequant_grouped",
+    "ratios": [
+     3.9944,
+     4.2053,
+     4.3004
+    ],
+    "median": 4.205272475593572,
+    "worst": 3.99436625516604
+   },
+   {
+    "regime": "decode_bs1",
+    "model": "Qwen/Qwen3-30B-A3B",
+    "proj": "gate_up",
+    "reps": 3,
+    "numerator": "dequant_grouped",
+    "ratios": [
+     2.7286,
+     2.8192,
+     2.7937
+    ],
+    "median": 2.7937439178237398,
+    "worst": 2.728627209660407
+   },
+   {
+    "regime": "decode_bs1",
+    "model": "allenai/OLMoE-1B-7B-0924",
+    "proj": "down",
+    "reps": 3,
+    "numerator": "dequant_grouped",
+    "ratios": [
+     3.7365,
+     3.7241,
+     3.687
+    ],
+    "median": 3.724081290448709,
+    "worst": 3.686986006849644
+   },
+   {
+    "regime": "decode_bs1",
+    "model": "allenai/OLMoE-1B-7B-0924",
+    "proj": "gate_up",
+    "reps": 3,
+    "numerator": "dequant_grouped",
+    "ratios": [
+     2.5669,
+     2.6229,
+     2.8332
+    ],
+    "median": 2.6229192314992207,
+    "worst": 2.5669053368092594
+   },
+   {
+    "regime": "decode_bs1",
+    "model": "google/gemma-4-26B-A4B",
+    "proj": "down",
+    "reps": 3,
+    "numerator": "dequant_grouped",
+    "ratios": [
+     4.9111,
+     5.0881,
+     5.0592
+    ],
+    "median": 5.059171632326736,
+    "worst": 4.911141199128403
+   },
+   {
+    "regime": "decode_bs1",
+    "model": "google/gemma-4-26B-A4B",
+    "proj": "gate_up",
+    "reps": 3,
+    "numerator": "dequant_grouped",
+    "ratios": [
+     2.1623,
+     2.2737,
+     2.2126
+    ],
+    "median": 2.2126403926936384,
+    "worst": 2.162298237261501
+   },
+   {
+    "regime": "decode_bs1",
+    "model": "openai/gpt-oss-120b",
+    "proj": "down",
+    "reps": 3,
+    "numerator": "dequant_grouped",
+    "ratios": [
+     1.643,
+     1.6601,
+     1.685
+    ],
+    "median": 1.660060452283502,
+    "worst": 1.6429949326196656
+   },
+   {
+    "regime": "decode_bs1",
+    "model": "openai/gpt-oss-120b",
+    "proj": "gate_up",
+    "reps": 3,
+    "numerator": "dequant_grouped",
+    "ratios": [
+     1.895,
+     1.8697,
+     1.8772
+    ],
+    "median": 1.877227223993492,
+    "worst": 1.869712919422361
+   },
+   {
+    "regime": "prefill_s2048",
+    "model": "Qwen/Qwen3-30B-A3B",
+    "proj": "down",
+    "reps": 3,
+    "numerator": "dequant_grouped",
+    "ratios": [
+     2.7824,
+     2.819,
+     2.7743
+    ],
+    "median": 2.7823986786166124,
+    "worst": 2.774337984146666
+   },
+   {
+    "regime": "prefill_s2048",
+    "model": "Qwen/Qwen3-30B-A3B",
+    "proj": "gate_up",
+    "reps": 3,
+    "numerator": "dequant_grouped",
+    "ratios": [
+     1.4569,
+     1.4533,
+     1.4329
+    ],
+    "median": 1.4532789863822373,
+    "worst": 1.432888594260584
+   },
+   {
+    "regime": "prefill_s2048",
+    "model": "allenai/OLMoE-1B-7B-0924",
+    "proj": "down",
+    "reps": 3,
+    "numerator": "dequant_grouped",
+    "ratios": [
+     1.1469,
+     1.1423,
+     1.1158
+    ],
+    "median": 1.142261548167175,
+    "worst": 1.1157583211046178
+   },
+   {
+    "regime": "prefill_s2048",
+    "model": "allenai/OLMoE-1B-7B-0924",
+    "proj": "gate_up",
+    "reps": 3,
+    "numerator": "dequant_grouped",
+    "ratios": [
+     0.6101,
+     0.6039,
+     0.5945
+    ],
+    "median": 0.6039388158632044,
+    "worst": 0.5944782034481833
+   },
+   {
+    "regime": "prefill_s2048",
+    "model": "google/gemma-4-26B-A4B",
+    "proj": "down",
+    "reps": 3,
+    "numerator": "dequant_grouped",
+    "ratios": [
+     2.9214,
+     2.6894,
+     2.6399
+    ],
+    "median": 2.689436103968939,
+    "worst": 2.6398537213020026
+   },
+   {
+    "regime": "prefill_s2048",
+    "model": "google/gemma-4-26B-A4B",
+    "proj": "gate_up",
+    "reps": 3,
+    "numerator": "dequant_grouped",
+    "ratios": [
+     1.16,
+     1.1632,
+     1.1471
+    ],
+    "median": 1.1599649445429334,
+    "worst": 1.147136174534481
+   },
+   {
+    "regime": "prefill_s2048",
+    "model": "openai/gpt-oss-120b",
+    "proj": "down",
+    "reps": 3,
+    "numerator": "dequant_grouped",
+    "ratios": [
+     1.342,
+     1.3261,
+     1.3199
+    ],
+    "median": 1.3261389852630996,
+    "worst": 1.3199300585743863
+   },
+   {
+    "regime": "prefill_s2048",
+    "model": "openai/gpt-oss-120b",
+    "proj": "gate_up",
+    "reps": 3,
+    "numerator": "dequant_grouped",
+    "ratios": [
+     1.2567,
+     1.2381,
+     1.2614
+    ],
+    "median": 1.2567018491256647,
+    "worst": 1.2380613721320493
+   }
+  ],
+  "A5000_rewrite": [
+   {
+    "regime": "decode_bs1",
+    "model": "Qwen/Qwen3-30B-A3B",
+    "proj": "down",
+    "reps": 3,
+    "numerator": "fused_v5loop",
+    "ratios": [
+     0.9314,
+     0.9662,
+     0.9862
+    ],
+    "median": 0.9662009441759943,
+    "worst": 0.9314192922210752
+   },
+   {
+    "regime": "decode_bs1",
+    "model": "Qwen/Qwen3-30B-A3B",
+    "proj": "gate_up",
+    "reps": 3,
+    "numerator": "fused_v5loop",
+    "ratios": [
+     0.9764,
+     0.9853,
+     0.9978
+    ],
+    "median": 0.9852905904875363,
+    "worst": 0.9764162275113255
+   },
+   {
+    "regime": "decode_bs1",
+    "model": "allenai/OLMoE-1B-7B-0924",
+    "proj": "down",
+    "reps": 3,
+    "numerator": "fused_v5loop",
+    "ratios": [
+     0.9995,
+     0.9962,
+     0.9807
+    ],
+    "median": 0.9962020067602626,
+    "worst": 0.9806743386214387
+   },
+   {
+    "regime": "decode_bs1",
+    "model": "allenai/OLMoE-1B-7B-0924",
+    "proj": "gate_up",
+    "reps": 3,
+    "numerator": "fused_v5loop",
+    "ratios": [
+     0.9788,
+     1.0007,
+     0.996
+    ],
+    "median": 0.9959535113968574,
+    "worst": 0.9788477882572724
+   },
+   {
+    "regime": "decode_bs1",
+    "model": "google/gemma-4-26B-A4B",
+    "proj": "down",
+    "reps": 3,
+    "numerator": "fused_v5loop",
+    "ratios": [
+     0.966,
+     0.9908,
+     0.9955
+    ],
+    "median": 0.990806799702585,
+    "worst": 0.9660326038816917
+   },
+   {
+    "regime": "decode_bs1",
+    "model": "google/gemma-4-26B-A4B",
+    "proj": "gate_up",
+    "reps": 3,
+    "numerator": "fused_v5loop",
+    "ratios": [
+     0.9816,
+     1.0038,
+     0.9946
+    ],
+    "median": 0.9946101910113598,
+    "worst": 0.9816462965935695
+   },
+   {
+    "regime": "decode_bs1",
+    "model": "openai/gpt-oss-120b",
+    "proj": "down",
+    "reps": 3,
+    "numerator": "fused_v5loop",
+    "ratios": [
+     0.994,
+     0.9992,
+     0.9946
+    ],
+    "median": 0.9945501972296374,
+    "worst": 0.9940471721490896
+   },
+   {
+    "regime": "decode_bs1",
+    "model": "openai/gpt-oss-120b",
+    "proj": "gate_up",
+    "reps": 3,
+    "numerator": "fused_v5loop",
+    "ratios": [
+     0.999,
+     0.9937,
+     0.9881
+    ],
+    "median": 0.9937419104040174,
+    "worst": 0.9881397471069611
+   },
+   {
+    "regime": "prefill_s2048",
+    "model": "Qwen/Qwen3-30B-A3B",
+    "proj": "down",
+    "reps": 3,
+    "numerator": "fused_v5loop",
+    "ratios": [
+     1.4952,
+     1.4941,
+     1.4998
+    ],
+    "median": 1.4952247815244617,
+    "worst": 1.4940854482092811
+   },
+   {
+    "regime": "prefill_s2048",
+    "model": "Qwen/Qwen3-30B-A3B",
+    "proj": "gate_up",
+    "reps": 3,
+    "numerator": "fused_v5loop",
+    "ratios": [
+     1.466,
+     1.445,
+     1.4556
+    ],
+    "median": 1.4555764262862652,
+    "worst": 1.4450101957539148
+   },
+   {
+    "regime": "prefill_s2048",
+    "model": "allenai/OLMoE-1B-7B-0924",
+    "proj": "down",
+    "reps": 3,
+    "numerator": "fused_v5loop",
+    "ratios": [
+     1.5151,
+     1.5219,
+     1.5095
+    ],
+    "median": 1.5151076371916181,
+    "worst": 1.5094622343343542
+   },
+   {
+    "regime": "prefill_s2048",
+    "model": "allenai/OLMoE-1B-7B-0924",
+    "proj": "gate_up",
+    "reps": 3,
+    "numerator": "fused_v5loop",
+    "ratios": [
+     1.5045,
+     1.4921,
+     1.5049
+    ],
+    "median": 1.5045267780241345,
+    "worst": 1.4921039389286104
+   },
+   {
+    "regime": "prefill_s2048",
+    "model": "google/gemma-4-26B-A4B",
+    "proj": "down",
+    "reps": 3,
+    "numerator": "fused_v5loop",
+    "ratios": [
+     1.5239,
+     1.3847,
+     1.3934
+    ],
+    "median": 1.3933976727020216,
+    "worst": 1.3846994144128526
+   },
+   {
+    "regime": "prefill_s2048",
+    "model": "google/gemma-4-26B-A4B",
+    "proj": "gate_up",
+    "reps": 3,
+    "numerator": "fused_v5loop",
+    "ratios": [
+     1.4621,
+     1.4281,
+     1.4502
+    ],
+    "median": 1.4501511122123014,
+    "worst": 1.4281189360101196
+   },
+   {
+    "regime": "prefill_s2048",
+    "model": "openai/gpt-oss-120b",
+    "proj": "down",
+    "reps": 3,
+    "numerator": "fused_v5loop",
+    "ratios": [
+     1.5543,
+     1.5363,
+     1.5211
+    ],
+    "median": 1.5363459793087817,
+    "worst": 1.5211301660542162
+   },
+   {
+    "regime": "prefill_s2048",
+    "model": "openai/gpt-oss-120b",
+    "proj": "gate_up",
+    "reps": 3,
+    "numerator": "fused_v5loop",
+    "ratios": [
+     1.5275,
+     1.5267,
+     1.539
+    ],
+    "median": 1.5275406920034023,
+    "worst": 1.5267273547474756
+   }
+  ]
+ },
+ "verdicts": {
+  "W1_rewrite_effect": {
+   "pass": true,
+   "bar": 1.25,
+   "median_bar": 1.4,
+   "median": 1.499875779774298,
+   "values": {
+    "allenai/OLMoE-1B-7B-0924/gate_up": 1.5045267780241345,
+    "allenai/OLMoE-1B-7B-0924/down": 1.5151076371916181,
+    "Qwen/Qwen3-30B-A3B/gate_up": 1.4555764262862652,
+    "Qwen/Qwen3-30B-A3B/down": 1.4952247815244617,
+    "google/gemma-4-26B-A4B/gate_up": 1.4501511122123014,
+    "google/gemma-4-26B-A4B/down": 1.3933976727020216,
+    "openai/gpt-oss-120b/gate_up": 1.5275406920034023,
+    "openai/gpt-oss-120b/down": 1.5363459793087817
+   }
+  },
+  "W2_dequant_floor": {
+   "pass": true,
+   "floor": 0.85,
+   "bar": 1.05,
+   "min_cells": 5,
+   "values": {
+    "allenai/OLMoE-1B-7B-0924/down": 1.142261548167175,
+    "Qwen/Qwen3-30B-A3B/gate_up": 1.4532789863822373,
+    "Qwen/Qwen3-30B-A3B/down": 2.7823986786166124,
+    "google/gemma-4-26B-A4B/gate_up": 1.1599649445429334,
+    "google/gemma-4-26B-A4B/down": 2.689436103968939,
+    "openai/gpt-oss-120b/gate_up": 1.2567018491256647,
+    "openai/gpt-oss-120b/down": 1.3261389852630996
+   }
+  },
+  "W3_gate_up": {
+   "pass": true,
+   "floor": 0.85,
+   "bar": 1.15,
+   "min_cells": 2,
+   "values": {
+    "Qwen/Qwen3-30B-A3B/gate_up": 1.4532789863822373,
+    "google/gemma-4-26B-A4B/gate_up": 1.1599649445429334,
+    "openai/gpt-oss-120b/gate_up": 1.2567018491256647
+   }
+  },
+  "W4_decode_guard": {
+   "pass": true,
+   "min_cells": 7,
+   "pass_cells": 8,
+   "values": {
+    "allenai/OLMoE-1B-7B-0924/gate_up": 2.6229192314992207,
+    "allenai/OLMoE-1B-7B-0924/down": 3.724081290448709,
+    "Qwen/Qwen3-30B-A3B/gate_up": 2.7937439178237398,
+    "Qwen/Qwen3-30B-A3B/down": 4.205272475593572,
+    "google/gemma-4-26B-A4B/gate_up": 2.2126403926936384,
+    "google/gemma-4-26B-A4B/down": 5.059171632326736,
+    "openai/gpt-oss-120b/gate_up": 1.877227223993492,
+    "openai/gpt-oss-120b/down": 1.660060452283502
+   }
+  },
+  "Q1_suite": {
+   "pass": true,
+   "a5000": "44/44",
+   "a2000": "not-run",
+   "note": "A2000 suite not run"
+  },
+  "R1_report_only": {
+   "allenai/OLMoE-1B-7B-0924/gate_up": 0.6039388158632044
+  },
+  "V6_CONFIRMED": true
+ }
+}
