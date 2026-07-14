@@ -1,0 +1,11 @@
+/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:180: UserWarning: CUDA initialization: The NVIDIA driver on your system is too old (found version 12080). Please update your GPU driver by downloading and installing a new version from the URL: http://www.nvidia.com/Download/index.aspx Alternatively, go to: https://pytorch.org to install a PyTorch version that has been compiled with your version of the CUDA driver. (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:119.)
+  return torch._C._cuda_getDeviceCount() > 0
+Traceback (most recent call last):
+  File "/root/g/bench/phase1/harness.py", line 879, in <module>
+    main()
+  File "/root/g/bench/phase1/harness.py", line 735, in main
+    assert torch.cuda.is_available(), "Phase-1 baselines are GPU measurements"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Phase-1 baselines are GPU measurements

@@ -38,6 +38,15 @@ dequantize-then-matmul baseline on the same stacks:
   instances). Fresh off-census shapes with `top_k ≥ 6` (DeepSeek-V3,
   granite-3.1, Qwen3-Next) run **1.0–1.8× at median**; `k=2`-large shapes
   (Grok-1, Mixtral-8x22B) 1.0–1.24×, never slower.
+- **Versus the other execution classes** (same-run census on the v6
+  kernel, [receipts](bench/phase1/results/comparators_v6/RESULTS-comparators-v6.md)):
+  the grouped-bf16-GEMM class that unsloth's MoE backend rides
+  (`grouped_gemm.ops.gmm`, dequant inside the timed path as 4-bit storage
+  requires) loses to the fused kernel on **every census cell — decode
+  median 4.67×, prefill median 3.02×**. Axolotl/PEFT stacks have no kernel
+  of their own (their QLoRA forward is bitsandbytes `Linear4bit` — see the
+  flagship bnb baseline). GPTQ-Marlin is fidelity-excellent but per-expert
+  (launch-storm at MoE decode) and format-incompatible with NF4 checkpoints.
 - **Known losers:** `top_k=1` cells are **instance-unstable in both
   directions** (Scout `down` measured 0.47–1.12 across six contexts on
   identical code — split-K helps paired but can't stabilize the class), and
