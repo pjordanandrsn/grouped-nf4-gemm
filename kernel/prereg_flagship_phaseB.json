@@ -1,0 +1,17 @@
+{
+  "registered_utc": "2026-07-14T07:30:00Z",
+  "purpose": "FLAGSHIP PHASE B: real Qwen/Qwen3-235B-A22B-Instruct-2507 checkpoint on the offload pipeline (bench/phase3/offload_generate_235b.py) — actual weights, actual router (softmax top-8 renormalized), Qwen3 attention (QK-norm, rope 1e6), actual text generation. Phase A (synthetic, prereg_flagship_offload.json) passed all criteria; B tests that NOTHING about real weights breaks the number or the output.",
+  "frozen_commit": "the commit carrying this file (script committed alongside; no changes between stamp and results).",
+  "protocol": {
+    "host": "RunPod SECURE H100 SXM class (>=150 GB container RAM; >=600 GB free in /dev/shm for the bf16 shards). Host class + link microbench recorded.",
+    "steps": "download bf16 shards to RAM -> stream-quantize per expert (bnb NF4, blocksize 64) into pinned stacks -> generate greedy continuations for 3 fixed prompts (committed in the script), 128 new tokens each.",
+    "note_on_pipelining": "The REAL router serializes expert-id knowledge behind each layer's attention, so the copy stream cannot prefetch the next layer (unlike Phase A's known schedule). Registered bar lowered accordingly; speculative expert prefetch is future work, not this run."
+  },
+  "frozen_verdict_criteria": {
+    "B1_speed": "median decode tok/s >= 0.80 x the waterfall ceiling computed from the box's measured link and the registered per-token byte formula, for every prompt.",
+    "B2_vram": "torch peak allocated <= 20.0 GB.",
+    "B3_real_text": "all 3 continuations committed VERBATIM; mechanical degeneration check: distinct-bigram ratio >= 0.30 per continuation (plus human inspection, which cannot be pre-registered and is labeled as such).",
+    "B4_quantize_integrity": "expert quantization uses bnb quantize_4bit exactly as the 44-test suite pins (no new numerics code paths).",
+    "no_tune_clause": "Failures reported at full volume; claims narrowed; no re-runs until green."
+  }
+}
