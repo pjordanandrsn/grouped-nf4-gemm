@@ -49,7 +49,7 @@ dequantize-then-matmul baseline on the same stacks:
   parity on the A5000; remaining gate_up cells sit at 0.4–0.8× pending a
   mainloop rewrite. Decode is still the primary product surface.
 
-Three blind confirmatories have run; **none fully passed as registered**,
+Five blind confirmatories have run; **none fully passed as registered**,
 and each results doc says exactly what failed and why:
 [v1](kernel/RESULTS-gate2-confirmatory.md) (caught the original per-shape
 config table overfitting its census), [v2](kernel/RESULTS-v2-confirmatory.md)
@@ -57,11 +57,50 @@ config table overfitting its census), [v2](kernel/RESULTS-v2-confirmatory.md)
 off-census `k≥6` wins), [v3](kernel/RESULTS-v3-confirmatory.md) (found the
 v2-era SM-conditional premise was measurement noise, quantified the
 `top_k=1` and tiny-shape loss classes, and established the methodology rule
-that latency-bound cells only support paired claims). A fourth (v4: dispatch
-floor + prefill config) is registered and running as of 2026-07-13; its
-verdict will be committed either way. The preregs, amendments, evidence
-JSONs, sweeps, and mechanical reducers are all committed; `.ots` files
-anchor the protocols to Bitcoin before the data existed.
+that latency-bound cells only support paired claims),
+[v4](kernel/RESULTS-v4-confirmatory.md) (dispatch floor + split-K work floor
++ prefill config; caught its own dispatch-point regression),
+[v5](kernel/RESULTS-v5-confirmatory.md) (the load-time dispatch fix, clean on
+the A5000 11/11 with energy 8/8 on both devices; one contended-A2000 noise
+cell kept it from a full pass — the dispatch line is closed). The preregs,
+amendments, evidence JSONs, sweeps, and mechanical reducers are all
+committed; `.ots` files anchor the protocols to Bitcoin before the data
+existed.
+
+## Flagship: a 235B MoE decoding at the PCIe physical limit on ≤16 GB of VRAM
+
+`bench/phase3/` runs Qwen3-235B-A22B with **all expert weights NF4-packed in
+host pinned RAM (~128 GB)** and streamed per-token over PCIe, with this
+kernel as the sole MoE compute. Same discipline (prereg + OTS, receipts
+in-repo):
+
+- **[Phase A](bench/phase3/flagship/RESULTS-flagship-offload.md)** (synthetic
+  weights, real GQA attention + router): **5.57 tok/s = 102–103% of the
+  measured 44.3 GB/s link's waterfall ceiling** — the stream fully hides
+  compute — on a **13.6 GB** working set. The dequantize-then-matmul path on
+  the identical pipeline: 1.81 tok/s (34% of ceiling). ALL PASS.
+- **[Phase B](bench/phase3/flagship/RESULTS-flagship-phaseB.md)** (the real
+  438 GB checkpoint, stream-quantized to NF4 in place): **coherent greedy
+  text at 4.3–4.4 tok/s on 15.2 GB VRAM**, replicated across five pods.
+- **Expert prefetch is measured CLOSED, negative** — four registered arcs
+  ([B2](bench/phase3/flagship/RESULTS-flagship-phaseB2.md) speculation:
+  token-to-token expert stickiness is only 0.44;
+  [B3](bench/phase3/flagship/RESULTS-flagship-phaseB3.md) early routing: the
+  pre-attention router predicts the post-attention top-8 at **0.93** but the
+  CPU sync tax eats the win;
+  [B4](bench/phase3/flagship/RESULTS-flagship-phaseB4.md) threaded issuance:
+  GIL tax, 0.57×;
+  [B5](bench/phase3/flagship/RESULTS-flagship-phaseB5.md) GPU-driven
+  zero-copy gather: hit rate H makes speculation move (2−H)× the bytes, and
+  the observed loss matches that law to ~1% — break-even needs H ≳ 0.95,
+  above this model's 0.93 predictor ceiling).
+- **Recommended configuration: `--prefetch-mode gpu`** — expert ids stay
+  GPU-resident and a triton kernel ([`kernel/host_gather.py`](kernel/host_gather.py))
+  gathers expert rows straight from pinned host RAM over UVA (zero-copy),
+  with no per-layer memcpy launches and no GPU→CPU syncs. It is the fastest
+  measured arm (4.39–4.41 tok/s, +1.5% over serialized memcpy, byte-identical
+  greedy output 6/6) and validates SM-issued UVA reads at ≥ copy-engine
+  throughput at 7.98 GB/token.
 
 ## Reproduce
 
@@ -86,7 +125,13 @@ python bench/phase1/harness.py --models OLMoE --regimes decode_bs1 \
 - `kernel/RESULTS-*.md` — results, including the failures
 - `bench/phase1/` — backend-registry harness (dequant/gemv/grouped-mm/
   unsloth/marlin/fused), confirmatory evidence, reducers
-- `bench/phase2/` — decode config sweeps (both devices)
+- `bench/phase2/` — decode config sweeps (both devices); `arch/` —
+  cross-architecture census (sm_86/89/90)
+- `bench/phase3/` — the 235B offload flagship: `offload_decode_235b.py`
+  (Phase A, synthetic), `offload_generate_235b.py` (real checkpoint,
+  generation, prefetch arms), `flagship/` — results + receipts
+- `kernel/host_gather.py` — GPU-driven zero-copy gather from pinned host
+  memory (UVA), the recommended offload copy path
 - `docs/KERNEL_CONTRACT.md`, `docs/TOLERANCE_CONTRACT.md` — op contract and
   fidelity spec; `census/`, `roofline/` — shape census + ceilings
 
@@ -99,13 +144,14 @@ python3 roofline/roofline.py      # roofline/ceilings.json
 
 ## Status / roadmap
 
-Landed through v4: universal decode constant (the dense-sweep result),
-split-K for starved grids (with a per-split work floor), a min-bytes
-dispatch floor (tiny cells route to the dequant path via
-`decode_dispatch()`), and the group-size-keyed prefill config. In flight:
-the v4 blind confirmatory. Next: prefill mainloop rewrite for gate_up
-parity; sm_120. Ecosystem landing is calendar-gated on the bitsandbytes
-v0.50.0 release; see the coordination note on #1949.
+Landed through v5: universal decode constant (the dense-sweep result),
+split-K for starved grids (with a per-split work floor), a load-time
+min-bytes dispatch floor (tiny cells route to the dequant path via
+`decode_dispatch()`), the group-size-keyed prefill config, and the flagship
+offload pipeline (Phase A/B + the closed prefetch program + the UVA gather
+path). Next: prefill mainloop rewrite for gate_up parity; sm_120; a
+bnb-CUDA-dequant pipeline baseline. Ecosystem landing is calendar-gated on
+the bitsandbytes v0.50.0 release; see the coordination note on #1949.
 
 ## License & attribution
 
