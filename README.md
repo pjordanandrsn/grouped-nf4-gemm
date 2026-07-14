@@ -44,13 +44,17 @@ dequantize-then-matmul baseline on the same stacks:
   **tiny shapes (≲5 M weight elements) lose outright** (0.24–0.35× speed,
   4–7× energy). v4 adds a dispatch floor that routes tiny cells back to the
   dequant path.
-- **Prefill** (compute-bound M): after a group-size-keyed config pass,
-  down-projections run **~1.9×** the dequant path and Qwen gate_up hits
-  parity on the A5000; remaining gate_up cells sit at 0.4–0.8× pending a
-  mainloop rewrite. Decode is still the primary product surface.
+- **Prefill** (compute-bound M): the v6 register-LUT mainloop rewrite
+  (blind-CONFIRMED) runs **1.39–1.54× the prior mainloop on every census
+  prefill cell**; against the dequant path the census reads 1.14–2.78× with
+  all three large gate_ups above 1.15 — gate_up is no longer a loser class.
+  One caveat carried at full volume: the dequant *baseline* itself swings
+  ~25% between cloud instances (the fused kernel holds within 0.2 ms), and
+  OLMoE gate_up (the smallest-expert shape) remains below parity at ~0.6×.
 
-Five blind confirmatories have run; **none fully passed as registered**,
-and each results doc says exactly what failed and why:
+Six blind confirmatories have run; the first five **did not fully pass as
+registered**, each results doc says exactly what failed and why, and the
+sixth passed clean:
 [v1](kernel/RESULTS-gate2-confirmatory.md) (caught the original per-shape
 config table overfitting its census), [v2](kernel/RESULTS-v2-confirmatory.md)
 (validated the replacement single-constant config on 64-SM parts and the
@@ -62,7 +66,11 @@ that latency-bound cells only support paired claims),
 + prefill config; caught its own dispatch-point regression),
 [v5](kernel/RESULTS-v5-confirmatory.md) (the load-time dispatch fix, clean on
 the A5000 11/11 with energy 8/8 on both devices; one contended-A2000 noise
-cell kept it from a full pass — the dispatch line is closed). The preregs,
+cell kept it from a full pass — the dispatch line is closed),
+[v6](kernel/RESULTS-v6-confirmatory.md) (**CONFIRMED**, all five criteria:
+the register-LUT M-tile mainloop, adjudicated on the instance-robust paired
+rewrite ratio after the dress rehearsal exposed the dequant baseline's
+host lottery). The preregs,
 amendments, evidence JSONs, sweeps, and mechanical reducers are all
 committed; `.ots` files anchor the protocols to Bitcoin before the data
 existed.
@@ -144,14 +152,17 @@ python3 roofline/roofline.py      # roofline/ceilings.json
 
 ## Status / roadmap
 
-Landed through v5: universal decode constant (the dense-sweep result),
+Landed through v6: universal decode constant (the dense-sweep result),
 split-K for starved grids (with a per-split work floor), a load-time
 min-bytes dispatch floor (tiny cells route to the dequant path via
-`decode_dispatch()`), the group-size-keyed prefill config, and the flagship
-offload pipeline (Phase A/B + the closed prefetch program + the UVA gather
-path). Next: prefill mainloop rewrite for gate_up parity; sm_120; a
-bnb-CUDA-dequant pipeline baseline. Ecosystem landing is calendar-gated on
-the bitsandbytes v0.50.0 release; see the coordination note on #1949.
+`decode_dispatch()`), the register-LUT prefill mainloop (v6, confirmed),
+and the flagship offload pipeline (Phase A/B + the closed prefetch program
++ the UVA gather path). In flight: sm_120 census; the bnb-CUDA-dequant
+pipeline baseline (registered prediction: the standard path also hides
+under the PCIe shadow at decode, narrowing our speed claim to
+energy/VRAM/simplicity — run blind either way). Ecosystem landing is
+calendar-gated on the bitsandbytes v0.50.0 release; see the coordination
+note on #1949.
 
 ## License & attribution
 
