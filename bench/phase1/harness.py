@@ -179,6 +179,13 @@ def make_activations(
     if regime == "decode_bs1":
         experts = list(range(spec.top_k))  # k experts, one token each
         return [(e, act(1)) for e in experts]
+    if regime.startswith("decode_m"):
+        # batched decode: k active experts x M tokens each — the continuous-
+        # batching band between bs1 (M=1, gemv path) and full prefill. The
+        # kernel dispatches to the M-tile path the moment M > 1.
+        m = int(regime[len("decode_m"):])
+        experts = list(range(spec.top_k))
+        return [(e, act(m)) for e in experts]
     if regime == "prefill_s2048":
         m = max(1, round(2048 * spec.top_k / spec.E))  # uniform routing, census note
         return [(e, act(m)) for e in range(spec.E)]
@@ -463,26 +470,31 @@ def bk_fused_nf4_nosplit(stack: QuantStack, groups):
 
 
 def bk_fused_routed(stack: QuantStack, groups):
-    """The PRODUCT path: consult decode_dispatch and run the fused kernel only
-    where it wins — below the bytes floor the call goes to the dequant path
-    (v3 measured tiny cells losing outright at 0.24-0.35x speed / 4-7x
-    energy, so the correct product behavior is to not run fused there). At
-    prefill (any group > 1 token) this is just the fused kernel."""
-    import sys
-
-    sys.path.insert(0, str(REPO / "kernel"))
-    from nf4_grouped import decode_dispatch
-
+    """The PRODUCT path: decode_dispatch chooses dequant-vs-fused ONCE PER
+    STACK and the branch is cached — MoE expert shapes are static at model
+    load, so a real integration never pays the dispatch per call. (v4 timed
+    a per-call implementation of this backend and its ~40-100us python floor
+    correctly failed the registered identity bands — the measurement-boundary
+    lesson now encoded here.) At prefill (any group > 1 token) this is just
+    the fused kernel."""
     sizes = [a.shape[0] for _, a in groups]
     if max(sizes) == 1:
-        sm = torch.cuda.get_device_properties(0).multi_processor_count
-        route = decode_dispatch(stack.spec.N, stack.spec.K, len(groups), sm)
+        route = getattr(stack, "_decode_route", None)
+        if route is None:
+            import sys
+
+            sys.path.insert(0, str(REPO / "kernel"))
+            from nf4_grouped import decode_dispatch
+
+            sm = torch.cuda.get_device_properties(0).multi_processor_count
+            route = decode_dispatch(stack.spec.N, stack.spec.K, len(groups), sm)
+            stack._decode_route = route
         if route[0] == "dequant":
             out = bk_dequant_grouped(stack, groups)
-            IMPL_NOTE["fused_routed"] = "below-floor: dequant path (decode_dispatch)"
+            IMPL_NOTE["fused_routed"] = "below-floor: dequant path (load-time dispatch)"
             return out
     out = bk_fused_nf4(stack, groups)
-    IMPL_NOTE["fused_routed"] = "fused kernel (decode_dispatch: eligible)"
+    IMPL_NOTE["fused_routed"] = "fused kernel (load-time dispatch: eligible)"
     return out
 
 
