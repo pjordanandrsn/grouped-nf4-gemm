@@ -128,6 +128,30 @@ def rmsnorm(x, w, eps=1e-6):
     return (x * torch.rsqrt(x.float().pow(2).mean(-1, keepdim=True) + eps)).to(x.dtype) * w
 
 
+def encode_prompt(tokenizer, prompt):
+    """Robust chat-template encode -> flat list[int], across every return
+    shape transformers has used (list[int], list[list[int]], tensor,
+    BatchEncoding/dict). Falls back to plain tokenization if the template
+    path misbehaves."""
+    msgs = [{"role": "user", "content": prompt}]
+    try:
+        enc = tokenizer.apply_chat_template(
+            msgs, add_generation_prompt=True, tokenize=True, return_dict=False)
+    except Exception:
+        enc = tokenizer(prompt)["input_ids"]
+    if hasattr(enc, "input_ids"):          # BatchEncoding attribute access
+        enc = enc.input_ids
+    elif hasattr(enc, "keys"):             # mapping / dict-like
+        enc = enc["input_ids"]
+    if hasattr(enc, "tolist"):             # tensor
+        enc = enc.tolist()
+    while enc and isinstance(enc[0], (list, tuple)):  # unwrap batch dim
+        enc = enc[0]
+    toks = [int(x) for x in enc]
+    assert toks and all(isinstance(x, int) for x in toks), f"bad encode: {toks[:5]}"
+    return toks
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cache", default="/dev/shm/hf")
@@ -142,6 +166,15 @@ def main():
     from transformers import AutoTokenizer
 
     tokenizer = AutoTokenizer.from_pretrained(str(root))
+    prompts = [
+        "The key difference between mixture-of-experts and dense transformer models is",
+        "Write a haiku about memory bandwidth.",
+        "Explain, in two sentences, why quantization reduces energy per token:",
+    ]
+    # Encode BEFORE the ~17 min build so any tokenizer quirk fails in seconds.
+    prompt_toks = [encode_prompt(tokenizer, p) for p in prompts]
+    log(f"prompts encoded: lengths {[len(t) for t in prompt_toks]}")
+
     shards = Shards(root)
     host, attn_w, router_w, norms, embed, final_norm, lm_head = build(shards, dev, layers)
 
@@ -236,23 +269,9 @@ def main():
         h = rmsnorm(h, final_norm)
         return (h @ lm_head.t()).float()
 
-    prompts = [
-        "The key difference between mixture-of-experts and dense transformer models is",
-        "Write a haiku about memory bandwidth.",
-        "Explain, in two sentences, why quantization reduces energy per token:",
-    ]
     torch.cuda.reset_peak_memory_stats()
     results = []
-    for prompt in prompts:
-        msgs = [{"role": "user", "content": prompt}]
-        enc = tokenizer.apply_chat_template(msgs, add_generation_prompt=True, tokenize=True)
-        if isinstance(enc, dict):
-            enc = enc["input_ids"]
-        if hasattr(enc, "tolist"):
-            enc = enc.tolist()
-        while enc and isinstance(enc[0], (list, tuple)):  # unwrap batch dim
-            enc = enc[0]
-        toks = [int(x) for x in enc]
+    for prompt, toks in zip(prompts, prompt_toks):
         t = 0
         for tid in toks:  # prompt pass, token by token (decode-path prefill)
             logits = step(tid, t)
