@@ -1,0 +1,5 @@
+SUITE rc=0 44 passed, 1 warning in 123.32s (0:02:03)
+DEC1 rc=0
+DEC2 rc=0
+DEC3 rc=0
+ALLDONE
