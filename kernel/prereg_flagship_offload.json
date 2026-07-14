@@ -1,0 +1,18 @@
+{
+  "registered_utc": "2026-07-14T05:05:00Z",
+  "purpose": "FLAGSHIP END-TO-END: Qwen3-235B-A22B-class decode on a <=20 GB VRAM working set, experts streamed from host pinned RAM, MoE compute via the fused NF4 kernel (bench/phase3/offload_decode_235b.py). Phase A: synthetic weights (decode timing is data-independent; numerics pinned separately by the 44-test suite), REAL bf16 GQA attention + KV, random top-k router (conservative gather locality). The registered question: does the pipelined system achieve the waterfall (link-bound) prediction, with the kernel's compute hidden under the copy stream?",
+  "frozen_commit": "ca6545b (grouped-nf4-gemm main; harness/kernel unchanged since the v5 freeze 47a06ba except this phase3 script). No changes between this stamp and reported results.",
+  "protocol": {
+    "host": "First available of: Latitude g3-h100-small bare metal (out of stock at registration — notifier armed) OR a RunPod SECURE pod with >=150 GB container RAM (H100 SXM class). Host class recorded in receipts; the claim is host-agnostic by construction (waterfall predicts from the MEASURED link).",
+    "config": "Qwen3-235B-A22B geometry: layers=min(94, floor((free_host_RAM_GB - 12) / 1.365)) — the runner sizes the streamed store to the box and records L; per-token bytes scale linearly in L by the registered formula (L * k * (N_gu*K_gu/2 + N_gu*K_gu/16 + N_dn*K_dn/2 + N_dn*K_dn/16)); E=128, k=8, hidden=4096, inter=1536, GQA 64/4 x128.",
+    "runs": "one process per mode: none (pure-stream ceiling), dequant (LUT-decode + bf16 matmul MoE), fused (the kernel); fused run twice (n=2 fresh-process). 64 measured tokens + 4 warmup per run; link microbench (10x 1 GiB pinned H2D) recorded per process.",
+    "reduction": "median s/token per run; tok/s = 1/median; waterfall ceiling = link_GBps * 1e9 / per_token_bytes."
+  },
+  "frozen_verdict_criteria": {
+    "FL1_waterfall": "fused tok/s >= 0.85 x waterfall ceiling (both fused reps).",
+    "FL2_vram": "torch peak allocated <= 20.0 GB in every run.",
+    "FL3_hidden_compute": "fused tok/s >= 0.97 x none-mode tok/s (the kernel's MoE compute hides under the copy stream) AND fused tok/s >= dequant tok/s (paired, same box).",
+    "REPORT": "absolute tok/s at as-run L; 94-layer-equivalent tok/s = tok/s * L / 94 (linear-in-L, registered here, labeled extrapolation when L < 94); host class + link GB/s; J/token if NVML readable.",
+    "no_tune_clause": "Failures reported at full volume; claims narrowed; no re-runs until green."
+  }
+}
