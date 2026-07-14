@@ -1,0 +1,35 @@
+/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[12:32:04] downloading Qwen/Qwen3-235B-A22B-Instruct-2507 -> /workspace/hf
+Fetching 125 files:   0%|          | 0/125 [00:00<?, ?it/s]Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 125 files:   1%|          | 1/125 [00:00<00:29,  4.27it/s]Fetching 125 files:   3%|▎         | 4/125 [00:38<21:08, 10.48s/it]Fetching 125 files:   4%|▍         | 5/125 [00:39<15:16,  7.64s/it]Fetching 125 files:   5%|▍         | 6/125 [00:39<10:53,  5.49s/it]Fetching 125 files:   6%|▋         | 8/125 [09:38<4:01:55, 124.07s/it]Fetching 125 files:  18%|█▊        | 22/125 [09:42<39:09, 22.81s/it]  Fetching 125 files:  18%|█▊        | 23/125 [13:27<1:05:15, 38.39s/it]Fetching 125 files:  34%|███▎      | 42/125 [22:47<44:45, 32.36s/it]  Fetching 125 files:  38%|███▊      | 47/125 [24:25<38:42, 29.77s/it]Fetching 125 files:  41%|████      | 51/125 [24:29<30:01, 24.35s/it]Fetching 125 files:  46%|████▌     | 57/125 [29:17<35:18, 31.16s/it]Fetching 125 files:  61%|██████    | 76/125 [32:53<16:19, 19.99s/it]Fetching 125 files:  96%|█████████▌| 120/125 [32:57<00:35,  7.02s/it]Fetching 125 files: 100%|██████████| 125/125 [32:57<00:00, 15.82s/it]
+[13:05:03] download complete
+[13:05:05] prompts encoded: lengths [21, 16, 23]
+[13:05:07] link 45.4 GB/s; 7.98 GB/token -> waterfall 5.69 tok/s
+[13:06:25]   built layer 8/94 (78s)
+[13:07:44]   built layer 16/94 (157s)
+[13:09:07]   built layer 24/94 (240s)
+[13:10:27]   built layer 32/94 (320s)
+[13:11:52]   built layer 40/94 (406s)
+[13:13:22]   built layer 48/94 (495s)
+[13:14:53]   built layer 56/94 (586s)
+[13:16:32]   built layer 64/94 (685s)
+[13:18:01]   built layer 72/94 (774s)
+[13:19:29]   built layer 80/94 (863s)
+[13:21:04]   built layer 88/94 (957s)
+[13:22:15] build complete in 1028s
+[13:23:25] PROMPT: 'The key difference between mixture-of-experts and dense transformer models is'
+  off 4.25 -> on 3.19 tok/s (x0.751, hit 0.45, identical=True)
+  The key difference between **Mixture-of-Experts (MoE)** and **dense (or dense) transformer models** lies in how they utilize their parameters during inference:
+
+### 1. **Parameter Usage During Inference**:
+- **Mixture-of
+[13:23:45] PROMPT: 'Write a haiku about memory bandwidth.'
+  off 4.32 -> on 3.28 tok/s (x0.761, hit 0.43, identical=True)
+  Data streams flow fast—  
+silicon whispers, vast and deep,  
+cache holds the fleeting thought.
+[13:24:23] PROMPT: 'Explain, in two sentences, why quantization reduces energy per token:'
+  off 4.30 -> on 3.16 tok/s (x0.734, hit 0.44, identical=True)
+  Quantization reduces energy per token by decreasing the precision of model weights and activations (e.g., from 32 to int8 or lower reduces the computational and memory requirements, enabling faster inference and lower po
+[13:24:23] wrote /workspace/phaseB2.json; VRAM peak 15.2 GB
