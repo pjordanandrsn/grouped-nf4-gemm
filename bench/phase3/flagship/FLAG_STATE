@@ -1,0 +1,6 @@
+host free 1407GB -> layers 94
+none_r1 rc=0
+dequant_r1 rc=0
+fused_r1 rc=0
+fused_r2 rc=0
+ALLDONE
