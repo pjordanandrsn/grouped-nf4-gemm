@@ -393,7 +393,7 @@ def gemm_4bit_grouped(
     decode_config: tuple | None = None,
     split_k: int | None = None,
     prefill_config: tuple | None = None,
-    prefill_variant: int = 0,
+    prefill_variant: int | None = None,
     prefill_groups: int = 1,
 ):
     """Single-launch grouped NF4 GEMM. ``a_cat [T,K]`` bf16/fp16 in group-sorted
@@ -403,10 +403,15 @@ def gemm_4bit_grouped(
     decode path's (BLOCK_N, num_warps); ``split_k`` overrides the decode
     split-K factor (None = plan, 1 = off); ``prefill_config`` overrides the
     M-tile path's (BLOCK_N, num_warps, num_stages) — benchmark/ablation
-    support only. ``prefill_variant``: 0 = shipped v5 mainloop, 1 =
-    register-LUT tl.gather, 3 = OPT-IN bf16 MMA (P-fid parity with the
-    dequant baseline, not the fp32/TF32 edge — see RESULTS-phase2-v1.1).
-    ``prefill_groups``: quant groups per K-step (2 requires K % 128 == 0)."""
+    support only. ``prefill_variant``: None = auto (register-LUT mainloop
+    when triton has ``tl.gather``, else the v5 loop), 0 = force v5 loop,
+    1 = register-LUT tl.gather (the v6 default: fidelity-identical, kills
+    the per-element L1 codebook gather), 3 = OPT-IN bf16 MMA (P-fid parity
+    with the dequant baseline, not the fp32/TF32 edge — measured slower
+    than variant 1 everywhere in the v6 matrix; see RESULTS-phase2-v1.1 and
+    bench/phase2/v6_prefill_matrix.py). ``prefill_groups``: quant groups
+    per K-step (2 = BLOCK_K 128: dead on sm_86 — SMEM blowout; kept for
+    ablation only)."""
     E, N, _ = B.shape
     T, K = a_cat.shape
     assert sum(sizes) == T, (sum(sizes), T)
@@ -476,17 +481,25 @@ def gemm_4bit_grouped(
         return out
     if block_m is None:
         block_m = _prefill_block_m(max(sizes))
+    if prefill_variant is None:
+        prefill_variant = 1 if hasattr(tl, "gather") else 0
     if prefill_config is not None:
         block_n, warps, stages = prefill_config
+    elif prefill_variant == 1:
+        # v6 register-LUT mainloop rule (bench/phase2/v6_prefill_matrix.py,
+        # A5000): bn=128/w4/s3 with the group-size-keyed BLOCK_M is the
+        # per-cell oracle on 6/8 census prefill cells, worst regret 1.034.
+        # Under it the M-tile path runs 1.20-2.88x the dequant baseline on
+        # every census cell except OLMoE gate_up (0.62x, the remaining
+        # known loser; was 0.38x on the v5 loop).
+        block_n = 128
+        warps = 4
+        stages = 3
     else:
-        # Group-size-keyed config from the 2-device M-tile sweeps
+        # v4 group-size-keyed rule for the v5 (VARIANT=0) loop
         # (bench/phase2/sweeps/v4_prefill_*.json): 128/128/w8/s3 for m >= 128
         # groups, 64-and-below groups want the narrower 64-row tile at w4/s2.
         # Rule regret vs per-cell oracle: worst 1.058, 13/16 cells at 1.00-1.02.
-        # Lifts the M-tile path 1.22-1.82x over the old 64-row/BLOCK_N=64
-        # default — down-projections now run 1.9x the dequant path at prefill
-        # on the A5000 and gate_up sits at 0.4-1.0x (mainloop rewrite still
-        # the path to full parity there).
         block_n = 128
         warps = 8 if block_m >= 128 else 4
         stages = 3 if block_m >= 128 else 2
