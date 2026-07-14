@@ -1,0 +1,47 @@
+{
+ "model": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+ "layers": 4,
+ "h2d_gbps": 50.958460175654096,
+ "per_token_gb": 0.339738624,
+ "waterfall_toks": 149.99313170719765,
+ "results": [
+  {
+   "prompt": "The key difference between mixture-of-experts and dense transformer models is",
+   "text": " bil\u623e\u623e\u623e\u623e\u623e\u623e\u623e",
+   "n_tokens": 8,
+   "mode": "early",
+   "toks_per_s_off": 92.65455211936982,
+   "toks_per_s_on": 89.92134044156299,
+   "prefetch_speedup": 0.9705010534799677,
+   "hit_rate": 0.7392241379310345,
+   "greedy_identical": true,
+   "distinct2": 0.2857142857142857
+  },
+  {
+   "prompt": "Write a haiku about memory bandwidth.",
+   "text": " bil\u623e\u623e\u623e\u623e\u623e\u623e\u623e",
+   "n_tokens": 8,
+   "mode": "early",
+   "toks_per_s_off": 93.011125384716,
+   "toks_per_s_on": 87.13361801661844,
+   "prefetch_speedup": 0.936808555494982,
+   "hit_rate": 0.7265625,
+   "greedy_identical": true,
+   "distinct2": 0.2857142857142857
+  },
+  {
+   "prompt": "Explain, in two sentences, why quantization reduces energy per token:",
+   "text": " bil\u623e\u623e\u623e\u623e\u623e\u623e\u623e",
+   "n_tokens": 8,
+   "mode": "early",
+   "toks_per_s_off": 93.23039496386193,
+   "toks_per_s_on": 90.11893809665172,
+   "prefetch_speedup": 0.9666261537515068,
+   "hit_rate": 0.7631048387096774,
+   "greedy_identical": true,
+   "distinct2": 0.2857142857142857
+  }
+ ],
+ "vram_peak_gb": 2.03613184,
+ "gpu": "NVIDIA H100 80GB HBM3"
+}
