@@ -157,8 +157,8 @@ def main():
     ap.add_argument("--cache", default="/dev/shm/hf")
     ap.add_argument("--layers", type=int, default=L_TOT)
     ap.add_argument("--max-new", type=int, default=128)
-    ap.add_argument("--prefetch-mode", choices=["spec", "early", "early2"], default="early2",
-                    help="ON-mode strategy: spec = last-token speculation (B2), early = pre-attention router prediction (B3)")
+    ap.add_argument("--prefetch-mode", default="gpu,gpu_early",
+                    help="comma list of ON-mode strategies to run paired against off: spec|early|early2|gpu|gpu_early")
     ap.add_argument("--paired-tokens", type=int, default=64,
                     help="tokens for the prefetch-off paired run + identity check")
     ap.add_argument("--out", required=True)
@@ -256,6 +256,41 @@ def main():
 
     issuer = _threading.Thread(target=_issuer, daemon=True)
     issuer.start()
+
+    # --- B5: GPU-driven zero-copy gather (no CPU in the loop) ---------------
+    from host_gather import gather_expert_rows
+
+    pred_ids_buf = [torch.full((K_TOP,), -1, dtype=torch.int32, device=dev)
+                    for _ in range(2)]
+    hit_counter = torch.zeros(1, dtype=torch.int64, device=dev)
+    opp_counter = [0]
+
+    def route_gpu(lay, h):
+        """True router, everything GPU-resident: sorted ids + aligned weights."""
+        logits = h.float() @ router_w[lay].t()
+        probs = torch.softmax(logits, -1)[0]
+        w, idx = torch.topk(probs, K_TOP)
+        w = w / w.sum()
+        idx, perm = torch.sort(idx)
+        return idx.to(torch.int32), w[perm].to(torch.bfloat16)
+
+    def early_route_gpu(lay, h):
+        logits = h.float() @ router_w[lay].t()
+        idx = torch.topk(logits[0], K_TOP).indices
+        return torch.sort(idx)[0].to(torch.int32)
+
+    def gather_buf(buf, lay, ids, have=None, stream=None):
+        s = stage[buf]
+        gu_b, gu_a, dn_b, dn_a = host[lay]
+        ctx = torch.cuda.stream(stream) if stream is not None else _nullctx()
+        with ctx:
+            gather_expert_rows(s["gu_b"], gu_b, ids, have)
+            gather_expert_rows(s["gu_a"], gu_a, ids, have)
+            gather_expert_rows(s["dn_b"], dn_b, ids, have)
+            gather_expert_rows(s["dn_a"], dn_a, ids, have)
+
+    import contextlib as _ctxlib
+    _nullctx = _ctxlib.nullcontext
 
     def early2_predict(buf, lay, h):
         """Enqueue L's early prediction with ZERO main-thread blocking:
@@ -375,6 +410,41 @@ def main():
           high-priority stream. Slot permutation is absorbed by slot-aligned
           weights: outputs are bit-identical to prefetch-off (asserted)."""
         h = embed[int(tok_id)].to(dev, torch.bfloat16).view(1, -1)
+        if prefetch and mode in ("gpu", "gpu_early"):
+            # B5: nothing below this line synchronizes with the GPU. The
+            # gather is a kernel reading pinned host RAM over UVA, indexed by
+            # GPU-resident ids; the CPU enqueues the whole token and runs ahead.
+            if mode == "gpu_early":
+                pids = early_route_gpu(0, rmsnorm(h, norms[0][1]))
+                pred_ids_buf[0].copy_(pids)
+                with torch.cuda.stream(prefetch_stream):
+                    prefetch_stream.wait_event(moe_done[0])
+                    gather_buf(0, 0, pred_ids_buf[0])
+                    copy_done[0].record(prefetch_stream)
+            for lay in range(layers):
+                buf = lay % 2
+                h = h + attention(lay, rmsnorm(h, norms[lay][0]), t)
+                hn = rmsnorm(h, norms[lay][1])
+                ids, wts = route_gpu(lay, hn)
+                if mode == "gpu":
+                    gather_buf(buf, lay, ids)          # main stream, after router
+                else:
+                    torch.cuda.current_stream().wait_event(copy_done[buf])
+                    gather_buf(buf, lay, ids, have=pred_ids_buf[buf])  # corrections only
+                    hit_counter.add_((ids == pred_ids_buf[buf]).sum())
+                    opp_counter[0] += K_TOP
+                h = h + moe(buf, hn, wts)
+                moe_done[buf].record()
+                if mode == "gpu_early" and lay + 1 < layers:
+                    nb = (lay + 1) % 2
+                    pids = early_route_gpu(lay + 1, rmsnorm(h, norms[lay + 1][1]))
+                    pred_ids_buf[nb].copy_(pids)
+                    with torch.cuda.stream(prefetch_stream):
+                        prefetch_stream.wait_event(moe_done[nb])
+                        gather_buf(nb, lay + 1, pred_ids_buf[nb], stream=None)
+                        copy_done[nb].record(prefetch_stream)
+            h = rmsnorm(h, final_norm)
+            return (h @ lm_head.t()).float()
         if prefetch:
             if mode == "early":
                 pred, _ = route(0, rmsnorm(h, norms[0][1]))
@@ -414,6 +484,9 @@ def main():
         for lay in range(layers):
             prev_eids[lay] = list(range(K_TOP))  # reset speculation state
         hits_total[0] = hits_total[1] = 0
+        hit_counter.zero_(); opp_counter[0] = 0
+        for b in range(2):
+            pred_ids_buf[b].fill_(-1)
         t = 0
         for tid in toks:
             logits = step(tid, t, prefetch, mode)
@@ -430,27 +503,32 @@ def main():
             cur = int(logits.argmax())
             if cur == tokenizer.eos_token_id:
                 break
-        hr = hits_total[0] / max(hits_total[1], 1) if prefetch else None
+        if prefetch and mode in ("gpu", "gpu_early"):
+            hr = (hit_counter.item() / opp_counter[0]) if opp_counter[0] else None
+        else:
+            hr = hits_total[0] / max(hits_total[1], 1) if prefetch else None
         return gen, statistics.median(times), hr
 
     torch.cuda.reset_peak_memory_stats()
     results = []
+    modes = [m.strip() for m in args.prefetch_mode.split(",") if m.strip()]
     for prompt, toks in zip(prompts, prompt_toks):
         g_off, med_off, _ = generate(toks, args.paired_tokens, prefetch=False)
-        g_on, med_on, hr = generate(toks, args.max_new, prefetch=True, mode=args.prefetch_mode)
-        identical = g_off == g_on[: len(g_off)]
-        text = tokenizer.decode(g_on, skip_special_tokens=True)
-        bigrams = list(zip(g_on, g_on[1:]))
-        d2 = len(set(bigrams)) / max(len(bigrams), 1)
-        results.append({
-            "prompt": prompt, "text": text, "n_tokens": len(g_on),
-            "mode": args.prefetch_mode,
-            "toks_per_s_off": 1.0 / med_off, "toks_per_s_on": 1.0 / med_on,
-            "prefetch_speedup": med_off / med_on, "hit_rate": hr,
-            "greedy_identical": identical, "distinct2": d2,
-        })
-        log(f"PROMPT: {prompt!r}\n  off {1.0/med_off:.2f} -> on {1.0/med_on:.2f} tok/s "
-            f"(x{med_off/med_on:.3f}, hit {hr:.2f}, identical={identical})\n  {text[:220]}")
+        for m_ in modes:
+            g_on, med_on, hr = generate(toks, args.max_new, prefetch=True, mode=m_)
+            identical = g_off == g_on[: len(g_off)]
+            text = tokenizer.decode(g_on, skip_special_tokens=True)
+            bigrams = list(zip(g_on, g_on[1:]))
+            d2 = len(set(bigrams)) / max(len(bigrams), 1)
+            results.append({
+                "prompt": prompt, "text": text, "n_tokens": len(g_on),
+                "mode": m_,
+                "toks_per_s_off": 1.0 / med_off, "toks_per_s_on": 1.0 / med_on,
+                "prefetch_speedup": med_off / med_on, "hit_rate": hr,
+                "greedy_identical": identical, "distinct2": d2,
+            })
+            log(f"PROMPT[{m_}]: {prompt!r}\n  off {1.0/med_off:.2f} -> on {1.0/med_on:.2f} tok/s "
+                f"(x{med_off/med_on:.3f}, hit {hr if hr is not None else -1:.2f}, identical={identical})\n  {text[:200]}")
 
     out = {
         "model": MODEL, "layers": layers,
