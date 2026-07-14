@@ -1,0 +1,6 @@
+start 2026-07-14T18:53:17Z ram=2015G
+fused rc=0
+bnb_dequant rc=0
+dequant rc=0
+fused2 rc=0
+ALLDONE
