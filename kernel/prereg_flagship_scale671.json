@@ -1,0 +1,20 @@
+{
+  "registered_utc": "2026-07-15T19:15:00Z",
+  "purpose": "FLAGSHIP SCALING POINT (671B-class): does the offload pipeline hold the PCIe waterfall as the pinned expert store grows 3x (128 GB -> 387 GB)? Phase A confirmed the waterfall at Qwen3-235B geometry (94L/E128/k8, 8.0 GB/token); this registers ONE larger synthetic geometry - DeepSeek-V3-CLASS (61L/E256/k8, hidden 7168, expert intermediate 2048; ~0.69T expert params; ~12.1 GB/token; 387 GB pinned NF4 store) - on a 2x-H100 RunPod pod rented for its ~468 GiB cgroup RAM allotment (single-GPU pods cap at 234 GiB: measured by the 2026-07-15 pin-probe, OOM-kill at 175-200 GB pinned). GPU 1 idles; the run uses GPU 0. Synthetic weights BY DESIGN (isolates the pipeline; downloading a ~1.3 TB real checkpoint is out of scope and the claim is explicitly 'pipeline scales', not 'ran real DeepSeek-V3'). Attention is the harness's GQA (128 heads / 8 KV / head-dim 128) standing in for DSV3's MLA - declared: attention realism is a compute load here, not a fidelity claim.",
+  "frozen_commit": "the commit carrying this file. Harness bench/phase3/offload_decode_235b.py unchanged (geometry via CLI args only).",
+  "provenance_of_bars": "Phase A (44.3 GB/s link): fused = 102-103% of waterfall. B5-era H100 pods (55 GB/s links): fused = 93.5-94% - the fraction is link-dependent (serialized non-MoE costs occupy more of a shorter token budget; documented in the bnb-baseline results). Bar set BELOW both observed regimes with margin. The 2x pod's cgroup (~468 GiB) leaves ~80 GiB headroom over the 387 GB store; the pin-probe showed ~40-60 GB of ceiling loss to overhead on a 1x pod, so the fit is expected but not guaranteed - an OOM abort is a documented environment outcome, not a pipeline failure.",
+  "protocol": {
+    "host": "FRESH RunPod SECURE pod, gpuTypeIds NVIDIA H100 80GB HBM3, gpuCount 2, provisioned AFTER this stamp. Runner asserts cgroup memory.max >= 430 GiB and aborts RAM-INSUFFICIENT otherwise (documented abort, not data).",
+    "pipeline": "bench/phase3/offload_decode_235b.py, args: --layers 61 --experts 256 --topk 8 --hidden 7168 --inter 2048 --heads 128 --kv-heads 8 --head-dim 128 --vram-cap-gb 45. On-box 1GiBx10 pinned link microbench defines the waterfall per run (its ~0.5-1% conservatism is documented in the README).",
+    "runs": "LEAN two-arm: fused then fused2 (A-A drift guard), fresh process each, 64 timed tokens (4 warmup), pynvml energy sampled. The dequant/bnb baselines are NOT re-run - the architectural comparison is established at 235B (Phase A + the bnb-baseline arc); this point adjudicates the FUSED pipeline's scaling only. Declared to avoid doubling the ~35-min store build per arm.",
+    "smoke": "--layers 4 first with the same geometry (validates E=256/hidden-7168 shapes through kernel + attention in minutes) - gates the full build."
+  },
+  "frozen_verdict_criteria": {
+    "S1_link": "on-box link GB/s + waterfall ceiling reported.",
+    "S2_scaling": "fused tok/s >= 0.85 x the on-box waterfall ceiling (both arms). The registered claim tier: the pipeline holds the wire within the link-dependent band already documented (0.93-1.03 across 44-55 GB/s links) at 3x the store.",
+    "S3_vram": "torch peak allocated <= 45 GB (the larger attention geometry is honest resident overhead, reported; the MoE contribution remains the two expert-sized staging buffers). Still: a ~0.7T-class MoE decoding on a fraction of one GPU's HBM.",
+    "S4_drift": "the two fused arms' tok/s within 5% of each other.",
+    "REPORT": "absolute tok/s; GB/token measured vs the 12.1 predicted; J/token; store build wall-time; pinned-store bytes as allocated.",
+    "no_tune_clause": "Failures reported at full volume; claims narrowed; no re-runs until green. An environment OOM abort is reported as an environment limit, not adjudicated against the pipeline."
+  }
+}
