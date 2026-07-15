@@ -1,0 +1,5822 @@
+{
+ "env": {
+  "gpu": "NVIDIA H200",
+  "sm_count": 132,
+  "torch": "2.8.0+cu128",
+  "triton": "3.4.0"
+ },
+ "regime": "prefill_s2048 (uniform)",
+ "combos": [
+  "V0G1_control",
+  "V1G1_regLUT",
+  "V0G2_k128",
+  "V1G2_regLUT_k128",
+  "V3G1_bf16",
+  "V3G2_bf16_k128"
+ ],
+ "cells": [
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "gate_up",
+   "N": 2048,
+   "K": 2048,
+   "E": 64,
+   "top_k": 8,
+   "tokens": 16384,
+   "dequant_ms": 2.02185595035553,
+   "current_default_ms": 2.0842878818511963,
+   "dequant_err": 0.0022269428902043447,
+   "combos": {
+    "V0G1_control": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 16.58064079284668,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 16.676608085632324,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 17.088096618652344,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 17.260784149169922,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 9.555936336517334,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 9.898496150970459,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 15.849376201629639,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 15.96281623840332,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 8.829216003417969,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 8.922304153442383,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 8.649519920349121,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 8.741551876068115,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 5.545664072036743,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 5.614735841751099,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 8.217999935150146,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 8.266655921936035,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 5.545664072036743,
+      "status": "ok"
+     },
+     "err": 0.0016980006918015111,
+     "err_vs_dequant": 0.7624805733773004,
+     "vs_dequant": 0.36458319943150963,
+     "vs_control_default": 0.3758409912278918
+    },
+    "V1G1_regLUT": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 6.305808067321777,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 6.3089599609375,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 6.646895885467529,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 6.64793586730957,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 3.468527913093567,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 3.4695520401000977,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 6.945264101028442,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 6.957600116729736,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 3.5759999752044678,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 3.5797600746154785,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 4.0767199993133545,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 4.084383964538574,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 1.977840006351471,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 1.9808800220489502,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.7214399576187134,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 3.729967951774597,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 1.977840006351471,
+      "status": "ok"
+     },
+     "err": 0.0016980006918015111,
+     "err_vs_dequant": 0.7624805733773004,
+     "vs_dequant": 1.0222545523716324,
+     "vs_control_default": 1.053820266127638
+    },
+    "V0G2_k128": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 17.096288681030273,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 16.76625633239746,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 16.53348731994629,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 16.817967414855957,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 9.966832160949707,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 314368, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 15.182176113128662,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 314368, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 9.61902379989624,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 9.66433572769165,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 8.520895957946777,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 8.680768013000488,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 264192, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 363520, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 264192, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 363520, Hardware limit: 232448. Reducing block sizes or `n"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 64,
+      "warps": 8,
+      "stages": 3,
+      "ms": 8.520895957946777,
+      "status": "ok"
+     },
+     "err": 0.0016980006918015111,
+     "err_vs_dequant": 0.7624805733773004,
+     "vs_dequant": 0.2372820839890554,
+     "vs_control_default": 0.2446090049846628
+    },
+    "V1G2_regLUT_k128": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 6.534127950668335,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 6.7000157833099365,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 7.256239891052246,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 7.278975963592529,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 3.5449280738830566,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 4.0969438552856445,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 6.535807847976685,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 6.556463956832886,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 4.031216144561768,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 4.773583889007568,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 4.018143892288208,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 4.026608228683472,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 3.0825600624084473,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 3.087440013885498,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.6085599660873413,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 3.6049760580062866,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 3.0825600624084473,
+      "status": "ok"
+     },
+     "err": 0.0016980006918015111,
+     "err_vs_dequant": 0.7624805733773004,
+     "vs_dequant": 0.6559015589061468,
+     "vs_control_default": 0.6761548322347085
+    },
+    "V3G1_bf16": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 15.349823951721191,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 15.622479915618896,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 15.340144157409668,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 15.571648120880127,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 9.56115198135376,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 9.57268762588501,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 15.766272068023682,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 14.89132833480835,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 7.883152008056641,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 8.250368118286133,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 8.022032260894775,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 8.305791854858398,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 4.713759899139404,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 4.772192001342773,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 7.93177604675293,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 8.011520385742188,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 4.713759899139404,
+      "status": "ok"
+     },
+     "err": 0.0022269428902043447,
+     "err_vs_dequant": 1.0,
+     "vs_dequant": 0.4289263758904356,
+     "vs_control_default": 0.442170990132893
+    },
+    "V3G2_bf16_k128": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 16.36401653289795,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 16.60103988647461,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 15.257344245910645,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 15.525343894958496,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 9.928320407867432,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 297984, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 15.278623580932617,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 297984, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 8.797135829925537,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 247296, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 7.9030561447143555,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 247296, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 264192, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 363520, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 264192, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 363520, Hardware limit: 232448. Reducing block sizes or `n"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 64,
+      "warps": 8,
+      "stages": 3,
+      "ms": 7.9030561447143555,
+      "status": "ok"
+     },
+     "err": 0.0022269428902043447,
+     "err_vs_dequant": 1.0,
+     "vs_dequant": 0.25583216332175085,
+     "vs_control_default": 0.263731883424008
+    }
+   }
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "down",
+   "N": 2048,
+   "K": 1024,
+   "E": 64,
+   "top_k": 8,
+   "tokens": 16384,
+   "dequant_ms": 2.0480480194091797,
+   "current_default_ms": 1.1118080019950867,
+   "dequant_err": 0.0022268756886403176,
+   "combos": {
+    "V0G1_control": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 8.473743915557861,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 8.588240146636963,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 8.667280197143555,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 8.827232360839844,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 4.936704158782959,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 5.09830379486084,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 7.937168121337891,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 8.068975925445557,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 4.503103971481323,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 4.591375827789307,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 4.437920093536377,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 4.506015777587891,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 2.8358880281448364,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 2.880400061607361,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 4.148384094238281,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 4.191456079483032,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 2.8358880281448364,
+      "status": "ok"
+     },
+     "err": 0.001697994998238505,
+     "err_vs_dequant": 0.7625010263932893,
+     "vs_dequant": 0.7221893103970537,
+     "vs_control_default": 0.39204933021364824
+    },
+    "V1G1_regLUT": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 3.168063998222351,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 3.175808072090149,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.338159918785095,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 3.341055989265442,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 1.7287039756774902,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 1.728655993938446,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.417791962623596,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 3.429103970527649,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 1.7947520017623901,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 1.8014879822731018,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 2.0276479721069336,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 2.034000039100647,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 1.0057920217514038,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 1.0106559991836548,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 1.8547839522361755,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 1.8576000332832336,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 1.0057920217514038,
+      "status": "ok"
+     },
+     "err": 0.001697994998238505,
+     "err_vs_dequant": 0.7625010263932893,
+     "vs_dequant": 2.0362539919961553,
+     "vs_control_default": 1.1054054694717854
+    },
+    "V0G2_k128": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 8.71174430847168,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 8.829279899597168,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 8.546095848083496,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 8.840416431427002,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 5.227360010147095,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 314368, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 7.878528118133545,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 314368, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 4.945616006851196,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 5.046032190322876,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 4.372767925262451,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 4.514256000518799,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 264192, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 363520, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 264192, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 363520, Hardware limit: 232448. Reducing block sizes or `n"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 64,
+      "warps": 8,
+      "stages": 3,
+      "ms": 4.372767925262451,
+      "status": "ok"
+     },
+     "err": 0.001697994998238505,
+     "err_vs_dequant": 0.7625010263932893,
+     "vs_dequant": 0.4683642156212205,
+     "vs_control_default": 0.2542572624474135
+    },
+    "V1G2_regLUT_k128": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 3.246448040008545,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 3.352047920227051,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.6441599130630493,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 3.643072009086609,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 1.7714879512786865,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 2.0698879957199097,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.2305279970169067,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 3.235167980194092,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 2.0272480249404907,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 2.401087999343872,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 2.0002560019493103,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 2.0105600357055664,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 1.563376009464264,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 1.5650079846382141,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 1.8018399477005005,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 1.8065760135650635,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 1.563376009464264,
+      "status": "ok"
+     },
+     "err": 0.001697994998238505,
+     "err_vs_dequant": 0.7625010263932893,
+     "vs_dequant": 1.3100162769614219,
+     "vs_control_default": 0.7111584131165476
+    },
+    "V3G1_bf16": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 7.880831956863403,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 8.10152006149292,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 7.854320049285889,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 8.065968036651611,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 4.931583881378174,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 4.972480058670044,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 7.972624063491821,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 7.582000017166138,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 4.046576023101807,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 4.25432014465332,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 4.130591869354248,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 4.2641119956970215,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 2.4393759965896606,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 2.5024800300598145,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.969712018966675,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 4.042079925537109,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 2.4393759965896606,
+      "status": "ok"
+     },
+     "err": 0.0022268756886403176,
+     "err_vs_dequant": 1.0,
+     "vs_dequant": 0.8395786554727225,
+     "vs_control_default": 0.4557755768481104
+    },
+    "V3G2_bf16_k128": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 8.318528175354004,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 8.542799949645996,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 7.79857611656189,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 8.019184112548828,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 5.215824127197266,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 297984, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 7.76526403427124,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 297984, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 4.4336159229278564,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 247296, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 4.011343955993652,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 247296, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 264192, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 363520, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 264192, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 363520, Hardware limit: 232448. Reducing block sizes or `n"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 64,
+      "warps": 8,
+      "stages": 3,
+      "ms": 4.011343955993652,
+      "status": "ok"
+     },
+     "err": 0.0022268756886403176,
+     "err_vs_dequant": 1.0,
+     "vs_dequant": 0.5105640508211808,
+     "vs_control_default": 0.27716596088297296
+    }
+   }
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "gate_up",
+   "N": 1536,
+   "K": 2048,
+   "E": 128,
+   "top_k": 8,
+   "tokens": 16384,
+   "dequant_ms": 4.139968156814575,
+   "current_default_ms": 1.6046560406684875,
+   "dequant_err": 0.0022269387082855517,
+   "combos": {
+    "V0G1_control": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 12.680079936981201,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 12.510464191436768,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 12.794335842132568,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 12.925136089324951,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 7.205792188644409,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 7.504623889923096,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 12.237167835235596,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 12.280352115631104,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 6.6170878410339355,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 6.703007936477661,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 6.605440139770508,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 6.6658079624176025,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 4.233760118484497,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 4.25761604309082,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 6.197775840759277,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 6.236207962036133,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 4.233760118484497,
+      "status": "ok"
+     },
+     "err": 0.0016977759411973283,
+     "err_vs_dequant": 0.762381081652845,
+     "vs_dequant": 0.9778466519015973,
+     "vs_control_default": 0.37901439754760713
+    },
+    "V1G1_regLUT": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 4.740095853805542,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 4.74233603477478,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 4.997312068939209,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 5.000576019287109,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 2.6257920265197754,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 2.625264048576355,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 5.245599985122681,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 5.253695964813232,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 2.7080960273742676,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 2.7139039039611816,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.0885279178619385,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 3.0915520191192627,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 1.4910399913787842,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 1.494159996509552,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 2.8075679540634155,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 2.8096959590911865,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 1.4910399913787842,
+      "status": "ok"
+     },
+     "err": 0.0016977759411973283,
+     "err_vs_dequant": 0.762381081652845,
+     "vs_dequant": 2.776564130239252,
+     "vs_control_default": 1.0761991964981712
+    },
+    "V0G2_k128": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 13.012624263763428,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 12.731023788452148,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 12.430463790893555,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 12.665551662445068,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 7.711599826812744,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 314368, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 11.516752243041992,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 314368, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 7.30623984336853,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 7.375247955322266,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 6.600992202758789,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 6.710560083389282,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 264192, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 363520, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 264192, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 363520, Hardware limit: 232448. Reducing block sizes or `n"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 64,
+      "warps": 8,
+      "stages": 3,
+      "ms": 6.600992202758789,
+      "status": "ok"
+     },
+     "err": 0.0016977759411973283,
+     "err_vs_dequant": 0.762381081652845,
+     "vs_dequant": 0.6271736171850553,
+     "vs_control_default": 0.24309315802522002
+    },
+    "V1G2_regLUT_k128": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 4.9064319133758545,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 5.038112163543701,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 5.462415933609009,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 5.478543996810913,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 2.6853439807891846,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 3.142815947532654,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 5.03328013420105,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 5.026576042175293,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 3.0524799823760986,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 3.6524959802627563,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.0459519624710083,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 3.051743984222412,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 2.333184003829956,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 2.343791961669922,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 2.7172800302505493,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 2.7416800260543823,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 2.333184003829956,
+      "status": "ok"
+     },
+     "err": 0.0016977759411973283,
+     "err_vs_dequant": 0.762381081652845,
+     "vs_dequant": 1.774385624973751,
+     "vs_control_default": 0.6877537468259772
+    },
+    "V3G1_bf16": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 11.523248195648193,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 11.807104110717773,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 11.490287780761719,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 11.683679580688477,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 7.225376129150391,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 7.242735862731934,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 11.882207870483398,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 11.252351760864258,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 5.949536085128784,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 6.19865608215332,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 6.046880006790161,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 6.2767040729522705,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 3.57531201839447,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 3.669487953186035,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 5.9497761726379395,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 6.005615949630737,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 3.57531201839447,
+      "status": "ok"
+     },
+     "err": 0.0022269387082855517,
+     "err_vs_dequant": 1.0,
+     "vs_dequant": 1.1579319890166313,
+     "vs_control_default": 0.4488156648742155
+    },
+    "V3G2_bf16_k128": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 12.395888328552246,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 12.520287990570068,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 11.624320030212402,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 11.831040382385254,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 7.688623905181885,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 297984, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 11.613120079040527,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 297984, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 6.701855897903442,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 247296, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 6.013440132141113,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 247296, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 264192, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 363520, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 264192, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 363520, Hardware limit: 232448. Reducing block sizes or `n"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 64,
+      "warps": 8,
+      "stages": 3,
+      "ms": 6.013440132141113,
+      "status": "ok"
+     },
+     "err": 0.0022269387082855517,
+     "err_vs_dequant": 1.0,
+     "vs_dequant": 0.6884525439418518,
+     "vs_control_default": 0.26684493491367683
+    }
+   }
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "down",
+   "N": 2048,
+   "K": 768,
+   "E": 128,
+   "top_k": 8,
+   "tokens": 16384,
+   "dequant_ms": 4.294751882553101,
+   "current_default_ms": 0.8953439891338348,
+   "dequant_err": 0.0022296980933628812,
+   "combos": {
+    "V0G1_control": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 6.482048034667969,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 6.580912113189697,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 6.583312034606934,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 6.773839950561523,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 3.811776041984558,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 3.9725120067596436,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 6.051120042800903,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 6.2231199741363525,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 3.428015947341919,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 3.515872001647949,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.409600019454956,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 3.4941920042037964,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 2.220944046974182,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 2.268288016319275,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.1539679765701294,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 3.2168480157852173,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 2.220944046974182,
+      "status": "ok"
+     },
+     "err": 0.0017012369133388016,
+     "err_vs_dequant": 0.7629898049439319,
+     "vs_dequant": 1.9337505996174364,
+     "vs_control_default": 0.40313667080161386
+    },
+    "V1G1_regLUT": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 2.396127939224243,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 2.4054239988327026,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 2.5351040363311768,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 2.5421760082244873,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 1.3309119939804077,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 1.3388320207595825,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 2.5918400287628174,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 2.597104072570801,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 1.3659200072288513,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 1.373744010925293,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 1.5549119710922241,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 1.562399983406067,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 0.7832159996032715,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 0.7903200089931488,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 1.414031982421875,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 1.4197760224342346,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 0.7832159996032715,
+      "status": "ok"
+     },
+     "err": 0.0017012369133388016,
+     "err_vs_dequant": 0.7629898049439319,
+     "vs_dequant": 5.483483336306402,
+     "vs_control_default": 1.1431635584402775
+    },
+    "V0G2_k128": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 6.7429280281066895,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 6.877728223800659,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 6.50166392326355,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 6.796831846237183,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 4.128527879714966,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 314368, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 6.086688041687012,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 314368, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 3.837727904319763,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 3.9536319971084595,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.3830559253692627,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 3.5431360006332397,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 264192, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 363520, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 264192, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 363520, Hardware limit: 232448. Reducing block sizes or `n"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 64,
+      "warps": 8,
+      "stages": 3,
+      "ms": 3.3830559253692627,
+      "status": "ok"
+     },
+     "err": 0.0017012369133388016,
+     "err_vs_dequant": 0.7629898049439319,
+     "vs_dequant": 1.269488881442102,
+     "vs_control_default": 0.26465539112721215
+    },
+    "V1G2_regLUT_k128": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 2.451743960380554,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 2.527999997138977,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 2.7774239778518677,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 2.7888320684432983,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 1.3567039966583252,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 1.5937920212745667,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 2.4738240242004395,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 2.4770400524139404,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 1.5454400181770325,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 1.8124799728393555,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 1.526144027709961,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 1.538591980934143,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 1.1967999935150146,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 1.1980159878730774,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 1.3774240016937256,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 1.379855990409851,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 1.1967999935150146,
+      "status": "ok"
+     },
+     "err": 0.0017012369133388016,
+     "err_vs_dequant": 0.7629898049439319,
+     "vs_dequant": 3.588529333075418,
+     "vs_control_default": 0.7481149682364217
+    },
+    "V3G1_bf16": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 6.02510404586792,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 6.25494384765625,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 6.006416082382202,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 6.221199989318848,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 3.8401600122451782,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 3.853887915611267,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 6.109263896942139,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 5.8377602100372314,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 3.1035680770874023,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 3.2731200456619263,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.173200011253357,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 3.2562559843063354,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 1.9372480511665344,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 2.0080959796905518,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.0224480628967285,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 3.105839967727661,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 1.9372480511665344,
+      "status": "ok"
+     },
+     "err": 0.0022296980933628812,
+     "err_vs_dequant": 1.0,
+     "vs_dequant": 2.216934418887127,
+     "vs_control_default": 0.4621731267685075
+    },
+    "V3G2_bf16_k128": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 6.411359786987305,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 6.639600038528442,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 6.077232122421265,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 6.294448137283325,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 4.125472068786621,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 297984, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 5.973968029022217,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 297984, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 3.433120012283325,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 247296, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.1300159692764282,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 247296, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 264192, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 363520, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 264192, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 363520, Hardware limit: 232448. Reducing block sizes or `n"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 64,
+      "warps": 8,
+      "stages": 3,
+      "ms": 3.1300159692764282,
+      "status": "ok"
+     },
+     "err": 0.0022296980933628812,
+     "err_vs_dequant": 1.0,
+     "vs_dequant": 1.3721182015393765,
+     "vs_control_default": 0.28605093326115305
+    }
+   }
+  },
+  {
+   "model": "google/gemma-4-26B-A4B",
+   "proj": "gate_up",
+   "N": 1408,
+   "K": 2816,
+   "E": 128,
+   "top_k": 8,
+   "tokens": 16384,
+   "dequant_ms": 4.16542387008667,
+   "current_default_ms": 2.049999952316284,
+   "dequant_err": 0.0022295013302333646,
+   "combos": {
+    "V0G1_control": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 15.880512237548828,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 15.631152153015137,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 16.00609588623047,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 16.129024505615234,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 9.000607967376709,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 9.351183891296387,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 15.277456283569336,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 15.349552154541016,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 8.308656215667725,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 8.386240005493164,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 8.269807815551758,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 8.334335803985596,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 5.356959819793701,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 5.391871929168701,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 7.753760099411011,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 7.791311979293823,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 5.356959819793701,
+      "status": "ok"
+     },
+     "err": 0.0017016854661502745,
+     "err_vs_dequant": 0.7632583318405811,
+     "vs_dequant": 0.7775723563756508,
+     "vs_control_default": 0.3826797327733607
+    },
+    "V1G1_regLUT": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 5.944479942321777,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 5.946320056915283,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 6.289872169494629,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 6.295232057571411,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 3.405216097831726,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 3.4005279541015625,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 6.655600070953369,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 6.670655965805054,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 3.439520001411438,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 3.4521759748458862,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.95249605178833,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 3.9625120162963867,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 1.937936007976532,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 1.9391520023345947,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.582304000854492,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 3.585471987724304,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 1.937936007976532,
+      "status": "ok"
+     },
+     "err": 0.0017016854661502745,
+     "err_vs_dequant": 0.7632583318405811,
+     "vs_dequant": 2.1494124950162505,
+     "vs_control_default": 1.0578264420901917
+    },
+    "V0G2_k128": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 16.25609588623047,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 15.751904010772705,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 15.655407905578613,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 15.861487865447998,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 9.589168071746826,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 314368, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 14.534799575805664,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 314368, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 9.165264129638672,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 9.196432113647461,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 8.137695789337158,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 8.247615814208984,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 264192, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 363520, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 264192, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 363520, Hardware limit: 232448. Reducing block sizes or `n"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 64,
+      "warps": 8,
+      "stages": 3,
+      "ms": 8.137695789337158,
+      "status": "ok"
+     },
+     "err": 0.0017016854661502745,
+     "err_vs_dequant": 0.7632583318405811,
+     "vs_dequant": 0.5118677298731952,
+     "vs_control_default": 0.25191405594227345
+    },
+    "V1G2_regLUT_k128": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 6.158447980880737,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 6.314095973968506,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 6.910784006118774,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 6.923920154571533,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 3.391152024269104,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 3.972656011581421,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 6.372591972351074,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 6.365872144699097,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 3.8508960008621216,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 4.5897440910339355,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.821328043937683,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 3.830288052558899,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 2.9434720277786255,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 2.9487680196762085,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.460319995880127,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 3.4632480144500732,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 2.9434720277786255,
+      "status": "ok"
+     },
+     "err": 0.0017016854661502745,
+     "err_vs_dequant": 0.7632583318405811,
+     "vs_dequant": 1.4151396142976853,
+     "vs_control_default": 0.6964564069132244
+    },
+    "V3G1_bf16": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 14.402160167694092,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 14.833087921142578,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 14.364784240722656,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 14.547743797302246,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 9.098767757415771,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 9.010960102081299,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 15.040208339691162,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 14.166687965393066,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 7.435423851013184,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 7.741631984710693,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 7.58027195930481,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 7.820800065994263,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 4.507215976715088,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 4.654768228530884,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 7.487855911254883,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 7.532800197601318,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 4.507215976715088,
+      "status": "ok"
+     },
+     "err": 0.0022295013302333646,
+     "err_vs_dequant": 1.0,
+     "vs_dequant": 0.9241677992813826,
+     "vs_control_default": 0.4548262082196355
+    },
+    "V3G2_bf16_k128": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 15.546847820281982,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 15.540048122406006,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 14.783663749694824,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 14.951903820037842,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 9.564607620239258,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 297984, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 14.6494722366333,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 297984, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 8.378640174865723,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 247296, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 7.529536008834839,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 247296, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 264192, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 363520, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 264192, Hardware limit: 232448. Reducing block sizes or `n"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "status": "failed",
+       "reason": "out of resource: shared memory, Required: 363520, Hardware limit: 232448. Reducing block sizes or `n"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 64,
+      "warps": 8,
+      "stages": 3,
+      "ms": 7.529536008834839,
+      "status": "ok"
+     },
+     "err": 0.0022295013302333646,
+     "err_vs_dequant": 1.0,
+     "vs_dequant": 0.5532112291114801,
+     "vs_control_default": 0.2722611260389619
+    }
+   }
+  },
+  {
+   "model": "google/gemma-4-26B-A4B",
+   "proj": "down",
+   "N": 2816,
+   "K": 704,
+   "E": 128,
+   "top_k": 8,
+   "tokens": 16384,
+   "dequant_ms": 4.220335960388184,
+   "current_default_ms": 0.766512006521225,
+   "dequant_err": 0.00222944469755026,
+   "combos": {
+    "V0G1_control": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 6.6265599727630615,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 6.842639923095703,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 6.880831956863403,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 7.078143835067749,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 4.061552047729492,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 4.378335952758789,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 6.55131196975708,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 6.783056020736694,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 3.550912022590637,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 3.682031989097595,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.641327977180481,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 3.755280017852783,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 2.5215200185775757,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 2.5750080347061157,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.3557440042495728,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 3.466271996498108,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 2.5215200185775757,
+      "status": "ok"
+     },
+     "err": 0.0017012648375137804,
+     "err_vs_dequant": 0.7630890505528799,
+     "vs_dequant": 1.6737269303017208,
+     "vs_control_default": 0.30398807103408404
+    },
+    "V1G1_regLUT": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 1.46561598777771,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 1.4714239835739136,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 1.6857439875602722,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 1.699616014957428,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 0.9673120081424713,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 0.9706400036811829,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 1.758351981639862,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 1.7654399871826172,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 0.990416020154953,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 0.9979840219020844,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 1.22707200050354,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 1.241807997226715,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 0.655023992061615,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 0.6594400107860565,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 1.057200014591217,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 1.061024010181427,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 0.655023992061615,
+      "status": "ok"
+     },
+     "err": 0.0017012648375137804,
+     "err_vs_dequant": 0.7630890505528799,
+     "vs_dequant": 6.443025006008019,
+     "vs_control_default": 1.1702044746616287
+    },
+    "V0G2_k128": {
+     "status": "skipped",
+     "reason": "K % 128 != 0"
+    },
+    "V1G2_regLUT_k128": {
+     "status": "skipped",
+     "reason": "K % 128 != 0"
+    },
+    "V3G1_bf16": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 6.092319965362549,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 6.401679992675781,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 6.147279977798462,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 6.343808174133301,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 4.157808065414429,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 4.212928056716919,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 6.459743976593018,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 6.204783916473389,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 3.138800024986267,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 3.4126880168914795,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.2134400606155396,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 3.4608160257339478,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 2.184224009513855,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 2.278752088546753,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.1898720264434814,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 3.313264012336731,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 128,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 2.184224009513855,
+      "status": "ok"
+     },
+     "err": 0.00222944469755026,
+     "err_vs_dequant": 1.0,
+     "vs_dequant": 1.9321900784926855,
+     "vs_control_default": 0.3509310414968968
+    },
+    "V3G2_bf16_k128": {
+     "status": "skipped",
+     "reason": "K % 128 != 0"
+    }
+   }
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "gate_up",
+   "N": 5760,
+   "K": 2880,
+   "E": 128,
+   "top_k": 4,
+   "tokens": 8192,
+   "dequant_ms": 4.349279880523682,
+   "current_default_ms": 4.572751998901367,
+   "dequant_err": 0.0022296587519132355,
+   "combos": {
+    "V0G1_control": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 26.347935676574707,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 26.57136058807373,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 27.616031646728516,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 27.837871551513672,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 15.624256134033203,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 16.433615684509277,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 26.934927940368652,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 27.153120040893555,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 27.366047859191895,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 27.66372776031494,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 28.36840057373047,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 28.632176399230957,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 19.20143985748291,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 19.14612865447998,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 26.091312408447266,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 26.33409595489502,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 64,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 15.624256134033203,
+      "status": "ok"
+     },
+     "err": 0.0017021841688224081,
+     "err_vs_dequant": 0.7634281108540893,
+     "vs_dequant": 0.2783671646965615,
+     "vs_control_default": 0.2926700611967611
+    },
+    "V1G1_regLUT": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 6.093424081802368,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 6.098863840103149,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 7.093551874160767,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 7.098112106323242,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 4.460896015167236,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 4.450160026550293,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 7.659631967544556,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 7.659024000167847,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 7.99073600769043,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 7.998704195022583,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 9.51756763458252,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 9.591775894165039,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 5.088608026504517,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 5.098160028457642,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 8.462047576904297,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 8.458112239837646,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 64,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 4,
+      "ms": 4.450160026550293,
+      "status": "ok"
+     },
+     "err": 0.0017021841688224081,
+     "err_vs_dequant": 0.7634281108540893,
+     "vs_dequant": 0.9773311194598069,
+     "vs_control_default": 1.0275477671858255
+    },
+    "V0G2_k128": {
+     "status": "skipped",
+     "reason": "K % 128 != 0"
+    },
+    "V1G2_regLUT_k128": {
+     "status": "skipped",
+     "reason": "K % 128 != 0"
+    },
+    "V3G1_bf16": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 23.97606372833252,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 24.425055503845215,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 24.53878402709961,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 24.364815711975098,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 16.473648071289062,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 15.642159938812256,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 26.209535598754883,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 24.702160835266113,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 24.547951698303223,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 25.871039390563965,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 25.062352180480957,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 26.46297550201416,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 16.481696128845215,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 16.5798397064209,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 24.86728000640869,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 25.14481544494629,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 64,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 4,
+      "ms": 15.642159938812256,
+      "status": "ok"
+     },
+     "err": 0.0022296587519132355,
+     "err_vs_dequant": 1.0,
+     "vs_dequant": 0.27804854940346124,
+     "vs_control_default": 0.29233507500170636
+    },
+    "V3G2_bf16_k128": {
+     "status": "skipped",
+     "reason": "K % 128 != 0"
+    }
+   }
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "down",
+   "N": 2880,
+   "K": 2880,
+   "E": 128,
+   "top_k": 4,
+   "tokens": 8192,
+   "dequant_ms": 4.623263835906982,
+   "current_default_ms": 2.4175519943237305,
+   "dequant_err": 0.002229350270592334,
+   "combos": {
+    "V0G1_control": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 13.207648277282715,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 13.351024150848389,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 13.853488445281982,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 13.962639808654785,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 8.145632266998291,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 8.53652811050415,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 13.947312355041504,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 14.051392078399658,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 13.699792385101318,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 13.847919940948486,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 14.248176097869873,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 14.37224006652832,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 9.972576141357422,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 9.925743579864502,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 13.540544033050537,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 13.66593599319458,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 64,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 3,
+      "ms": 8.145632266998291,
+      "status": "ok"
+     },
+     "err": 0.001701773017006447,
+     "err_vs_dequant": 0.763349321752965,
+     "vs_dequant": 0.5675758104914648,
+     "vs_control_default": 0.2967912023377666
+    },
+    "V1G1_regLUT": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 3.07478404045105,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 3.0797120332717896,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.5749599933624268,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 3.5776000022888184,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 2.3022079467773438,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 2.3016159534454346,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 3.9429759979248047,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 3.9434080123901367,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 4.019727945327759,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 4.030016183853149,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 4.794015884399414,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 4.826304197311401,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 2.635200023651123,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 2.6374080181121826,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 4.351039886474609,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 4.3489439487457275,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 64,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 4,
+      "ms": 2.3016159534454346,
+      "status": "ok"
+     },
+     "err": 0.001701773017006447,
+     "err_vs_dequant": 0.763349321752965,
+     "vs_dequant": 2.0087034194328233,
+     "vs_control_default": 1.0503715838016954
+    },
+    "V0G2_k128": {
+     "status": "skipped",
+     "reason": "K % 128 != 0"
+    },
+    "V1G2_regLUT_k128": {
+     "status": "skipped",
+     "reason": "K % 128 != 0"
+    },
+    "V3G1_bf16": {
+     "status": "ok",
+     "configs": [
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 12.057695865631104,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 12.282015800476074,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 12.311488151550293,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 12.226959705352783,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 8.69491195678711,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 8.142576217651367,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 13.56324815750122,
+       "status": "ok"
+      },
+      {
+       "block_m": 64,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 12.813983917236328,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 3,
+       "ms": 12.31660795211792,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 4,
+       "stages": 4,
+       "ms": 12.968400001525879,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 3,
+       "ms": 12.584287643432617,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 64,
+       "warps": 8,
+       "stages": 4,
+       "ms": 13.274191856384277,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 3,
+       "ms": 8.557983875274658,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 4,
+       "stages": 4,
+       "ms": 8.60865592956543,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 3,
+       "ms": 12.915056228637695,
+       "status": "ok"
+      },
+      {
+       "block_m": 128,
+       "block_n": 128,
+       "warps": 8,
+       "stages": 4,
+       "ms": 13.050352096557617,
+       "status": "ok"
+      }
+     ],
+     "best": {
+      "block_m": 64,
+      "block_n": 128,
+      "warps": 4,
+      "stages": 4,
+      "ms": 8.142576217651367,
+      "status": "ok"
+     },
+     "err": 0.002229350270592334,
+     "err_vs_dequant": 1.0,
+     "vs_dequant": 0.5677888314861251,
+     "vs_control_default": 0.296902593196855
+    },
+    "V3G2_bf16_k128": {
+     "status": "skipped",
+     "reason": "K % 128 != 0"
+    }
+   }
+  }
+ ]
+}

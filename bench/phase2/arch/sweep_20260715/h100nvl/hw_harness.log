@@ -1,0 +1,27 @@
+/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+== allenai/OLMoE-1B-7B-0924 gate_up N=2048 K=2048 E=64 k=8
+   stack build failed -> all cells skipped: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+CUDA kernel errors might be asynchrono
+== allenai/OLMoE-1B-7B-0924 down N=2048 K=1024 E=64 k=8
+   stack build failed -> all cells skipped: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+CUDA kernel errors might be asynchrono
+== Qwen/Qwen3-30B-A3B gate_up N=1536 K=2048 E=128 k=8
+   stack build failed -> all cells skipped: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+CUDA kernel errors might be asynchrono
+== Qwen/Qwen3-30B-A3B down N=2048 K=768 E=128 k=8
+   stack build failed -> all cells skipped: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+CUDA kernel errors might be asynchrono
+== google/gemma-4-26B-A4B gate_up N=1408 K=2816 E=128 k=8
+   stack build failed -> all cells skipped: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+CUDA kernel errors might be asynchrono
+== google/gemma-4-26B-A4B down N=2816 K=704 E=128 k=8
+   stack build failed -> all cells skipped: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+CUDA kernel errors might be asynchrono
+== openai/gpt-oss-120b gate_up N=5760 K=2880 E=128 k=4
+   stack build failed -> all cells skipped: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+CUDA kernel errors might be asynchrono
+== openai/gpt-oss-120b down N=2880 K=2880 E=128 k=4
+   stack build failed -> all cells skipped: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+CUDA kernel errors might be asynchrono
+receipts -> /root/hw_harness.json (48 cells)

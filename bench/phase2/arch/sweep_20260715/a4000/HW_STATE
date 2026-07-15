@@ -1,0 +1,9 @@
+start 2026-07-15T16:29:03Z
+NVIDIA RTX A4000, 550.127.08, 8.6
+/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+torch 2.8.0+cu128 | triton 3.4.0 | bnb 0.49.2 | sm 48
+SUITE rc=0 44 passed 
+MATRIX rc=0
+HARNESS rc=0
+ALLDONE

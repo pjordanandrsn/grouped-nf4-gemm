@@ -1,0 +1,42 @@
+/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[allenai/OLMoE-1B-7B- gate_up ] V0G1_control          7.20 ms (128/64/w4/s3) vs-deq 0.70x err/deq 0.76
+[allenai/OLMoE-1B-7B- gate_up ] V1G1_regLUT           3.34 ms (128/128/w4/s3) vs-deq 1.51x err/deq 0.76
+[allenai/OLMoE-1B-7B- gate_up ] V0G2_k128            14.21 ms (128/64/w8/s3) vs-deq 0.36x err/deq 0.76
+[allenai/OLMoE-1B-7B- gate_up ] V1G2_regLUT_k128      6.23 ms (128/128/w8/s4) vs-deq 0.81x err/deq 0.76
+[allenai/OLMoE-1B-7B- gate_up ] V3G1_bf16             6.00 ms (128/128/w4/s3) vs-deq 0.84x err/deq 1.00
+[allenai/OLMoE-1B-7B- gate_up ] V3G2_bf16_k128       13.27 ms (128/64/w8/s3) vs-deq 0.38x err/deq 1.00
+[allenai/OLMoE-1B-7B- down    ] V0G1_control          3.71 ms (128/64/w4/s3) vs-deq 1.38x err/deq 0.76
+[allenai/OLMoE-1B-7B- down    ] V1G1_regLUT           1.70 ms (128/128/w4/s3) vs-deq 3.01x err/deq 0.76
+[allenai/OLMoE-1B-7B- down    ] V0G2_k128             7.42 ms (128/64/w8/s3) vs-deq 0.69x err/deq 0.76
+[allenai/OLMoE-1B-7B- down    ] V1G2_regLUT_k128      3.09 ms (128/64/w8/s3) vs-deq 1.66x err/deq 0.76
+[allenai/OLMoE-1B-7B- down    ] V3G1_bf16             3.11 ms (128/128/w4/s3) vs-deq 1.65x err/deq 1.00
+[allenai/OLMoE-1B-7B- down    ] V3G2_bf16_k128        6.93 ms (128/64/w8/s3) vs-deq 0.74x err/deq 1.00
+[Qwen/Qwen3-30B-A3B   gate_up ] V0G1_control          5.56 ms (128/64/w4/s3) vs-deq 1.79x err/deq 0.76
+[Qwen/Qwen3-30B-A3B   gate_up ] V1G1_regLUT           2.65 ms (128/128/w4/s3) vs-deq 3.75x err/deq 0.76
+[Qwen/Qwen3-30B-A3B   gate_up ] V0G2_k128            10.83 ms (128/64/w8/s3) vs-deq 0.92x err/deq 0.76
+[Qwen/Qwen3-30B-A3B   gate_up ] V1G2_regLUT_k128      4.88 ms (128/64/w8/s3) vs-deq 2.04x err/deq 0.76
+[Qwen/Qwen3-30B-A3B   gate_up ] V3G1_bf16             4.69 ms (128/128/w4/s3) vs-deq 2.12x err/deq 1.00
+[Qwen/Qwen3-30B-A3B   gate_up ] V3G2_bf16_k128       10.14 ms (128/64/w8/s3) vs-deq 0.98x err/deq 1.00
+[Qwen/Qwen3-30B-A3B   down    ] V0G1_control          2.93 ms (128/128/w8/s3) vs-deq 3.43x err/deq 0.76
+[Qwen/Qwen3-30B-A3B   down    ] V1G1_regLUT           1.36 ms (128/128/w4/s3) vs-deq 7.37x err/deq 0.76
+[Qwen/Qwen3-30B-A3B   down    ] V0G2_k128             5.74 ms (128/64/w8/s3) vs-deq 1.75x err/deq 0.76
+[Qwen/Qwen3-30B-A3B   down    ] V1G2_regLUT_k128      2.36 ms (128/64/w8/s3) vs-deq 4.25x err/deq 0.76
+[Qwen/Qwen3-30B-A3B   down    ] V3G1_bf16             2.41 ms (128/128/w4/s3) vs-deq 4.16x err/deq 1.00
+[Qwen/Qwen3-30B-A3B   down    ] V3G2_bf16_k128        5.40 ms (128/64/w8/s3) vs-deq 1.86x err/deq 1.00
+[google/gemma-4-26B-A gate_up ] V0G1_control          7.04 ms (128/64/w4/s3) vs-deq 1.35x err/deq 0.76
+[google/gemma-4-26B-A gate_up ] V1G1_regLUT           3.38 ms (128/128/w4/s3) vs-deq 2.82x err/deq 0.76
+[google/gemma-4-26B-A gate_up ] V0G2_k128            13.72 ms (128/64/w8/s3) vs-deq 0.69x err/deq 0.76
+[google/gemma-4-26B-A gate_up ] V1G2_regLUT_k128      6.07 ms (128/64/w8/s3) vs-deq 1.57x err/deq 0.76
+[google/gemma-4-26B-A gate_up ] V3G1_bf16             5.92 ms (128/128/w4/s3) vs-deq 1.61x err/deq 1.00
+[google/gemma-4-26B-A gate_up ] V3G2_bf16_k128       12.86 ms (128/64/w8/s3) vs-deq 0.74x err/deq 1.00
+[google/gemma-4-26B-A down    ] V0G1_control          2.54 ms (128/64/w4/s3) vs-deq 3.91x err/deq 0.76
+[google/gemma-4-26B-A down    ] V1G1_regLUT           1.22 ms (128/128/w4/s3) vs-deq 8.16x err/deq 0.76
+[google/gemma-4-26B-A down    ] V3G1_bf16             2.41 ms (128/64/w4/s3) vs-deq 4.13x err/deq 1.00
+[openai/gpt-oss-120b  gate_up ] V0G1_control         14.14 ms (64/128/w4/s3) vs-deq 0.70x err/deq 0.76
+[openai/gpt-oss-120b  gate_up ] V1G1_regLUT           7.71 ms (64/128/w4/s4) vs-deq 1.29x err/deq 0.76
+[openai/gpt-oss-120b  gate_up ] V3G1_bf16            13.62 ms (64/128/w4/s4) vs-deq 0.73x err/deq 1.00
+[openai/gpt-oss-120b  down    ] V0G1_control          7.38 ms (64/128/w4/s3) vs-deq 1.40x err/deq 0.76
+[openai/gpt-oss-120b  down    ] V1G1_regLUT           3.98 ms (64/128/w4/s4) vs-deq 2.61x err/deq 0.76
+[openai/gpt-oss-120b  down    ] V3G1_bf16             7.16 ms (64/128/w4/s4) vs-deq 1.45x err/deq 1.00
+wrote /root/hw_matrix.json

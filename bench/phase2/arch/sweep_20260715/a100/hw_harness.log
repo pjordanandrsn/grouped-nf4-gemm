@@ -1,0 +1,59 @@
+/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+== allenai/OLMoE-1B-7B-0924 gate_up N=2048 K=2048 E=64 k=8
+    prefill_s2048 dequant_grouped     4.830 ms  3392065.1 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           3.512 ms  4664999.3 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop        7.468 ms  2193931.6 tok/s  err 1.70e-03
+       decode_bs1 dequant_grouped     0.601 ms    13309.2 tok/s  err 2.23e-03
+       decode_bs1 fused_nf4           0.272 ms    29422.1 tok/s  err 1.66e-03
+       decode_bs1 fused_v5loop        0.272 ms    29372.0 tok/s  err 1.66e-03
+== allenai/OLMoE-1B-7B-0924 down N=2048 K=1024 E=64 k=8
+    prefill_s2048 dequant_grouped     8.661 ms  1891749.1 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           1.906 ms  8596373.5 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop        3.919 ms  4180189.0 tok/s  err 1.70e-03
+       decode_bs1 dequant_grouped     0.682 ms    11732.1 tok/s  err 2.25e-03
+       decode_bs1 fused_nf4           0.178 ms    45061.3 tok/s  err 1.67e-03
+       decode_bs1 fused_v5loop        0.178 ms    44827.0 tok/s  err 1.67e-03
+== Qwen/Qwen3-30B-A3B gate_up N=1536 K=2048 E=128 k=8
+    prefill_s2048 dequant_grouped     9.420 ms  1739295.9 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           2.826 ms  5798611.6 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop        5.933 ms  2761313.7 tok/s  err 1.70e-03
+       decode_bs1 dequant_grouped     0.606 ms    13204.8 tok/s  err 2.20e-03
+       decode_bs1 fused_nf4           0.264 ms    30306.7 tok/s  err 1.66e-03
+       decode_bs1 fused_v5loop        0.268 ms    29900.7 tok/s  err 1.66e-03
+== Qwen/Qwen3-30B-A3B down N=2048 K=768 E=128 k=8
+    prefill_s2048 dequant_grouped    10.118 ms  1619361.5 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           1.520 ms 10780536.2 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop        3.087 ms  5307514.5 tok/s  err 1.70e-03
+       decode_bs1 dequant_grouped     0.597 ms    13411.3 tok/s  err 2.23e-03
+       decode_bs1 fused_nf4           0.144 ms    55685.5 tok/s  err 1.66e-03
+       decode_bs1 fused_v5loop        0.142 ms    56363.4 tok/s  err 1.66e-03
+== google/gemma-4-26B-A4B gate_up N=1408 K=2816 E=128 k=8
+    prefill_s2048 dequant_grouped     9.582 ms  1709875.5 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           3.558 ms  4604316.7 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop        7.476 ms  2191602.6 tok/s  err 1.70e-03
+       decode_bs1 dequant_grouped     0.591 ms    13546.5 tok/s  err 2.26e-03
+       decode_bs1 fused_nf4           0.333 ms    23994.6 tok/s  err 1.66e-03
+       decode_bs1 fused_v5loop        0.335 ms    23901.7 tok/s  err 1.66e-03
+== google/gemma-4-26B-A4B down N=2816 K=704 E=128 k=8
+    prefill_s2048 dequant_grouped     9.881 ms  1658213.6 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           1.340 ms 12223217.1 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop        2.793 ms  5865841.7 tok/s  err 1.70e-03
+       decode_bs1 dequant_grouped     0.677 ms    11823.4 tok/s  err 2.22e-03
+       decode_bs1 fused_nf4           0.117 ms    68558.9 tok/s  err 1.65e-03
+       decode_bs1 fused_v5loop        0.107 ms    75041.3 tok/s  err 1.65e-03
+== openai/gpt-oss-120b gate_up N=5760 K=2880 E=128 k=4
+    prefill_s2048 dequant_grouped     9.788 ms   836922.7 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           7.850 ms  1043518.0 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop       12.418 ms   659689.3 tok/s  err 1.70e-03
+       decode_bs1 dequant_grouped     0.330 ms    12104.2 tok/s  err 2.27e-03
+       decode_bs1 fused_nf4           0.264 ms    15175.4 tok/s  err 1.68e-03
+       decode_bs1 fused_v5loop        0.263 ms    15216.1 tok/s  err 1.68e-03
+== openai/gpt-oss-120b down N=2880 K=2880 E=128 k=4
+    prefill_s2048 dequant_grouped     8.726 ms   938829.4 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           4.121 ms  1987662.5 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop        6.652 ms  1231556.7 tok/s  err 1.70e-03
+       decode_bs1 dequant_grouped     0.377 ms    10618.0 tok/s  err 2.83e-03
+       decode_bs1 fused_nf4           0.208 ms    19205.7 tok/s  err 1.68e-03
+       decode_bs1 fused_v5loop        0.207 ms    19303.5 tok/s  err 1.68e-03
+receipts -> /root/hw_harness.json (48 cells)

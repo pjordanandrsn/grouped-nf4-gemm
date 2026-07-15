@@ -1,0 +1,42 @@
+/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[allenai/OLMoE-1B-7B- gate_up ] V0G1_control          4.03 ms (128/128/w8/s3) vs-deq 1.28x err/deq 0.76
+[allenai/OLMoE-1B-7B- gate_up ] V1G1_regLUT           2.95 ms (128/64/w4/s3) vs-deq 1.74x err/deq 0.76
+[allenai/OLMoE-1B-7B- gate_up ] V0G2_k128          failed
+[allenai/OLMoE-1B-7B- gate_up ] V1G2_regLUT_k128      3.66 ms (128/64/w8/s3) vs-deq 1.40x err/deq 0.76
+[allenai/OLMoE-1B-7B- gate_up ] V3G1_bf16             3.13 ms (128/128/w4/s3) vs-deq 1.64x err/deq 1.00
+[allenai/OLMoE-1B-7B- gate_up ] V3G2_bf16_k128     failed
+[allenai/OLMoE-1B-7B- down    ] V0G1_control          2.10 ms (128/128/w8/s3) vs-deq 2.51x err/deq 0.76
+[allenai/OLMoE-1B-7B- down    ] V1G1_regLUT           1.51 ms (128/64/w4/s3) vs-deq 3.49x err/deq 0.76
+[allenai/OLMoE-1B-7B- down    ] V0G2_k128          failed
+[allenai/OLMoE-1B-7B- down    ] V1G2_regLUT_k128      1.88 ms (128/64/w8/s3) vs-deq 2.80x err/deq 0.76
+[allenai/OLMoE-1B-7B- down    ] V3G1_bf16             1.62 ms (128/128/w4/s3) vs-deq 3.24x err/deq 1.00
+[allenai/OLMoE-1B-7B- down    ] V3G2_bf16_k128     failed
+[Qwen/Qwen3-30B-A3B   gate_up ] V0G1_control          2.98 ms (128/128/w8/s3) vs-deq 3.91x err/deq 0.61
+[Qwen/Qwen3-30B-A3B   gate_up ] V1G1_regLUT           2.27 ms (128/128/w4/s3) vs-deq 5.14x err/deq 0.61
+[Qwen/Qwen3-30B-A3B   gate_up ] V0G2_k128          failed
+[Qwen/Qwen3-30B-A3B   gate_up ] V1G2_regLUT_k128      2.79 ms (128/64/w8/s3) vs-deq 4.18x err/deq 0.61
+[Qwen/Qwen3-30B-A3B   gate_up ] V3G1_bf16             2.39 ms (128/128/w4/s3) vs-deq 4.87x err/deq 0.80
+[Qwen/Qwen3-30B-A3B   gate_up ] V3G2_bf16_k128     failed
+[Qwen/Qwen3-30B-A3B   down    ] V0G1_control          1.63 ms (128/128/w8/s3) vs-deq 6.58x err/deq 0.76
+[Qwen/Qwen3-30B-A3B   down    ] V1G1_regLUT           1.14 ms (128/64/w8/s3) vs-deq 9.40x err/deq 0.76
+[Qwen/Qwen3-30B-A3B   down    ] V0G2_k128          failed
+[Qwen/Qwen3-30B-A3B   down    ] V1G2_regLUT_k128      1.45 ms (128/64/w8/s3) vs-deq 7.42x err/deq 0.76
+[Qwen/Qwen3-30B-A3B   down    ] V3G1_bf16             1.28 ms (128/128/w4/s3) vs-deq 8.42x err/deq 1.00
+[Qwen/Qwen3-30B-A3B   down    ] V3G2_bf16_k128     failed
+[google/gemma-4-26B-A gate_up ] V0G1_control          4.12 ms (128/128/w8/s3) vs-deq 2.71x err/deq 0.61
+[google/gemma-4-26B-A gate_up ] V1G1_regLUT           2.97 ms (128/64/w4/s3) vs-deq 3.76x err/deq 0.61
+[google/gemma-4-26B-A gate_up ] V0G2_k128          failed
+[google/gemma-4-26B-A gate_up ] V1G2_regLUT_k128      3.60 ms (128/64/w8/s3) vs-deq 3.10x err/deq 0.61
+[google/gemma-4-26B-A gate_up ] V3G1_bf16             3.10 ms (128/128/w4/s3) vs-deq 3.61x err/deq 0.79
+[google/gemma-4-26B-A gate_up ] V3G2_bf16_k128     failed
+[google/gemma-4-26B-A down    ] V0G1_control          1.69 ms (128/64/w8/s3) vs-deq 6.34x err/deq 0.76
+[google/gemma-4-26B-A down    ] V1G1_regLUT           1.05 ms (128/64/w4/s3) vs-deq 10.24x err/deq 0.76
+[google/gemma-4-26B-A down    ] V3G1_bf16             1.23 ms (128/128/w8/s3) vs-deq 8.70x err/deq 1.00
+[openai/gpt-oss-120b  gate_up ] V0G1_control          8.33 ms (64/128/w4/s3) vs-deq 1.43x err/deq 0.61
+[openai/gpt-oss-120b  gate_up ] V1G1_regLUT           7.07 ms (64/128/w4/s4) vs-deq 1.69x err/deq 0.61
+[openai/gpt-oss-120b  gate_up ] V3G1_bf16             7.40 ms (64/128/w4/s3) vs-deq 1.61x err/deq 0.79
+[openai/gpt-oss-120b  down    ] V0G1_control          4.11 ms (64/128/w4/s3) vs-deq 3.37x err/deq 0.61
+[openai/gpt-oss-120b  down    ] V1G1_regLUT           3.41 ms (64/64/w4/s3) vs-deq 4.07x err/deq 0.61
+[openai/gpt-oss-120b  down    ] V3G1_bf16             3.57 ms (64/128/w4/s3) vs-deq 3.89x err/deq 0.79
+wrote /root/hw_matrix.json

@@ -1,0 +1,1152 @@
+FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF..FFFFF.F                             [100%]
+=================================== FAILURES ===================================
+_____________ TestDecodeExactness.test_decode_matches_bnb_exactly ______________
+
+self = <test_nf4_grouped.TestDecodeExactness object at 0x7e31a1db3800>
+
+    def test_decode_matches_bnb_exactly(self):
+        """Values + nibble order, all 16 codes in both positions, real quantized
+        data — torch.equal, not allclose."""
+        from bitsandbytes import functional as F
+    
+>       B, A, packed, states = make_stack(2, 128, 128)
+                               ^^^^^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:86: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 2, N = 128, K = 128, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+------------------------------ Captured log call -------------------------------
+DEBUG    torch.__trace:utils.py:1900 
+DEBUG    torch.__trace:utils.py:1900
+___________ TestDecodeExactness.test_all_codes_both_nibble_positions ___________
+
+self = <test_nf4_grouped.TestDecodeExactness object at 0x7e31a0989eb0>
+
+    def test_all_codes_both_nibble_positions(self):
+        """Craft packed bytes covering every (code, position) pair; kernel output
+        via one-hot activations must equal the reference decode exactly."""
+        N, K, E = 16, 64, 1
+        dev = "cuda"
+>       B = torch.empty(E, N, K // 2, dtype=torch.uint8, device=dev)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:97: AcceleratorError
+________ TestCensusShapes.test_pfid_and_brel[1-olmoe_gu-2048-2048-64-8] ________
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a098a270>
+name = 'olmoe_gu', N = 2048, K = 2048, E = 64, k = 8, m = 1
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 64, N = 2048, K = 2048, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+________ TestCensusShapes.test_pfid_and_brel[1-olmoe_dn-2048-1024-64-8] ________
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a098a000>
+name = 'olmoe_dn', N = 2048, K = 1024, E = 64, k = 8, m = 1
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 64, N = 2048, K = 1024, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+________ TestCensusShapes.test_pfid_and_brel[1-qwen_gu-1536-2048-128-8] ________
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a0989df0>
+name = 'qwen_gu', N = 1536, K = 2048, E = 128, k = 8, m = 1
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 128, N = 1536, K = 2048, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+________ TestCensusShapes.test_pfid_and_brel[1-qwen_dn-2048-768-128-8] _________
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a0989d00>
+name = 'qwen_dn', N = 2048, K = 768, E = 128, k = 8, m = 1
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 128, N = 2048, K = 768, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+_______ TestCensusShapes.test_pfid_and_brel[1-gemma_gu-1408-2816-128-8] ________
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a0989bb0>
+name = 'gemma_gu', N = 1408, K = 2816, E = 128, k = 8, m = 1
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 128, N = 1408, K = 2816, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+________ TestCensusShapes.test_pfid_and_brel[1-gemma_dn-2816-704-128-8] ________
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a0988d40>
+name = 'gemma_dn', N = 2816, K = 704, E = 128, k = 8, m = 1
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 128, N = 2816, K = 704, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+_______ TestCensusShapes.test_pfid_and_brel[1-gptoss_gu-5760-2880-128-4] _______
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a098a9f0>
+name = 'gptoss_gu', N = 5760, K = 2880, E = 128, k = 4, m = 1
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 128, N = 5760, K = 2880, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+_______ TestCensusShapes.test_pfid_and_brel[1-gptoss_dn-2880-2880-128-4] _______
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a098aae0>
+name = 'gptoss_dn', N = 2880, K = 2880, E = 128, k = 4, m = 1
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 128, N = 2880, K = 2880, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+_______ TestCensusShapes.test_pfid_and_brel[128-olmoe_gu-2048-2048-64-8] _______
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a098ab70>
+name = 'olmoe_gu', N = 2048, K = 2048, E = 64, k = 8, m = 128
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 64, N = 2048, K = 2048, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+_______ TestCensusShapes.test_pfid_and_brel[128-olmoe_dn-2048-1024-64-8] _______
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a098ac00>
+name = 'olmoe_dn', N = 2048, K = 1024, E = 64, k = 8, m = 128
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 64, N = 2048, K = 1024, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+_______ TestCensusShapes.test_pfid_and_brel[128-qwen_gu-1536-2048-128-8] _______
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a098acc0>
+name = 'qwen_gu', N = 1536, K = 2048, E = 128, k = 8, m = 128
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 128, N = 1536, K = 2048, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+_______ TestCensusShapes.test_pfid_and_brel[128-qwen_dn-2048-768-128-8] ________
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a098ad80>
+name = 'qwen_dn', N = 2048, K = 768, E = 128, k = 8, m = 128
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 128, N = 2048, K = 768, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+______ TestCensusShapes.test_pfid_and_brel[128-gemma_gu-1408-2816-128-8] _______
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a098ae40>
+name = 'gemma_gu', N = 1408, K = 2816, E = 128, k = 8, m = 128
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 128, N = 1408, K = 2816, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+_______ TestCensusShapes.test_pfid_and_brel[128-gemma_dn-2816-704-128-8] _______
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a098af00>
+name = 'gemma_dn', N = 2816, K = 704, E = 128, k = 8, m = 128
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 128, N = 2816, K = 704, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+______ TestCensusShapes.test_pfid_and_brel[128-gptoss_gu-5760-2880-128-4] ______
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a098afc0>
+name = 'gptoss_gu', N = 5760, K = 2880, E = 128, k = 4, m = 128
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 128, N = 5760, K = 2880, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+______ TestCensusShapes.test_pfid_and_brel[128-gptoss_dn-2880-2880-128-4] ______
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a098b080>
+name = 'gptoss_dn', N = 2880, K = 2880, E = 128, k = 4, m = 128
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 128, N = 2880, K = 2880, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+_______ TestCensusShapes.test_pfid_and_brel[290-olmoe_gu-2048-2048-64-8] _______
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a098b140>
+name = 'olmoe_gu', N = 2048, K = 2048, E = 64, k = 8, m = 290
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 64, N = 2048, K = 2048, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+_______ TestCensusShapes.test_pfid_and_brel[290-olmoe_dn-2048-1024-64-8] _______
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a098b200>
+name = 'olmoe_dn', N = 2048, K = 1024, E = 64, k = 8, m = 290
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 64, N = 2048, K = 1024, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+_______ TestCensusShapes.test_pfid_and_brel[290-qwen_gu-1536-2048-128-8] _______
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a098b290>
+name = 'qwen_gu', N = 1536, K = 2048, E = 128, k = 8, m = 290
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 128, N = 1536, K = 2048, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+_______ TestCensusShapes.test_pfid_and_brel[290-qwen_dn-2048-768-128-8] ________
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a098b320>
+name = 'qwen_dn', N = 2048, K = 768, E = 128, k = 8, m = 290
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 128, N = 2048, K = 768, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+______ TestCensusShapes.test_pfid_and_brel[290-gemma_gu-1408-2816-128-8] _______
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a098b3e0>
+name = 'gemma_gu', N = 1408, K = 2816, E = 128, k = 8, m = 290
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 128, N = 1408, K = 2816, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+_______ TestCensusShapes.test_pfid_and_brel[290-gemma_dn-2816-704-128-8] _______
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a098b4d0>
+name = 'gemma_dn', N = 2816, K = 704, E = 128, k = 8, m = 290
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 128, N = 2816, K = 704, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+______ TestCensusShapes.test_pfid_and_brel[290-gptoss_gu-5760-2880-128-4] ______
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a098b590>
+name = 'gptoss_gu', N = 5760, K = 2880, E = 128, k = 4, m = 290
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 128, N = 5760, K = 2880, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+______ TestCensusShapes.test_pfid_and_brel[290-gptoss_dn-2880-2880-128-4] ______
+
+self = <test_nf4_grouped.TestCensusShapes object at 0x7e31a098b680>
+name = 'gptoss_dn', N = 2880, K = 2880, E = 128, k = 4, m = 290
+
+    @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
+    @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
+    def test_pfid_and_brel(self, name, N, K, E, k, m):
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 128, N = 2880, K = 2880, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+_______________ TestAdversarialAbsmax.test_absmax_extremes[tiny] _______________
+
+self = <test_nf4_grouped.TestAdversarialAbsmax object at 0x7e31a098bb00>
+kind = 'tiny'
+
+    @pytest.mark.parametrize("kind", ["tiny", "huge", "mixed", "denormal_adj"])
+    def test_absmax_extremes(self, kind):
+        N, K, E = 64, 128, 2
+        dev = "cuda"
+        torch.manual_seed(3)
+>       B = torch.randint(0, 256, (E, N, K // 2), dtype=torch.uint8, device=dev)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:148: AcceleratorError
+_______________ TestAdversarialAbsmax.test_absmax_extremes[huge] _______________
+
+self = <test_nf4_grouped.TestAdversarialAbsmax object at 0x7e31a098bdd0>
+kind = 'huge'
+
+    @pytest.mark.parametrize("kind", ["tiny", "huge", "mixed", "denormal_adj"])
+    def test_absmax_extremes(self, kind):
+        N, K, E = 64, 128, 2
+        dev = "cuda"
+        torch.manual_seed(3)
+>       B = torch.randint(0, 256, (E, N, K // 2), dtype=torch.uint8, device=dev)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:148: AcceleratorError
+______________ TestAdversarialAbsmax.test_absmax_extremes[mixed] _______________
+
+self = <test_nf4_grouped.TestAdversarialAbsmax object at 0x7e31a098be90>
+kind = 'mixed'
+
+    @pytest.mark.parametrize("kind", ["tiny", "huge", "mixed", "denormal_adj"])
+    def test_absmax_extremes(self, kind):
+        N, K, E = 64, 128, 2
+        dev = "cuda"
+        torch.manual_seed(3)
+>       B = torch.randint(0, 256, (E, N, K // 2), dtype=torch.uint8, device=dev)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:148: AcceleratorError
+___________ TestAdversarialAbsmax.test_absmax_extremes[denormal_adj] ___________
+
+self = <test_nf4_grouped.TestAdversarialAbsmax object at 0x7e31a098bf80>
+kind = 'denormal_adj'
+
+    @pytest.mark.parametrize("kind", ["tiny", "huge", "mixed", "denormal_adj"])
+    def test_absmax_extremes(self, kind):
+        N, K, E = 64, 128, 2
+        dev = "cuda"
+        torch.manual_seed(3)
+>       B = torch.randint(0, 256, (E, N, K // 2), dtype=torch.uint8, device=dev)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:148: AcceleratorError
+___________________ TestBoundaries.test_single_token_groups ____________________
+
+self = <test_nf4_grouped.TestBoundaries object at 0x7e31a09b0200>
+
+    def test_single_token_groups(self):
+>       B, A, *_ = self._stack()
+                   ^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:170: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+kernel/test_nf4_grouped.py:167: in _stack
+    return make_stack(8, 128, 128)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 8, N = 128, K = 128, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+__________________ TestBoundaries.test_all_tokens_one_expert ___________________
+
+self = <test_nf4_grouped.TestBoundaries object at 0x7e31a09b0500>
+
+    def test_all_tokens_one_expert(self):
+>       B, A, *_ = self._stack()
+                   ^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:177: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+kernel/test_nf4_grouped.py:167: in _stack
+    return make_stack(8, 128, 128)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 8, N = 128, K = 128, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+_______________ TestBoundaries.test_g_less_than_e_noncontiguous ________________
+
+self = <test_nf4_grouped.TestBoundaries object at 0x7e31a09b07d0>
+
+    def test_g_less_than_e_noncontiguous(self):
+>       B, A, *_ = self._stack()
+                   ^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:183: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+kernel/test_nf4_grouped.py:167: in _stack
+    return make_stack(8, 128, 128)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 8, N = 128, K = 128, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+____________________ TestBoundaries.test_k_equals_blocksize ____________________
+
+self = <test_nf4_grouped.TestBoundaries object at 0x7e31a09b0aa0>
+
+    def test_k_equals_blocksize(self):
+>       B, A, packed, states = make_stack(2, 64, BLOCKSIZE)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:190: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 2, N = 64, K = 64, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+____________________ TestBoundaries.test_ragged_tail_tiles _____________________
+
+self = <test_nf4_grouped.TestBoundaries object at 0x7e31a09b0da0>
+
+    def test_ragged_tail_tiles(self):
+>       B, A, *_ = self._stack()
+                   ^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:196: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+kernel/test_nf4_grouped.py:167: in _stack
+    return make_stack(8, 128, 128)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 8, N = 128, K = 128, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+_______________ TestSplitK.test_forced_split_matches_single_pass _______________
+
+self = <test_nf4_grouped.TestSplitK object at 0x7e31a09b05f0>
+
+    def test_forced_split_matches_single_pass(self):
+>       B, A, packed, states = make_stack(8, 512, 2048)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:248: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 8, N = 512, K = 2048, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+___________________ TestSplitK.test_split_exactness_one_hot ____________________
+
+self = <test_nf4_grouped.TestSplitK object at 0x7e31a09b00b0>
+
+    def test_split_exactness_one_hot(self):
+        # one-hot activation selects a single weight column: exact through
+        # any split (only one k contributes per output).
+>       B, A, packed, states = make_stack(2, 128, 512)
+                               ^^^^^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:260: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 2, N = 128, K = 512, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+_____________________ TestSplitK.test_split_pfid_ordering ______________________
+
+self = <test_nf4_grouped.TestSplitK object at 0x7e31a09b1070>
+
+    def test_split_pfid_ordering(self):
+        # Scout-down-like starved shape (scaled): fused-with-split error must
+        # stay at-or-below the dequant path's vs fp64 (the P-fid claim).
+        E, N, K = 4, 1280, 2048
+>       B, A, packed, states = make_stack(E, N, K)
+                               ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:271: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 4, N = 1280, K = 2048, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+___________________ TestSplitK.test_split_span_not_divisible ___________________
+
+self = <test_nf4_grouped.TestSplitK object at 0x7e31a09b1370>
+
+    def test_split_span_not_divisible(self):
+        # 45 absmax blocks (K=2880) over split 4 -> spans 12/12/12/9; and an
+        # empty tail split (split 8 over 9 blocks) must contribute zeros.
+>       B, A, *_ = make_stack(2, 128, 2880)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:281: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 2, N = 128, K = 2880, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+_____________ TestSplitK.test_auto_plan_takes_split_and_is_correct _____________
+
+self = <test_nf4_grouped.TestSplitK object at 0x7e31a09b1640>
+
+    def test_auto_plan_takes_split_and_is_correct(self):
+        # Starved cell on the real device: the auto plan must split (on any
+        # sm_86 card >=26 SM this cell wants sk>1) and stay correct vs fp64.
+        from nf4_grouped import _decode_plan, _sm_count
+    
+        E, N, K = 2, 1024, 4096
+        sm = _sm_count("cuda")
+        *_, sk = _decode_plan(N, K, 1, sm)
+        assert sk > 1
+>       B, A, *_ = make_stack(E, N, K)
+                   ^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:297: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 2, N = 1024, K = 4096, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+__________ TestPrefillConfig.test_new_config_correct_and_matches_old ___________
+
+self = <test_nf4_grouped.TestPrefillConfig object at 0x7e31a09b1c10>
+
+    def test_new_config_correct_and_matches_old(self):
+        # the new group-size-keyed config must produce the same math as the
+        # retired config at bf16 output precision (config != semantics)
+>       B, A, packed, states = make_stack(8, 256, 512)
+                               ^^^^^^^^^^^^^^^^^^^^^^^
+
+kernel/test_nf4_grouped.py:314: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+E = 8, N = 256, K = 512, device = 'cuda', seed = 0, scale = 0.02
+
+    def make_stack(E, N, K, device="cuda", seed=0, scale=0.02):
+        from bitsandbytes import functional as F
+    
+        g = torch.Generator(device="cpu").manual_seed(seed)
+>       w = (torch.randn(E, N, K, generator=g) * scale).to(device, torch.bfloat16)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+E       CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+E       For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+E       Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+kernel/test_nf4_grouped.py:32: AcceleratorError
+=============================== warnings summary ===============================
+../../usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:63
+  /usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+    import pynvml  # type: ignore[import]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED kernel/test_nf4_grouped.py::TestDecodeExactness::test_decode_matches_bnb_exactly
+FAILED kernel/test_nf4_grouped.py::TestDecodeExactness::test_all_codes_both_nibble_positions
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[1-olmoe_gu-2048-2048-64-8]
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[1-olmoe_dn-2048-1024-64-8]
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[1-qwen_gu-1536-2048-128-8]
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[1-qwen_dn-2048-768-128-8]
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[1-gemma_gu-1408-2816-128-8]
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[1-gemma_dn-2816-704-128-8]
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[1-gptoss_gu-5760-2880-128-4]
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[1-gptoss_dn-2880-2880-128-4]
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[128-olmoe_gu-2048-2048-64-8]
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[128-olmoe_dn-2048-1024-64-8]
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[128-qwen_gu-1536-2048-128-8]
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[128-qwen_dn-2048-768-128-8]
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[128-gemma_gu-1408-2816-128-8]
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[128-gemma_dn-2816-704-128-8]
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[128-gptoss_gu-5760-2880-128-4]
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[128-gptoss_dn-2880-2880-128-4]
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[290-olmoe_gu-2048-2048-64-8]
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[290-olmoe_dn-2048-1024-64-8]
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[290-qwen_gu-1536-2048-128-8]
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[290-qwen_dn-2048-768-128-8]
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[290-gemma_gu-1408-2816-128-8]
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[290-gemma_dn-2816-704-128-8]
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[290-gptoss_gu-5760-2880-128-4]
+FAILED kernel/test_nf4_grouped.py::TestCensusShapes::test_pfid_and_brel[290-gptoss_dn-2880-2880-128-4]
+FAILED kernel/test_nf4_grouped.py::TestAdversarialAbsmax::test_absmax_extremes[tiny]
+FAILED kernel/test_nf4_grouped.py::TestAdversarialAbsmax::test_absmax_extremes[huge]
+FAILED kernel/test_nf4_grouped.py::TestAdversarialAbsmax::test_absmax_extremes[mixed]
+FAILED kernel/test_nf4_grouped.py::TestAdversarialAbsmax::test_absmax_extremes[denormal_adj]
+FAILED kernel/test_nf4_grouped.py::TestBoundaries::test_single_token_groups
+FAILED kernel/test_nf4_grouped.py::TestBoundaries::test_all_tokens_one_expert
+FAILED kernel/test_nf4_grouped.py::TestBoundaries::test_g_less_than_e_noncontiguous
+FAILED kernel/test_nf4_grouped.py::TestBoundaries::test_k_equals_blocksize - ...
+FAILED kernel/test_nf4_grouped.py::TestBoundaries::test_ragged_tail_tiles - t...
+FAILED kernel/test_nf4_grouped.py::TestSplitK::test_forced_split_matches_single_pass
+FAILED kernel/test_nf4_grouped.py::TestSplitK::test_split_exactness_one_hot
+FAILED kernel/test_nf4_grouped.py::TestSplitK::test_split_pfid_ordering - tor...
+FAILED kernel/test_nf4_grouped.py::TestSplitK::test_split_span_not_divisible
+FAILED kernel/test_nf4_grouped.py::TestSplitK::test_auto_plan_takes_split_and_is_correct
+FAILED kernel/test_nf4_grouped.py::TestPrefillConfig::test_new_config_correct_and_matches_old
+41 failed, 3 passed, 1 warning in 84.32s (0:01:24)
