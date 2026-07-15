@@ -85,14 +85,28 @@ speed — generalizes to the whole line. A device-keyed bf16 dispatch is off the
 table; **V1 is the correct fused variant universally** (V1 > V0 > V3 on every
 card), so the v6 ship decision needs no revision.
 
-## What this motivates
+## A prefill dispatch floor was investigated — and the data refuses it
 
-A **device-keyed prefill dispatch floor**: on cards below ~40 SMs, route the
-gate_up-prefill class to the dequant path (which wins there), mirroring v4's
-tiny-cell floor. That converts the one honest prefill loss into "≥ baseline
-everywhere," and the sweep gives it a real 10-card threshold rather than a
-two-point guess. Registered separately as a blind confirmatory (see
-`kernel/prereg_v7_confirmatory.json`); nothing here is a stamped claim.
+The obvious follow-up was a device-keyed prefill dispatch floor (route the
+gate_up class to dequant on low-SM cards, mirroring v4's decode floor). Fitting
+that idea to the 88 prefill cells across the 10 cards **refutes it**, and the
+refutation is recorded here so it isn't retried blind:
+
+- The prefill losers do **not** separate by SM count. The dominant loser across
+  the whole line is the **smallest-expert shape (OLMoE)** — its gate_up loses at
+  sm 22/48/56/58 (0.43–0.57×) and still reads 0.96× at sm 132. That is precisely
+  the cell v6 already carries as the report-only known-loser, not a new
+  SM-regime effect.
+- The best separating predicate found, `sm < 40 AND N ≥ K`, catches 2 losers
+  while **wrongly surrendering 4 real wins and missing 9 losses**; widening to
+  `sm < 64` gives up 23 wins. No `(N, K, M, sm)` predicate separates losers from
+  winners without either forfeiting real speedups or overfitting 11 data points
+  — the v1 config-overfit failure mode the methodology exists to prevent.
+
+**Conclusion:** the fused kernel stays the universal default at prefill; there is
+no low-regret dispatch floor to add. The small-expert prefill shortfall remains a
+documented known-loser (as in v6), not a dispatch case. No v7 is registered —
+this negative result is the finding.
 
 ## Teardown
 
