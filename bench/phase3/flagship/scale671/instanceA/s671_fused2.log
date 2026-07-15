@@ -1,0 +1,20 @@
+/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+link: 55.5 GB/s pinned H2D; 12.09 GB/token -> waterfall ceiling 4.59 tok/s
+  host stacks 10/61 (264s)
+  host stacks 20/61 (578s)
+  host stacks 30/61 (911s)
+  host stacks 40/61 (1259s)
+  host stacks 50/61 (1595s)
+  host stacks 60/61 (2003s)
+host expert store: 386.8 GB pinned in 2056s
+  tok 0/68: 2794 ms
+  tok 8/68: 228 ms
+  tok 16/68: 279 ms
+  tok 24/68: 227 ms
+  tok 32/68: 251 ms
+  tok 40/68: 231 ms
+  tok 48/68: 245 ms
+  tok 56/68: 249 ms
+  tok 64/68: 257 ms
+MODE=fused: 4.06 tok/s (waterfall 4.59, 88%), VRAM peak 30.9 GB -> /root/s671_fused2.json
