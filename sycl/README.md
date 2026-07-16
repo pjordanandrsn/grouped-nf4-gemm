@@ -3,7 +3,13 @@
 **Status: WIP. M0 done. M1 (decode-gemv correctness) PASS on CPU-SYCL AND on
 real Intel GPU silicon (UHD P630, opencl:gpu) — max rel err 2.02e-5 vs the
 canonical `dequant_ref` on both, identical to the last ulp (2026-07-15).
-M2 (perf) needs Arc/Max-class hardware. Not yet published.**
+M2 (perf) — the SLM-tiled variant is DONE on the P630: bit-identical numerics
+(b_rel ~1e-7) and 1.32x over the naive baseline at MoE-realistic shape
+(N=8192, K=2048, WG=64), with a load-bearing work-group-size sweep. See
+`M2-RESULTS.md`. Absolute throughput + the speedup magnitude on Arc/Max stay
+R3 "port target" until measured there — the P630 is a weak iGPU, not the perf
+target — but the memory-traffic win is now confirmed on real Intel silicon,
+not projected. Not yet published.**
 
 **Gen9.x runtime recipe (the M0 blocker, solved):** the oneAPI basekit image
 ships NEO 26.x from the intel-graphics PPA, which dropped Gen9.5 — the P630 is
@@ -51,8 +57,11 @@ Ported from `kernel/nf4_grouped.py`. The decode gemv path is the first target
   hardware for GPU validation.
 - **M1 — correctness.** SYCL decode gemv matching the test vector on the P630
   (naïve tiling; speed irrelevant). This is the milestone that proves the port.
-- **M2 — performance.** Sub-group tiling, coalesced packed-byte loads,
-  work-group sizing for the target GPU; the M-tile/prefill path.
+- **M2 — performance. DONE on the P630 (decode gemv).** SLM activation cache +
+  work-group-size sweep: bit-identical numerics, 1.32x over naive at
+  N=8192/K=2048 (`nf4_gemv_bench.cpp`, `m2_gpu_run.sh`, `M2-RESULTS.md`). Still
+  open: coalesced packed-byte loads / sub-group K-reduction and the M-tile /
+  prefill path — worth tuning on Arc/Max, not the P630.
 - **M3 — OpenVINO integration.** Wire the kernel into the GPU plugin
   (kernel-selector / custom op) so it dispatches for NF4 MoE experts — the path
   that makes it usable in the toolkit Cerin Amroth already contributes to.
