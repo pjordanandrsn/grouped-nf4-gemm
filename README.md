@@ -184,6 +184,40 @@ Parked: sm_120 (three consecutive cloud provisioning failures on 5090s —
 availability, not code). Ecosystem landing is calendar-gated on the
 bitsandbytes v0.50.0 release; see the coordination note on #1949.
 
+## Cross-vendor projections (stamped, PROJECTED tier — help us confirm them)
+
+The waterfall arithmetic doesn't care which vendor's bus you're on, so we've
+extended it — under the same receipts discipline — into a stamped, pre-silicon
+projection table for AMD, Intel, and NVIDIA unified-memory parts:
+[`PROJECTIONS-multiarch.md`](PROJECTIONS-multiarch.md) (protocol:
+[`PROTOCOL-multiarch.md`](PROTOCOL-multiarch.md); model + R1 anchor gate:
+[`projections/`](projections/)). Both docs are OpenTimestamps-anchored (`.ots`)
+**before any of this silicon was run** — the projections are a falsifiable
+prediction, not a marketing table.
+
+**Every row is `PROJECTED` — none is confirmed on its hardware.** Streaming rows
+(discrete GPU) are anchored to the measured flagship numbers to <2%; unified-memory
+rows are *ceilings only* and real decode sits below them. Headlines, all
+projected: 235B-A22B at **3.0–3.5 tok/s** on a gen4-×16 desktop, **6.0–6.9** on
+gen5 (5090 / RDNA4), and a **17–22 tok/s ceiling** on 128 GB unified boxes
+(Strix Halo / DGX Spark / Jetson Thor). NF4-vs-bf16 is a **3.56×** byte reduction
+(absmax-inclusive), not the round 4×.
+
+**Call for confirmatories.** If you own any listed part, run
+`PROTOCOL-multiarch.md` and file the result — **pass or fail** — as an issue.
+A refuting measurement is as welcome as a confirming one; that's the point.
+Template:
+
+```
+Title: [confirmatory] <platform> — <model>
+Environment: vendor / device / driver / runtime / triton / torch / bnb;
+  link measured via lspci + on-box microbench (streaming) OR mem-band spec
+  (unified)
+Correctness gate: max rel-err vs dequant_ref = <value>  (pass < 1e-2)
+Measured decode: <tok/s> per census cell   Projected band: <from table>
+Verdict: within band? / refutes row?   Attach: results JSONL
+```
+
 ## License & attribution
 
 MIT ([LICENSE](LICENSE)). Portions developed with Claude Code as an AI
