@@ -1,29 +1,32 @@
-# Cross-architecture sweep (11 GPUs, sm_80 → sm_120) — decode wins everywhere, zero code bugs, and the prefill gate_up regime is a low-SM floor
+# Cross-architecture sweep (12 GPUs, sm_80 → sm_120) — decode wins everywhere, zero code bugs, and the prefill gate_up regime is a low-SM floor
 
 **2026-07-15 · Exploratory (NOT a blind confirmatory)** — a breadth shakedown to
 surface cross-architecture bugs and stumbling blocks before external users do.
 Eleven RunPod SECURE cards, one unmodified image (`torch 2.8.0+cu128 / triton
-3.4.0 / bitsandbytes 0.49.2`), the frozen v6 tree. Each pod ran: env fingerprint
+3.4.0 / bitsandbytes 0.49.2`), the frozen v6 tree. (A twelfth — the RTX 5090,
+whose provisioning wedged four times during the original sweep — landed
+2026-07-16 on a fifth attempt and is folded into the tables below; see the
+dated addendum at the end.) Each pod ran: env fingerprint
 → property suite (44) → the v6 variant matrix (`bench/phase2/v6_prefill_matrix.py`)
 → the paired 3-backend harness (`dequant_grouped fused_nf4 fused_v5loop`,
 prefill_s2048 + decode_bs1). Receipts + `SHA256SUMS` in `sweep_20260715/`.
 
 ## Coverage
 
-Four GPU generations, compute capability 8.0 → 12.0, SM counts 22 → 148:
+Four GPU generations, compute capability 8.0 → 12.0, SM counts 22 → 170:
 
 | generation | cards (SM count) |
 |---|---|
 | Ampere (sm_80/86) | A100 (108), A4000 (48), A4500 (56) |
 | Ada (sm_89) | RTX 2000 Ada (22), RTX 4000 Ada (48), L4 (58), L40 (142) |
 | Hopper (sm_90) | H200 (132), H100 NVL (132 — see flake) |
-| Blackwell (sm_100/120) | B200 (148), RTX PRO 4500 Blackwell (82) |
+| Blackwell (sm_100/120) | B200 (148), RTX PRO 4500 Blackwell (82), RTX 5090 (170 — added 2026-07-16) |
 
 ## Bug ledger: clean
 
-**Zero code bugs across all 11 architectures.** Property suite **44/44** on all
-ten cards that ran to completion; the v6 variant matrix and the paired harness
-both exited 0 on all ten. The kernel compiles and is numerically correct from
+**Zero code bugs across all 12 architectures.** Property suite **44/44** on all
+eleven cards that ran to completion; the v6 variant matrix and the paired
+harness both exited 0 on all eleven. The kernel compiles and is numerically correct from
 Ampere through Blackwell on stock dependencies, unmodified.
 
 **One environmental flake, not a defect:** H100 NVL returned `CUDA-capable
@@ -54,6 +57,7 @@ cells (min–max, median):
 | 132 | H200 | 9.0 | 1.10–3.91 (med 1.97) |
 | 142 | L40 | 8.9 | 2.26–5.71 (med 4.57) |
 | 148 | B200 | 10.0 | 1.22–4.05 (med 2.23) |
+| 170 | RTX 5090 | 12.0 | 1.48–3.88 (med 2.96) |
 
 **Every census decode cell on every card is a fused win** (worst single cell
 1.10× on H200). Decode down-projections at prefill likewise win on all cards ≥48
@@ -69,7 +73,7 @@ dequant path, and the sweep localizes exactly where:
 |---|---|---|
 | ≤ ~26 (RTX 2000 Ada; A2000 from the v6 A2000 leg) | 0.43–0.89× on the large gate_ups | **loses** |
 | 48–58 (A4000, 4000 Ada, A4500, L4) | 1.02–1.59× | wins |
-| ≥ 82 (Blackwell, A100, H200, L40, B200) | 1.25–4.79× | wins, growing with SM count |
+| ≥ 82 (Blackwell incl. RTX 5090, A100, H200, L40, B200) | 1.18–4.79× | wins, growing with SM count |
 
 The loss is a **compute-poverty floor**, not a gradient across the line:
 compute-bound prefill on ≤~26-SM cards favors cuBLAS's full-rate bf16 tensor
@@ -78,8 +82,9 @@ cores over the fused path's in-loop decode. Everything with ≥48 SMs already wi
 ## The bf16-MMA variant is refuted as a fix — everywhere
 
 The v6 matrix carried `fused_v5loop` (v5 loop) and, in the standalone matrix, the
-opt-in bf16-MMA prefill variant (V3). Across all 10 cards, **V3 loses to the
-shipped V1 register-LUT mainloop on every one** (V3/V1 = 0.40–0.95×, never ≥ 1.0).
+opt-in bf16-MMA prefill variant (V3). Across all 11 cards, **V3 loses to the
+shipped V1 register-LUT mainloop on every one** (V3/V1 = 0.40–0.95×, never ≥ 1.0;
+the 5090 reads 0.75–0.95 — consumer Blackwell's bf16 tensor cores don't save it).
 The sm_86 exploratory finding — bf16-MMA costs the fidelity edge and buys no
 speed — generalizes to the whole line. A device-keyed bf16 dispatch is off the
 table; **V1 is the correct fused variant universally** (V1 > V0 > V3 on every
@@ -113,3 +118,49 @@ this negative result is the finding.
 All 11 pods DELETE → 404-verified by the collector; stragglers expired at the
 2.5 h deadline; wedged 5090 (a fourth GeForce provisioning wedge) self-deleted.
 Total sweep spend ≈ $13.
+
+---
+
+## Addendum 2026-07-16 — the twelfth card: RTX 5090 (fifth provisioning attempt)
+
+**Provisioning post-mortem.** The 5090 wedged four times during the original
+sweep window (pods created, never received an IP — all SECURE, all at Low/None
+listed stock). On 2026-07-16 stock read **Medium**; attempt 5 tried COMMUNITY
+first (twice — both bounced instantly with `machine does not have the
+resources`, a per-machine capacity error, not a wedge) and then **SECURE
+created AND provisioned normally** (pod `83r70st31jo1ia`). Working hypothesis
+from the 5-attempt record: the wedge variable was **stock level, not cloud
+type** — at Low stock the scheduler places pods it can't ever bring up.
+Run: same tarball, same runner, same image as the other eleven cards.
+Spend ≈ $1.1 (SECURE $0.99/hr, ~65 min); DELETE → 404-verified.
+
+**Fingerprint.** RTX 5090, driver 570.195.03, cc 12.0 (sm_120), **170 SMs —
+the largest card in the table**; `torch 2.8.0+cu128 / triton 3.4.0 /
+bitsandbytes 0.49.2`, unmodified.
+
+**Epistemic status: exploratory, out-of-sample — no 5090-specific prereg.**
+This run was launched from the exploratory lane; no prediction document was
+stamped before it (and none was stamped after — by the time the question was
+asked, the harness receipts already existed, so the registration window was
+closed). What the row IS graded against: the cross-card laws published in this
+document at commit `add0ef5`, pushed to the public repo on **2026-07-15, before
+this run existed**. Every one of them holds out-of-sample:
+
+| published law (2026-07-15) | RTX 5090 outcome (2026-07-16) |
+|---|---|
+| suite 44/44 unmodified on every arch | **44/44** ✓ |
+| decode fused > dequant on every census cell | **8/8 win, 1.48–3.88 (med 2.96)** — 2nd-best median in the table ✓ |
+| prefill gate_up wins for ≥48 SMs | **4/4 win, 1.18–3.06 (med 2.30)** ✓ |
+| prefill down wins on ≥48-SM cards | **4/4 win, 2.27–5.70 (med 4.15)** ✓ |
+| v6 register-LUT ≥ v5 loop at prefill | **8/8, v6 = 1.24–1.41× v5loop (med 1.32)** ✓ |
+| bf16-MMA (V3) < V1 everywhere | **V3 = 0.75–0.95× V1, never wins** ✓ |
+
+Two cells worth naming. The **OLMoE gate_up known-loser closes with SM count**:
+0.43–0.57× at sm 22–58 → 0.96× at sm 132 → **1.18× (a win) at sm 170** — the
+compute-poverty-floor reading of the loss is now a monotone SM progression.
+And **gpt-oss down — the historically instance-unstable cell
+({0.67..1.75} over six instances)** — reads a clear 1.58× here.
+
+Receipts: `sweep_20260715/5090/` (HW_STATE, harness/matrix JSONs + logs),
+hashes appended to `SHA256SUMS`; reduction by `sweep_20260715/reduce_row.py`,
+validated against the published B200 and L40 rows before use on this card.
