@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-RP = Path("/work/v6/router_probe")            # repo mount inside gnf4-v6
+RP = Path(__file__).resolve().parent.parent   # router_probe root (host-agnostic)
 sys.path.insert(0, str(RP))
 from capture.hooks import DecodeCapture         # noqa: E402
 from capture.streams import ContractLoader, write_capture  # noqa: E402
@@ -54,19 +54,25 @@ LADDER = [
 TRAIN = {"epochs": 30, "batch": 512, "lr": 3.0e-3, "cosine": True, "weight_decay": 0.0, "seed": 20260716}
 
 
-def capture(out_dir, n_tokens, n_prompts):
+FAMILIES = {
+    "olmoe": "allenai/OLMoE-1B-7B-0924",
+    "qwen3_moe": "Qwen/Qwen3-30B-A3B",
+}
+
+
+def capture(out_dir, n_tokens, n_prompts, family="olmoe"):
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-    name = "allenai/OLMoE-1B-7B-0924"
-    tok = AutoTokenizer.from_pretrained(name)
+    name = FAMILIES[family]
+    tok = AutoTokenizer.from_pretrained(name, trust_remote_code=True)
     bnb = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4",
                              bnb_4bit_compute_dtype=torch.bfloat16)
     model = AutoModelForCausalLM.from_pretrained(name, quantization_config=bnb,
-                                                 device_map={"": 0})
+                                                 device_map={"": 0}, trust_remote_code=True)
     model.eval()
     cfg = model.config
     E, k = cfg.num_experts, cfg.num_experts_per_tok
     L = cfg.num_hidden_layers
-    cap = DecodeCapture(model, family="olmoe", layers=range(L))
+    cap = DecodeCapture(model, family=family, layers=range(L))
     cap.set_k(k)
     cap.arm()
     tok_id = 0
@@ -91,8 +97,8 @@ def capture(out_dir, n_tokens, n_prompts):
         cap._decode_mode = False
     cap.disarm()
     n = cap.save(out_dir, E=E, k=k,
-                 extra_meta={"model": name, "load": "nf4-4bit", "n_layers": L,
-                             "prompts": min(n_prompts, len(PROMPTS)),
+                 extra_meta={"model": name, "family": family, "load": "nf4-4bit",
+                             "n_layers": L, "prompts": min(n_prompts, len(PROMPTS)),
                              "tokens_per_prompt": n_tokens,
                              "input_note": "embedded diverse prompts, greedy decode"})
     # rewrite join sidecars aligned to the saved n
@@ -104,7 +110,7 @@ def capture(out_dir, n_tokens, n_prompts):
     return E, k, L, n
 
 
-def audit(out_dir, E, k):
+def audit(out_dir, E, k, family):
     rows = []
     for delta in (1, 2, 4):
         ld = ContractLoader(out_dir, delta=delta)
@@ -113,31 +119,34 @@ def audit(out_dir, E, k):
         for rung in LADDER:
             r = train_eval_rung(rung, tX, ty, hX, hy, E, k, TRAIN)
             rungs.append({"name": rung["name"], **r})
-            print(f"[delta{delta}] {rung['name']:8s} train={r['train_h']:.4f} heldout={r['heldout_h']:.4f}", flush=True)
-        rows.append({"family": "olmoe", "band": "all_layers", "delta": delta,
+            print(f"[{family} delta{delta}] {rung['name']:8s} train={r['train_h']:.4f} heldout={r['heldout_h']:.4f}", flush=True)
+        rows.append({"family": family, "band": "all_layers", "delta": delta,
                      "masked_fraction": ld.masked_fraction, "rungs": rungs})
     return rows
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out", default="/work/router_probe_olmoe")
+    ap.add_argument("--family", default="olmoe", choices=list(FAMILIES))
+    ap.add_argument("--out", default=None)
+    ap.add_argument("--device-label", default="cloud A5000")
     ap.add_argument("--tokens", type=int, default=512)
     ap.add_argument("--prompts", type=int, default=12)
     args = ap.parse_args()
     t0 = time.time()
-    stream_dir = args.out + "/streams"
-    E, k, L, n = capture(stream_dir, args.tokens, args.prompts)
-    print(f"captured {n} records (E={E} k={k} L={L})", flush=True)
-    rows = audit(stream_dir, E, k)
+    out = args.out or f"/root/router_probe_{args.family}"
+    stream_dir = out + "/streams"
+    E, k, L, n = capture(stream_dir, args.tokens, args.prompts, args.family)
+    print(f"captured {n} records (family={args.family} E={E} k={k} L={L})", flush=True)
+    rows = audit(stream_dir, E, k, args.family)
     date = time.strftime("%Y%m%d")
     rdir = RP / "receipts" / date
     rdir.mkdir(parents=True, exist_ok=True)
     receipt = {"tier": "EXPLORATORY", "charter": "router_probe/CHARTER.md",
-               "phase": 1, "family": "olmoe", "device": "A2000 (home, 02-06 window)",
+               "phase": 1, "family": args.family, "device": args.device_label,
                "generated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                "elapsed_s": round(time.time() - t0, 1), "records": n, "runs": rows}
-    rp = rdir / "EXPLORATORY_phase1_olmoe.json"
+    rp = rdir / f"EXPLORATORY_phase1_{args.family}.json"
     rp.write_text(json.dumps(receipt, indent=1))
     print(f"\nreceipt: {rp}\n--- committed reducer verdict (per delta) ---", flush=True)
     for row in rows:
