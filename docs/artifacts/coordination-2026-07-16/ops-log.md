@@ -56,3 +56,22 @@ ABORT invoked per handoff rule: "Any delta → ABORT, report."
 - Post-verification: both comments author = pjordanandrsn, edited = no. Final thread states: #1999 closed/merged, 3 comments; #1849 open, 8 comments, updated_at 18:29:14Z.
 - Snapshot inventory (this directory): `executed-pr1999-comment.json`, `executed-issue1849-comment.json`, `executed-pr1999-state.json`, `executed-issue1849-state.json`, post receipts, plus the pre-flight/gate/gap interim captures and render previews. `SHA256SUMS` covers all files.
 - **Aftermath rails armed (standing until revoked):** no further comments, reactions, or edits on either thread — typo fixes included (a true error gets reported to operator, not silently fixed); any reply from the maintainer (or anyone) → capture + report verbatim, no autonomous response; radio silence until the 2026-08-01 launch gate; no watchlist changes beyond this artifact capture.
+
+## pr1984-stewardship-exhibit (captured 2026-07-16)
+
+Snapshot of bitsandbytes-foundation/bitsandbytes PR #1984 (zaid646), the priority +
+stewardship exhibit: maintainer designation of #1965 as the implementation of record,
+and the operator's conduct toward a converging contributor. Preservation against
+edit/deletion. Files in `pr1984-exhibit/`: pr1984-pull.json (body verbatim — 3090
+table, MAE 0.073 / RMSE 0.092, ~5000 tok/s, "dequantized on-the-fly" line all present),
+pr1984-comments.json (matthewdouglas closure in full + zaid646 apology + operator reply),
+pr1984-timeline.json (label + close events), pr1984-rendered.html (SSR page snapshot),
+intel-1984.md.
+
+Event sequence (UTC order):
+- 2026-07-16T18:55:09Z  `Duplicate` label applied by matthewdouglas
+- 2026-07-16T18:55:16Z  closed by matthewdouglas (state=closed, merged=false)
+- 2026-07-16T18:55:16Z  closure comment by matthewdouglas ("This duplicates #1965…
+                         raise them there or in #1849")
+- 2026-07-16T19:26:59Z  zaid646 apology  (−47m relative to the operator reply)
+- 2026-07-16T20:14:15Z  operator reply by pjordanandrsn ("no apology needed…")
