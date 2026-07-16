@@ -303,7 +303,13 @@ _SM_CACHE: dict = {}
 def _sm_count(device) -> int:
     key = str(device)
     if key not in _SM_CACHE:
-        _SM_CACHE[key] = torch.cuda.get_device_properties(device).multi_processor_count
+        # CPU / interpreter mode (correctness testing, no GPU) can't query cuda;
+        # the count only feeds split-K planning, so a nominal value is safe there.
+        # On a real cuda device the true count is still used (no perf-path change).
+        if torch.cuda.is_available() and "cuda" in key:
+            _SM_CACHE[key] = torch.cuda.get_device_properties(device).multi_processor_count
+        else:
+            _SM_CACHE[key] = 64
     return _SM_CACHE[key]
 
 
