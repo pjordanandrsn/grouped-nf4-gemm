@@ -162,6 +162,9 @@ def main():
     ap.add_argument("--paired-tokens", type=int, default=64,
                     help="tokens for the prefetch-off paired run + identity check")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--capture", default=None,
+                    help="router-probe: dir to dump contract streams (bs1 decode, per layer); "
+                         "runs a capture pass instead of the prefetch benchmark. No-op if unset.")
     args = ap.parse_args()
     dev = "cuda"
     layers = args.layers
@@ -386,10 +389,16 @@ def main():
             slot_w[hit_slots[e]] = w
         return slot_w, K_TOP - len(misses)
 
+    import numpy as _np
+    CAP = {"on": False, "decode": False, "hidden": [], "logits": [], "embed": [],
+           "topk": [], "tok": [], "layer": [], "_emb": None, "_tok": 0, "_logits": None}
+
     def route(lay, h):
         logits = h.float() @ router_w[lay].t()
         probs = torch.softmax(logits, -1)[0]
         w, idx = torch.topk(probs, K_TOP)
+        if CAP["on"]:
+            CAP["_logits"] = logits[0].detach().cpu().numpy()
         w = (w / w.sum()).to(torch.bfloat16)
         return idx.tolist(), w
 
@@ -415,6 +424,8 @@ def main():
           high-priority stream. Slot permutation is absorbed by slot-aligned
           weights: outputs are bit-identical to prefetch-off (asserted)."""
         h = embed[int(tok_id)].to(dev, torch.bfloat16).view(1, -1)
+        if CAP["on"] and CAP["decode"]:
+            CAP["_emb"] = h[0].detach().float().cpu().numpy()
         if prefetch and mode in ("gpu", "gpu_early"):
             # B5: nothing below this line synchronizes with the GPU. The
             # gather is a kernel reading pinned host RAM over UVA, indexed by
@@ -479,6 +490,12 @@ def main():
                 prev_eids[lay] = list(eids)
             h = h + moe(buf, hn, slot_w)
             moe_done[buf].record()
+            if CAP["on"] and CAP["decode"]:
+                CAP["hidden"].append(h[0].detach().float().cpu().numpy())
+                CAP["logits"].append(CAP["_logits"])
+                CAP["embed"].append(CAP["_emb"])
+                CAP["topk"].append(_np.asarray(eids, _np.int32))
+                CAP["tok"].append(CAP["_tok"]); CAP["layer"].append(lay)
             if prefetch and lay + 1 < layers:
                 if mode == "early":
                     pred, _ = route(lay + 1, rmsnorm(h, norms[lay + 1][1]))
@@ -497,9 +514,11 @@ def main():
         for b in range(2):
             pred_ids_buf[b].fill_(-1)
         t = 0
+        CAP["decode"] = False           # prompt pass never captured (decode-only contract)
         for tid in toks:
             logits = step(tid, t, prefetch, mode)
             t += 1
+        CAP["decode"] = CAP["on"]
         gen, times = [], []
         cur = int(logits.argmax())
         for _ in range(n_new):
@@ -509,6 +528,8 @@ def main():
             torch.cuda.synchronize()
             times.append(time.perf_counter() - a)
             t += 1
+            if CAP["on"]:
+                CAP["_tok"] += 1        # one decode step = one token; layer-major records share it
             cur = int(logits.argmax())
             if cur == tokenizer.eos_token_id:
                 break
@@ -519,6 +540,50 @@ def main():
         return gen, statistics.median(times), hr
 
     torch.cuda.reset_peak_memory_stats()
+    if args.capture:
+        import sys as _sys, json as _json, time as _time
+        _rp = Path(__file__).resolve().parents[2] / "router_probe"
+        _sys.path.insert(0, str(_rp))
+        from capture.streams import write_capture, ContractLoader
+        from probes.ladder import train_eval_rung
+        from reduce.reduce_ceiling import proc as _proc
+        CAP["on"] = True
+        for prompt, toks in zip(prompts, prompt_toks):
+            _ = generate(toks, args.max_new, prefetch=False)  # decode-only capture (gated inside)
+        sd = Path(args.capture) / "streams"
+        n = len(CAP["topk"])
+        E_ = router_w[0].shape[0]
+        write_capture(sd, _np.stack(CAP["hidden"][:n]), _np.stack(CAP["logits"][:n]),
+                      _np.stack(CAP["embed"][:n]), _np.stack(CAP["topk"][:n]),
+                      {"E": int(E_), "k": int(K_TOP), "family": "qwen3_235b",
+                       "decode_only": True, "n_layers": layers, "tier": "EXPLORATORY"},
+                      record_token=CAP["tok"][:n], record_layer=CAP["layer"][:n])
+        log(f"captured {n} records (E={E_} k={K_TOP} layers={layers})")
+        LAD = [{"name":"linear","kind":"linear"},{"name":"mlp_d","kind":"mlp","width_mult":1},
+               {"name":"mlp_4d","kind":"mlp","width_mult":4},{"name":"attn2","kind":"attn","heads":4,"layers":2}]
+        TR = {"epochs":30,"batch":512,"lr":3.0e-3,"cosine":True,"weight_decay":0.0,"seed":20260716}
+        rows = []
+        for delta in (1, 2, 4):
+            ld = ContractLoader(sd, delta=delta)
+            tX, ty, hX, hy = ld.split(heldout=max(2000, ld.y.shape[0] // 6), seed=TR["seed"])
+            rungs = []
+            for rg in LAD:
+                r = train_eval_rung(rg, tX, ty, hX, hy, int(E_), int(K_TOP), TR)
+                rungs.append({"name": rg["name"], **r})
+                log(f"[235b delta{delta}] {rg['name']:8s} tr={r['train_h']:.4f} ho={r['heldout_h']:.4f}")
+            rows.append({"family":"qwen3_235b","band":"all_layers","delta":delta,
+                         "masked_fraction": ld.masked_fraction, "rungs": rungs})
+        rdir = _rp / "receipts" / _time.strftime("%Y%m%d"); rdir.mkdir(parents=True, exist_ok=True)
+        rp = rdir / "EXPLORATORY_phase1_qwen3_235b.json"
+        rp.write_text(_json.dumps({"tier":"EXPLORATORY","phase":1,"family":"qwen3_235b",
+                      "records": n, "runs": rows}, indent=1))
+        log(f"receipt: {rp}")
+        import subprocess as _sp
+        for row in rows:
+            one = rdir / f".235b_d{row['delta']}.json"; one.write_text(_json.dumps(row))
+            _sp.run([_sys.executable, str(_rp/"reduce"/"reduce_ceiling.py"), "ceiling", str(one)])
+            one.unlink()
+        return
     results = []
     modes = [m.strip() for m in args.prefetch_mode.split(",") if m.strip()]
     for prompt, toks in zip(prompts, prompt_toks):
