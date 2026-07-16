@@ -3,13 +3,14 @@
 **Status: WIP. M0 done. M1 (decode-gemv correctness) PASS on CPU-SYCL AND on
 real Intel GPU silicon (UHD P630, opencl:gpu) — max rel err 2.02e-5 vs the
 canonical `dequant_ref` on both, identical to the last ulp (2026-07-15).
-M2 (perf) — the SLM-tiled variant is DONE on the P630: bit-identical numerics
-(b_rel ~1e-7) and 1.32x over the naive baseline at MoE-realistic shape
-(N=8192, K=2048, WG=64), with a load-bearing work-group-size sweep. See
-`M2-RESULTS.md`. Absolute throughput + the speedup magnitude on Arc/Max stay
-R3 "port target" until measured there — the P630 is a weak iGPU, not the perf
-target — but the memory-traffic win is now confirmed on real Intel silicon,
-not projected. Not yet published.**
+M2 (perf) — the SLM-tiled variant is DONE and CROSS-VENDOR: one SYCL source,
+bit-identical (b_rel ~1e-7) and showing the tiling win on an Intel GPU (P630,
+1.32x, WG=64, via oneAPI/OpenCL), an NVIDIA GPU (RTX A2000, 1.21x, WG=16, via
+AdaptiveCpp's CUDA backend), and CPU. Optimal work-group size is arch-dependent
+(64 vs 16) — validates per-arch autotuning. See `M2-RESULTS.md`. Absolute
+throughput + the speedup magnitude on Arc/Max stay R3 "port target" until
+measured there; the win's existence, direction, and cross-vendor portability
+are now measured, not projected. Not yet published.**
 
 **Gen9.x runtime recipe (the M0 blocker, solved):** the oneAPI basekit image
 ships NEO 26.x from the intel-graphics PPA, which dropped Gen9.5 — the P630 is

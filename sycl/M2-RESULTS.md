@@ -1,12 +1,46 @@
-# M2 (performance) — measured on real Intel GPU silicon (UHD P630)
+# M2 (performance) — measured on TWO real GPUs, cross-vendor (Intel + NVIDIA)
 
-**Status: M2 DONE on the P630 (Gen9.5, opencl:gpu, NEO 23.43).** The SLM-tiled
-decode-gemv variant is numerically bit-identical to the M1 kernel / canonical
-`dequant_ref` and faster than the naive baseline at realistic MoE shape. The
-P630 is a weak iGPU and NOT the perf target — absolute throughput and the
-speedup *magnitude* on Arc/Max stay R3 "port target" until measured there —
-but the existence and direction of the memory-traffic win is now **confirmed on
-real Intel GPU silicon, not projected**.
+**Status: M2 DONE, and cross-vendor.** The same SYCL source runs bit-identically
+and shows the SLM-tiling win on an Intel GPU (UHD P630, via oneAPI/OpenCL), an
+NVIDIA GPU (RTX A2000, via AdaptiveCpp's CUDA backend), and CPU (OpenMP host) —
+one kernel, three backends, `b_rel ~1e-7` on all three. The tiling win holds
+across vendors (1.32x Intel / 1.21x NVIDIA at MoE-realistic shape), and the
+optimal work-group size is **architecture-dependent** (WG=64 on the P630, WG=16
+on the A2000) — which is exactly what validates the per-arch autotune search
+space (`backends/config.py`). Neither GPU is the "Arc/Max" perf target, so
+absolute throughput there stays R3 "port target"; but the win's existence,
+direction, and cross-vendor portability are now **measured, not projected**.
+
+## Cross-vendor summary (best-of-N, MoE-realistic N=8192 K=2048 unless noted)
+
+| backend | device | naive | tiled best | speedup | best WG | b_rel |
+|---|---|---|---|---|---|---|
+| oneAPI/OpenCL | Intel UHD P630 (Gen9.5) | 112.7 ms | 85.5 ms | **1.32x** | 64 | 8.3e-7 |
+| AdaptiveCpp/CUDA | NVIDIA RTX A2000 (sm_86) | 7.35 ms | 6.06 ms | **1.21x** | 16 | 8.3e-7 |
+| OpenMP host | Xeon W-1250 (CPU) | ~170 ms | ~0.9x | (loss) | — | 8.3e-7 |
+
+The A2000 is ~15x faster than the P630 in absolute terms (real discrete GPU vs
+weak iGPU). At tiny N=128 tiling is neutral-to-loss on every backend (nothing to
+amortize) — an honest crossover: naive for tiny N, tiled for MoE-sized N.
+
+**NVIDIA-via-SYCL build recipe** (AdaptiveCpp, no Codeplay plugin, on the QNAP
+A2000): `micromamba install -c conda-forge "adaptivecpp=25.02.0=cuda129*"
+"cuda-toolkit=12.9" "cuda-version=12.9" clangxx=19.1.7 libboost-devel python`
+(PIN adaptivecpp to the cuda build — the cuda-toolkit metapackage otherwise
+solves it down to the HIP variant; match the CUDA series to the driver — 575.64
+tops out at 12.9, so cuda130 hits CUDA_ERROR 35). Build a classic CUDA-root
+symlink tree (`include`→targets/.../include, `nvvm`→conda nvvm, `bin/ptxas`) and
+`acpp -O3 --acpp-targets=cuda:sm_86 --acpp-cuda-path=<root> --cuda-path=<root>
+-lcudart`. Force the GPU at runtime with `ACPP_VISIBILITY_MASK=cuda` (the default
+selector otherwise picks the OpenMP host device).
+
+---
+
+## Intel P630 detail (oneAPI/OpenCL, Gen9.5, NEO 23.43)
+
+The P630 is a weak iGPU and NOT the perf target, but it was the first real Intel
+GPU to confirm the win — absolute throughput and the speedup *magnitude* on
+Arc/Max stay R3 "port target" until measured there.
 
 ## What the tiled variant does
 A work-group owns one group `g` and a strip of `WG` output columns; the reused
