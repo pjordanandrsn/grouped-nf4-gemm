@@ -1,0 +1,124 @@
+{
+ "tier": "EXPLORATORY",
+ "charter": "router_probe/CHARTER.md",
+ "generated_utc": "2026-07-16T08:24:06Z",
+ "elapsed_s": 2135.6,
+ "fixtures": [
+  {
+   "name": "planted_70",
+   "kind": "planted",
+   "target": 0.700166875,
+   "chance": null,
+   "best_heldout_h": 0.69959,
+   "rungs": [
+    {
+     "name": "linear",
+     "train_h": 0.70027,
+     "heldout_h": 0.69959
+    },
+    {
+     "name": "mlp_d",
+     "train_h": 0.70122,
+     "heldout_h": 0.69806
+    },
+    {
+     "name": "mlp_4d",
+     "train_h": 0.71844,
+     "heldout_h": 0.68421
+    },
+    {
+     "name": "attn2",
+     "train_h": 0.74039,
+     "heldout_h": 0.68249
+    }
+   ]
+  },
+  {
+   "name": "planted_85",
+   "kind": "planted",
+   "target": 0.84995775,
+   "chance": null,
+   "best_heldout_h": 0.84701,
+   "rungs": [
+    {
+     "name": "linear",
+     "train_h": 0.84845,
+     "heldout_h": 0.84701
+    },
+    {
+     "name": "mlp_d",
+     "train_h": 0.84836,
+     "heldout_h": 0.84554
+    },
+    {
+     "name": "mlp_4d",
+     "train_h": 0.86188,
+     "heldout_h": 0.83359
+    },
+    {
+     "name": "attn2",
+     "train_h": 0.87544,
+     "heldout_h": 0.83792
+    }
+   ]
+  },
+  {
+   "name": "planted_95",
+   "kind": "planted",
+   "target": 0.9500340625,
+   "chance": null,
+   "best_heldout_h": 0.93765,
+   "rungs": [
+    {
+     "name": "linear",
+     "train_h": 0.94085,
+     "heldout_h": 0.93765
+    },
+    {
+     "name": "mlp_d",
+     "train_h": 0.94045,
+     "heldout_h": 0.93541
+    },
+    {
+     "name": "mlp_4d",
+     "train_h": 0.9492,
+     "heldout_h": 0.92268
+    },
+    {
+     "name": "attn2",
+     "train_h": 0.96036,
+     "heldout_h": 0.93174
+    }
+   ]
+  },
+  {
+   "name": "null",
+   "kind": "null",
+   "target": null,
+   "chance": 0.125,
+   "best_heldout_h": 0.12671,
+   "rungs": [
+    {
+     "name": "linear",
+     "train_h": 0.14322,
+     "heldout_h": 0.12481
+    },
+    {
+     "name": "mlp_d",
+     "train_h": 0.17457,
+     "heldout_h": 0.12671
+    },
+    {
+     "name": "mlp_4d",
+     "train_h": 0.23629,
+     "heldout_h": 0.12588
+    },
+    {
+     "name": "attn2",
+     "train_h": 0.2661,
+     "heldout_h": 0.12443
+    }
+   ]
+  }
+ ]
+}

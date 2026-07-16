@@ -1,0 +1,5 @@
+# raw activation streams are large + regenerable from fixtures (seed in procedure.yaml);
+# only the hashed verdict JSON + SHA256SUMS are committed as receipts.
+receipts/*/fixture_streams/
+receipts/*/*_streams/
+*.npy
