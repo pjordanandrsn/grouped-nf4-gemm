@@ -223,3 +223,27 @@ Verdict: within band? / refutes row?   Attach: results JSONL
 MIT ([LICENSE](LICENSE)). Portions developed with Claude Code as an AI
 assistant under the author's direction and review — see
 [ATTRIBUTION.md](ATTRIBUTION.md). All claims are the author's responsibility.
+
+## Portability program
+
+The kernel is single-source Triton; everything that must differ per vendor
+is being pulled into `backends/` — device detection, warp/wavefront/sub-group
+width, per-arch autotune search spaces. `bench/hw_contract.py` validates
+kernel correctness on any torch device **without a bitsandbytes build**; if
+you have ROCm or XPU silicon, that is the entry point. `docs/PORTABILITY.md`
+is the pre-port hazard register. Per the repo's tier language, every
+non-CUDA row is `port target` until a confirmatory passes on that silicon.
+
+## Router-predictability probe
+
+`router_probe/` asks whether the measured H = 0.93 one-layer-lead prediction
+ceiling is the router's conditional entropy or the probe's capacity limit.
+The charter and procedure were OTS-stamped before any real-model capture;
+the Phase-0 instrument gate passed 4/4 on planted fixtures (see
+`router_probe/RESULTS.md`, exploratory tier). Phase 1 is pending.
+
+## Contact
+
+Cerin Amroth Research takes contract and pilot engagements on this work —
+kernel ports, offload integration, and sponsored research lanes with
+stamped receipts. Contact **jordan@cerinamroth.com**.
