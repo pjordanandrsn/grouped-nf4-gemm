@@ -75,3 +75,25 @@ Event sequence (UTC order):
                          raise them there or in #1849")
 - 2026-07-16T19:26:59Z  zaid646 apology  (−47m relative to the operator reply)
 - 2026-07-16T20:14:15Z  operator reply by pjordanandrsn ("no apology needed…")
+
+## 2026-07-17 scheduled GO — CANCELLED (operator-confirmed 2026-07-16 eve)
+
+The evening directive scheduled the two-comment op for 2026-07-17 15:00-17:00 UTC on
+the premise it was still "staged, abort-pending." That premise was STALE: the op had
+already EXECUTED earlier the same day (this session) — both comments verified LIVE on
+GitHub under pjordanandrsn before any tomorrow action:
+- Payload A: #1999 issuecomment-4995065442 @ 2026-07-16T18:02:50Z
+- Payload B: #1849 issuecomment-4995291438 @ 2026-07-16T18:29:14Z
+Bodies byte-match the frozen payloads (A sha c2d84354…, B sha 41ef3d89…).
+
+Executing tomorrow would have DOUBLE-POSTED the one-shot payloads (permanent; violates
+the no-double-submission standard). Agent HELD and reported instead of posting.
+Operator CONFIRMED cancellation 2026-07-16 eve: "the frozen payloads are one-shot and
+they shot today. No different pair intended." Root cause = the directive's premise, not
+execution. The §3 re-baseline would also have caught it independently (agent's own A/B
+are now the newest comments on both #1999 and #1849 → HOLD).
+
+DISPOSITION: coordination rail EXECUTED (today) + CLOSED. Radio silence to the
+2026-08-01 gate now in FULL EFFECT — no agent public touches on bnb until then.
+A2 test-salvage queue entry stands (separate track). No reactions, no post-edits,
+no comments on #1984/#2005/#2006; any matthewdouglas/zaid646 reply = capture + report only.
