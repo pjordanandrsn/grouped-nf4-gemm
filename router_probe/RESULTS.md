@@ -18,8 +18,14 @@ is touched (CHARTER §5 bright line 1). It is not a result about any model.
   (`reduce_ceiling.py gate`), the only thing permitted to print it.
 
 ```
-<PASTE reducer `gate` verdict here — receipts/<date>/EXPLORATORY_fixture_gate.json>
+gate: 4/4  exit_phase0: true  (committed reducer, reduce_ceiling.py gate)
+  planted_70   target=0.7002  best_heldout=0.6996  pass=True
+  planted_85   target=0.8500  best_heldout=0.8470  pass=True
+  planted_95   target=0.9500  best_heldout=0.9376  pass=True
+  null         target=0.1250  best_heldout=0.1267  pass=True  leakage_alarm=False
 ```
+
+**Gate PASSED 2026-07-16** — pipeline recovers the planted levels within ±0.02 and the null reads chance (no leakage). Phase 1 unlocked.
 
 Reducer self-check (CHARTER §3.3, done before first real data): the ceiling
 reducer was exercised on four crafted ladders spanning the plateau criterion —
