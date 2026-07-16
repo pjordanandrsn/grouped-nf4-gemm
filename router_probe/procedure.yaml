@@ -1,0 +1,54 @@
+# Frozen procedure — mechanical transcription of CHARTER.md §3 (2026-07-16).
+# The reducer reads THIS file; edits here are charter amendments, not tuning knobs.
+tier: exploratory
+
+metric:
+  primary: set_agreement            # |predicted top-k ∩ realized top-k| / k
+  lead_delta_primary: 1             # Δ=1 is the headline lead
+  lead_deltas: [1, 2, 4]            # Phase-1 sweep axis (dataloader parameter)
+  k: as_served                      # k comes from the serving config, never re-chosen
+  secondaries: [positional_agreement, byte_weighted_hit, h1_fraction]  # logged, never headlined
+
+feature_contract:                    # law 11 — enforced in the dataloader
+  streams: [hidden_post_block_l, router_logits_l, token_embedding]
+  decode_only: true                  # bs1 decode tokens; prefill excluded
+  label_stream: topk_set_l_plus_delta
+
+ladder:                              # capacity rungs, in order
+  - {name: linear,   kind: linear}
+  - {name: mlp_d,    kind: mlp,  width_mult: 1, layers: 2}
+  - {name: mlp_4d,   kind: mlp,  width_mult: 4, layers: 2}
+  - {name: attn2,    kind: attn, layers: 2, heads: 4}
+
+criteria:                            # reducer arithmetic — charter §3.3
+  plateau_gain_abs: 0.005            # held-out gain < this across EACH of top two doublings
+  train_heldout_gap_min: 0.02        # AND top-rung train-H exceeds held-out-H by ≥ this
+  runtime_viable_h: 0.95             # any rung ≥ this held-out at Δ=1
+  # model-limited  := plateau AND gap        (capacity demonstrably not binding)
+  # probe-limited  := top-rung held-out gain ≥ plateau_gain_abs (ceiling not established)
+  # runtime-viable := any rung ≥ runtime_viable_h at Δ=1 (cost logged, not barred)
+
+fixture_gate:                        # Phase-0 exit — charter §3.4
+  planted_levels: [0.70, 0.85, 0.95]
+  recovery_band_abs: 0.02            # held-out recovery within ±this of analytic target
+  null_margin_abs: 0.02              # null must read ≤ chance + this
+  # v2 construction (see fixtures/planted.py DESIGN HISTORY): stream 2 = true
+  # score vector u; labels = top-k(u + sigma*g) (temperature noise); sigma
+  # calibrated by bisection to the frozen levels; analytic target = 2e6-sample
+  # MC of the generator. v1 (replacement noise + generic linear map) was
+  # UNLEARNABLE by any rung: CE-step bias + flat landscape — documented, not
+  # to be retried. dims/samples are CONSTRUCTION params (agent-owned), not
+  # pass bands.
+  noise: temperature
+  fixture_dims: {E: 64, k: 8, d_hidden: 48, d_logits: 64, d_embed: 16}
+  samples: {train: 120000, heldout: 20000}
+  seed: 20260716
+
+training:                            # instrument settings (not verdict inputs)
+  objective: softmax_multipos_ce     # -(1/k) sum over realized set of log softmax(scores) — matches what a router is; BCE-multihot cannot recover a planted ranking (membership is nonlinear in x)
+  epochs: 30                         # 8 undertrained the linear rung at H=0.95
+  batch: 512                         #   (train 0.922 == heldout 0.920, not overfit);
+  lr: 3.0e-3                         #   ep30+cosine converges to 0.938 (ep60 plateaus).
+  cosine: true                       # instrument config (agent-owned), criteria untouched.
+  weight_decay: 0.0
+  seed: 20260716
