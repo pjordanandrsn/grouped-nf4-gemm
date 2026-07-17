@@ -1,5 +1,14 @@
 # Frozen procedure — mechanical transcription of CHARTER.md §3 (2026-07-16).
 # The reducer reads THIS file; edits here are charter amendments, not tuning knobs.
+# AMENDMENT A1 (2026-07-17, operator-authorized: "amend the ladder and re-run qwen"):
+#   ladder extended past attn2 with monotone attention-family capacity rungs
+#   (attn4 -> attn4_w512 -> attn6_w512). Trigger: Qwen3-30B Phase-1 read
+#   probe-limited x3 — attn2 (+0.20 over mlp_4d) was still climbing at the old
+#   top rung, so no ceiling was establishable. First four rungs are UNCHANGED
+#   (OLMoE receipts stay comparable; its model-limited verdict is unaffected —
+#   plateau there was attn2 == mlp_4d). Criteria arithmetic untouched.
+#   Re-stamped over the amended bytes BEFORE any A1 data was generated; the
+#   pre-amendment stamp remains valid for the pre-amendment bytes (git history).
 tier: exploratory
 
 metric:
@@ -14,11 +23,14 @@ feature_contract:                    # law 11 — enforced in the dataloader
   decode_only: true                  # bs1 decode tokens; prefill excluded
   label_stream: topk_set_l_plus_delta
 
-ladder:                              # capacity rungs, in order
-  - {name: linear,   kind: linear}
-  - {name: mlp_d,    kind: mlp,  width_mult: 1, layers: 2}
-  - {name: mlp_4d,   kind: mlp,  width_mult: 4, layers: 2}
-  - {name: attn2,    kind: attn, layers: 2, heads: 4}
+ladder:                              # capacity rungs, in order (A1: +3 attn rungs)
+  - {name: linear,     kind: linear}
+  - {name: mlp_d,      kind: mlp,  width_mult: 1, layers: 2}
+  - {name: mlp_4d,     kind: mlp,  width_mult: 4, layers: 2}
+  - {name: attn2,      kind: attn, layers: 2, heads: 4, width: 256}
+  - {name: attn4,      kind: attn, layers: 4, heads: 4, width: 256}   # A1: 2x depth
+  - {name: attn4_w512, kind: attn, layers: 4, heads: 8, width: 512}   # A1: 2x width
+  - {name: attn6_w512, kind: attn, layers: 6, heads: 8, width: 512}   # A1: top rung
 
 criteria:                            # reducer arithmetic — charter §3.3
   plateau_gain_abs: 0.005            # held-out gain < this across EACH of top two doublings
