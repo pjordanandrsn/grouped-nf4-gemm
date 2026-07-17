@@ -61,7 +61,7 @@ FAMILIES = {
 }
 
 
-def capture(out_dir, n_tokens, n_prompts, family="olmoe"):
+def capture(out_dir, n_tokens, n_prompts, family="olmoe", offload=False):
     from transformers import AutoTokenizer
     from experts4bit_qlora.loader import load_moe_4bit_streaming
     name = FAMILIES[family]
@@ -74,8 +74,14 @@ def capture(out_dir, n_tokens, n_prompts, family="olmoe"):
     # router gate + block modules are untouched, so the DecodeCapture hooks attach
     # unchanged, and ExpertsLoRA is zero-init so the forward equals the frozen NF4
     # base — exactly the 4-bit model the probe is meant to characterize.
+    # offload=True: frozen NF4 experts live in pinned CPU RAM and stream to the GPU
+    # one layer at a time (prefetch overlaps the H2D copy) — Qwen3-30B decodes in
+    # ~4.4 GB VRAM, so the capture fits a 12 GB card that can't hold the experts
+    # resident. Router gate/hidden/embed stay on-GPU, so the contract streams and
+    # hooks are unchanged; only wall-clock differs (~0.2 tok/s on the A2000).
     model, _ = load_moe_4bit_streaming(name, device="cuda:0", dtype=torch.bfloat16,
-                                       r=8, alpha=16, offload=False, quant_type="nf4")
+                                       r=8, alpha=16, offload=offload, prefetch=offload,
+                                       quant_type="nf4")
     model.eval()
     cfg = model.config
     E, k = cfg.num_experts, cfg.num_experts_per_tok
@@ -105,7 +111,8 @@ def capture(out_dir, n_tokens, n_prompts, family="olmoe"):
         cap._decode_mode = False
     cap.disarm()
     n = cap.save(out_dir, E=E, k=k,
-                 extra_meta={"model": name, "family": family, "load": "nf4-4bit",
+                 extra_meta={"model": name, "family": family,
+                             "load": "nf4-4bit" + ("+expert-offload" if offload else ""),
                              "n_layers": L, "prompts": min(n_prompts, len(PROMPTS)),
                              "tokens_per_prompt": n_tokens,
                              "input_note": "embedded diverse prompts, greedy decode"})
@@ -140,11 +147,14 @@ def main():
     ap.add_argument("--device-label", default="cloud A5000")
     ap.add_argument("--tokens", type=int, default=512)
     ap.add_argument("--prompts", type=int, default=12)
+    ap.add_argument("--offload", action="store_true",
+                    help="e4b expert offload: experts stream from pinned CPU RAM "
+                         "(fits Qwen3-30B capture in ~4.4GB VRAM; slow, quiet-window use)")
     args = ap.parse_args()
     t0 = time.time()
     out = args.out or f"/root/router_probe_{args.family}"
     stream_dir = out + "/streams"
-    E, k, L, n = capture(stream_dir, args.tokens, args.prompts, args.family)
+    E, k, L, n = capture(stream_dir, args.tokens, args.prompts, args.family, args.offload)
     print(f"captured {n} records (family={args.family} E={E} k={k} L={L})", flush=True)
     rows = audit(stream_dir, E, k, args.family)
     date = time.strftime("%Y%m%d")
