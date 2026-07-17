@@ -561,7 +561,8 @@ def main():
         log(f"captured {n} records (E={E_} k={K_TOP} layers={layers})")
         LAD = [{"name":"linear","kind":"linear"},{"name":"mlp_d","kind":"mlp","width_mult":1},
                {"name":"mlp_4d","kind":"mlp","width_mult":4},{"name":"attn2","kind":"attn","heads":4,"layers":2}]
-        TR = {"epochs":30,"batch":512,"lr":3.0e-3,"cosine":True,"weight_decay":0.0,"seed":20260716}
+        TR = {"epochs":30,"batch":512,"lr":3.0e-3,"cosine":True,"weight_decay":0.0,"seed":20260716,
+              "device": "cuda:0" if torch.cuda.is_available() else "cpu"}  # GPU ladder: CPU audit on a rented H100 wastes hours
         rows = []
         for delta in (1, 2, 4):
             ld = ContractLoader(sd, delta=delta)
