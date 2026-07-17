@@ -67,7 +67,7 @@ def set_agreement(scores: torch.Tensor, y: torch.Tensor, k: int) -> float:
 
 
 def _multihot(y, E):
-    mh = torch.zeros(y.shape[0], E)
+    mh = torch.zeros(y.shape[0], E, device=y.device)
     mh.scatter_(1, y.long(), 1.0)
     return mh
 
@@ -75,6 +75,10 @@ def _multihot(y, E):
 def train_eval_rung(rung, tX, ty, hX, hy, E, k, cfg):
     """Returns {'train_h':…, 'heldout_h':…} for one ladder rung."""
     torch.manual_seed(int(cfg.get("seed", 0)))
+    # Probes are tiny torch modules; on CPU the MLP(4d) rung is >1h each, on the
+    # GPU ~1 min. cfg["device"] (default cpu) selects it; features + model + index
+    # perm all live on the same device so the training loop never touches the host.
+    dev = torch.device(cfg.get("device", "cpu"))
     attn = rung["kind"] == "attn"
     dims = [x.shape[1] for x in tX]
     if rung["kind"] == "linear":
@@ -83,14 +87,15 @@ def train_eval_rung(rung, tX, ty, hX, hy, E, k, cfg):
         model = MLPProbe(sum(dims), E, rung["width_mult"] * sum(dims))
     else:
         model = AttnProbe(dims, E, heads=rung.get("heads", 4), layers=rung.get("layers", 2))
+    model = model.to(dev)
 
     def tensors(X):
-        return [torch.from_numpy(np.ascontiguousarray(x)).float() for x in X] if attn \
-            else torch.from_numpy(_flat(X)).float()
+        return [torch.from_numpy(np.ascontiguousarray(x)).float().to(dev) for x in X] if attn \
+            else torch.from_numpy(_flat(X)).float().to(dev)
 
     Xt, Xh = tensors(tX), tensors(hX)
-    yt = torch.from_numpy(np.ascontiguousarray(ty)).long()
-    yh = torch.from_numpy(np.ascontiguousarray(hy)).long()
+    yt = torch.from_numpy(np.ascontiguousarray(ty)).long().to(dev)
+    yh = torch.from_numpy(np.ascontiguousarray(hy)).long().to(dev)
     mh = _multihot(yt, E)
     opt = torch.optim.AdamW(model.parameters(), lr=float(cfg["lr"]),
                             weight_decay=float(cfg.get("weight_decay", 0.0)))
@@ -108,7 +113,7 @@ def train_eval_rung(rung, tX, ty, hX, hy, E, k, cfg):
     n = yt.shape[0]
     bs = int(cfg["batch"])
     for _ in range(epochs):
-        perm = torch.randperm(n)
+        perm = torch.randperm(n, device=dev)
         for i in range(0, n, bs):
             idx = perm[i:i + bs]
             xb = [x[idx] for x in Xt] if attn else Xt[idx]
