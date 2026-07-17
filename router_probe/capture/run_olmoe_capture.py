@@ -49,7 +49,12 @@ LADDER = [
     {"name": "linear", "kind": "linear"},
     {"name": "mlp_d", "kind": "mlp", "width_mult": 1},
     {"name": "mlp_4d", "kind": "mlp", "width_mult": 4},
-    {"name": "attn2", "kind": "attn", "heads": 4, "layers": 2},
+    {"name": "attn2", "kind": "attn", "heads": 4, "layers": 2, "width": 256},
+    # procedure.yaml AMENDMENT A1 (2026-07-17): attention-family capacity climb —
+    # Qwen3-30B read probe-limited with attn2 still gaining +0.20 over mlp_4d.
+    {"name": "attn4", "kind": "attn", "heads": 4, "layers": 4, "width": 256},
+    {"name": "attn4_w512", "kind": "attn", "heads": 8, "layers": 4, "width": 512},
+    {"name": "attn6_w512", "kind": "attn", "heads": 8, "layers": 6, "width": 512},
 ]
 TRAIN = {"epochs": 30, "batch": 512, "lr": 3.0e-3, "cosine": True, "weight_decay": 0.0, "seed": 20260716,
          "device": "cuda:0" if torch.cuda.is_available() else "cpu"}
@@ -150,12 +155,30 @@ def main():
     ap.add_argument("--offload", action="store_true",
                     help="e4b expert offload: experts stream from pinned CPU RAM "
                          "(fits Qwen3-30B capture in ~4.4GB VRAM; slow, quiet-window use)")
+    # capture/audit split (A1 ops): cloud pods die ~50 min in (2026-07-17 incident),
+    # so the pod runs --skip-audit (capture + stream tar only, in-window) and the
+    # 7-rung ladder runs locally from the pulled streams via --audit-only.
+    ap.add_argument("--skip-audit", action="store_true",
+                    help="capture + write streams, no ladder/receipt (pod mode)")
+    ap.add_argument("--audit-only", action="store_true",
+                    help="run the ladder + reducer on an EXISTING stream dir (--out)")
     args = ap.parse_args()
     t0 = time.time()
     out = args.out or f"/root/router_probe_{args.family}"
     stream_dir = out + "/streams"
-    E, k, L, n = capture(stream_dir, args.tokens, args.prompts, args.family, args.offload)
-    print(f"captured {n} records (family={args.family} E={E} k={k} L={L})", flush=True)
+    if args.audit_only:
+        meta = json.loads((Path(stream_dir) / "meta.json").read_text())
+        E, k = int(meta["E"]), int(meta["k"])
+        n = int(meta.get("n") or meta.get("records") or
+                np.load(Path(stream_dir) / "topk_set.npy", mmap_mode="r").shape[0])
+        L = int(meta.get("n_layers") or 0)
+        print(f"audit-only: {n} records from {stream_dir} (E={E} k={k})", flush=True)
+    else:
+        E, k, L, n = capture(stream_dir, args.tokens, args.prompts, args.family, args.offload)
+        print(f"captured {n} records (family={args.family} E={E} k={k} L={L})", flush=True)
+        if args.skip_audit:
+            print("skip-audit: streams written, exiting (pod mode)", flush=True)
+            return
     rows = audit(stream_dir, E, k, args.family)
     date = time.strftime("%Y%m%d")
     rdir = RP / "receipts" / date
