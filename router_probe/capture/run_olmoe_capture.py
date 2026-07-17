@@ -51,7 +51,8 @@ LADDER = [
     {"name": "mlp_4d", "kind": "mlp", "width_mult": 4},
     {"name": "attn2", "kind": "attn", "heads": 4, "layers": 2},
 ]
-TRAIN = {"epochs": 30, "batch": 512, "lr": 3.0e-3, "cosine": True, "weight_decay": 0.0, "seed": 20260716}
+TRAIN = {"epochs": 30, "batch": 512, "lr": 3.0e-3, "cosine": True, "weight_decay": 0.0, "seed": 20260716,
+         "device": "cuda:0" if torch.cuda.is_available() else "cpu"}
 
 
 FAMILIES = {
@@ -61,13 +62,20 @@ FAMILIES = {
 
 
 def capture(out_dir, n_tokens, n_prompts, family="olmoe"):
-    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+    from transformers import AutoTokenizer
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
     name = FAMILIES[family]
     tok = AutoTokenizer.from_pretrained(name, trust_remote_code=True)
-    bnb = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4",
-                             bnb_4bit_compute_dtype=torch.bfloat16)
-    model = AutoModelForCausalLM.from_pretrained(name, quantization_config=bnb,
-                                                 device_map={"": 0}, trust_remote_code=True)
+    # Experts4bit (bitsandbytes#1849/#1965): stock load_in_4bit's walker only swaps
+    # nn.Linear modules, so OLMoE's FUSED expert stacks (OlmoeExperts.gate_up_proj/
+    # down_proj, a 3-D nn.Parameter) stay bf16 -> ~9.55 GiB, which OOMs the 12 GB
+    # A2000 even fully cleared. The streaming loader quantizes those fused experts to
+    # NF4 on the way to the GPU (~4.7 GiB; the bf16 model is never materialized). The
+    # router gate + block modules are untouched, so the DecodeCapture hooks attach
+    # unchanged, and ExpertsLoRA is zero-init so the forward equals the frozen NF4
+    # base — exactly the 4-bit model the probe is meant to characterize.
+    model, _ = load_moe_4bit_streaming(name, device="cuda:0", dtype=torch.bfloat16,
+                                       r=8, alpha=16, offload=False, quant_type="nf4")
     model.eval()
     cfg = model.config
     E, k = cfg.num_experts, cfg.num_experts_per_tok
