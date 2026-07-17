@@ -1,0 +1,96 @@
+{
+ "tier": "EXPLORATORY",
+ "charter": "router_probe/CHARTER.md",
+ "phase": 1,
+ "family": "olmoe",
+ "device": "local A2000 (Experts4bit)",
+ "generated_utc": "2026-07-17T01:42:28Z",
+ "elapsed_s": 1738.7,
+ "records": 98304,
+ "runs": [
+  {
+   "family": "olmoe",
+   "band": "all_layers",
+   "delta": 1,
+   "masked_fraction": 0.0625,
+   "rungs": [
+    {
+     "name": "linear",
+     "train_h": 0.69647,
+     "heldout_h": 0.67126
+    },
+    {
+     "name": "mlp_d",
+     "train_h": 0.96704,
+     "heldout_h": 0.91143
+    },
+    {
+     "name": "mlp_4d",
+     "train_h": 0.96847,
+     "heldout_h": 0.91361
+    },
+    {
+     "name": "attn2",
+     "train_h": 0.96643,
+     "heldout_h": 0.91147
+    }
+   ]
+  },
+  {
+   "family": "olmoe",
+   "band": "all_layers",
+   "delta": 2,
+   "masked_fraction": 0.125,
+   "rungs": [
+    {
+     "name": "linear",
+     "train_h": 0.69802,
+     "heldout_h": 0.67251
+    },
+    {
+     "name": "mlp_d",
+     "train_h": 0.96149,
+     "heldout_h": 0.90474
+    },
+    {
+     "name": "mlp_4d",
+     "train_h": 0.96263,
+     "heldout_h": 0.90682
+    },
+    {
+     "name": "attn2",
+     "train_h": 0.96112,
+     "heldout_h": 0.9047
+    }
+   ]
+  },
+  {
+   "family": "olmoe",
+   "band": "all_layers",
+   "delta": 4,
+   "masked_fraction": 0.25,
+   "rungs": [
+    {
+     "name": "linear",
+     "train_h": 0.6999,
+     "heldout_h": 0.67669
+    },
+    {
+     "name": "mlp_d",
+     "train_h": 0.95367,
+     "heldout_h": 0.89666
+    },
+    {
+     "name": "mlp_4d",
+     "train_h": 0.9542,
+     "heldout_h": 0.89685
+    },
+    {
+     "name": "attn2",
+     "train_h": 0.95924,
+     "heldout_h": 0.90073
+    }
+   ]
+  }
+ ]
+}
