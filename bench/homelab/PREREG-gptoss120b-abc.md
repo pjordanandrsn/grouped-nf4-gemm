@@ -151,3 +151,26 @@ This H2 is exactly why the hot-expert fusion is interesting on energy grounds:
 it puts the idle-during-transfer GPU to work on resident experts, so the
 fusion's energy win (if built) should exceed its speed win. Registered here,
 pre-data, as the energy rationale for the follow-on gated in the body.
+
+---
+
+## Correction 1 (2026-07-18) — UPS provenance (forward-only; stamped text above untouched)
+
+Amendment 1 states "no UPS/smart-plug wall meter is available (checked NUT +
+HA)." That is **imprecise and is corrected here**: a **PhxTec-A1000** UPS
+(~1000 VA) *is* connected and configured in QNAP (`/etc/config/ups/ups.conf`
+section `[qnapups]`, `UPS Type = PhxTec-A1000`). What Amendment 1 got right is
+that its telemetry is **not reachable from the shell**: the NUT stack is not
+live (no `usbhid-ups` driver process, empty `/var/state/ups/`, `upsd` not
+listening on 3493), QNAP reads load% only through its proprietary web daemon,
+`getsysinfo` exposes no UPS field, and the CP210x USB-serial device on this box
+is **not** the UPS — it is the Thread border-router radio held by `otbr-agent`
+(the FP300 Matter dongle), which was deliberately not touched.
+
+So a real whole-box wall reading exists **in the QNAP GUI** but not on any
+scriptable path. Operator decision (2026-07-18): **keep the TDP-model CPU
+estimate** as registered in Amendment 1 — the joules column stays
+"GPU measured + CPU estimated," and the total-J/tok numbers remain
+ESTIMATED-tier. The GUI UPS load% is available for a future manual upgrade of
+that column if a run is ever repeated with the value read off by hand; it is
+not wired in for this exploratory pass. No prediction changes.
