@@ -1,0 +1,141 @@
+{
+ "tier": "EXPLORATORY",
+ "charter": "router_probe/CHARTER.md",
+ "phase": 1,
+ "family": "qwen3_moe",
+ "device": "capture: cloud pod (Experts4bit) / audit: local A2000, ladder-A1",
+ "generated_utc": "2026-07-17T21:18:53Z",
+ "elapsed_s": 4876.8,
+ "records": 147456,
+ "runs": [
+  {
+   "family": "qwen3_moe",
+   "band": "all_layers",
+   "delta": 1,
+   "masked_fraction": 0.0208,
+   "rungs": [
+    {
+     "name": "linear",
+     "train_h": 0.59664,
+     "heldout_h": 0.51843
+    },
+    {
+     "name": "mlp_d",
+     "train_h": 0.56679,
+     "heldout_h": 0.51333
+    },
+    {
+     "name": "mlp_4d",
+     "train_h": 0.63885,
+     "heldout_h": 0.57003
+    },
+    {
+     "name": "attn2",
+     "train_h": 0.87131,
+     "heldout_h": 0.7729
+    },
+    {
+     "name": "attn4",
+     "train_h": 0.90879,
+     "heldout_h": 0.79034
+    },
+    {
+     "name": "attn4_w512",
+     "train_h": 0.93394,
+     "heldout_h": 0.78871
+    },
+    {
+     "name": "attn6_w512",
+     "train_h": 0.97263,
+     "heldout_h": 0.79926
+    }
+   ]
+  },
+  {
+   "family": "qwen3_moe",
+   "band": "all_layers",
+   "delta": 2,
+   "masked_fraction": 0.0417,
+   "rungs": [
+    {
+     "name": "linear",
+     "train_h": 0.59259,
+     "heldout_h": 0.51176
+    },
+    {
+     "name": "mlp_d",
+     "train_h": 0.55621,
+     "heldout_h": 0.50307
+    },
+    {
+     "name": "mlp_4d",
+     "train_h": 0.63042,
+     "heldout_h": 0.55778
+    },
+    {
+     "name": "attn2",
+     "train_h": 0.86404,
+     "heldout_h": 0.76766
+    },
+    {
+     "name": "attn4",
+     "train_h": 0.90608,
+     "heldout_h": 0.78495
+    },
+    {
+     "name": "attn4_w512",
+     "train_h": 0.93518,
+     "heldout_h": 0.78739
+    },
+    {
+     "name": "attn6_w512",
+     "train_h": 0.94879,
+     "heldout_h": 0.78805
+    }
+   ]
+  },
+  {
+   "family": "qwen3_moe",
+   "band": "all_layers",
+   "delta": 4,
+   "masked_fraction": 0.0833,
+   "rungs": [
+    {
+     "name": "linear",
+     "train_h": 0.5793,
+     "heldout_h": 0.49643
+    },
+    {
+     "name": "mlp_d",
+     "train_h": 0.60884,
+     "heldout_h": 0.53673
+    },
+    {
+     "name": "mlp_4d",
+     "train_h": 0.5748,
+     "heldout_h": 0.51432
+    },
+    {
+     "name": "attn2",
+     "train_h": 0.85244,
+     "heldout_h": 0.75822
+    },
+    {
+     "name": "attn4",
+     "train_h": 0.89657,
+     "heldout_h": 0.77628
+    },
+    {
+     "name": "attn4_w512",
+     "train_h": 0.93399,
+     "heldout_h": 0.78033
+    },
+    {
+     "name": "attn6_w512",
+     "train_h": 0.94586,
+     "heldout_h": 0.78456
+    }
+   ]
+  }
+ ]
+}
