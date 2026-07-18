@@ -103,3 +103,51 @@ confirmatory. NF4↔MXFP4 storage differs between arms (throughput comparison,
 not a fidelity claim). DDR4 bandwidth is spec-estimated. `--n-cpu-moe`
 semantics (which layers land on GPU) are llama.cpp-version-specific (b10068);
 the achieved VRAM residency is reported from the run, not assumed.
+
+---
+
+## Amendment 1 (2026-07-18) — joules/token column (forward-only, still pre-data)
+
+**Stamped before any tok/s** (A-arm still mid-load, 0 tokens timed; B0/B/C not
+started). The body above is unchanged; this adds the energy axis — the
+program's signature metric.
+
+**Instrument, stated honestly.** GPU-rail power is **measured** (nvidia-smi
+`power.draw`, integrated over each arm's wall-clock generation window by an
+external sampler so the frozen harnesses are untouched — `abc_power_sampler.py`
+sha256 `a2270dfb7f1f3777018ac095956c4db92c201cd000372ceea2bac54393157c6e`).
+CPU-package energy is **ESTIMATED**, not measured: this QNAP kernel exposes no
+intel-rapl powercap (checked host + container) and no UPS/smart-plug wall meter
+is available (checked NUT + HA). CPU joules = ∫ (busy-fraction × 80 W) dt, with
+busy-fraction from `/proc/stat` and 80 W the Xeon W-1250 package limit — a
+model, tier ESTIMATED. Reported as two columns: **GPU J/tok (measured)** and
+**total J/tok (GPU measured + CPU estimated)**.
+
+`J/token = (∫ power dt over the timed window) / tokens_generated` — aggregate
+over each arm's generation window (16 tokens for A Phase B, 32 for B0/B/C),
+not per-token, since `llama-bench` reports aggregate tg.
+
+**Predictions (before data):**
+
+| arm | GPU J/tok (measured) | total J/tok (GPU meas + CPU est) | falsifier (total) |
+|---|---|---|---|
+| A (selective) | 15 – 35 | **20 – 45** | outside ⇒ energy model wrong for this box |
+| B0 (all-CPU) | ~2 (idle GPU) | 12 – 28 | — |
+| B (GPU-attn + CPU-experts) | ~3 (brief attn) | **8 – 18** | — |
+| C (residency) | 4 – 12 | **8 – 16** | >1.3×B ⇒ residency costs energy it shouldn't |
+
+Energy ordering prediction: **B ≈ C < B0 < A** — same order as speed.
+
+**The non-obvious, pre-committed nuance (H2):** A's total-energy gap to B is
+**narrower than its speed gap.** A is bottlenecked on PCIe transfer (~346 ms/tok
+of DMA) during which the GPU mostly *idles* at low power, so A draws less power
+but for longer; B pegs the CPU at high power but briefly. Predicted: speed
+margin B/A ≈ 3–6×, but energy margin B/A only ≈ 1.5–2.5×. If the measured
+energy margin instead **matches** the speed margin (≈ the same multiple), H2 is
+refuted — the streaming GPU is *not* idling as modeled (it's power-hungry while
+waiting), and the fusion's premise (an idle GPU worth filling) weakens.
+
+This H2 is exactly why the hot-expert fusion is interesting on energy grounds:
+it puts the idle-during-transfer GPU to work on resident experts, so the
+fusion's energy win (if built) should exceed its speed win. Registered here,
+pre-data, as the energy rationale for the follow-on gated in the body.
