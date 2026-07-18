@@ -34,6 +34,17 @@ ADAPTERS = {
         "embed": "model.embed_tokens",
         "k_attr": "num_experts_per_tok",
     },
+    "gpt_oss": {
+        # GptOssTopKRouter (transformers>=5) returns (router_logits,
+        # router_scores, router_indices); the gate hook's out[0] is therefore
+        # the RAW logits row — stream 2 stays comparable to olmoe/qwen3_moe
+        # (whose gates emit raw logits directly). The model's own top-k is
+        # torch.topk over these same logits, so the label math is identical.
+        "block": "model.layers.{i}",
+        "gate": "model.layers.{i}.mlp.router",
+        "embed": "model.embed_tokens",
+        "k_attr": "num_experts_per_tok",
+    },
 }
 
 

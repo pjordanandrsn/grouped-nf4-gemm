@@ -63,6 +63,11 @@ TRAIN = {"epochs": 30, "batch": 512, "lr": 3.0e-3, "cosine": True, "weight_decay
 FAMILIES = {
     "olmoe": "allenai/OLMoE-1B-7B-0924",
     "qwen3_moe": "Qwen/Qwen3-30B-A3B",
+    # First k=4 family (olmoe/qwen3_moe are both k=8): E=32, L=24. On-disk
+    # MXFP4 experts dequant bit-identically then requantize to NF4 via the
+    # experts4bit-qlora gptoss-loader lane (PR #24); a 12 GB card needs
+    # --offload (experts stream from pinned CPU RAM, ~5.1 GB peak).
+    "gpt_oss": "openai/gpt-oss-20b",
 }
 
 
