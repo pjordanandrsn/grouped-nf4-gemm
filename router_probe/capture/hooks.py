@@ -46,6 +46,8 @@ ADAPTERS = {
         "k_attr": "num_experts_per_tok",
     },
 }
+# gpt-oss-120b shares the 20b module layout; E/L/k come from the config.
+ADAPTERS["gpt_oss_120b"] = ADAPTERS["gpt_oss"]
 
 
 def _resolve(model, path):

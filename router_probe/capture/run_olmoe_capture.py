@@ -68,6 +68,10 @@ FAMILIES = {
     # experts4bit-qlora gptoss-loader lane (PR #24); a 12 GB card needs
     # --offload (experts stream from pinned CPU RAM, ~5.1 GB peak).
     "gpt_oss": "openai/gpt-oss-20b",
+    # Same architecture at scale: E=128, L=36, k=4 (config-driven; the loader
+    # keys off model_type "gpt_oss" for both). ~65 GB NF4 — needs a big-VRAM
+    # box resident, or SSD-tier offload.
+    "gpt_oss_120b": "openai/gpt-oss-120b",
 }
 
 
