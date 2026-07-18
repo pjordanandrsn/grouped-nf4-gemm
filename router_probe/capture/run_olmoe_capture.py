@@ -72,6 +72,10 @@ FAMILIES = {
     # keys off model_type "gpt_oss" for both). ~65 GB NF4 — needs a big-VRAM
     # box resident, or SSD-tier offload.
     "gpt_oss_120b": "openai/gpt-oss-120b",
+    # 5th family — IBM Granite MoE (open/Apache): E=40, k=8, ~3B. A new E
+    # point at k=8 (vs OLMoE E=64 / Qwen E=128), strengthening the E-axis.
+    # GraniteMoeTopKRouter returns logits at tuple position 2 (see hooks.py).
+    "granitemoe": "ibm-granite/granite-3.0-3b-a800m-base",
 }
 
 
