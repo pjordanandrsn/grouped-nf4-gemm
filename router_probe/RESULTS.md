@@ -87,3 +87,64 @@ irreducible with probe capacity.
 
 Determinism: an independent re-run (same seed, GPU reducer) reproduced every rung and
 all three verdicts.
+
+### Family 2 — Qwen3-30B-A3B (E=128, k=8, L=48)
+
+Qwen's ladder did **not** resolve the way OLMoE's did, and pinning down *why* drove a
+CHARTER-amended re-run — the informative part of this result.
+
+**First pass (4-rung ladder, 147,456 records, `receipts/20260717/…_preA1_4rung.json`):**
+`probe-limited ×3`. attn2 (0.77) sat +0.20 above MLP-4d (0.57) and was still the top of a
+rising ladder — no ceiling established. Unlike OLMoE (flat MLP↔attn plateau at 0.91),
+Qwen's routing signal lived in cross-stream structure only the attention probe reached, and
+the 4-rung ladder ran out of rungs before flattening.
+
+**Amendment A1** (`procedure.yaml`, re-stamped pre-data): ladder extended past attn2 with
+three attention-family rungs — `attn4` (2× depth), `attn4_w512` (2× width), `attn6_w512`.
+First four rungs unchanged (OLMoE comparability preserved); criteria arithmetic untouched.
+
+**A1 re-run at two data volumes** (7-rung, local A2000 audit):
+
+| Δ | linear | MLP-d | MLP-4d | attn2 | attn4 | attn4_w512 | attn6_w512 | ceiling | verdict |
+|---|---|---|---|---|---|---|---|---|---|
+| **147k** (256 tok) `…_A1_147k.json` | | | | | | | | | |
+| 1 | 0.518 | 0.513 | 0.570 | 0.773 | 0.790 | 0.789 | 0.799 | 0.799 | probe-limited |
+| 2 | 0.512 | 0.503 | 0.558 | 0.768 | 0.785 | 0.787 | 0.788 | 0.788 | model-limited |
+| 4 | 0.496 | 0.537 | 0.514 | 0.758 | 0.776 | 0.780 | 0.785 | 0.785 | model-limited |
+| **294k** (512 tok) `receipts/20260718/…` | | | | | | | | | |
+| 1 | 0.528 | 0.532 | 0.552 | 0.792 | 0.814 | 0.826 | 0.824 | **0.826** | plateau-no-gap |
+| 2 | 0.523 | 0.522 | 0.582 | 0.785 | 0.808 | 0.820 | 0.821 | **0.821** | plateau-no-gap |
+| 4 | 0.509 | 0.435 | 0.564 | 0.778 | 0.799 | 0.813 | 0.816 | **0.816** | plateau-no-gap |
+
+Verdict at 294k, verbatim from the committed reducer (`reduce/reduce_ceiling.py`):
+
+```
+{ "family": "qwen3_moe", "band": "all_layers", "delta": 1,
+  "heldout_by_rung": [0.528, 0.532, 0.5523, 0.7921, 0.814, 0.8257, 0.8242],
+  "verdict": ["plateau-without-overfit-gap (no verdict; extend data or ladder)"] }
+{ "family": "qwen3_moe", "band": "all_layers", "delta": 2,
+  "heldout_by_rung": [0.5234, 0.5221, 0.582, 0.7845, 0.8075, 0.8198, 0.8209],
+  "verdict": ["plateau-without-overfit-gap (no verdict; extend data or ladder)"] }
+{ "family": "qwen3_moe", "band": "all_layers", "delta": 4,
+  "heldout_by_rung": [0.5088, 0.4353, 0.5643, 0.7784, 0.799, 0.8128, 0.8161],
+  "verdict": ["plateau-without-overfit-gap (no verdict; extend data or ladder)"] }
+```
+
+**Reading (CHARTER §7).** Doubling the data (147k→294k) both **raised the plateau**
+(~0.80→~0.826) and **changed the verdict** — the 147k probe/model-limited calls dissolved into
+the reducer's fourth, abstaining outcome: the ladder has flattened at ~0.82 (top-two-doublings
+held-out gain < 0.005) but the train–held-out gap has not closed enough to certify the
+capacity-not-binding condition for *model-limited*. The reducer therefore refuses to name a
+ceiling and asks to extend data or ladder. (The Δ4 MLP-d dip to 0.435, below its own linear
+rung, is an optimizer artifact at that rung; the attention rungs are unaffected.)
+
+The honest result is **not** a number but a shape: **Qwen3-30B routing is ≈0.82-predictable at
+all three leads, and its ceiling is not yet pinned.** This contrasts sharply with OLMoE (clean
+flat plateau, cleanly model-limited at 0.91) and is the concrete evidence that **the wire-law H
+is family-dependent, and that measuring it is itself data-sensitive** — a 2× data change moved a
+Qwen verdict but no OLMoE one. Decision-relevant corollary: even unpinned, ~0.82 ≪ the ~0.95
+speculation break-even, so a runtime prefetch predictor is not viable on this family regardless
+of where the true ceiling sits — pinning it exactly is scientific completeness, not a gate.
+
+Determinism: the 294k audit's first four rungs reproduced the 147k capture's independent
+values to ±0.01 across a *different* capture run (two pods, two token counts).

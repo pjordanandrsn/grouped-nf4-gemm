@@ -86,7 +86,8 @@ def train_eval_rung(rung, tX, ty, hX, hy, E, k, cfg):
     elif rung["kind"] == "mlp":
         model = MLPProbe(sum(dims), E, rung["width_mult"] * sum(dims))
     else:
-        model = AttnProbe(dims, E, heads=rung.get("heads", 4), layers=rung.get("layers", 2))
+        model = AttnProbe(dims, E, width=rung.get("width", 256),
+                          heads=rung.get("heads", 4), layers=rung.get("layers", 2))
     model = model.to(dev)
 
     def tensors(X):
