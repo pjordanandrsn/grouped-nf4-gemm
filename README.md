@@ -28,6 +28,13 @@ pip install grouped-nf4-gemm    # ships nf4_grouped + nf4_pack_ref + host_gather
 `pip install nf4gemm` and `pip install gnf4` are equivalent aliases.
 Published via trusted publishing; every wheel carries a PEP 740 attestation.
 
+**Using it inside a model?** [experts4bit-qlora](https://pypi.org/project/experts4bit-qlora/)
+ships this kernel as its optional inference path:
+`pip install "experts4bit-qlora[fast]"` then `enable_fast(model)` routes the
+frozen NF4 expert projections through `gemm_4bit_grouped` (measured 3.65× over
+its reference per-expert loop at bs=1 decode, OLMoE geometry, A2000) with
+automatic fallback for training and ineligible modules.
+
 ```python
 from nf4_grouped import gemm_4bit_grouped, dequant_ref
 ```
