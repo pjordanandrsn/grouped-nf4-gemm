@@ -207,3 +207,160 @@ along both axes measured so far, and k=4 does not, by itself, buy the
 predictability that OLMoE's k=8 shows. Decision-relevant: 0.83 ≪ the ~0.95
 speculation break-even, so the runtime-prefetch fork stays dead on this family
 too. Streams re-auditable on the capture host.
+
+### Family 2, continued — A1 at 589k (2026-07-18)
+
+**Motivation.** At 294k the reducer abstained ×3 (`plateau-without-overfit-gap`):
+the ladder had flattened at ~0.82 but the train–held-out gap wouldn't certify
+*model-limited*. Its printed remedy is "extend data or ladder." This run extends
+**data** — 589,824 records (24 prompts × 512 tok; the 294k set-A plus a
+12-prompt set-B captured via the incremental per-prompt slice banking), audited
+on the same committed 7-rung × Δ{1,2,4} ladder. Capture on a DO L40S (resident
+NF4), audit on a DO L40S; same `reduce/reduce_ceiling.py`, untouched.
+
+**A1 at 589k** (`receipts/20260718/EXPLORATORY_phase1_qwen3_moe_589k.json`):
+
+| Δ | linear | MLP-d | MLP-4d | attn2 | attn4 | attn4_w512 | attn6_w512 | ceiling | verdict |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 0.497 | 0.493 | 0.551 | 0.789 | 0.818 | 0.840 | **0.845** | 0.845 | plateau-no-gap |
+| 2 | 0.492 | 0.489 | 0.546 | 0.784 | 0.812 | 0.832 | **0.837** | 0.837 | probe-limited |
+| 4 | 0.475 | 0.449 | 0.592 | 0.777 | 0.800 | 0.820 | **0.827** | 0.827 | probe-limited |
+
+Verdicts verbatim from the committed reducer:
+
+```
+{"family": "qwen3_moe", "band": "all_layers", "delta": 1, "heldout_by_rung": [0.497, 0.4927, 0.5512, 0.789, 0.8177, 0.8404, 0.845], "verdict": ["plateau-without-overfit-gap (no verdict; extend data or ladder)"]}
+{"family": "qwen3_moe", "band": "all_layers", "delta": 2, "heldout_by_rung": [0.4918, 0.4894, 0.5457, 0.784, 0.812, 0.8318, 0.8372], "verdict": ["probe-limited (ceiling not established)"]}
+{"family": "qwen3_moe", "band": "all_layers", "delta": 4, "heldout_by_rung": [0.4752, 0.449, 0.5916, 0.7766, 0.8004, 0.8201, 0.8274], "verdict": ["probe-limited (ceiling not established)"]}
+```
+
+**Reading (CHARTER §7).** The second data-doubling moved the verdicts *again* —
+and not toward closure. The plateau rose a third time (~0.80 → ~0.826 → 0.845
+at Δ1), and at Δ2/Δ4 the extra data **re-opened the top of the ladder**: the
+attn4_w512 → attn6_w512 held-out gains grew from <0.005 at 294k to
++0.005/+0.007, so the reducer now reads a *rising* top segment and returns
+`probe-limited` — the biggest-capacity rungs are the ones that benefit most
+from more data, re-steepening exactly the segment that had flattened. Train-side
+H at the top rungs sits at 0.91–0.95 with held-out at 0.82–0.845, so the
+generalization gap persists at 4× the original A1 volume.
+
+Three verdict flips across three volumes (147k probe/model-limited mix → 294k
+abstain ×3 → 589k abstain + probe-limited ×2) is the result: **the Qwen3-30B
+ceiling is not pinnable by data scaling at this ladder** — each doubling buys
+~+0.02 of plateau and a different verdict shape. Contrast OLMoE, where every
+volume and every Δ returned the same clean model-limited 0.91. The
+family-dependence headline strengthens: for OLMoE, H is a stable, cheaply
+measurable model property; for Qwen, the measurement itself chases a moving
+plateau.
+
+**Decision corollary (unchanged, now at 3 volumes).** Every observed or
+extrapolated Qwen plateau (0.80, 0.826, 0.845, trend ≈ +0.02/doubling) sits far
+below the ≈0.95 wire-law break-even for speculative expert streaming — the
+prefetch-negative conclusion does not depend on pinning the exact ceiling.
+
+**Cost/ops note.** First 589k audit attempt on the home A2000 OOM'd (7.57 GB
+needed, ~4.7 free under co-tenant load) — the audit ran on a DO L40S instead;
+first collector window (55 min) was shorter than the Δ4 leg and the audit was
+re-run with a 135-min ceiling for the complete 3-Δ receipt. Big-ladder audits
+need a 48 GB card or a true quiet window, and collectors must outlive the
+longest leg.
+
+
+### Family 4 — gpt-oss-120b (E=128, k=4, L=36) at two data volumes
+
+Same architecture as Family 3 (gpt-oss-20b, E=32) at E=128 — the E-axis test
+at fixed k=4. Resident NF4 on H200s (DO), experts4bit streaming loader,
+`gpt_oss` adapter (config-driven E/L).
+
+| volume | Δ | linear | MLP-d | MLP-4d | attn2 | attn4 | attn4_w512 | attn6_w512 | ceiling | verdict |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 110k | 1 | 0.300 | 0.230 | 0.225 | 0.728 | 0.744 | 0.739 | 0.745 | 0.745 | probe-limited |
+| 110k | 2 | 0.299 | 0.225 | 0.230 | 0.718 | 0.733 | 0.730 | 0.740 | 0.740 | probe-limited |
+| 110k | 4 | 0.293 | 0.223 | 0.219 | 0.706 | 0.720 | 0.722 | 0.722 | 0.722 | model-limited |
+| 221k | 1 | 0.355 | 0.267 | 0.256 | 0.761 | 0.776 | 0.782 | 0.787 | **0.787** | plateau-no-gap |
+| 221k | 2 | 0.354 | 0.247 | 0.238 | 0.754 | 0.770 | 0.776 | 0.779 | 0.779 | plateau-no-gap |
+| 221k | 4 | 0.343 | 0.246 | 0.237 | 0.739 | 0.755 | 0.762 | 0.763 | 0.763 | plateau-no-gap |
+
+Verdicts from the committed reducer (`reduce/reduce_ceiling.py`), verbatim
+class names in the table; train-side H at the top rungs is 0.97–0.99 at both
+volumes, so the generalization gap never closes.
+
+**Reading (CHARTER §7).** Doubling the data moved every verdict and lifted the
+plateau 0.745 → 0.787 — gpt-oss-120b is **data-starved, tracking Qwen3-30B's
+arc one doubling behind** (mixed probe/model-limited → abstain-with-rising-
+plateau). The honest statement of its H is therefore **≥ 0.787 and unpinned**,
+not the 110k run's 0.745.
+
+**E-axis reading, revised (5 families, honest form).** The earlier framing
+"E=32→E=128 drops H 0.83→0.745 at k=4" overstated what the receipts support —
+0.745 was a data-starved lower bound. What the five families actually show:
+
+- **Low-E families pin cleanly at first volume** (model-limited ×3):
+  gpt-oss-20b E=32 → 0.83; granite E=40 → 0.90; OLMoE E=64 → 0.91.
+- **Both E=128 families are data-unpinnable** at every volume tried:
+  Qwen3-30B (k=8) — three doublings to 589k, plateau 0.80→0.845, never
+  certifies; gpt-oss-120b (k=4) — two volumes, plateau 0.722→0.787, never
+  certifies.
+
+So expert count doesn't merely lower H — **at E=128 it makes H unmeasurable by
+data scaling on this ladder**, at both k=4 and k=8. The k=4/E=32 point (0.83,
+pinned) still sits below every pinned k=8 family (0.90–0.91), so a k effect
+survives; the E=128 magnitude claim should be stated as bounds
+(≥0.787 / ≥0.845), not point values.
+
+**Curiosity on record:** at both volumes the MLP rungs (0.22–0.27) sit far
+*below* the linear rung (0.29–0.36) — unique to this family; the attention
+rungs carry the entire ladder. Not investigated further here.
+
+**Ops note.** The 512-tok lane took four droplets to land — none of the
+failures were science: a stale bundle predating `--receipt-suffix` (the
+incremental-capture upgrade had never been committed; recovered into git,
+`c5c9b42`), a `snapshot_download` wall on the repo's consolidated
+`original/*` file (fixed with `ignore_patterns` + a download gate), and two
+watcher-destroyed SSH-dark-during-download droplets before the API-check law
+landed. Capture itself: ~45 min on an H200, audit on-box.
+
+
+### Family 5 — Granite-3.0-3B-A800M (E=40, k=8, L=32)
+
+**Why this family.** A low-E anchor at k=8: OLMoE (E=64) and Qwen3-30B (E=128)
+share k=8, and the gpt-oss pair showed H falling E=32→E=128 at fixed k=4.
+Granite (E=40, k=8, Apache) tests whether the k=8 axis shows the same
+E-dependence. Capture: 98,304 records (12 prompts × 256 tok × 32 layers),
+resident NF4 via the experts4bit streaming loader (`granitemoe` adapter —
+router at `block_sparse_moe.router`, logits at tuple position 2, expert count
+from `num_local_experts`), DO H100.
+
+| Δ | linear | MLP-d | MLP-4d | attn2 | attn4 | attn4_w512 | attn6_w512 | ceiling | verdict |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 0.569 | 0.895 | 0.898 | 0.888 | 0.898 | 0.900 | **0.901** | 0.901 | **model-limited** |
+| 2 | 0.555 | 0.887 | 0.891 | 0.882 | 0.890 | 0.892 | 0.888 | 0.892 | **model-limited** |
+| 4 | 0.563 | 0.881 | 0.885 | 0.876 | 0.884 | 0.884 | 0.881 | 0.885 | **model-limited** |
+
+Verdicts from the committed reducer (`reduce/reduce_ceiling.py`):
+**model-limited at all three leads** — the second family (after OLMoE) to get
+the clean verdict, at the first attempt and the smallest data volume of any
+family.
+
+**The shape is the finding.** Granite's ladder is flat from the *MLP-d rung
+onward* — a one-hidden-layer MLP on the local features already reads 0.895,
+and five further rungs of capacity (through attn6_w512) buy +0.006. Granite's
+future routing is almost entirely predictable from cheap, local,
+current-position features; there is no cross-stream structure for the
+attention probes to find (contrast Qwen, where attn2 sat +0.20 above MLP-4d
+and the ladder never flattened). Same clean-plateau class as OLMoE, reached
+one rung earlier.
+
+**E-axis reading (5 families).** At k=8: E=40 → 0.90, E=64 → 0.91, E=128 →
+≈0.845-and-unpinned. At k=4: E=32 → 0.83, E=128 → 0.745. Both k-slices are
+consistent with H declining in E with the decline concentrated at high E
+(≈flat 40→64, down at 128), and k=8 sitting above k=4 at comparable E. Granite
+strengthens the headline: **the wire-law H is a family property dominated by
+expert count, not top-k alone.**
+
+**Ops note.** Three fires to land: (1) config crash — `GraniteMoeConfig` names
+the expert count `num_local_experts` (loader had already quantized 32/32
+layers cleanly, validating the granitemoe path); (2) H100 boot race — CUDA
+init returned error 802 (fabric manager not yet up); the runner now retries
+CUDA init for up to 6 min before failing loud.
+

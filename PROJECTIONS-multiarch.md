@@ -87,3 +87,121 @@ models **larger than 192 GB**. Rented MI300X is the cheapest confirmatory
 
 *Constants captured 2026-07-15; cloud rates and street prices move — re-verify
 before committing spend (R6).*
+
+
+---
+
+## Addendum 1 (2026-07-18) — serialization term; gen5 bands revised
+
+**Forward-only correction.** The rows above are stamped and untouched; this
+addendum registers a term the original model omitted, refits the affected
+streaming-regime bands, and pre-registers the expectation that the original
+gen5 rows falsify while these revised bands hold. Tier: the revised bands are
+**projections under an estimated term** — one tier below the original rows'
+pure-waterfall status.
+
+### What the original rows assumed
+
+The streaming model above is `tok/s = link_GBps / bytes_per_token`
+(`projections/model.py:9`, `streaming_waterfall_toks` at
+`projections/model.py:33`): every per-token expert byte crosses the link, and
+all other work hides under the copy. Its anchors (Phase A 44.3 GB/s → 5.55
+tok/s; 671B 55.5 → 4.59) are fixed-token *streaming-form* measurements, where
+nothing on the critical path waits for a generated token.
+
+### What the data showed
+
+Real autoregressive decode carries per-token work that does **not** hide under
+the copy: the router/dispatch/launch path runs serially between transfers
+(established across the prefetch arc — B3 measured the router-serialization
+tax directly, B5 closed the mechanism). Five flagship Phase-B hosts (four RunPod H100s, one DigitalOcean H200) with
+on-box link microbenches and off-mode (shipped-config) decode:
+
+| receipt | link L (GB/s) | B/L (ms) | measured off (tok/s) | 1/off (ms) | implied t_s (ms) | off ÷ waterfall |
+|---|---|---|---|---|---|---|
+| `bench/phase3/flagship/phaseB2.json` | 45.45 | 175.7 | 4.303 | 232.4 | **56.7** | 0.756 |
+| `bench/phase3/flagship/phaseB3.json` | 55.09 | 144.9 | 4.331 | 230.9 | **86.0** | 0.628 |
+| `bench/phase3/flagship/phaseB4.json` | 51.78 | 154.2 | 4.351 | 229.8 | **75.7** | 0.671 |
+| `bench/phase3/flagship/phaseB5.json` | 44.98 | 177.5 | 4.330 | 231.0 | **53.5** | 0.768 |
+| `bench/phase3/flagship/do_replication/phaseB_do.json` | 55.35 | 144.2 | 4.430 | 225.7 | **81.5** | 0.639 |
+
+(`B = per_token_gb = 7.9839` from the same receipts; off = median of each
+receipt's `toks_per_s_off` runs; three-to-six runs each, greedy-identity
+gated.) The faster the link, the smaller B/L — and the further
+measured decode falls below the waterfall (0.77× at 45 GB/s → 0.63× at
+55 GB/s). At gen5-class links the omitted term is no longer a correction; it
+is comparable to the transfer itself.
+
+### The revised model
+
+```
+tok/s ≈ 1 / (B/L + t_s)        t_s = per-token serialized work
+```
+
+Fitted per host: **t_s = 53.5–86.0 ms** (median 76 ms, spread 1.61× — same
+order on every host; the sanity gate for a one-term correction passes).
+Evidence tier: *estimated from 5 hosts' measured throughput; not independently
+confirmed on desktop silicon.*
+
+Honest limit of the fit, on the record: a **single** t_s constant does not
+reconcile the five hosts — the measured per-token total is nearly flat
+in-sample (225.7–232.4 ms while B/L spans 144.2–177.5 ms), so the per-host
+t_s anti-correlates with link speed. Two readings are compatible with the
+data: per-host serial-path variance (CPU/driver/launch differences across
+pods), or partial overlap of the serial work with the transfer (t_s grows as
+the copy window shrinks). The receipts cannot distinguish them; the fitted
+*range* brackets both, and at gen5 links both readings land inside the
+Addendum-1 band below (the flat-total reading pins ~4.3–4.4 tok/s; the
+additive reading spans the band).
+
+### Revised rows — Addendum-1 bands (supersede the original gen4/gen5 streaming rows for falsification purposes)
+
+`tok/s = 1/(B/L + t_s)` with the file's own link bands and B = 7.9839,
+t_s ∈ [53.5, 86.0] ms:
+
+| platform | link band | Addendum-1 band (235B decode) | falsification |
+|---|---|---|---|
+| Desktop gen5 ×16 (5090 / RDNA4 host) | 48–55 GB/s | **4.0–5.0 tok/s** | <3.6 or >5.5 |
+| AMD RDNA4 (RX 9070 / XT) | 48–55 GB/s | **4.0–5.0 tok/s** | <3.6 or >5.5 |
+| Desktop gen4 ×16 / Arc A770 / Arc B580 | 24–28 GB/s | **2.4–3.0 tok/s** | <2.2 or >3.3 |
+
+Two notes the derivation forces:
+
+- **The gen4 rows are *not* immune.** At 24–28 GB/s the transfer (285–333 ms)
+  still dominates, but t_s at 53.5–86.0 ms moves the band to 2.4–3.0 —
+  entirely at-or-below the original 3.0–3.5 band-low. The original gen4 rows
+  are as much at risk as gen5, just by a smaller ratio.
+- **The 30B-A3B secondary line inherits the omission with an unmeasured
+  magnitude.** t_s here was measured on the 235B pipeline (94 layers); the
+  30B pipeline (48 layers, different serial path) has no measured off-mode
+  anchor, and t_s does not obviously transfer. Because B/L is small for 30B
+  (≈20 ms at gen5), *any* t_s of this order would dominate — the derived
+  30B streaming numbers above should be read as **waterfall ceilings, not
+  decode predictions**, until a 30B off-mode anchor is measured. No constant
+  is fitted here.
+
+### Standing prediction
+
+A real gen5 desktop confirmatory is expected to land **inside the Addendum-1
+band (4.0–5.0) and below the original band (6.0–6.9)** — i.e., we predict the
+original gen5 rows falsify and the revised rows hold. Either outcome is
+informative; both are pre-registered as of this addendum's stamp.
+
+### What would falsify this addendum
+
+A gen5 measurement at or above the original 6.0–6.9 band. That would mean t_s
+is hideable on desktop topologies — plausible mechanisms would include a
+different IOMMU/driver launch path or deeper driver-side pipelining than the
+datacenter hosts showed — and the commitment is to investigate that mechanism,
+not to hand-wave the number.
+
+### Related surfaces (not edited here)
+
+- `README.md` (call-for-confirmatories headline) restates the original gen4/gen5 headline numbers.
+- `PROTOCOL-multiarch.md:49–50`'s streaming pass band requires
+  `achieved ≥ 0.80 × on-box waterfall`; the five hosts above measured
+  0.63–0.77×, so that clause embeds the same omission and would fail a
+  faithful run with a perfect kernel.
+
+Both are flagged for a forward-only pointer/amendment decision; neither is
+touched by this addendum.

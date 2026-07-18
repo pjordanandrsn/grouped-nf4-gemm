@@ -74,3 +74,27 @@ environment fingerprint, correctness-gate result, the per-cell measured vs
 projected table, the reducer verdict, and — on failure — the mechanism. Hash +
 `ots stamp`. Update the `PROJECTIONS-multiarch.md` row's tier only via a
 forward-only changelog line (R2 — the stamped projection file is never edited).
+
+---
+
+## Amendment 1 (2026-07-18) — streaming pass band follows Addendum-1 bands
+
+**Forward-only.** The clauses above are stamped and untouched; this amendment
+supersedes two of them for streaming-regime *real-decode* cells, following
+`PROJECTIONS-multiarch.md` Addendum 1 (the serialization term `t_s`, fitted
+from five flagship Phase-B hosts).
+
+1. **Band clause.** "Decode tok/s within the projected band's ±15%" now reads
+   the **Addendum-1 band** for the row (gen5 4.0–5.0, gen4-class 2.4–3.0
+   tok/s for 235B-A22B), not the original pure-waterfall band.
+2. **Floor clause.** "`achieved ≥ 0.80 × on-box waterfall`" is superseded:
+   the five measured hosts achieved 0.63–0.77× of waterfall with a correct
+   kernel — the floor as written embeds the omitted term and would fail a
+   faithful run. It becomes **`achieved ≥ 0.80 × the Addendum-1 predicted
+   tok/s for the measured on-box link`** (equivalently ~0.50–0.65× waterfall
+   at gen5 links). Report `achieved / waterfall` as before — it is the
+   diagnostic that localizes t_s.
+
+Unified-regime clauses are unaffected. A measurement satisfying the *original*
+clauses (≥0.80× waterfall) would simultaneously refute Addendum 1 — report it
+at full volume; that outcome is pre-registered as informative in the addendum.
