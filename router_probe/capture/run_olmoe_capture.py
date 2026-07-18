@@ -102,7 +102,10 @@ def capture(out_dir, n_tokens, n_prompts, family="olmoe", offload=False):
                                        quant_type="nf4")
     model.eval()
     cfg = model.config
-    E, k = cfg.num_experts, cfg.num_experts_per_tok
+    # expert-count attr varies by family: olmoe/qwen3_moe/gpt_oss use
+    # num_experts; granitemoe uses num_local_experts
+    E = getattr(cfg, "num_experts", None) or cfg.num_local_experts
+    k = cfg.num_experts_per_tok
     L = cfg.num_hidden_layers
     cap = DecodeCapture(model, family=family, layers=range(L))
     cap.set_k(k)
