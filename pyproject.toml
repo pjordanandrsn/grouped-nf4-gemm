@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "grouped-nf4-gemm"
-version = "0.1.0"
+version = "0.1.1"
 description = "Fused grouped GEMM on bitsandbytes NF4-packed weights with host streaming, on consumer GPUs."
 readme = "README.md"
 license = { text = "MIT" }
