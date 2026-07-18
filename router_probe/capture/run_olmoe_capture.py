@@ -87,7 +87,7 @@ FAMILIES = {
 
 
 def capture(out_dir, n_tokens, n_prompts, family="olmoe", offload=False,
-            prompt_set="a"):
+            prompt_set="a", incremental=False, prompt_start=0):
     plist = PROMPT_SETS[prompt_set]
     from transformers import AutoTokenizer
     from experts4bit_qlora.loader import load_moe_4bit_streaming
@@ -118,7 +118,9 @@ def capture(out_dir, n_tokens, n_prompts, family="olmoe", offload=False,
     cap.arm()
     tok_id = 0
     rec_tok, rec_layer = [], []
-    for pi in range(min(n_prompts, len(plist))):
+    for pi in range(prompt_start, min(n_prompts, len(plist))):
+        p_start = len(cap.buf["topk"])     # slice bounds for incremental banking
+        rt_start = len(rec_tok)
         ids = tok(plist[pi], return_tensors="pt").input_ids.cuda()
         with torch.no_grad():
             out = model(ids, use_cache=True)
@@ -136,7 +138,36 @@ def capture(out_dir, n_tokens, n_prompts, family="olmoe", offload=False,
             rec_layer += list(range(added))       # layer-major within the token
             tok_id += 1
         cap._decode_mode = False
+        if incremental:
+            # Bank this prompt's records NOW as a self-contained stream dir —
+            # a pod death loses at most the prompt in flight, and a fresh pod
+            # resumes with --prompt-start (greedy decode is per-prompt
+            # deterministic, so slices from different pods are identical to a
+            # single-pod capture). combine_streams.py reassembles slices; the
+            # cross-token mask treats slice boundaries like any token boundary.
+            e = len(cap.buf["topk"])
+            sdir = Path(out_dir).parent / f"streams_p{pi:02d}"
+            write_capture(sdir,
+                          np.stack(cap.buf["hidden"][p_start:e]),
+                          np.stack(cap.buf["logits"][p_start:e]),
+                          np.stack(cap.buf["embed"][p_start:e]),
+                          np.stack(cap.buf["topk"][p_start:e]),
+                          {"E": E, "k": k, "family": family,
+                           "decode_only": True, "records": e - p_start,
+                           "tier": "EXPLORATORY", "model": name,
+                           "load": "nf4-4bit" + ("+expert-offload" if offload else ""),
+                           "n_layers": L, "prompts": 1,
+                           "prompt_set": prompt_set, "prompt_index": pi,
+                           "tokens_per_prompt": n_tokens,
+                           "input_note": "incremental per-prompt slice, greedy decode"},
+                          record_token=rec_tok[rt_start:],
+                          record_layer=rec_layer[rt_start:])
+            print(f"slice {pi:02d} banked ({e - p_start} records)", flush=True)
     cap.disarm()
+    if incremental:
+        # slices are the artifact; no combined pod-side save (the local
+        # combiner is canonical, and skipping it halves pod disk/time).
+        return E, k, L, len(cap.buf["topk"])
     n = cap.save(out_dir, E=E, k=k,
                  extra_meta={"model": name, "family": family,
                              "load": "nf4-4bit" + ("+expert-offload" if offload else ""),
@@ -192,7 +223,19 @@ def main():
     ap.add_argument("--receipt-suffix", default="",
                     help="append _<suffix> to the receipt filename so an "
                          "extended-data audit never clobbers a sealed receipt")
+    ap.add_argument("--incremental", action="store_true",
+                    help="bank each prompt as a self-contained slice dir "
+                         "(<out>/streams_pNN) the moment it finishes — pod "
+                         "death loses only the prompt in flight; requires "
+                         "--skip-audit (the audit runs on the locally "
+                         "combined dir)")
+    ap.add_argument("--prompt-start", type=int, default=0,
+                    help="resume an incremental capture from this prompt "
+                         "index (earlier slices already banked elsewhere)")
     args = ap.parse_args()
+    if args.incremental and not args.skip_audit:
+        ap.error("--incremental is a pod capture mode; use --skip-audit and "
+                 "audit the locally combined dir")
     t0 = time.time()
     out = args.out or f"/root/router_probe_{args.family}"
     stream_dir = out + "/streams"
@@ -205,7 +248,9 @@ def main():
         print(f"audit-only: {n} records from {stream_dir} (E={E} k={k})", flush=True)
     else:
         E, k, L, n = capture(stream_dir, args.tokens, args.prompts, args.family,
-                             args.offload, prompt_set=args.prompt_set)
+                             args.offload, prompt_set=args.prompt_set,
+                             incremental=args.incremental,
+                             prompt_start=args.prompt_start)
         print(f"captured {n} records (family={args.family} E={E} k={k} L={L})", flush=True)
         if args.skip_audit:
             print("skip-audit: streams written, exiting (pod mode)", flush=True)
