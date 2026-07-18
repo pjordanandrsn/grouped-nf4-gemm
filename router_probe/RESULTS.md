@@ -148,3 +148,62 @@ of where the true ceiling sits — pinning it exactly is scientific completeness
 
 Determinism: the 294k audit's first four rungs reproduced the 147k capture's independent
 values to ±0.01 across a *different* capture run (two pods, two token counts).
+
+### Family 3 — gpt-oss-20b (E=32, k=4, L=24)
+
+*(EXPLORATORY, 2026-07-18 — the first k=4 family; olmoe and qwen3_moe are both k=8.)*
+
+**Setup.**
+- Model loaded in **NF4 via `Experts4bit`** through the gpt_oss lane
+  (experts4bit-qlora ≥0.4.0): on-disk **MXFP4** expert tensors dequantize
+  bit-identically to transformers' reference and requantize to NF4; capture ran
+  with **expert offload** (~5.1 GB peak) on the same local A2000. Adapter-only
+  instrument change: the router is `model.layers.{i}.mlp.router`, and
+  transformers≥5 `GptOssTopKRouter` returns `(router_logits, scores, indices)`,
+  so the standard gate hook's `out[0]` is the raw logits row — stream 2 is
+  comparable across families. `procedure.yaml` bytes untouched.
+- bs1 greedy decode, 256 tokens × 12 diverse prompts → **73,728 (token, layer)
+  records**; the stamped 7-rung A1 ladder at Δ ∈ {1, 2, 4}.
+- Device: local RTX A2000 12 GB (capture + audit, one process, 2 h 18 m wall).
+  Receipt: `receipts/20260718/EXPLORATORY_phase1_gpt_oss.json` (hashed in
+  `SHA256SUMS`).
+
+Heldout set-agreement H by rung (chance = k/E = 0.125):
+
+| Δ | linear | MLP-d | MLP-4d | attn2 | attn4 | attn4-w512 | attn6-w512 | best | reducer verdict |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 0.440 | 0.383 | 0.405 | 0.820 | 0.833 | 0.823 | 0.826 | **0.833** | model-limited |
+| 2 | 0.440 | 0.398 | 0.395 | 0.817 | 0.825 | 0.808 | 0.819 | 0.825 | probe-limited |
+| 4 | 0.452 | 0.409 | 0.393 | 0.801 | 0.810 | 0.790 | 0.800 | 0.810 | probe-limited |
+
+Verdicts, verbatim from the committed reducer (`reduce/reduce_ceiling.py`):
+
+```
+{ "family": "gpt_oss", "band": "all_layers", "delta": 1,
+  "heldout_by_rung": [0.44001, 0.38277, 0.40532, 0.82035, 0.83333, 0.82263, 0.82613],
+  "verdict": ["model-limited"] }
+{ "family": "gpt_oss", "band": "all_layers", "delta": 2,
+  "heldout_by_rung": [0.4403, 0.39804, 0.39495, 0.81652, 0.8248, 0.80811, 0.81936],
+  "verdict": ["probe-limited (ceiling not established)"] }
+{ "family": "gpt_oss", "band": "all_layers", "delta": 4,
+  "heldout_by_rung": [0.45247, 0.40916, 0.39272, 0.80083, 0.81021, 0.79045, 0.80007],
+  "verdict": ["probe-limited (ceiling not established)"] }
+```
+
+**Reading (CHARTER §7).** At Δ=1 the attention ladder **saturates** — attn4 reads
+0.833 and both wider/deeper rungs sit flat at 0.823–0.826 — with a large
+train–held-out gap, so the reducer certifies *model-limited*: **≈0.83 is the
+router's conditional entropy one layer ahead on this family.** The flat-feature
+rungs collapse (MLP rungs 0.38–0.41, below the 0.44 linear floor): as on
+Qwen3-MoE, the predictive signal lives in cross-stream structure that only the
+attention probes exploit — but unlike Qwen3-MoE, the ladder then saturates
+cleanly. Multi-layer leads (Δ=2/4 ≈0.82/0.80) remain probe-limited at this
+record count.
+
+Cross-family picture after three families: OLMoE (k=8) ≈0.91, cleanly
+model-limited; Qwen3-30B (k=8) ≈0.82 plateau, ceiling unpinned at 294k records;
+**gpt-oss-20b (k=4) ≈0.83, certified at Δ=1.** The wire-law H is family-dependent
+along both axes measured so far, and k=4 does not, by itself, buy the
+predictability that OLMoE's k=8 shows. Decision-relevant: 0.83 ≪ the ~0.95
+speculation break-even, so the runtime-prefetch fork stays dead on this family
+too. Streams re-auditable on the capture host.
