@@ -1,0 +1,54 @@
+start 2026-07-18T23:41:56Z
+NVIDIA H100 80GB HBM3, 81559 MiB, 81079 MiB
+RAM total=235GB avail=233GB
+=== download GGUF (~59GB, direct) ===
+download rc=0 in 189s, size 60G
+ghcr.io/ggml-org/llama.cpp:full-cuda
+llama.cpp = docker :full-cuda (--bench)
+=== ARMS (t=8, n32/p8, r2) ===
+=== RESIDENT  (all experts on GPU, -ngl 99) ===
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 81079 MiB):
+  Device 0: NVIDIA H100 80GB HBM3, compute capability 9.0, VMM: yes, VRAM: 81079 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl | threads |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | ------: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |       8 |             pp8 |       529.69 ± 76.77 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |       8 |            tg32 |        234.07 ± 5.03 |
+=== B  GPU-attn + CPU-experts (--n-cpu-moe 36) ===
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 81079 MiB):
+  Device 0: NVIDIA H100 80GB HBM3, compute capability 9.0, VMM: yes, VRAM: 81079 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl |  n_cpu_moe | threads |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | ---------: | ------: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         36 |       8 |             pp8 |         32.55 ± 2.66 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         36 |       8 |            tg32 |         25.49 ± 0.70 |
+=== C1 residency (--n-cpu-moe 24) ===
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 81079 MiB):
+  Device 0: NVIDIA H100 80GB HBM3, compute capability 9.0, VMM: yes, VRAM: 81079 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl |  n_cpu_moe | threads |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | ---------: | ------: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         24 |       8 |             pp8 |         46.40 ± 1.14 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         24 |       8 |            tg32 |         36.81 ± 0.13 |
+=== C2 residency (--n-cpu-moe 12) ===
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 81079 MiB):
+  Device 0: NVIDIA H100 80GB HBM3, compute capability 9.0, VMM: yes, VRAM: 81079 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl |  n_cpu_moe | threads |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | ---------: | ------: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         12 |       8 |             pp8 |         87.56 ± 3.92 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         12 |       8 |            tg32 |         63.41 ± 0.90 |
+=== B0 all-CPU (-ngl 0) ===
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 81079 MiB):
+  Device 0: NVIDIA H100 80GB HBM3, compute capability 9.0, VMM: yes, VRAM: 81079 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl | threads |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | ------: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |   0 |       8 |             pp8 |         26.65 ± 0.30 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |   0 |       8 |            tg32 |         14.79 ± 0.04 |
+ALLDONE
