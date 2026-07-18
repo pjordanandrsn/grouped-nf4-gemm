@@ -7,7 +7,7 @@ All six prior flagship hosts were RunPod virtual pods. These two runs put the
 pipeline on a different provider (DigitalOcean GPU droplets, `gpu-h200x1-141gb`,
 image `gpu-h100x1-base`), hosts #6 (Phase A) and #7 (Phase B).
 
-## Phase A — synthetic-weight A-B-C-A (H200, link 55.5 GB/s → waterfall 6.94 tok/s)
+## Phase A — synthetic-weight A-B-C-A (H100 80GB, ams3; link 55.5 GB/s → waterfall 6.94 tok/s)
 
 | mode | tok/s | fraction of waterfall |
 |---|---|---|
@@ -19,11 +19,13 @@ image `gpu-h100x1-base`), hosts #6 (Phase A) and #7 (Phase B).
 - **Fused replicates**: 93.5% of the per-box waterfall, A-B-C-A bracketing
   stable to 0.03% — same fraction as the RunPod 55 GB/s pod (93.5–93.6%).
 - **Torch dequant replicates**: 1.82 tok/s ≈ the 1.80–1.81 seen on every host.
-- **The bnb-CUDA gap compresses on faster compute.** On the RunPod H100 the bnb
-  baseline reached only 40% of waterfall (fused 2.33× tok/s); on this H200 it
-  reaches 81.7% (fused 1.14×). Direction is exactly what the architecture
-  predicts: the bnb path is compute-bound (per-expert dequant+GEMM must fit
-  under the copy shadow), so faster compute hides more of it. The *ordering*
+- **The bnb-CUDA gap compresses across hosts.** On the RunPod H100 (55 GB/s)
+  the bnb baseline reached only 40% of waterfall (fused 2.33× tok/s); on this
+  DO H100 at the same link class it reaches 81.7% (fused 1.14×). Same silicon
+  name, very different bnb showing — the bnb path is compute-bound (per-expert
+  dequant+GEMM must fit under the copy shadow), so its fraction tracks the
+  host's effective compute/driver behavior, not the link; the DO box (newer
+  driver 580.173, torch 2.6/cu124 stack) hides far more of it. The *ordering*
   (fused > bnb > torch) and the fused path's ceiling fraction are
   arch-invariant; the *margin* over bnb is a function of the box's
   compute-to-link ratio. The registered H100 result stands as registered; this
