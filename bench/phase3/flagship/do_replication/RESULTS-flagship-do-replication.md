@@ -1,9 +1,7 @@
-# DRAFT — Flagship replication on DigitalOcean (Phase A + Phase B, first non-RunPod provider)
+# Flagship replication on DigitalOcean (Phase A + Phase B, first non-RunPod provider)
 
-> **DRAFT / addendum-hold.** Receipts banked in this directory
-> (`flag_*.json`, `phaseB_do.json`); not stamped, not linked from the
-> flagship RESULTS docs until reviewed. EXPLORATORY tier — Phase A here is
-> **qualified** by a suite-environment anomaly disclosed below.
+**EXPLORATORY tier.** Receipts in this directory (`flag_*.json`, `phaseB_do.json`).
+Phase A here is **qualified** by a suite-environment anomaly disclosed below.
 
 All six prior flagship hosts were RunPod virtual pods. These two runs put the
 pipeline on a different provider (DigitalOcean GPU droplets, `gpu-h200x1-141gb`,
