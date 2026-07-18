@@ -1,5 +1,8 @@
 # grouped-nf4-gemm — single-launch W4A16 GEMM over fused NF4 MoE expert stacks
 
+[![CI](https://github.com/pjordanandrsn/grouped-nf4-gemm/actions/workflows/ci.yml/badge.svg)](https://github.com/pjordanandrsn/grouped-nf4-gemm/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/grouped-nf4-gemm)](https://pypi.org/project/grouped-nf4-gemm/)
+
 A Triton kernel that runs the grouped expert GEMM **directly on NF4-packed
 weights** — one launch for all active experts, LUT decode to fp32 in
 registers, blockwise fp32 absmax, fp32 accumulation, bf16 epilogue. No
@@ -15,6 +18,19 @@ trip (plus ~3 kernel launches per active expert) dominates. Fusing the decode
 into the GEMM deletes it. The measured side effect worth stating plainly:
 **fp32 accumulation makes the fused path *more accurate* than the
 materialize-to-bf16 baseline, in every cell ever measured here.**
+
+## Install
+
+```bash
+pip install grouped-nf4-gemm    # ships nf4_grouped + nf4_pack_ref + host_gather (torch + triton)
+```
+
+`pip install nf4gemm` and `pip install gnf4` are equivalent aliases.
+Published via trusted publishing; every wheel carries a PEP 740 attestation.
+
+```python
+from nf4_grouped import gemm_4bit_grouped, dequant_ref
+```
 
 ## The claim (blind-confirmed, receipts in-repo)
 
