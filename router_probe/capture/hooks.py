@@ -34,6 +34,30 @@ ADAPTERS = {
         "embed": "model.embed_tokens",
         "k_attr": "num_experts_per_tok",
     },
+    "gpt_oss": {
+        # GptOssTopKRouter (transformers>=5) returns (router_logits,
+        # router_scores, router_indices); the gate hook's out[0] is therefore
+        # the RAW logits row — stream 2 stays comparable to olmoe/qwen3_moe
+        # (whose gates emit raw logits directly). The model's own top-k is
+        # torch.topk over these same logits, so the label math is identical.
+        "block": "model.layers.{i}",
+        "gate": "model.layers.{i}.mlp.router",
+        "embed": "model.embed_tokens",
+        "k_attr": "num_experts_per_tok",
+    },
+}
+# gpt-oss-120b shares the 20b module layout; E/L/k come from the config.
+ADAPTERS["gpt_oss_120b"] = ADAPTERS["gpt_oss"]
+ADAPTERS["granitemoe"] = {
+    # GraniteMoeTopKRouter (transformers>=5) returns
+    # (top_k_index, top_k_weights, router_logits) — router_logits is at
+    # position 2, NOT 0. logits_pos pins that so the gate hook captures the
+    # raw logits (comparable to the other families) rather than the indices.
+    "block": "model.layers.{i}",
+    "gate": "model.layers.{i}.block_sparse_moe.router",
+    "embed": "model.embed_tokens",
+    "k_attr": "num_experts_per_tok",
+    "logits_pos": 2,
 }
 
 
@@ -89,7 +113,8 @@ class DecodeCapture:
             self._embed_now = out.detach()[0, -1].float().cpu().numpy()
 
     def _gate_hook(self, mod, args, out):
-        logits = out[0] if isinstance(out, tuple) else out
+        lp = self.ad.get("logits_pos", 0)   # which tuple element is router_logits
+        logits = out[lp] if isinstance(out, tuple) else out
         if not self._decode_mode or self._embed_now is None:
             return
         v = logits.detach().reshape(-1, logits.shape[-1])[-1].float().cpu().numpy()

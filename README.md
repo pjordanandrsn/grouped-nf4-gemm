@@ -1,5 +1,8 @@
 # grouped-nf4-gemm — single-launch W4A16 GEMM over fused NF4 MoE expert stacks
 
+[![CI](https://github.com/pjordanandrsn/grouped-nf4-gemm/actions/workflows/ci.yml/badge.svg)](https://github.com/pjordanandrsn/grouped-nf4-gemm/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/grouped-nf4-gemm)](https://pypi.org/project/grouped-nf4-gemm/)
+
 A Triton kernel that runs the grouped expert GEMM **directly on NF4-packed
 weights** — one launch for all active experts, LUT decode to fp32 in
 registers, blockwise fp32 absmax, fp32 accumulation, bf16 epilogue. No
@@ -15,6 +18,19 @@ trip (plus ~3 kernel launches per active expert) dominates. Fusing the decode
 into the GEMM deletes it. The measured side effect worth stating plainly:
 **fp32 accumulation makes the fused path *more accurate* than the
 materialize-to-bf16 baseline, in every cell ever measured here.**
+
+## Install
+
+```bash
+pip install grouped-nf4-gemm    # ships nf4_grouped + nf4_pack_ref + host_gather (torch + triton)
+```
+
+`pip install nf4gemm` and `pip install gnf4` are equivalent aliases.
+Published via trusted publishing; every wheel carries a PEP 740 attestation.
+
+```python
+from nf4_grouped import gemm_4bit_grouped, dequant_ref
+```
 
 ## The claim (blind-confirmed, receipts in-repo)
 
@@ -199,7 +215,9 @@ prediction, not a marketing table.
 (discrete GPU) are anchored to the measured flagship numbers to <2%; unified-memory
 rows are *ceilings only* and real decode sits below them. Headlines, all
 projected: 235B-A22B at **3.0–3.5 tok/s** on a gen4-×16 desktop, **6.0–6.9** on
-gen5 (5090 / RDNA4), and a **17–22 tok/s ceiling** on 128 GB unified boxes
+gen5 (5090 / RDNA4) — **both revised down by Addendum 1** (a measured
+serialization term; real-decode bands now **2.4–3.0** gen4 / **4.0–5.0** gen5,
+see `PROJECTIONS-multiarch.md`) — and a **17–22 tok/s ceiling** on 128 GB unified boxes
 (Strix Halo / DGX Spark / Jetson Thor). NF4-vs-bf16 is a **3.56×** byte reduction
 (absmax-inclusive), not the round 4×.
 
@@ -223,3 +241,34 @@ Verdict: within band? / refutes row?   Attach: results JSONL
 MIT ([LICENSE](LICENSE)). Portions developed with Claude Code as an AI
 assistant under the author's direction and review — see
 [ATTRIBUTION.md](ATTRIBUTION.md). All claims are the author's responsibility.
+
+## Portability program
+
+The kernel is single-source Triton; everything that must differ per vendor
+is being pulled into `backends/` — device detection, warp/wavefront/sub-group
+width, per-arch autotune search spaces. `bench/hw_contract.py` validates
+kernel correctness on any torch device **without a bitsandbytes build**; if
+you have ROCm or XPU silicon, that is the entry point. `docs/PORTABILITY.md`
+is the pre-port hazard register. Per the repo's tier language, every
+non-CUDA row is `port target` until a confirmatory passes on that silicon.
+
+## Router-predictability probe
+
+`router_probe/` asks whether the measured H = 0.93 one-layer-lead prediction
+ceiling is the router's conditional entropy or the probe's capacity limit.
+The charter and procedure were OTS-stamped before any real-model capture; the
+Phase-0 instrument gate passed 4/4 on planted fixtures. Phase 1 has run on
+**five MoE families** (see `router_probe/RESULTS.md`, exploratory tier):
+low-expert-count families pin cleanly at first data volume (gpt-oss-20b E=32
+→ 0.83, granite E=40 → 0.90, OLMoE E=64 → 0.91, all model-limited ×3 from the
+committed reducer), while **both E=128 families are data-unpinnable** (Qwen3-30B
+k=8 ≥0.845 after three data doublings; gpt-oss-120b k=4 ≥0.787 after two) —
+high expert count doesn't just lower H, it makes H unmeasurable by data
+scaling on this ladder, at both k. Every observed plateau sits far below the
+≈0.95 wire-law break-even for speculative expert streaming.
+
+## Contact
+
+Cerin Amroth Research takes contract and pilot engagements on this work —
+kernel ports, offload integration, and sponsored research lanes with
+stamped receipts. Contact **jordan@cerinamroth.com**.

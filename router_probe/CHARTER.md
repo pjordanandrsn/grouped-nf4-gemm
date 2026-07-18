@@ -175,25 +175,3 @@ router_probe/
 The one-line contract: **the agent may generate anything except a verdict.**
 Verdicts are arithmetic, printed by committed reducers from frozen procedures —
 at every tier, including this one.
-
----
-
-## 9. Operator amendments (forward-only; the base text above is not edited)
-
-**A1 — 2026-07-16, operator instruction: "cross them autonomously."**
-
-1. **§6 per-launch approval → pre-granted for Phase 1.** The flagship 235B
-   capture (~$7, still first per §4) and Qwen3-30B (~$0.50) are approved in
-   advance; standard ops rails stay (hardcap from create, 404-verified teardown,
-   email on fire/completion). Budget ceiling for Phase-1 captures: $15.
-2. **§4 Phase-2 fork → delegated.** The fork is selected mechanically from the
-   per-family reducer verdict per the §7 interpretation table; the agent
-   proceeds down the selected branch without waiting.
-3. **§5 bright line 1 → satisfied by registration, not by waiting.** If the
-   model-limited branch is selected, the agent authors the stamped protocol
-   (twin registered bars: H at Δ=1; quality delta on a fixed eval set),
-   OTS-stamps it BEFORE any fine-tune data exists, and only then runs and
-   measures. The prohibition's purpose — never closing a registration window
-   with unregistered receipts (law 14) — is preserved; the waiting is removed.
-4. Status emails continue at every phase transition (operator instruction of
-   the same date).

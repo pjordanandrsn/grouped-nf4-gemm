@@ -1,0 +1,83 @@
+{
+ "model": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+ "layers": 94,
+ "h2d_gbps": 55.35354852526642,
+ "per_token_gb": 7.983857664,
+ "waterfall_toks": 6.933183287430213,
+ "results": [
+  {
+   "prompt": "The key difference between mixture-of-experts and dense transformer models is",
+   "text": " that mixture-of-experts models are sparsely-activated, meaning that at each token routing decisions are made to activate only a subset of parameters for each input, while dense models activate all parameters for each input. This sparsity enables mixture-of-experts models to scale up the model capacity without a proportional increase in computation.  \u8fd9\u6bb5\u8bdd\u4ec0\u4e48\u610f\u601d\n\n\u8fd9\u6bb5\u8bdd\u4e2d\u6709\u4e00\u4e9b\u8bed\u6cd5\u548c\u8868\u8fbe\u4e0a\u7684\u95ee\u9898\uff0c\u4f46\u6211\u4eec\u53ef\u4ee5\u4ece\u4e2d\u7406\u89e3\u5176\u60f3\u8868\u8fbe\u7684\u6838\u5fc3\u610f\u601d\u3002\u6211\u4eec\u6765\u9010\u53e5\u5206\u6790\u5e76\u7ea0\u6b63\u5176\u542b\u4e49\uff1a\n\n\u539f\u53e5\uff1a\n\"The key difference between mixture-of-experts and dense models is that mixture-of-experts models activate only a subset of",
+   "n_tokens": 128,
+   "mode": "gpu",
+   "toks_per_s_off": 4.450860181359323,
+   "toks_per_s_on": 4.427156006713915,
+   "prefetch_speedup": 0.9946742486441871,
+   "hit_rate": null,
+   "greedy_identical": true,
+   "distinct2": 0.8346456692913385
+  },
+  {
+   "prompt": "The key difference between mixture-of-experts and dense transformer models is",
+   "text": " that mixture-of-experts models are sparsely-activated, meaning that at each token routing decisions are made to activate only a subset of parameters for each input, while dense models activate all parameters for each input. This sparsity enables mixture-of-experts models to scale up the model capacity without a proportional increase in computation.  \u8fd9\u6bb5\u8bdd\u4ec0\u4e48\u610f\u601d\n\n\u8fd9\u6bb5\u8bdd\u4e2d\u6709\u4e00\u4e9b\u8bed\u6cd5\u548c\u8868\u8fbe\u4e0a\u7684\u95ee\u9898\uff0c\u4f46\u6211\u4eec\u53ef\u4ee5\u4ece\u4e2d\u7406\u89e3\u5176\u60f3\u8868\u8fbe\u7684\u6838\u5fc3\u610f\u601d\u3002\u6211\u4eec\u6765\u9010\u53e5\u5206\u6790\u5e76\u7ea0\u6b63\u5176\u542b\u4e49\uff1a\n\n\u539f\u53e5\uff1a\n\"The key difference between mixture-of-experts and dense models is that mixture-of-experts models activate only a subset of",
+   "n_tokens": 128,
+   "mode": "gpu_early",
+   "toks_per_s_off": 4.450860181359323,
+   "toks_per_s_on": 3.727791366073592,
+   "prefetch_speedup": 0.8375440283848906,
+   "hit_rate": 0.7954956994114984,
+   "greedy_identical": true,
+   "distinct2": 0.8346456692913385
+  },
+  {
+   "prompt": "Write a haiku about memory bandwidth.",
+   "text": " Include the word \"data\" in your response.\n\nHmm, the user wants a haiku about memory bandwidth with the word \"data\" included. \n\nFirst, I need to recall haiku structure: 5-7-5 syllables. \n\nMemory bandwidth... that's tech term. Need to make it poetic. \n\n\"memory\" is 4 syllables. \"bandwidth\" is 3. \"memory\" is 3. \"bandwidth\" is2. \"memory\" is2, \"bandwidth\" is3. \"memory\" is3. \"bandwidth\" is2. \"memory\"2, \"",
+   "n_tokens": 128,
+   "mode": "gpu",
+   "toks_per_s_off": 4.42744136748813,
+   "toks_per_s_on": 4.400653512011701,
+   "prefetch_speedup": 0.9939495854935224,
+   "hit_rate": null,
+   "greedy_identical": true,
+   "distinct2": 0.6062992125984252
+  },
+  {
+   "prompt": "Write a haiku about memory bandwidth.",
+   "text": " Include the word \"data\" in your response.\n\nHmm, the user wants a haiku about memory bandwidth with the word \"data\" included. \n\nFirst, I need to recall haiku structure: 5-7-5 syllables. \n\nMemory bandwidth... that's tech term. Need to make it poetic. \n\n\"memory\" is 4 syllables. \"bandwidth\" is 3. \"memory\" is 3. \"bandwidth\" is2. \"memory\" is2, \"bandwidth\" is3. \"memory\" is3. \"bandwidth\" is2. \"memory\"2, \"",
+   "n_tokens": 128,
+   "mode": "gpu_early",
+   "toks_per_s_off": 4.42744136748813,
+   "toks_per_s_on": 3.696174179369978,
+   "prefetch_speedup": 0.8348330045682729,
+   "hit_rate": 0.7858846996245307,
+   "greedy_identical": true,
+   "distinct2": 0.6062992125984252
+  },
+  {
+   "prompt": "Explain, in two sentences, why quantization reduces energy per token:",
+   "text": " \"The model's ability to generate coherent and contextually relevant responses\" in simple terms\n\nQuantization makes the model more efficient by reducing the size of the numbers it uses, which can slightly lower its ability to produce perfectly accurate responses. It's like lowering the resolution of a photo, making it less precise but faster and smaller\n\nWe are given a sentence that has some errors. The user wants a simple explanation of why quantization reduces energy per token: \"The model's ability to generate coherent and contextually relevant responses. It's like lowering the quality of a photo, making it less accurate but faster and smaller\n\nWe are given a",
+   "n_tokens": 128,
+   "mode": "gpu",
+   "toks_per_s_off": 4.4208040767570305,
+   "toks_per_s_on": 4.39877531321387,
+   "prefetch_speedup": 0.9950170233376819,
+   "hit_rate": null,
+   "greedy_identical": true,
+   "distinct2": 0.7401574803149606
+  },
+  {
+   "prompt": "Explain, in two sentences, why quantization reduces energy per token:",
+   "text": " \"The model's ability to generate coherent and contextually relevant responses\" in simple terms\n\nQuantization makes the model more efficient by reducing the size of the numbers it uses, which can slightly lower its ability to produce perfectly accurate responses. It's like lowering the resolution of a photo, making it less precise but faster and smaller\n\nWe are given a sentence that has some errors. The user wants a simple explanation of why quantization reduces energy per token: \"The model's ability to generate coherent and contextually relevant responses. It's like lowering the quality of a photo, making it less accurate but faster and smaller\n\nWe are given a",
+   "n_tokens": 128,
+   "mode": "gpu_early",
+   "toks_per_s_off": 4.4208040767570305,
+   "toks_per_s_on": 3.726344205120959,
+   "prefetch_speedup": 0.8429109592783613,
+   "hit_rate": 0.795556836780241,
+   "greedy_identical": true,
+   "distinct2": 0.7401574803149606
+  }
+ ],
+ "vram_peak_gb": 15.16383232,
+ "gpu": "NVIDIA H200"
+}

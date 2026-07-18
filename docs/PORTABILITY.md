@@ -34,7 +34,7 @@ this is the pre-port hazard list. Tier language (R3): every non-CUDA row is
 - **intel-xpu-backend-for-triton:** exists and is maintained; gfx-equivalent
   maturity for our exact ops unverified — flag, don't assume.
 
-**Consequence for Phase-2 ordering (addendum-2 B5):** Intel drops **below** AMD
+**Consequence for Phase-2 ordering (per the dependency audit above):** Intel drops **below** AMD
 — bnb-XPU preview + XPU-triton unknowns make it the riskiest first confirmatory.
 AMD MI300X (rented, bnb source-build, CDNA MFMA) is the cleanest first port.
 
