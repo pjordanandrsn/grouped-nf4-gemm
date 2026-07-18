@@ -215,7 +215,9 @@ prediction, not a marketing table.
 (discrete GPU) are anchored to the measured flagship numbers to <2%; unified-memory
 rows are *ceilings only* and real decode sits below them. Headlines, all
 projected: 235B-A22B at **3.0–3.5 tok/s** on a gen4-×16 desktop, **6.0–6.9** on
-gen5 (5090 / RDNA4), and a **17–22 tok/s ceiling** on 128 GB unified boxes
+gen5 (5090 / RDNA4) — **both revised down by Addendum 1** (a measured
+serialization term; real-decode bands now **2.4–3.0** gen4 / **4.0–5.0** gen5,
+see `PROJECTIONS-multiarch.md`) — and a **17–22 tok/s ceiling** on 128 GB unified boxes
 (Strix Halo / DGX Spark / Jetson Thor). NF4-vs-bf16 is a **3.56×** byte reduction
 (absmax-inclusive), not the round 4×.
 
@@ -254,9 +256,16 @@ non-CUDA row is `port target` until a confirmatory passes on that silicon.
 
 `router_probe/` asks whether the measured H = 0.93 one-layer-lead prediction
 ceiling is the router's conditional entropy or the probe's capacity limit.
-The charter and procedure were OTS-stamped before any real-model capture;
-the Phase-0 instrument gate passed 4/4 on planted fixtures (see
-`router_probe/RESULTS.md`, exploratory tier). Phase 1 is pending.
+The charter and procedure were OTS-stamped before any real-model capture; the
+Phase-0 instrument gate passed 4/4 on planted fixtures. Phase 1 has run on
+**five MoE families** (see `router_probe/RESULTS.md`, exploratory tier):
+low-expert-count families pin cleanly at first data volume (gpt-oss-20b E=32
+→ 0.83, granite E=40 → 0.90, OLMoE E=64 → 0.91, all model-limited ×3 from the
+committed reducer), while **both E=128 families are data-unpinnable** (Qwen3-30B
+k=8 ≥0.845 after three data doublings; gpt-oss-120b k=4 ≥0.787 after two) —
+high expert count doesn't just lower H, it makes H unmeasurable by data
+scaling on this ladder, at both k. Every observed plateau sits far below the
+≈0.95 wire-law break-even for speculative expert streaming.
 
 ## Contact
 
