@@ -45,6 +45,26 @@ PROMPTS = [
     "Migratory birds navigate using a combination of",
     "The symphony's third movement modulates from C minor to",
 ]
+# Prompt set B (ceiling data-extension, 2026-07-17): greedy decode is
+# deterministic, so re-running set A at any overlapping length reproduces the
+# SAME records — new data must come from new prompts (or longer tails). Set B
+# covers 12 domains disjoint from set A; 12 x 512 tok doubles the Qwen corpus
+# 294k -> 589k when concatenated via capture/combine_streams.py.
+PROMPTS_B = [
+    "The contract stipulates that the party of the first part shall",
+    "When sodium reacts with chlorine, the resulting compound",
+    "Bottom of the ninth, two outs, bases loaded, and the pitcher",
+    '"Where were you on the night of the twelfth?" the detective asked,',
+    "The patient presented with a fever of 39.2 C and complained of",
+    "Jupiter's moon Europa is of particular interest because",
+    "<html>\n<head><title>Weekly Report</title></head>\n<body>",
+    "Theorem: every bounded monotone sequence converges. Proof:",
+    "Tomorrow's forecast calls for a cold front moving through, bringing",
+    "To repot a root-bound houseplant, first",
+    "In the endgame, a king and pawn versus a lone king is winning when",
+    "The container ship departed Rotterdam carrying twelve thousand",
+]
+PROMPT_SETS = {"a": PROMPTS, "b": PROMPTS_B}
 LADDER = [
     {"name": "linear", "kind": "linear"},
     {"name": "mlp_d", "kind": "mlp", "width_mult": 1},
@@ -79,7 +99,9 @@ FAMILIES = {
 }
 
 
-def capture(out_dir, n_tokens, n_prompts, family="olmoe", offload=False):
+def capture(out_dir, n_tokens, n_prompts, family="olmoe", offload=False,
+            prompt_set="a", incremental=False, prompt_start=0):
+    plist = PROMPT_SETS[prompt_set]
     from transformers import AutoTokenizer
     from experts4bit_qlora.loader import load_moe_4bit_streaming
     name = FAMILIES[family]
@@ -112,8 +134,10 @@ def capture(out_dir, n_tokens, n_prompts, family="olmoe", offload=False):
     cap.arm()
     tok_id = 0
     rec_tok, rec_layer = [], []
-    for pi in range(min(n_prompts, len(PROMPTS))):
-        ids = tok(PROMPTS[pi], return_tensors="pt").input_ids.cuda()
+    for pi in range(prompt_start, min(n_prompts, len(plist))):
+        p_start = len(cap.buf["topk"])     # slice bounds for incremental banking
+        rt_start = len(rec_tok)
+        ids = tok(plist[pi], return_tensors="pt").input_ids.cuda()
         with torch.no_grad():
             out = model(ids, use_cache=True)
             past = out.past_key_values
@@ -130,11 +154,41 @@ def capture(out_dir, n_tokens, n_prompts, family="olmoe", offload=False):
             rec_layer += list(range(added))       # layer-major within the token
             tok_id += 1
         cap._decode_mode = False
+        if incremental:
+            # Bank this prompt's records NOW as a self-contained stream dir —
+            # a pod death loses at most the prompt in flight, and a fresh pod
+            # resumes with --prompt-start (greedy decode is per-prompt
+            # deterministic, so slices from different pods are identical to a
+            # single-pod capture). combine_streams.py reassembles slices; the
+            # cross-token mask treats slice boundaries like any token boundary.
+            e = len(cap.buf["topk"])
+            sdir = Path(out_dir).parent / f"streams_p{pi:02d}"
+            write_capture(sdir,
+                          np.stack(cap.buf["hidden"][p_start:e]),
+                          np.stack(cap.buf["logits"][p_start:e]),
+                          np.stack(cap.buf["embed"][p_start:e]),
+                          np.stack(cap.buf["topk"][p_start:e]),
+                          {"E": E, "k": k, "family": family,
+                           "decode_only": True, "records": e - p_start,
+                           "tier": "EXPLORATORY", "model": name,
+                           "load": "nf4-4bit" + ("+expert-offload" if offload else ""),
+                           "n_layers": L, "prompts": 1,
+                           "prompt_set": prompt_set, "prompt_index": pi,
+                           "tokens_per_prompt": n_tokens,
+                           "input_note": "incremental per-prompt slice, greedy decode"},
+                          record_token=rec_tok[rt_start:],
+                          record_layer=rec_layer[rt_start:])
+            print(f"slice {pi:02d} banked ({e - p_start} records)", flush=True)
     cap.disarm()
+    if incremental:
+        # slices are the artifact; no combined pod-side save (the local
+        # combiner is canonical, and skipping it halves pod disk/time).
+        return E, k, L, len(cap.buf["topk"])
     n = cap.save(out_dir, E=E, k=k,
                  extra_meta={"model": name, "family": family,
                              "load": "nf4-4bit" + ("+expert-offload" if offload else ""),
-                             "n_layers": L, "prompts": min(n_prompts, len(PROMPTS)),
+                             "n_layers": L, "prompts": min(n_prompts, len(plist)),
+                             "prompt_set": prompt_set,
                              "tokens_per_prompt": n_tokens,
                              "input_note": "embedded diverse prompts, greedy decode"})
     # rewrite join sidecars aligned to the saved n
@@ -178,7 +232,26 @@ def main():
                     help="capture + write streams, no ladder/receipt (pod mode)")
     ap.add_argument("--audit-only", action="store_true",
                     help="run the ladder + reducer on an EXISTING stream dir (--out)")
+    ap.add_argument("--prompt-set", default="a", choices=list(PROMPT_SETS),
+                    help="which embedded prompt list to decode (b = the "
+                         "ceiling data-extension set; greedy decode makes "
+                         "same-set re-runs duplicates, not new data)")
+    ap.add_argument("--receipt-suffix", default="",
+                    help="append _<suffix> to the receipt filename so an "
+                         "extended-data audit never clobbers a sealed receipt")
+    ap.add_argument("--incremental", action="store_true",
+                    help="bank each prompt as a self-contained slice dir "
+                         "(<out>/streams_pNN) the moment it finishes — pod "
+                         "death loses only the prompt in flight; requires "
+                         "--skip-audit (the audit runs on the locally "
+                         "combined dir)")
+    ap.add_argument("--prompt-start", type=int, default=0,
+                    help="resume an incremental capture from this prompt "
+                         "index (earlier slices already banked elsewhere)")
     args = ap.parse_args()
+    if args.incremental and not args.skip_audit:
+        ap.error("--incremental is a pod capture mode; use --skip-audit and "
+                 "audit the locally combined dir")
     t0 = time.time()
     out = args.out or f"/root/router_probe_{args.family}"
     stream_dir = out + "/streams"
@@ -190,7 +263,10 @@ def main():
         L = int(meta.get("n_layers") or 0)
         print(f"audit-only: {n} records from {stream_dir} (E={E} k={k})", flush=True)
     else:
-        E, k, L, n = capture(stream_dir, args.tokens, args.prompts, args.family, args.offload)
+        E, k, L, n = capture(stream_dir, args.tokens, args.prompts, args.family,
+                             args.offload, prompt_set=args.prompt_set,
+                             incremental=args.incremental,
+                             prompt_start=args.prompt_start)
         print(f"captured {n} records (family={args.family} E={E} k={k} L={L})", flush=True)
         if args.skip_audit:
             print("skip-audit: streams written, exiting (pod mode)", flush=True)
@@ -203,7 +279,8 @@ def main():
                "phase": 1, "family": args.family, "device": args.device_label,
                "generated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                "elapsed_s": round(time.time() - t0, 1), "records": n, "runs": rows}
-    rp = rdir / f"EXPLORATORY_phase1_{args.family}.json"
+    sfx = f"_{args.receipt_suffix}" if args.receipt_suffix else ""
+    rp = rdir / f"EXPLORATORY_phase1_{args.family}{sfx}.json"
     rp.write_text(json.dumps(receipt, indent=1))
     print(f"\nreceipt: {rp}\n--- committed reducer verdict (per delta) ---", flush=True)
     for row in rows:
