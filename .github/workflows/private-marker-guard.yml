@@ -1,0 +1,17 @@
+name: private-marker-guard
+on: [push, pull_request]
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: refuse private-lane material in the public tree
+        run: |
+          set -e
+          if git ls-files | grep -E '^AGENT-'; then
+            echo "::error::AGENT-* planning docs belong on the private fork"; exit 1
+          fi
+          if git grep -l "(PRIVATE)" -- ':!.github/workflows/private-marker-guard.yml'; then
+            echo "::error::(PRIVATE) lane marker found in public tree"; exit 1
+          fi
+          echo "clean"
