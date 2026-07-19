@@ -73,21 +73,23 @@ basis: ~40 ms/tok at 300–500 W class). Ours J/token at K=16 ∈ [5.5, 9.5]
 **Traffic (ours, B1/B2):** K=0 panel cold ∈ [1.45, 1.75] GiB/tok (s3:
 1.59–1.63; slot-cache variation across prompts); K=128 cold = 0.
 
-**The crossing (per box, the headline under test):** K\*(box) = min K with
-ours(panel median) > llama(best config, that box). [S3-BIND-2] — the
-prediction is conditional on session-3's E1 outcome and is pre-committed
-per branch, to be bound to ONE branch before stamping:
-- E1 lands ≤ 25 tok/s (threads don't help) → predict **K\* = 16 on B1, B2
-  and B3**.
-- E1 ∈ (25, 33] → predict **K\* = 16 or 32 on B1/B2**; B3 graded at its own
-  llama-best (16 metal cores): K\* ∈ {8, 16} plausible if B3's llama-best
-  is lower than DO's.
-- E1 ∈ (33, 45] → predict **K\* ∈ {32, 64} on B1/B2**; the K=16 crossing
-  claim is then restated as thread-capped-host-specific, BEFORE
-  publication.
-- E1 > 45 → the fat-host crossing claim is withdrawn as stated and the
-  result is re-framed on the host-CPU axis (weak-host regime + energy),
-  plainly.
+**Crossing predictions — BOUND (session-3 E1 = 45.34 ⇒ the ">45" branch
+executed; the blanket fat-host K\*=16 claim is already withdrawn/restated
+in RESULTS amendment f4fec4f). S4 predicts per-host-class rows, not one
+K\*:**
+- **B1/B2 vs box-best llama (-t 24):** K=64 within ±7% of llama-best
+  (statistical tie band, [0.93, 1.07]×); K=128 ∈ [1.20, 1.45]× llama-best.
+  *Falsify either side.*
+- **B1/B2 vs the 8-core-class row (-t 8, retained as the thread-capped
+  host reference):** ours K=16 panel median > llama(-t8) by [1.05, 1.35]×.
+- **B3 (16 dedicated metal cores):** llama-best-B3 ∈ [30, 45] (basis: DO's
+  shared-vCPU t16 = 35.4; dedicated Zen4 cores faster per-core). Ours-B3
+  K=16 ∈ [0.70, 1.05]× of the DO K=16 median. B3's matched-VRAM verdict is
+  a genuine open measurement: both readings pre-committed — ours(K16) >
+  llama-best-B3 ⇒ the crossing holds on mid-size metal hosts at matched
+  VRAM; ours(K16) ≤ llama-best-B3 ⇒ B3 joins the fat-host rows and the
+  hybrid's case there rests on VRAM-at-parity + host-CPU-freedom + energy,
+  stated plainly.
 
 **Cross-box consistency:** for each shared K, max/min across B1,B2 ≤ 1.15
 (same product, different hosts). *Falsify:* pod-to-pod variance larger
@@ -136,8 +138,10 @@ ours-internal (engine vs our own NF4 forward).
 Per box: probes (pinned H2D, HBM D2D, RAPL/powercap inventory — B3 metal
 may expose CPU energy; recorded either way) → reducer (hot sets + capture
 from the stamped stream; shas cited) → panel (8 prompts × 64 replays,
-graphs, per-K) → eager anchor K=16 → soak-lite (256 replays, K=16, halves
-within 3%) → ours ppl chunked-512 on the ~1.8k matched text → llama:
+graphs, per-K) → eager anchor K=16 → teacher-forced soak (256 forced-token steps from the matched text —
+content-stationary by construction, per session-3's E3 lesson; halves
+within 3%) → ours ppl chunked-512 mirroring llama's accounting EXACTLY (floor(N/512)
+full chunks, tail dropped, per session-3's E5 lesson) → llama:
 resident + fine ncmoe ladder at box-best `-t`, differential-energy pairs
 (n=24/n=512) for resident and matched-VRAM point, ppl. Watchers armed;
 independent hardcaps (DO: launchd DELETE; **Latitude: launchd DELETE
@@ -155,8 +159,11 @@ medians ± spread, K\* per box, ratio grades for B3, consistency grade,
 energy comparison under the provisioning-exclusion rule. RESULTS +
 `.ots`; any red amends the public claims before further publication.
 
-## Bind log (to complete before stamp)
+## Bind log — COMPLETE; STAMP-READY
 
-- [S3-BIND-1] llama best `-t` on 24 vCPU: ____ (from E1)
-- [S3-BIND-2] conditional-crossing branch selected: ____ (from E1)
-- Session-3 grades folded into RESULTS-pipelined-ladder.md: commit ____
+- [S3-BIND-1] llama best `-t` on 24 vCPU: **24** (45.34 ± 0.18); B3 probes
+  its own 16 metal cores and uses its argmax.
+- [S3-BIND-2] branch **">45"** — per-host-class predictions above replace
+  the single-K\* form.
+- Session-3 grades folded: RESULTS amendment **f4fec4f** (E5 red makes A4
+  the load-bearing fidelity arm of this session).
