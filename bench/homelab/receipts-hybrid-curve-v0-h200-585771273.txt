@@ -1,0 +1,83 @@
+start 2026-07-19T02:18:04Z
+NVIDIA H200, 143771 MiB
+RAM 235GB
+PCIe 5, 16
+cuda True
+=== HYBRID CURVE: per-expert residency sweep (cold STREAMED, gpt-oss GLU) ===
+Fetching 31 files:   0%|          | 0/31 [00:00<?, ?it/s]Fetching 31 files:  10%|▉         | 3/31 [00:28<04:25,  9.48s/it]Fetching 31 files:  13%|█▎        | 4/31 [00:40<04:37, 10.26s/it]Fetching 31 files:  19%|█▉        | 6/31 [00:41<02:21,  5.65s/it]Fetching 31 files:  35%|███▌      | 11/31 [00:42<00:44,  2.25s/it]Fetching 31 files:  39%|███▊      | 12/31 [00:43<00:37,  1.97s/it]Fetching 31 files:  52%|█████▏    | 16/31 [00:45<00:18,  1.24s/it]Fetching 31 files:  55%|█████▍    | 17/31 [00:46<00:17,  1.22s/it]Fetching 31 files:  68%|██████▊   | 21/31 [01:04<00:27,  2.76s/it]Fetching 31 files:  71%|███████   | 22/31 [01:13<00:32,  3.58s/it]Fetching 31 files:  74%|███████▍  | 23/31 [01:15<00:26,  3.34s/it]Fetching 31 files:  77%|███████▋  | 24/31 [01:20<00:25,  3.70s/it]Fetching 31 files: 100%|██████████| 31/31 [01:20<00:00,  2.60s/it]
+[02:21:14]   fusing + quantizing experts (up to 36x128) to nf4 (streaming)...
+[02:21:27]   quantized experts on 36/36 MoE layers (128 experts each)
+[02:21:27]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+loaded bare in 98s, VRAM 64.1GB
+36 GptOssExperts4bit modules, E=128
+H2D bandwidth 55.2 GB/s (cold-stream pipe)
+K     resGB    ms/tok   tok/s    b_rel
+0     0.0      250      3.99     0.0123   t/s
+4     1.8      252      3.97     0.0138   t/s
+8     3.7      249      4.01     0.0102   t/s
+16    7.4      230      4.35     0.0123   t/s
+24    11.1     205      4.87     0.0123   t/s
+32    14.7     165      6.05     0.0123   t/s
+64    29.5     140      7.12     0.0123   t/s
+128   58.9     61       16.38    0.0123   t/s
+CORRECTNESS worst-b_rel over sweep = 0.0138  OK
+HYBRID-CURVE-DONE
+hybrid rc=0
+=== LLAMA CURVE: --n-cpu-moe sweep (per-layer expert offload, same box) ===
+gguf 60G
+ghcr.io/ggml-org/llama.cpp:full-cuda
+--- llama ncmoe=0 ---
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 143155 MiB):
+  Device 0: NVIDIA H200, compute capability 9.0, VMM: yes, VRAM: 143155 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl | threads |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | ------: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |       8 |             pp8 |      519.46 ± 104.89 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |       8 |            tg24 |        240.83 ± 5.87 |
+--- llama ncmoe=8 ---
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 143155 MiB):
+  Device 0: NVIDIA H200, compute capability 9.0, VMM: yes, VRAM: 143155 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl |  n_cpu_moe | threads |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | ---------: | ------: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |          8 |       8 |             pp8 |        107.62 ± 5.21 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |          8 |       8 |            tg24 |         72.58 ± 1.80 |
+--- llama ncmoe=16 ---
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 143155 MiB):
+  Device 0: NVIDIA H200, compute capability 9.0, VMM: yes, VRAM: 143155 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl |  n_cpu_moe | threads |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | ---------: | ------: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         16 |       8 |             pp8 |         59.98 ± 5.39 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         16 |       8 |            tg24 |         43.55 ± 0.93 |
+--- llama ncmoe=24 ---
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 143155 MiB):
+  Device 0: NVIDIA H200, compute capability 9.0, VMM: yes, VRAM: 143155 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl |  n_cpu_moe | threads |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | ---------: | ------: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         24 |       8 |             pp8 |         41.61 ± 2.25 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         24 |       8 |            tg24 |         30.44 ± 0.93 |
+--- llama ncmoe=32 ---
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 143155 MiB):
+  Device 0: NVIDIA H200, compute capability 9.0, VMM: yes, VRAM: 143155 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl |  n_cpu_moe | threads |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | ---------: | ------: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         32 |       8 |             pp8 |         32.27 ± 1.77 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         32 |       8 |            tg24 |         23.28 ± 0.11 |
+--- llama ncmoe=36 ---
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 143155 MiB):
+  Device 0: NVIDIA H200, compute capability 9.0, VMM: yes, VRAM: 143155 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl |  n_cpu_moe | threads |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | ---------: | ------: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         36 |       8 |             pp8 |         30.01 ± 1.38 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         36 |       8 |            tg24 |         21.26 ± 0.08 |
+ALLDONE
