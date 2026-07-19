@@ -112,6 +112,25 @@ bit-exactness is a category error and is not claimed anywhere):**
   small divergence *expected and benign*; measured only to frame A1's
   symmetry, reported only with that exact framing, or dropped.
 
+**A4 — fidelity vs the REFERENCE STANDARD (both stacks vs ground truth;
+runs on B1):** the reference is the shipped checkpoint in its shipped
+precision through the HF native path (~63 GB, fits B1; bf16-dequantized
+disk-offload fallback — same represented values). One forward over the
+matched text → a sha-recorded reference-logits artifact. Both stacks then
+score against it at identical positions: ours = the bare NF4 forward
+(engine-family representative; engine-vs-forward exactness is separately
+proven), llama = its own saved logits on the same file. Metrics: mean KL
+of next-token distributions, top-1 agreement, max relative logit error.
+**Precondition gate:** tokenizer identity on the file (token counts must
+match exactly; both stacks counted the prior matched file at 655).
+**Pre-committed expectation, stated before data: llama-KL ≤ ours-KL** —
+theirs is a near-lossless repack of the native values; ours is a
+re-quantization with real error by construction. Rows recorded-not-scored;
+the measured quantity of interest is the SIZE of our re-quant gap against
+the standard. Strict bit-exactness is claimed by neither stack against the
+reference (kernel accumulation orders differ); exactness claims remain
+ours-internal (engine vs our own NF4 forward).
+
 ## Protocol
 
 Per box: probes (pinned H2D, HBM D2D, RAPL/powercap inventory — B3 metal
