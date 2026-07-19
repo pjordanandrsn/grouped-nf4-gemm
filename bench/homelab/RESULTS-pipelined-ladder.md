@@ -182,3 +182,71 @@ Deviations, documented: arena-allocation cache (`be5fe53`, pre-declared);
 the capture recipe above (harness-level, zero engine change); reducer
 capture-split methodology note (session 1). Both sessions' pods destroyed,
 404-verified; total program pod spend this arc ≈ $11.
+
+---
+
+# SESSION 3 — robustness + steelman (amendment 2; prior stamp preserved as
+# `.pre-session3.ots`; grades PREREG-note-session3.md `7ad357e`, pre-data)
+
+Pod: DO H200 585846927, destroyed 404-verified. Receipts verbatim:
+`receipts-pipelined-s3-585846927.txt`.
+
+## E-grades (greens and reds)
+
+| E | prediction | outcome | grade |
+|---|---|---|---|
+| E1 | llama ncmoe32 `-t24` ∈ [28, 55]; K\* moves right but survives | **45.34 ± 0.18** — in band; lands the pre-committed **">45" branch by 0.34** (boundary case, ruled UP per the branch text) | **GREEN**, branch `>45` bound |
+| E2 | panel K=16 median ∈ [22, 27]; worst ≥ 20 | median **28.71** (over-band); worst **23.58** ✓ | worst-clause **GREEN**; median **RED (over-band)** — s2's single prompt sat at the route-diverse end (only p3 colder); explained below |
+| E3 | soak halves within 3% | first-half 35.35, second-half **62.99** (−43.9% "drift") | **RED** — not instability: the 512-token greedy continuation degenerates into a repetitive loop, routing collapses, cold→0.04 GiB/tok, speed rises to the overhead floor. b_rel 0.0000 throughout. Protocol fix for S4: **teacher-forced soak** (content-stationary by construction) |
+| E4 | K=0 per-replay cold ∈ [1.3, 1.9] GiB/tok | typical prompts 1.59–1.68; panel median ≈ 1.61; degenerate p6 = 0.34 (included, flagged) | **GREEN** |
+| E5 | chunked ppl ratio ours/llama ∈ [0.9, 1.3] | ours 32.76 (4 chunks incl. a 289-token tail) vs llama 21.76 ± 2.36 (3 full chunks) ⇒ **1.51** | **RED** — causes named: (a) real NF4 re-quant error vs the native-precision checkpoint (expected direction, size unknown), (b) chunk-accounting mismatch (our short-context tail chunk inflates ours; llama floors to full chunks), (c) text composition. **Resolution = the A4 reference-standard arm in session 4; the fidelity axis is UNRESOLVED until then and every speed claim carries this caveat** |
+| E6 | thread ladder monotone; `-t1` < 8 tok/s | 3.98 / 7.65 / 13.93 / 24.25 / 35.36 / 45.34 — monotone, near-linear to 16t | **GREEN** — the crossover curve, measured |
+| — | decode-only sync audit | **0 warnings in 5 full-model steps** (session-2's 7 were the reference-path prefill, by design) | clean |
+
+## The one-law panel (why the "discrepancy" isn't one)
+
+Every panel row fits **t ≈ 12.5 ms + cold_bytes / 45.2 GB/s** (p3: 30.3+12.1
+= 42.4 ✓; p0: 28.3+12.1 = 40.4 ✓; p6: 3.0+13.2 = 16.2 ✓ — and p6's 61.76
+equals the K=128 floor because zero cold traffic makes every K look like
+K=128). Prompt-to-prompt cold bytes at K=16 span 10× (0.13–1.28 GiB/tok):
+generic/templated continuations route into the expert-frequency head —
+exactly what the train-derived hot set covers — while diverse technical
+prose routes into the tail. Session 2's single prompt (p0) reproduces to
+0.3% and sits near the *worst* case, so the earlier crossing figure was
+conservative sampling, not flattery. Locked stat remains
+median-of-prompts; worst-prompt reported beside it always.
+
+## RESTATED HEADLINE (executing the pre-committed ">45" branch)
+
+**The blanket "crossing at K\*=16" claim is withdrawn as a general fat-host
+statement and restated as a function of host CPU strength** — which the
+data now measures rather than assumes. Same box, llama at each host
+class's best config, our panel medians (host-CPU-independent by
+construction):
+
+| host-CPU class (llama config) | llama tok/s | ours ≥ llama at | resident-expert GB there |
+|---|---:|---|---:|
+| 1 thread  | 3.98  | K=0 (20.45, **5.1×**) | 0 |
+| 2 threads | 7.65  | K=0 (2.7×) | 0 |
+| 4 threads | 13.93 | K=0 (1.5×) | 0 |
+| 8 threads | 24.25 | **K=16** (28.71) | 7.4 |
+| 16 threads | 35.36 | K=64 (45.21) | 29.5 |
+| 24 vCPU (box best) | **45.34** | K=64 is a statistical tie (45.21 ± ~1.4); clear at **K=128** (61.69) | 58.9 |
+
+Durable claims, unchanged by the restatement: host-CPU-independence of the
+hybrid (its column is flat in threads); the weak-host regime win (1.5–5×
+at ≤4 cores with **zero** resident-expert VRAM); placement-invariant
+correctness (b_rel 0.0000 at every K, every prompt, and through the
+512-replay soak); a sync-free decode loop (0 warnings, decode-only);
+the transfer-law fit; energy trending 9→4 J/tok with residency. The
+fat-host equal-VRAM comparison now honestly reads: **llama's CPU-offload
+is the right tool on many-core hosts; the hybrid is the right tool when
+host cores are few, VRAM is the binding constraint, or the host CPU is
+needed for other work.** Fidelity caveat: E5 red pending the A4
+reference-standard measurement — no speed claim should be quoted without
+it.
+
+Session-4 binds from this session: [S3-BIND-1] llama best `-t` = **24**
+(box max; B3 probes its own 16 metal cores); [S3-BIND-2] branch **">45"**
+— S4's crossing predictions are per-host-class rows, not a single K\*.
+Pod spend this session ≈ $4.4; arc total ≈ $15.5.
