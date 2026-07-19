@@ -250,3 +250,92 @@ Session-4 binds from this session: [S3-BIND-1] llama best `-t` = **24**
 (box max; B3 probes its own 16 metal cores); [S3-BIND-2] branch **">45"**
 — S4's crossing predictions are per-host-class rows, not a single K\*.
 Pod spend this session ≈ $4.4; arc total ≈ $15.5.
+
+---
+
+# SESSION 4 — confirmatory replication, B1+B2 graded (amendment 3; prior
+# stamp preserved as `.pre-session4.ots`; grades the OTS-stamped
+# `PREREG-session4-replication.md`, sha 157ac8eb…)
+
+B1 = DO H200 atl1 585856812 (A4 assignment), B2 = DO H200 nyc2 585856813 —
+both destroyed, 404-verified. Receipts verbatim:
+`receipts-pipelined-s4-b1-585856812.txt`, `…-b2-585856813.txt`. **B3
+(Latitude H100 metal): zero inventory at all nine US sites at fire time
+(`in_stock=[]`; the plans API's `available` is deployability, not stock) —
+a 30-min stock poller is armed and B3 folds in when metal exists. Same
+wave, per-box paired protocol; delay is methodologically neutral.**
+
+## Panel grades (graphs, median-of-8-prompts / worst; H2D 44.3 / 43.6 GB/s)
+
+| K | band | B1 | B2 | grade |
+|---:|---|---|---|---|
+| 0   | [18.5, 22.5] | 20.45 / 19.52 | 20.46 / 19.53 | **GREEN** |
+| 8   | (recorded)   | 25.99 / 21.42 | 26.00 / 21.43 | — |
+| 16  | [24, 33]     | 28.70 / 23.57 | 28.72 / 23.57 | **GREEN** |
+| 32  | [30, 40]     | 34.88 / 30.42 | 34.92 / 30.44 | **GREEN** |
+| 64  | [38, 50]     | 48.26 / 41.83 | 48.37 / 41.91 | **GREEN** |
+| 128 | [56, 67]     | 61.74 / 61.61 | 61.85 / 61.70 | **GREEN** |
+
+**Cross-box consistency: max/min ≤ 1.0023 at every K** (gate was ≤ 1.15 —
+passed with a factor-65 margin; session-3's numbers reproduce to 0.1%).
+Degenerate-loop prompts flagged at K ≤ 32, included in medians, per the
+locked metric. b_rel = 0.0000 on every capture point, both boxes.
+
+## Crossing rows (bound branch, graded)
+
+- vs the 8-core-class reference (pinned `-t 8` = 24.25): ours K=16 =
+  **1.184×** on both boxes — band [1.05, 1.35] **GREEN**.
+- vs box-best llama (`-t 24`, ncmoe32): K=64 ratio **B1 1.095 (RED-over by
+  0.025)** / **B2 1.051 (GREEN)** — tie band was [0.93, 1.07]. Context the
+  band math missed: llama's own ncmoe32@t24 repeats spread **40.24–46.04
+  (±7%) within/across these boxes**, wider than our cross-box spread
+  (0.2%); the substantive tie conclusion stands, the formal B1 red is
+  reported. K=128 ratio 1.401 / 1.343 — band [1.20, 1.45] **GREEN**.
+- **New honest observation (fine ladder):** llama's best offload config on
+  these 24-vCPU boxes is **ncmoe28 ≈ 49.8–51.6 tok/s at ~13 GB resident**
+  — at mid-range VRAM llama at its best out-paces our K=64 (29.5 GB,
+  48.3). Our uncontested rows on fat hosts remain K=128 (61.8 beats their
+  entire offload ladder), the flat-in-host-CPU column, and (pending A4)
+  whatever fidelity says. The ladder is monotone as predicted.
+
+## Other stamped arms
+
+- **A1 placement invariance: 100.0% token agreement, K=0 vs 16 vs 128, both
+  boxes.** The slip's publication clause is satisfied: *the dial changes
+  speed, not answers* — now a measured sentence.
+- **Teacher-forced soak:** first/second halves 26.17 → 27.15 tok/s on BOTH
+  boxes (identical to the hundredth) — drift **−3.6%**, band was ±3% ⇒
+  **RED by 0.6 pt**, favorable direction, systematic (clock ramp-up is the
+  suspect; content is stationary by construction). The greedy-degeneration
+  confound from session 3 is gone.
+- **Energy (differential — provisioning cancels):** llama resident **1.64 /
+  1.73 J/tok** (validates the method: ~240 tok/s at ~400 W ⇒ ~1.7);
+  llama ncmoe32@t24 **3.15 / 2.79 J/tok GPU-side only** — the CPU term is
+  unmeasured on these VMs (powercap exposes only `dtpm`), and llama's
+  24-thread expert compute is precisely what it omits. Ours: **7.3 / 7.5
+  J/tok at K=16 (soak, clean windows)** — inside the [5.5, 9.5] band,
+  GREEN — and ours is GPU-dominated *total* (host near-idle during DMA
+  streaming). No cross-stack energy verdict is claimed until a box with
+  CPU energy visibility reports (B3 metal is that box).
+- **Fidelity, exact-chunk-matched:** ours **29.27** vs llama **21.7559**
+  (identical on both boxes; deterministic) ⇒ ratio **1.345** — the
+  accounting fix narrowed session-3's 1.51 but the red stands. **A4 is the
+  decider and is INCOMPLETE this wave:** the reference load OOM'd (the
+  ladder process still held module refs + the 61 GB pinned arena; the
+  dequant then attempted a monolithic 120 GiB allocation). Root-caused;
+  completion design: subprocess-clean A4 on a fresh box, reference logits
+  + KL vs the retained `ours_logits.npy` (617 MB, in hand), plus reference
+  ppl to anchor both stacks to ground truth.
+- **A2 cross-stack agreement: INCOMPLETE** — llama-cli hung 600 s on the
+  first prompt under docker (interactive-mode edge); the timeout killed
+  the block. Ours-side continuations are saved; completion uses one
+  llama-server + 8 API calls instead.
+
+## Wave status
+
+B1/B2 complete and graded: **every stamped band GREEN except two narrow,
+favorable-direction reds (soak −3.6% vs ±3%; B1's K=64 ratio 1.095 vs
+1.07) and the two incomplete arms (A4, A2) with root causes and a
+completion design.** B3 stock-gated with an armed poller. Completion
+re-fire awaits operator GO per the slip's re-fire clause. Wave spend ≈
+$8.7; arc total ≈ $24.

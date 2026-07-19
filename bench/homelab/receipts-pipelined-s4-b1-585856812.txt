@@ -1,0 +1,197 @@
+start-session4 box=b1 a4=1 2026-07-19T11:46:07Z
+NVIDIA H200, 143771 MiB
+RAM 235GB
+PCIe 5, 16
+powercap: dtpm 
+stack OK
+stream sha256[:16]=45c071e689b9f173 records=221184 prompts=12 (train 8) L=36 E=128 k=4
+held-out capture: K=0:0.000  K=8:0.235  K=16:0.373  K=32:0.572  K=64:0.799  K=128:1.000
+=== S4 LADDER box=b1 ===
+H2D bandwidth 44.3 GB/s
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 31 files:   0%|          | 0/31 [00:00<?, ?it/s]Fetching 31 files:  10%|▉         | 3/31 [00:19<03:06,  6.67s/it]Fetching 31 files:  13%|█▎        | 4/31 [00:28<03:15,  7.25s/it]Fetching 31 files:  19%|█▉        | 6/31 [00:32<01:56,  4.65s/it]Fetching 31 files:  35%|███▌      | 11/31 [00:36<00:45,  2.28s/it]Fetching 31 files:  52%|█████▏    | 16/31 [00:37<00:18,  1.25s/it]Fetching 31 files:  55%|█████▍    | 17/31 [00:51<00:39,  2.80s/it]Fetching 31 files:  68%|██████▊   | 21/31 [01:02<00:28,  2.84s/it]Fetching 31 files:  71%|███████   | 22/31 [01:12<00:33,  3.73s/it]Fetching 31 files:  74%|███████▍  | 23/31 [01:13<00:26,  3.32s/it]Fetching 31 files:  77%|███████▋  | 24/31 [01:15<00:20,  2.99s/it]Fetching 31 files: 100%|██████████| 31/31 [01:15<00:00,  2.43s/it]
+[11:48:59]   fusing + quantizing experts (up to 36x128) to nf4 (streaming)...
+[11:49:11]   quantized experts on 36/36 MoE layers (128 experts each)
+[11:49:11]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+loaded bare in 92s, VRAM 64.1GB
+--- PANEL K=0 (enabled 36/36, VRAM 66.0GB) ---
+K=0   p0 med   48.4 ms/tok  20.67 tok/s  brel 0.0000  cold 1.594 GiB/tok  E 8.9 J/tok
+K=0   p1 med   48.9 ms/tok  20.44 tok/s  brel 0.0000  cold 1.614 GiB/tok  E 8.9 J/tok
+K=0   p2 med   48.7 ms/tok  20.55 tok/s  brel 0.0000  cold 1.621 GiB/tok  E 8.8 J/tok
+K=0   p3 med   50.1 ms/tok  19.95 tok/s  brel 0.0000  cold 1.628 GiB/tok  E 9.1 J/tok
+K=0   p4 med   48.9 ms/tok  20.46 tok/s  brel 0.0000  cold 1.594 GiB/tok  E 8.9 J/tok
+K=0   p5 med   49.5 ms/tok  20.19 tok/s  brel 0.0000  cold 1.592 GiB/tok  E 9.1 J/tok
+K=0   p6 med   17.3 ms/tok  57.72 tok/s  brel 0.0000  cold 0.340 GiB/tok  E 4.7 J/tok
+K=0   p7 med   51.2 ms/tok  19.52 tok/s  brel 0.0000  cold 1.676 GiB/tok  E 9.3 J/tok
+PANEL K=0: median 20.45 tok/s  worst 19.52  best 57.72 [degenerate-flag]
+--- PANEL K=8 (enabled 36/36, VRAM 69.8GB) ---
+K=8   p0 med   44.0 ms/tok  22.75 tok/s  brel 0.0000  cold 1.377 GiB/tok  E 8.1 J/tok
+K=8   p1 med   35.8 ms/tok  27.90 tok/s  brel 0.0000  cold 0.961 GiB/tok  E 7.0 J/tok
+K=8   p2 med   43.0 ms/tok  23.27 tok/s  brel 0.0000  cold 1.309 GiB/tok  E 8.2 J/tok
+K=8   p3 med   46.7 ms/tok  21.42 tok/s  brel 0.0000  cold 1.482 GiB/tok  E 8.7 J/tok
+K=8   p4 med   39.4 ms/tok  25.37 tok/s  brel 0.0000  cold 1.131 GiB/tok  E 7.5 J/tok
+K=8   p5 med   37.5 ms/tok  26.65 tok/s  brel 0.0000  cold 1.058 GiB/tok  E 7.2 J/tok
+K=8   p6 med   16.2 ms/tok  61.56 tok/s  brel 0.0000  cold 0.174 GiB/tok  E 4.0 J/tok
+K=8   p7 med   35.6 ms/tok  28.11 tok/s  brel 0.0000  cold 0.861 GiB/tok  E 6.7 J/tok
+PANEL K=8: median 25.99 tok/s  worst 21.42  best 61.56 [degenerate-flag]
+--- PANEL K=16 (enabled 36/36, VRAM 73.6GB) ---
+K=16  p0 med   40.4 ms/tok  24.76 tok/s  brel 0.0000  cold 1.193 GiB/tok  E 8.0 J/tok
+K=16  p1 med   30.1 ms/tok  33.19 tok/s  brel 0.0000  cold 0.707 GiB/tok  E 6.3 J/tok
+K=16  p2 med   39.3 ms/tok  25.46 tok/s  brel 0.0000  cold 1.128 GiB/tok  E 7.5 J/tok
+K=16  p3 med   42.4 ms/tok  23.57 tok/s  brel 0.0000  cold 1.276 GiB/tok  E 7.9 J/tok
+K=16  p4 med   36.0 ms/tok  27.77 tok/s  brel 0.0000  cold 0.954 GiB/tok  E 7.0 J/tok
+K=16  p5 med   33.7 ms/tok  29.69 tok/s  brel 0.0000  cold 0.844 GiB/tok  E 6.8 J/tok
+K=16  p6 med   16.2 ms/tok  61.65 tok/s  brel 0.0000  cold 0.128 GiB/tok  E 4.0 J/tok
+K=16  p7 med   30.8 ms/tok  32.45 tok/s  brel 0.0000  cold 0.595 GiB/tok  E 5.8 J/tok
+PANEL K=16: median 28.70 tok/s  worst 23.57  best 61.65 [degenerate-flag]
+EAGER-ANCHOR K=16: 63.8 ms/tok (coarse, incl prefill)
+SOAK-TF K=16 256 forced: first 26.17 second 27.15 tok/s  drift -3.6%  cold 1.040 GiB/tok  E 7.3 J/tok
+--- PANEL K=32 (enabled 36/36, VRAM 81.1GB) ---
+K=32  p0 med   32.4 ms/tok  30.84 tok/s  brel 0.0000  cold 0.832 GiB/tok  E 6.5 J/tok
+K=32  p1 med   22.4 ms/tok  44.57 tok/s  brel 0.0000  cold 0.409 GiB/tok  E 5.3 J/tok
+K=32  p2 med   32.9 ms/tok  30.42 tok/s  brel 0.0000  cold 0.857 GiB/tok  E 6.8 J/tok
+K=32  p3 med   32.5 ms/tok  30.79 tok/s  brel 0.0000  cold 0.849 GiB/tok  E 6.8 J/tok
+K=32  p4 med   29.6 ms/tok  33.81 tok/s  brel 0.0000  cold 0.660 GiB/tok  E 5.7 J/tok
+K=32  p5 med   27.8 ms/tok  36.01 tok/s  brel 0.0000  cold 0.586 GiB/tok  E 5.8 J/tok
+K=32  p6 med   16.0 ms/tok  62.68 tok/s  brel 0.0000  cold 0.074 GiB/tok  E 3.8 J/tok
+K=32  p7 med   23.9 ms/tok  41.77 tok/s  brel 0.0000  cold 0.346 GiB/tok  E 5.1 J/tok
+PANEL K=32: median 34.88 tok/s  worst 30.42  best 62.68 [degenerate-flag]
+--- PANEL K=64 (enabled 36/36, VRAM 96.1GB) ---
+K=64  p0 med   22.1 ms/tok  45.24 tok/s  brel 0.0000  cold 0.387 GiB/tok  E 5.0 J/tok
+K=64  p1 med   18.6 ms/tok  53.91 tok/s  brel 0.0000  cold 0.134 GiB/tok  E 4.6 J/tok
+K=64  p2 med   23.9 ms/tok  41.83 tok/s  brel 0.0000  cold 0.438 GiB/tok  E 5.3 J/tok
+K=64  p3 med   22.7 ms/tok  44.05 tok/s  brel 0.0000  cold 0.326 GiB/tok  E 4.8 J/tok
+K=64  p4 med   21.9 ms/tok  45.75 tok/s  brel 0.0000  cold 0.318 GiB/tok  E 5.0 J/tok
+K=64  p5 med   19.6 ms/tok  51.06 tok/s  brel 0.0000  cold 0.152 GiB/tok  E 4.6 J/tok
+K=64  p6 med   15.7 ms/tok  63.81 tok/s  brel 0.0000  cold 0.037 GiB/tok  E 3.8 J/tok
+K=64  p7 med   19.1 ms/tok  52.48 tok/s  brel 0.0000  cold 0.120 GiB/tok  E 4.3 J/tok
+PANEL K=64: median 48.26 tok/s  worst 41.83  best 63.81
+--- PANEL K=128 (enabled 36/36, VRAM 126.1GB) ---
+K=128 p0 med   16.2 ms/tok  61.75 tok/s  brel 0.0000  cold 0.000 GiB/tok  E 3.8 J/tok
+K=128 p1 med   16.2 ms/tok  61.73 tok/s  brel 0.0000  cold 0.000 GiB/tok  E 3.8 J/tok
+K=128 p2 med   16.2 ms/tok  61.73 tok/s  brel 0.0000  cold 0.000 GiB/tok  E 3.8 J/tok
+K=128 p3 med   16.2 ms/tok  61.73 tok/s  brel 0.0000  cold 0.000 GiB/tok  E 4.1 J/tok
+K=128 p4 med   16.2 ms/tok  61.83 tok/s  brel 0.0000  cold 0.000 GiB/tok  E 4.1 J/tok
+K=128 p5 med   16.2 ms/tok  61.78 tok/s  brel 0.0000  cold 0.000 GiB/tok  E 4.1 J/tok
+K=128 p6 med   15.4 ms/tok  64.85 tok/s  brel 0.0000  cold 0.000 GiB/tok  E 3.5 J/tok
+K=128 p7 med   16.2 ms/tok  61.61 tok/s  brel 0.0000  cold 0.000 GiB/tok  E 3.7 J/tok
+PANEL K=128: median 61.74 tok/s  worst 61.61  best 64.85
+A1 placement-invariance K=0 vs K=16: 100.0% token agreement over 64
+A1 placement-invariance K=0 vs K=128: 100.0% token agreement over 64
+A2 ours-continuations saved (8 prompts x 64 tok)
+PPL ours EXACT-CHUNKED (3 full chunks of 512, 1825 tok total): nll 3.3766 ppl 29.27
+=== A4: reference standard (shipped precision via HF) ===
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+A4-REFERENCE UNAVAILABLE (recorded): OutOfMemoryError: CUDA out of memory. Tried to allocate 120.41 GiB. GPU 0 has a total capacity of 139.80 GiB of which 77.96 GiB is free. Including non-PyTorch memory, this proces
+LADDER-DONE
+ladder rc=0
+=== LLAMA arms box=b1 (frozen flags; differential energy) ===
+gguf 60G
+ghcr.io/ggml-org/llama.cpp:full-cuda
+--- resident -t 8 anchor ---
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 143155 MiB):
+  Device 0: NVIDIA H200, compute capability 9.0, VMM: yes, VRAM: 143155 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl | threads |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | ------: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |       8 |             pp8 |       536.42 ± 83.68 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |       8 |            tg24 |        240.68 ± 5.64 |
+--- fine ncmoe ladder at -t 24 ---
+--- ncmoe28 -t 24 ---
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 143155 MiB):
+  Device 0: NVIDIA H200, compute capability 9.0, VMM: yes, VRAM: 143155 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl |  n_cpu_moe |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | ---------: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         28 |             pp8 |         71.23 ± 3.91 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         28 |            tg24 |         49.83 ± 1.15 |
+--- ncmoe30 -t 24 ---
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 143155 MiB):
+  Device 0: NVIDIA H200, compute capability 9.0, VMM: yes, VRAM: 143155 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl |  n_cpu_moe |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | ---------: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         30 |             pp8 |         69.28 ± 2.97 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         30 |            tg24 |         47.88 ± 3.22 |
+--- ncmoe32 -t 24 ---
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 143155 MiB):
+  Device 0: NVIDIA H200, compute capability 9.0, VMM: yes, VRAM: 143155 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl |  n_cpu_moe |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | ---------: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         32 |             pp8 |         65.50 ± 4.28 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         32 |            tg24 |         44.07 ± 2.14 |
+--- ncmoe34 -t 24 ---
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 143155 MiB):
+  Device 0: NVIDIA H200, compute capability 9.0, VMM: yes, VRAM: 143155 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl |  n_cpu_moe |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | ---------: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         34 |             pp8 |         63.49 ± 3.46 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         34 |            tg24 |         43.02 ± 0.21 |
+--- ncmoe36 -t 24 ---
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 143155 MiB):
+  Device 0: NVIDIA H200, compute capability 9.0, VMM: yes, VRAM: 143155 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl |  n_cpu_moe |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | ---------: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         36 |             pp8 |         61.28 ± 2.85 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         36 |            tg24 |         42.03 ± 2.48 |
+--- differential energy pairs ---
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 143155 MiB):
+  Device 0: NVIDIA H200, compute capability 9.0, VMM: yes, VRAM: 143155 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |             pp8 |      521.45 ± 105.21 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |            tg24 |        240.09 ± 6.41 |
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 143155 MiB):
+  Device 0: NVIDIA H200, compute capability 9.0, VMM: yes, VRAM: 143155 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |             pp8 |       534.40 ± 81.83 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |           tg512 |        242.87 ± 0.45 |
+llama resident DIFFERENTIAL GPU energy: (E512-E24) = 1608 J over 976 tokens => 1.64 J/tok
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 143155 MiB):
+  Device 0: NVIDIA H200, compute capability 9.0, VMM: yes, VRAM: 143155 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl |  n_cpu_moe |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | ---------: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         32 |             pp8 |         67.64 ± 4.18 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         32 |            tg24 |         40.24 ± 0.89 |
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 143155 MiB):
+  Device 0: NVIDIA H200, compute capability 9.0, VMM: yes, VRAM: 143155 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl |  n_cpu_moe |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | ---------: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         32 |             pp8 |         61.33 ± 4.26 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         32 |           tg512 |         46.06 ± 1.51 |
+llama ncmoe32 DIFFERENTIAL GPU energy: (E512-E24) = 3078 J over 976 tokens => 3.15 J/tok
+--- llama perplexity (exact-chunk) ---
+[1]20.6709,[2]19.7371,[3]21.7559,
+
+0.59.910.168 I Final estimate: PPL = 21.7559 +/- 2.35685
+--- A2 llama continuations (temp 0) ---
+Traceback (most recent call last):
+  File "<stdin>", line 5, in <module>
+  File "/usr/lib/python3.10/subprocess.py", line 505, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+  File "/usr/lib/python3.10/subprocess.py", line 1154, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+  File "/usr/lib/python3.10/subprocess.py", line 2022, in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+  File "/usr/lib/python3.10/subprocess.py", line 1198, in _check_timeout
+    raise TimeoutExpired(
+subprocess.TimeoutExpired: Command '['docker', 'run', '--rm', '--gpus', 'all', '-v', '/root/gguf:/models', '--entrypoint', '/app/llama-cli', 'ghcr.io/ggml-org/llama.cpp:full-cuda', '-m', '/models/model.gguf', '-p', 'The key advantage of mixture-of-experts models is', '-n', '64', '--temp', '0', '-ngl', '99', '--no-display-prompt', '-no-cnv']' timed out after 600 seconds
+ALLDONE
