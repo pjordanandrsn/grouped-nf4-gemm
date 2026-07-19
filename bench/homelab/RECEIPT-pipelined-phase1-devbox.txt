@@ -1,0 +1,25 @@
+Phase-1 dev-box receipt — pipelined residency engine (e4b experts4bit_qlora/pipelined.py)
+Box: DO gpu-4000adax1-20gb (RTX 4000 Ada, tor1), droplet 585776820, 2026-07-19.
+Torch cu128 + triton + working-tree nf4_grouped (PYTHONPATH; NOT the PyPI wheel).
+
+Gates:
+  tests/test_pipelined.py — 14 passed in 4.22s (first CUDA contact)
+  includes test_zero_sync_token_loop under torch.cuda.set_sync_debug_mode("error")
+  (torch warns the detector is non-exhaustive; pod run adds a profiler cross-check)
+
+Layer-step probe (E=128, k=4, H=I=1536 — HALF dims, 20GB card; per-expert 3.8 MiB;
+overhead bundle is launch-count-dominated, dims scale only GEMV/transfer terms):
+  pipelined K=0   (brel 0.0077) med  889 us/layer-step  -> x36 = 32.0 ms/token
+  pipelined K=16  (brel 0.0077) med  885 us/layer-step  -> x36 = 31.9 ms/token
+  pipelined K=128 (brel 0.0077) med  437 us/layer-step  -> x36 = 15.7 ms/token
+  reference K-any (brel 0.0000) med ~2450 us/layer-step -> x36 = 88.2 ms/token
+  NOTE: rows labeled "v0" in the raw probe printed the REFERENCE (unsplit) forward —
+  shipped enable_hot_residency correctly skips GptOssExperts4bit (custom forward);
+  v0-hybrid overhead at full dims is banked on the H200:
+  RESULT-hybrid-curve-v0-h200.md (61 ms/token at K=128, zero transfer).
+
+Readings:
+  - zero-transfer eager bundle 437 us/layer (launch-bound; graphs are Phase 3's cut)
+  - K=0 minus K=128 = ~452 us/layer for 15.2 MiB cold => ~34 GB/s implied — the
+    UVA gather streams at line rate on this link; transfer term behaves as bytes/BW
+  - correctness flat across K under 56-route churn (slot-cache discipline holds)
