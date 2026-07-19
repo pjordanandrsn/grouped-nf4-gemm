@@ -103,10 +103,82 @@ suspects — its own reported event with its own repair path.
   methodology (8/12-prompt train split here); grading used reducer values
   per U3, as stamped.
 
-## Follow-up session (operator-authorized "follow up work on DO")
+---
 
-One session: (1) reproduce the capture error with full traceback, fix the
-unpinned copy, re-run the **graphs arms** across the ladder under the same
-frozen protocol; (2) matched text extended ≥1200 tokens so llama's ppl tool
-runs — both stacks scored; (3) sync-audit without self-syncs; (4) pynvml
-wrap around the llama arms. Everything else stays frozen.
+# SESSION 2 — graphs arms landed (amendment; prior stamp preserved as
+# `.pre-session2.ots`)
+
+Pod: DO H200 585792200 (atl1), destroyed 404-verified. Raw state verbatim:
+`receipts-pipelined-ladder-s2-585792200.txt`. Pipe re-measured 45.2 GB/s.
+Same frozen protocol; the capture blocker was reproduced and repaired for
+zero pod spend on the A2000 (five rounds): three sites —
+`masking_utils.eager_mask`'s per-step `torch.tensor(0.0, device=cuda)`,
+the sliding-window cache layer's `torch.tensor([-1], …)` in its roll
+branch, and (repro-only) HF's stock MoE fallback, which the e4b engine
+replaces on the pod. **Recipe** (harness-level, this file is its
+documentation): a contained const-shim serving cached device scalars/small
+int-lists, plus **warm past the sliding window before capture** — the
+sliding layer's branch is chosen by a *python int*, so capture freezes the
+live branch; warming past the window freezes the roll branch, which is the
+semantically-correct steady state (and steady-state timing). Validated on
+the A2000 tiny-model rig at b_rel 0.00000 before any pod spend.
+
+## Session-2 ladder (graphs r=3; eager r=1 continuity anchors reproduced
+## session 1 within noise)
+
+| K | resGB | graphs tok/s | ms/tok (sd) | b_rel (state-matched) | eager anchor |
+|---:|---:|---:|---:|---:|---:|
+| 0   | 0.0  | 20.76 | 48.2 (1.2) | **0.0000** | 18.93 |
+| 8   | 1.8  | 22.90 | 43.7 (2.3) | **0.0000** | 19.73 |
+| 16  | 7.4  | **24.84** | 40.3 (2.2) | **0.0000** | 22.51 |
+| 32  | 14.7 | **30.21** | 33.1 (2.3) | **0.0000** | 22.91 |
+| 64  | 29.5 | **40.44** | 24.7 (1.4) | **0.0000** | 22.69 |
+| 128 | 58.9 | **62.06** | 16.1 (0.0) | **0.0000** | 21.97 |
+
+llama frozen arms, same box, same session: resident 239.50 ± 6.88, ncmoe32
+**24.43 ± 0.06**. Fidelity, matched 1108-token text (measurement-only, as
+stamped; different chunking methodologies and different quantization
+formats — GGUF-native shipped quant vs NF4-converted — so no claim is
+attached): ours nll 3.0957 / ppl 22.10 single-pass full-context; llama
+chunked-512 PPL 19.80 ± 2.68. llama arm GPU energy: 5803 J (resident) /
+5107 J (ncmoe32) per whole bench run incl. model load — attribution
+approximate, recorded not scored.
+
+**Harness attribution artifact (recorded):** session-2's per-token cold-GiB
+and J/tok columns for the graphs arms divide a window that includes the
+2×133-step warm prefixes by the 72 replays — they are warm-inclusive and
+NOT per-replay traffic. Session-1's eager traffic numbers (e.g. 1.636
+GiB/tok at K=0) remain the clean per-token measurements; physics bounds the
+K=0 replay traffic at ≤ 48.2 ms × 45.2 GB/s = 2.18 GB. Sync-audit-v2
+(no self-syncs): 7 warnings in a window that includes the reference-path
+prefill (T>1 falls back by design); the decode step's sync-freedom is
+separately proven by the unit gate under `set_sync_debug_mode("error")`.
+
+## Amended grades (P2/P3/P5 now gradeable)
+
+| P | prediction | outcome | grade |
+|---|---|---|---|
+| P1 | b_rel < 3e-2 every K, both arms | eager 0.0063; graphs **0.0000 at every K** | **GREEN** |
+| P2 | graphs K=128 ∈ [6, 36] ms | **16.1 ms** (v0: 61) | **GREEN** |
+| P3 | graphs K=0 ∈ [49.7, 79.7] ms (at 45.2 GB/s) | **48.2 ms** — 3% under the floor of the band | **RED (over-band)** — same two named overestimates as P4: slot-cache traffic below naive + launch share below width |
+| P5 | graphs crossing K* ≤ 64 | **K\* = 16**: 24.84 > 24.43 (same-session frozen) | **GREEN** |
+| P6 | monotone dial | graphs 20.76→22.90→24.84→30.21→40.44→62.06, strict | **GREEN** |
+
+(P4/P7 grades from session 1 stand; P8 now recorded for both stacks.)
+
+## The two closing numbers — FINAL
+
+1. **Achieved fraction of transfer floor at K=0: 90.7%** (graphs; slip
+   arithmetic 43.7/48.2). v0: 13.6%. Eager session-1: 81.8%.
+2. **The hybrid crosses llama's pinned 24.3 at K\* = 16** (7.4 GB resident
+   experts, ~matched to ncmoe32's ~6.6 GB) and pulls away on the dial:
+   1.24× at K=32, 1.65× at K=64, 62.1 tok/s at K=128. Honest bound on the
+   other end: resident-vs-resident, llama's all-GPU path (239.5) remains
+   ~3.9× our all-hot engine (62.1) — the fused-GEMV-per-layer granularity +
+   non-expert eager stack is our next ceiling, and it is llama's home turf,
+   not the constrained-VRAM regime this instrument is for.
+
+Deviations, documented: arena-allocation cache (`be5fe53`, pre-declared);
+the capture recipe above (harness-level, zero engine change); reducer
+capture-split methodology note (session 1). Both sessions' pods destroyed,
+404-verified; total program pod spend this arc ≈ $11.
