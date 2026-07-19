@@ -58,3 +58,10 @@ Operator-notes addendum (dev box 2: 585780581, 4000 Ada tor1, ~25 min, destroyed
   families are separate-process by design (co-collection is two-way incompatible:
   whichever imports first wins the process-global env). Solo: engine 25/25,
   interp contract 18/18.
+
+A2000 night-window entry (operator-ruled adjunct, correctness-only, 2026-07-19 ~03:25Z):
+  gnf4-v6 container (torch 2.8.0+cu128, triton 3.4.0), RTX A2000 12GB (sm_86,
+  gen3-class link, consumer allocator personality), card shared-idle (no compute
+  apps; existing residents untouched). 25/25 — all three engine suites incl.
+  CUDA-graph capture+replay and the fetch-kernel unit suite. No allocator, UVA,
+  or capture quirks on the target-class silicon. Adjunct only; no bands attached.
