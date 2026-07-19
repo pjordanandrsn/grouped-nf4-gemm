@@ -37,3 +37,24 @@ Phase-2/3 addendum (same box, before teardown):
   NB the probe's "capture-time brel 1.0" is an artifact — capture does not
   execute; parity is gated by replay-then-compare in the test suite, green.)
   Box destroyed 404-verified; hardcap disarmed. Total dev-box wall ~35 min.
+
+Operator-notes addendum (dev box 2: 585780581, 4000 Ada tor1, ~25 min, destroyed 404-verified):
+  Note 1 (fast-shelf re-copy): hot rows are D2D re-copied stack->slot instead of
+  computed in place — ACCEPTED at HBM bandwidth (~5 us/expert), watch-item on
+  small-bandwidth cards (~45 us/expert GDDR6-class). Now instrumented: zero-sync
+  device counters hot_d2d_bytes / cold_pcie_bytes at the single _fetch site
+  (.traffic() syncs only at report time); counters verified against hand-counted
+  expectations. Known fix if small-hardware profiles show the term: in-place hot
+  GEMM path.
+  Note 2 (fetch kernel gets its own suite): tests/test_gather_addr_kernel.py —
+  byte-exact host(UVA)+device(D2D) mixed in one launch; have-skip PROVEN BY
+  MUTATION (skipped slot retains stale bytes); tail masking w/ neighbor-row
+  integrity; duplicate sources; counter accounting; interpreter-mode guard.
+  compute-sanitizer memcheck on the kernel suite: 0 errors.
+  Segfault found+fixed during this pass: the gnf4 interpreter-contract suite sets
+  TRITON_INTERPRET=1 at import; a raw-pointer gather under the HOST interpreter
+  segv'd when co-collected in one pytest process. Engine now refuses loudly
+  (RuntimeError) and the e4b suites runtime-skip under interpreter mode; the two
+  families are separate-process by design (co-collection is two-way incompatible:
+  whichever imports first wins the process-global env). Solo: engine 25/25,
+  interp contract 18/18.
