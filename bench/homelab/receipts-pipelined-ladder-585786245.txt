@@ -1,0 +1,75 @@
+start 2026-07-19T03:49:03Z
+NVIDIA H200, 143771 MiB
+RAM 235GB
+PCIe 5, 16
+RAPL dirs: dtpm 
+stack OK
+=== HOT SETS (committed reducer, stamped stream) ===
+stream sha256[:16]=45c071e689b9f173 records=221184 prompts=12 (train 8) L=36 E=128 k=4
+held-out capture: K=0:0.000  K=8:0.235  K=16:0.373  K=32:0.572  K=64:0.799  K=128:1.000
+=== LADDER (eager + graphs, r=3) ===
+H2D bandwidth 45.3 GB/s
+HBM D2D bandwidth 4.21 TB/s (rw)
+energy counter: OK
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 31 files:   0%|          | 0/31 [00:00<?, ?it/s]Fetching 31 files:  10%|▉         | 3/31 [00:26<04:08,  8.88s/it]Fetching 31 files:  13%|█▎        | 4/31 [00:41<04:55, 10.95s/it]Fetching 31 files:  39%|███▊      | 12/31 [00:44<00:49,  2.59s/it]Fetching 31 files:  52%|█████▏    | 16/31 [00:50<00:32,  2.19s/it]Fetching 31 files:  55%|█████▍    | 17/31 [00:59<00:42,  3.02s/it]Fetching 31 files:  74%|███████▍  | 23/31 [01:06<00:16,  2.07s/it]Fetching 31 files:  77%|███████▋  | 24/31 [01:12<00:17,  2.47s/it]Fetching 31 files:  81%|████████  | 25/31 [01:13<00:14,  2.35s/it]Fetching 31 files: 100%|██████████| 31/31 [01:13<00:00,  2.38s/it]
+[03:52:05]   fusing + quantizing experts (up to 36x128) to nf4 (streaming)...
+[03:52:17]   quantized experts on 36/36 MoE layers (128 experts each)
+[03:52:17]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+loaded bare in 90s, VRAM 64.1GB
+36 modules; reducer capture: K=0:0.000 K=8:0.235 K=16:0.373 K=32:0.572 K=64:0.799 K=128:1.000
+bare ref decode anchored (first tokens [1023, 665])
+--- K=0: enabled 36/36 in 59s, VRAM 66.0GB ---
+K=0    EAGER  med   53.4 ms/tok (sd 0.1)   18.74 tok/s  brel 0.0063  cold 1.636 GiB/tok  hotD2D 0.0 MiB/tok  E 12.4 J/tok
+K=0    GRAPHS demoted to eager — RuntimeError: Cannot copy between CPU and CUDA tensors during CUDA graph capture unless the CPU tensor is pinned. Please use tensor.pin_memory() or alloca
+--- K=8: enabled 36/36 in 33s, VRAM 69.8GB ---
+K=8    EAGER  med   51.1 ms/tok (sd 0.5)   19.56 tok/s  brel 0.0063  cold 1.525 GiB/tok  hotD2D 113.6 MiB/tok  E 12.3 J/tok
+K=8    GRAPHS demoted to eager — RuntimeError: Cannot copy between CPU and CUDA tensors during CUDA graph capture unless the CPU tensor is pinned. Please use tensor.pin_memory() or alloca
+--- K=16: enabled 36/36 in 34s, VRAM 73.5GB ---
+K=16   EAGER  med   44.4 ms/tok (sd 0.7)   22.52 tok/s  brel 0.0063  cold 1.197 GiB/tok  hotD2D 449.0 MiB/tok  E 11.4 J/tok
+K=16   GRAPHS demoted to eager — RuntimeError: Cannot copy between CPU and CUDA tensors during CUDA graph capture unless the CPU tensor is pinned. Please use tensor.pin_memory() or alloca
+DECOMP K=16: layer-step 1501 us -> 36x = 54.0 ms; eager token med above => U2+glue ~ -9.6 ms
+/usr/local/lib/python3.10/dist-packages/torch/cuda/__init__.py:1270: UserWarning: Synchronization debug mode is a prototype feature and does not yet detect all synchronizing operations (Triggered internally at /pytorch/torch/csrc/cuda/Module.cpp:1003.)
+  torch._C._cuda_set_sync_debug_mode(debug_mode)
+SYNC-AUDIT K=16 (5 eager full-model steps, warn-mode): 9 sync warnings | called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunct || called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunct || called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunct
+--- K=32: enabled 36/36 in 35s, VRAM 81.3GB ---
+K=32   EAGER  med   42.3 ms/tok (sd 0.8)   23.62 tok/s  brel 0.0063  cold 0.648 GiB/tok  hotD2D 1011.5 MiB/tok  E 10.6 J/tok
+K=32   GRAPHS demoted to eager — RuntimeError: Cannot copy between CPU and CUDA tensors during CUDA graph capture unless the CPU tensor is pinned. Please use tensor.pin_memory() or alloca
+--- K=64: enabled 36/36 in 38s, VRAM 96.3GB ---
+K=64   EAGER  med   42.0 ms/tok (sd 0.2)   23.83 tok/s  brel 0.0063  cold 0.170 GiB/tok  hotD2D 1501.3 MiB/tok  E 10.3 J/tok
+K=64   GRAPHS demoted to eager — RuntimeError: Cannot copy between CPU and CUDA tensors during CUDA graph capture unless the CPU tensor is pinned. Please use tensor.pin_memory() or alloca
+--- K=128: enabled 36/36 in 44s, VRAM 126.3GB ---
+K=128  EAGER  med   41.8 ms/tok (sd 0.5)   23.93 tok/s  brel 0.0063  cold 0.000 GiB/tok  hotD2D 1675.2 MiB/tok  E 10.3 J/tok
+K=128  GRAPHS demoted to eager — RuntimeError: Cannot copy between CPU and CUDA tensors during CUDA graph capture unless the CPU tensor is pinned. Please use tensor.pin_memory() or alloca
+PPL ours (bare NF4 reference, 655 tokens, single-pass): nll 3.0208 ppl 20.51
+LADDER-DONE
+ladder rc=0
+=== LLAMA overlay (FROZEN pinned configs, same box) ===
+gguf 60G
+ghcr.io/ggml-org/llama.cpp:full-cuda
+--- llama resident (frozen) ---
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 143155 MiB):
+  Device 0: NVIDIA H200, compute capability 9.0, VMM: yes, VRAM: 143155 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl | threads |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | ------: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |       8 |             pp8 |       539.18 ± 82.67 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |       8 |            tg24 |        240.75 ± 6.52 |
+--- llama ncmoe32 (frozen) ---
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 143155 MiB):
+  Device 0: NVIDIA H200, compute capability 9.0, VMM: yes, VRAM: 143155 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl |  n_cpu_moe | threads |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | ---------: | ------: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         32 |       8 |             pp8 |         33.77 ± 0.17 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         32 |       8 |            tg24 |         24.25 ± 0.18 |
+--- llama perplexity (matched text) ---
+0.40.294.685 I system_info: n_threads = 24 (n_threads_batch = 24) / 24 | CUDA : ARCHS = 500,610,700,750,800,860,890,900,1200 | USE_GRAPHS = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.40.294.701 I perplexity: tokenizing the input ..
+0.40.298.039 I perplexity: tokenization took 3.335 ms
+0.40.298.041 E perplexity: you need at least 1024 tokens to evaluate perplexity with a context of 512
+0.40.298.042 E perplexity: the data file you provided tokenizes to only 655 tokens
+
+ALLDONE
