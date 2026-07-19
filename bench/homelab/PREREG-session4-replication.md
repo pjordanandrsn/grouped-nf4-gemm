@@ -93,6 +93,25 @@ per branch, to be bound to ONE branch before stamping:
 (same product, different hosts). *Falsify:* pod-to-pod variance larger
 than reported — widen all published error bars accordingly.
 
+**Agreement checks (fidelity, sharper than ppl — strict cross-stack
+bit-exactness is a category error and is not claimed anywhere):**
+- **A1 — placement invariance (ours, the design property):** greedy 64-token
+  sequences at K ∈ {0, 16, 128} from the same prompt/state predicted
+  **token-identical across K** — same NF4 bytes through the same kernel at
+  every placement. Band: agreement ∈ [98, 100]%; the sub-100 allowance is
+  named (fp32 `index_add_` atomics can flip a near-tie argmax) — any
+  mismatch is attributed there or investigated, and the "dial changes
+  speed, not answers" sentence is only published if this measures 100%.
+- **A2 — cross-stack greedy agreement:** 8 prompts × 64 tokens, temp-0,
+  both stacks; report % token agreement + first-divergence positions.
+  Band: [70, 95]% (different quantization formats and engines; greedy
+  amplifies epsilon at branch points — cross-format caveat applies to the
+  sentence that reports this). Contextualizes the ppl rows.
+- A3 (OPTIONAL, operator call, tone-gated): llama resident-vs-ncmoe token
+  agreement — compute migration between their CPU and GPU kernels makes
+  small divergence *expected and benign*; measured only to frame A1's
+  symmetry, reported only with that exact framing, or dropped.
+
 ## Protocol
 
 Per box: probes (pinned H2D, HBM D2D, RAPL/powercap inventory — B3 metal
