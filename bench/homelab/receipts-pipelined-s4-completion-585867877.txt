@@ -1,0 +1,43 @@
+start-s4-completion 2026-07-19T12:55:13Z
+NVIDIA H200, 143771 MiB
+RAM 235GB
+stack OK
+=== PASS 1: ours (NF4) — logits + exact-chunk ppl + continuations ===
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 31 files:   0%|          | 0/31 [00:00<?, ?it/s]Fetching 31 files:  10%|▉         | 3/31 [00:21<03:21,  7.21s/it]Fetching 31 files:  13%|█▎        | 4/31 [00:28<03:11,  7.10s/it]Fetching 31 files:  19%|█▉        | 6/31 [00:32<01:57,  4.70s/it]Fetching 31 files:  35%|███▌      | 11/31 [00:34<00:38,  1.93s/it]Fetching 31 files:  39%|███▊      | 12/31 [00:38<00:44,  2.33s/it]Fetching 31 files:  52%|█████▏    | 16/31 [00:40<00:22,  1.48s/it]Fetching 31 files:  55%|█████▍    | 17/31 [00:56<00:49,  3.54s/it]Fetching 31 files:  68%|██████▊   | 21/31 [01:01<00:24,  2.47s/it]Fetching 31 files:  71%|███████   | 22/31 [01:12<00:32,  3.62s/it]Fetching 31 files:  74%|███████▍  | 23/31 [01:12<00:25,  3.13s/it]Fetching 31 files:  77%|███████▋  | 24/31 [01:17<00:24,  3.49s/it]Fetching 31 files: 100%|██████████| 31/31 [01:17<00:00,  2.51s/it]
+[12:58:08]   fusing + quantizing experts (up to 36x128) to nf4 (streaming)...
+[12:58:20]   quantized experts on 36/36 MoE layers (128 experts each)
+[12:58:20]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+ours loaded in 95s
+matched text: 1825 tokens -> 3 full chunks (llama accounting)
+PPL ours EXACT-CHUNKED: nll 3.3766 ppl 29.27
+ours continuations saved (8x64, temp-0)
+pass1 rc=0
+=== PASS 2: reference standard (shipped precision, clean process) ===
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+Loading weights:   0%|          | 0/615 [00:00<?, ?it/s]Loading weights:   1%|          | 4/615 [00:00<00:36, 16.68it/s]Loading weights:   1%|          | 6/615 [00:00<01:03,  9.61it/s]Loading weights:   1%|▏         | 8/615 [00:01<02:01,  4.98it/s]Loading weights:   4%|▎         | 22/615 [00:01<00:41, 14.39it/s]Loading weights:   4%|▍         | 24/615 [00:02<00:46, 12.62it/s]Loading weights:   6%|▋         | 39/615 [00:02<00:24, 23.67it/s]Loading weights:   7%|▋         | 42/615 [00:03<00:42, 13.35it/s]Loading weights:   9%|▉         | 56/615 [00:03<00:26, 21.37it/s]Loading weights:  10%|▉         | 60/615 [00:03<00:31, 17.82it/s]Loading weights:  12%|█▏        | 73/615 [00:04<00:22, 24.58it/s]Loading weights:  13%|█▎        | 77/615 [00:04<00:29, 18.25it/s]Loading weights:  18%|█▊        | 109/615 [00:04<00:10, 46.42it/s]Loading weights:  23%|██▎       | 141/615 [00:04<00:06, 77.07it/s]Loading weights:  28%|██▊       | 175/615 [00:04<00:04, 107.76it/s]Loading weights:  34%|███▍      | 209/615 [00:05<00:02, 135.58it/s]Loading weights:  37%|███▋      | 229/615 [00:05<00:02, 136.38it/s]Loading weights:  40%|████      | 247/615 [00:05<00:02, 139.22it/s]Loading weights:  43%|████▎     | 265/615 [00:05<00:02, 147.05it/s]Loading weights:  46%|████▌     | 283/615 [00:05<00:02, 153.80it/s]Loading weights:  49%|████▉     | 301/615 [00:05<00:01, 158.23it/s]Loading weights:  52%|█████▏    | 319/615 [00:11<00:28, 10.21it/s] Loading weights:  54%|█████▍    | 332/615 [00:17<00:50,  5.60it/s]Loading weights:  56%|█████▌    | 345/615 [00:19<00:46,  5.84it/s]Loading weights:  57%|█████▋    | 352/615 [00:23<01:00,  4.32it/s]Loading weights:  59%|█████▉    | 362/615 [00:25<00:57,  4.44it/s]Loading weights:  60%|█████▉    | 366/615 [00:29<01:19,  3.15it/s]Loading weights:  62%|██████▏   | 379/615 [00:31<01:00,  3.91it/s]Loading weights:  62%|██████▏   | 381/615 [00:35<01:28,  2.64it/s]Loading weights:  64%|██████▍   | 396/615 [00:37<00:58,  3.73it/s]Loading weights:  65%|██████▍   | 398/615 [00:40<01:26,  2.52it/s]Loading weights:  67%|██████▋   | 413/615 [00:42<00:55,  3.62it/s]Loading weights:  67%|██████▋   | 415/615 [00:46<01:21,  2.45it/s]Loading weights:  70%|██████▉   | 430/615 [00:48<00:51,  3.56it/s]Loading weights:  70%|███████   | 432/615 [00:52<01:16,  2.41it/s]Loading weights:  73%|███████▎  | 447/615 [00:54<00:47,  3.53it/s]Loading weights:  73%|███████▎  | 449/615 [00:58<01:09,  2.39it/s]Loading weights:  75%|███████▌  | 464/615 [01:00<00:43,  3.50it/s]Loading weights:  76%|███████▌  | 466/615 [01:04<01:03,  2.35it/s]Loading weights:  78%|███████▊  | 481/615 [01:06<00:38,  3.45it/s]Loading weights:  79%|███████▊  | 483/615 [01:10<00:56,  2.32it/s]Loading weights:  81%|████████  | 498/615 [01:12<00:34,  3.43it/s]Loading weights:  81%|████████▏ | 500/615 [01:16<00:49,  2.33it/s]Loading weights:  84%|████████▎ | 515/615 [01:18<00:29,  3.43it/s]Loading weights:  84%|████████▍ | 517/615 [01:22<00:42,  2.32it/s]Loading weights:  87%|████████▋ | 532/615 [01:24<00:24,  3.42it/s]Loading weights:  87%|████████▋ | 534/615 [01:28<00:34,  2.32it/s]Loading weights:  89%|████████▉ | 549/615 [01:30<00:19,  3.44it/s]Loading weights:  90%|████████▉ | 551/615 [01:34<00:27,  2.34it/s]Loading weights:  92%|█████████▏| 566/615 [01:36<00:14,  3.44it/s]Loading weights:  92%|█████████▏| 568/615 [01:40<00:20,  2.26it/s]Loading weights:  95%|█████████▍| 583/615 [01:42<00:09,  3.34it/s]Loading weights:  95%|█████████▌| 585/615 [01:50<00:17,  1.68it/s]Loading weights:  98%|█████████▊| 600/615 [01:52<00:05,  2.61it/s]Loading weights:  98%|█████████▊| 602/615 [01:56<00:06,  1.91it/s]Loading weights: 100%|██████████| 615/615 [01:56<00:00,  5.27it/s]
+Some parameters are on the meta device because they were offloaded to the cpu.
+reference loaded [mxfp4-dequant auto 115/180] in 119s
+ref chunk 1/3 done
+ref chunk 2/3 done
+ref chunk 3/3 done
+PPL reference EXACT-CHUNKED: nll 3.2867 ppl 26.75
+A4 ref-logits artifact sha256[:16]=a7ca117747f8657f shape=(1536, 201088)
+A4 OURS-vs-REF: mean KL 0.06572  top1 88.15%  max-rel 0.2489
+pass2 rc=0
+=== A2: llama-server continuations vs ours ===
+gguf 60G
+ghcr.io/ggml-org/llama.cpp:full-cuda
+b73c88327d83e7b92d816224ad7474602d103d27869b7b80eca5e84137ab212e
+llama-server up=1
+A2 p0: common-prefix 56 chars (16%)  ours[:48]=' that they can capture complex, multimodal distr'  llama[:48]=' that they can capture complex, multimodal distr'
+A2 p1: common-prefix 25 chars (8%)  ours[:48]=' a hidden treasure chest buried beneath the sand'  llama[:48]=' a hidden treasure chest filled with ancient coi'
+A2 p2: common-prefix 282 chars (100%)  ours[:48]='  # Base case: an array of zero or one element i'  llama[:48]='  # Base case: an array of zero or one element i'
+A2 p3: common-prefix 44 chars (19%)  ours[:48]=' consisting of a black hole and a photon gas. Th'  llama[:48]=' consisting of a black hole and a photon gas in '
+A2 p4: common-prefix 103 chars (42%)  ours[:48]=" The tilt of Earth's axis\n\nQ: What is the name o"  llama[:48]=" The tilt of Earth's axis\n\nQ: What is the name o"
+A2 p5: common-prefix 49 chars (30%)  ours[:48]=' 500g flour, 350g water, 100g starter, 10g salt.'  llama[:48]=' 500g flour, 350g water, 100g starter, 10g salt.'
+A2 p6: common-prefix 48 chars (15%)  ours[:48]=' changes to the policy are not feasible.\n\nThe co'  llama[:48]=' changes to the policy are not feasible.\n\nThe co'
+A2 p7: common-prefix 56 chars (100%)  ours[:48]='\n\nLa bibliothèque ouvre à neuf heures chaque mat'  llama[:48]='\n\nLa bibliothèque ouvre à neuf heures chaque mat'
+A2 SUMMARY: median common-prefix 24%  min 8%  max 100%
+ALLDONE
