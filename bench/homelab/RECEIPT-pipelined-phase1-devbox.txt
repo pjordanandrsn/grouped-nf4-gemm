@@ -23,3 +23,17 @@ Readings:
   - K=0 minus K=128 = ~452 us/layer for 15.2 MiB cold => ~34 GB/s implied — the
     UVA gather streams at line rate on this link; transfer term behaves as bytes/BW
   - correctness flat across K under 56-route churn (slot-cache discipline holds)
+
+Phase-2/3 addendum (same box, before teardown):
+  tests: 18/18 (suite + graphs + hint) — CUDA-graph capture of the decode step
+  replays correctly across churning routes at every hot split (have-skip state
+  evolves inside the graph); lead-time hint correctness-invariant under
+  perfect/wrong/absent hints. kernel test_interp_contract.py: 18/18 from the
+  working tree.
+  Graph-replay layer-step (same dims as the eager probe):
+    graph K=0    med 828 us/layer-replay -> x36 = 29.8 ms/token
+    graph K=128  med 262 us/layer-replay -> x36 =  9.4 ms/token
+  (eager was 889/437; graphs cut the zero-transfer launch bundle ~40% here.
+  NB the probe's "capture-time brel 1.0" is an artifact — capture does not
+  execute; parity is gated by replay-then-compare in the test suite, green.)
+  Box destroyed 404-verified; hardcap disarmed. Total dev-box wall ~35 min.
