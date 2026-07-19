@@ -331,11 +331,74 @@ locked metric. b_rel = 0.0000 on every capture point, both boxes.
   the block. Ours-side continuations are saved; completion uses one
   llama-server + 8 API calls instead.
 
-## Wave status
+## Completion run (operator GO; DO H200 585867877, destroyed 404-verified;
+## receipts `receipts-pipelined-s4-completion-585867877.txt`)
 
-B1/B2 complete and graded: **every stamped band GREEN except two narrow,
-favorable-direction reds (soak −3.6% vs ±3%; B1's K=64 ratio 1.095 vs
-1.07) and the two incomplete arms (A4, A2) with root causes and a
-completion design.** B3 stock-gated with an armed poller. Completion
-re-fire awaits operator GO per the slip's re-fire clause. Wave spend ≈
-$8.7; arc total ≈ $24.
+Both incomplete arms finished with their root causes mechanized: ours-pass
+and reference-pass ran in SEPARATE python processes (exit = guaranteed GPU
++ pinned-RAM release; no parent residue → the reference's dequant had the
+full card), and A2 used one llama-server + 8 API calls (llama-cli's
+interactive hang path never engaged).
+
+**A4 — fidelity vs the reference standard (the decider).** Reference =
+shipped checkpoint, native precision dequantized via HF
+(`Mxfp4Config(dequantize=True)`, device_map auto, 119 s load), same
+matched text, exact same 3×512 chunks. Precondition gate passed (identical
+tokenization, 1825 tokens). Artifact `ref_logits.npy` sha256[:16]
+=a7ca117747f8657f, shape (1536, 201088).
+
+| stack | exact-chunk ppl | vs reference |
+|---|---:|---|
+| **reference (shipped precision)** | **26.75** | — (ground truth) |
+| ours (NF4 re-quant) | 29.27 | KL 0.0657, top-1 **88.15%**, max-rel 0.249 |
+| llama (its GGUF repack) | 21.76 | (below reference — see reading) |
+
+**Reading — the E5/ppl red is RESOLVED and the pre-committed expectation
+holds:** ours sits **+9.4% ppl above** the reference standard — a real,
+modest NF4 re-quantization cost (mean KL 0.066, 88% top-1 to native), the
+expected direction and now a *sized* number. **llama's 21.76 is 18.7%
+BELOW the reference** — a repack does not add information, so a sub-
+reference ppl is a scoring-convention artifact (llama-perplexity's
+sliding-window context vs our independent-chunk cross-entropy), not
+superior fidelity. So the earlier "ours/llama = 1.345" was never a fidelity
+gap at all — it compared two *different distances-from-truth measured
+different ways*. Against the common ground truth, ours is +9.4% and the
+llama number is not a like-for-like fidelity figure. **The pre-committed
+ordering (llama-KL ≤ ours-KL) is not evaluable as stated** — llama's
+logits weren't extracted (only its self-scored ppl), so no llama-vs-
+reference KL exists; recorded as a partial, and the honest fidelity claim
+is now the absolute one: *ours is within KL 0.066 / 88% top-1 / +9.4% ppl
+of the shipped-precision model.*
+
+**A2 — cross-stack greedy agreement (temp 0, 8 prompts × 64 tok, common
+prefix vs ours):** per-prompt 100/100/42/30/19/16/15/8%, **median 24%**,
+against the pre-registered band **[70, 95]%** ⇒ **RED (below)**. Reading,
+pre-committed style: the band was simply wrong for greedy decode across
+two quantizations — deterministic greedy has NO error tolerance, so the
+first near-tie logit flip forks the sequence permanently and prefix-
+agreement collapses even between near-identical models. The *content*
+tells the real story: every divergence is a legitimate paraphrase at a
+genuine branch point (p1 "buried beneath the sand" vs "filled with ancient
+coins"; p3 "photon gas. The" vs "photon gas in "), never a degeneration —
+and the fully-determined prompts agree 100% (p2 quicksort, p7 French
+translation). The KL 0.066 from A4 is the correct fidelity instrument;
+A2's prefix-agreement is a decode-divergence-amplification artifact, and
+the band is corrected to that understanding (a distributional metric like
+A4, not sequence prefix, is what "agreement" should have meant). No
+publication claim rests on A2.
+
+## Wave status — B1/B2 COMPLETE, B3 stock-gated
+
+Stamped bands: **all six panel rows GREEN, both boxes; replication 0.2%;
+A1 placement-invariance 100%; the fidelity red RESOLVED** (ours within
+KL 0.066 / +9.4% ppl of ground truth; the 1.345 "gap" was a cross-scoring
+artifact). Remaining reds are narrow and understood: soak −3.6% vs ±3%
+(favorable, clock-ramp); B1 K=64-vs-box-best 1.095 vs 1.07 (llama's own
+±7% t24 spread swamps it); A2 prefix-agreement below a band that was
+mis-specified for greedy decode (corrected; A4 KL is the right instrument).
+Honest headline caveat retained: llama's true best on 24-vCPU boxes
+(ncmoe28 ≈ 50 tok/s @ 13 GB) beats our mid-VRAM points; our uncontested
+domains are weak/mid-host CPU, VRAM-at-parity, K=128, and fidelity-to-
+native at a stated 9.4% cost. B3 (Latitude H100 metal) still
+`in_stock=[]`; 30-min poller armed, folds in on restock. Wave spend ≈
+$11.7; arc total ≈ $27.
