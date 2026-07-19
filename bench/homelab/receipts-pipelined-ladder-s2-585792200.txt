@@ -1,0 +1,71 @@
+start-session2 2026-07-19T04:23:49Z
+NVIDIA H200, 143771 MiB
+RAM 235GB
+PCIe 5, 16
+stack OK
+=== HOT SETS (committed reducer, stamped stream) ===
+stream sha256[:16]=45c071e689b9f173 records=221184 prompts=12 (train 8) L=36 E=128 k=4
+held-out capture: K=0:0.000  K=8:0.235  K=16:0.373  K=32:0.572  K=64:0.799  K=128:1.000
+=== SESSION-2 LADDER (graphs r=3 + eager r=1 anchor) ===
+H2D bandwidth 45.2 GB/s
+energy counter: OK
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 31 files:   0%|          | 0/31 [00:00<?, ?it/s]Fetching 31 files:  10%|▉         | 3/31 [00:29<04:32,  9.72s/it]Fetching 31 files:  13%|█▎        | 4/31 [00:32<03:30,  7.80s/it]Fetching 31 files:  19%|█▉        | 6/31 [00:36<02:05,  5.01s/it]Fetching 31 files:  39%|███▊      | 12/31 [00:43<00:45,  2.40s/it]Fetching 31 files:  52%|█████▏    | 16/31 [00:53<00:36,  2.42s/it]Fetching 31 files:  55%|█████▍    | 17/31 [01:06<00:51,  3.71s/it]Fetching 31 files:  71%|███████   | 22/31 [01:09<00:20,  2.23s/it]Fetching 31 files:  74%|███████▍  | 23/31 [01:11<00:17,  2.23s/it]Fetching 31 files:  77%|███████▋  | 24/31 [01:13<00:15,  2.22s/it]Fetching 31 files: 100%|██████████| 31/31 [01:13<00:00,  2.37s/it]
+[04:26:46]   fusing + quantizing experts (up to 36x128) to nf4 (streaming)...
+[04:26:58]   quantized experts on 36/36 MoE layers (128 experts each)
+[04:26:58]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+loaded bare in 90s, VRAM 64.1GB
+36 modules; sliding_window=128 -> capture warm=132 (roll branch frozen)
+--- K=0: enabled 36/36 in 58s, VRAM 66.0GB ---
+K=0    EAGER(r1)  med   52.8 ms/tok   18.93 tok/s  (session-1 continuity anchor)
+K=0    GRAPHS(r3) med   48.2 ms/tok (sd 1.2)   20.76 tok/s  brel(state-matched) 0.0000  cold 7.670 GiB/tok  E 46.3 J/tok
+--- K=8: enabled 36/36 in 33s, VRAM 69.8GB ---
+K=8    EAGER(r1)  med   50.7 ms/tok   19.73 tok/s  (session-1 continuity anchor)
+K=8    GRAPHS(r3) med   43.7 ms/tok (sd 2.3)   22.90 tok/s  brel(state-matched) 0.0000  cold 7.180 GiB/tok  E 44.6 J/tok
+--- K=16: enabled 36/36 in 34s, VRAM 73.6GB ---
+K=16   EAGER(r1)  med   44.4 ms/tok   22.51 tok/s  (session-1 continuity anchor)
+K=16   GRAPHS(r3) med   40.3 ms/tok (sd 2.2)   24.84 tok/s  brel(state-matched) 0.0000  cold 6.259 GiB/tok  E 42.7 J/tok
+/usr/local/lib/python3.10/dist-packages/torch/cuda/__init__.py:1270: UserWarning: Synchronization debug mode is a prototype feature and does not yet detect all synchronizing operations (Triggered internally at /pytorch/torch/csrc/cuda/Module.cpp:1003.)
+  torch._C._cuda_set_sync_debug_mode(debug_mode)
+SYNC-AUDIT-v2 K=16 (5 steps, no self-syncs): 7 warnings | sites: cache_utils.py:206 experts.py:448 experts.py:457 gptoss.py:103 gptoss.py:110
+--- K=32: enabled 36/36 in 36s, VRAM 81.1GB ---
+K=32   EAGER(r1)  med   43.6 ms/tok   22.91 tok/s  (session-1 continuity anchor)
+K=32   GRAPHS(r3) med   33.1 ms/tok (sd 2.3)   30.21 tok/s  brel(state-matched) 0.0000  cold 4.380 GiB/tok  E 39.9 J/tok
+--- K=64: enabled 36/36 in 38s, VRAM 96.1GB ---
+K=64   EAGER(r1)  med   44.1 ms/tok   22.69 tok/s  (session-1 continuity anchor)
+K=64   GRAPHS(r3) med   24.7 ms/tok (sd 1.4)   40.44 tok/s  brel(state-matched) 0.0000  cold 2.066 GiB/tok  E 36.7 J/tok
+--- K=128: enabled 36/36 in 44s, VRAM 126.1GB ---
+K=128  EAGER(r1)  med   45.5 ms/tok   21.97 tok/s  (session-1 continuity anchor)
+K=128  GRAPHS(r3) med   16.1 ms/tok (sd 0.0)   62.06 tok/s  brel(state-matched) 0.0000  cold 0.000 GiB/tok  E 34.9 J/tok
+PPL ours (bare NF4 reference, 1108 tokens, single-pass): nll 3.0957 ppl 22.10
+LADDER-DONE
+ladder rc=0
+=== LLAMA overlay (FROZEN flags) + energy wrap + ppl ===
+gguf 60G
+ghcr.io/ggml-org/llama.cpp:full-cuda
+--- llama resident (frozen) ---
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 143155 MiB):
+  Device 0: NVIDIA H200, compute capability 9.0, VMM: yes, VRAM: 143155 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl | threads |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | ------: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |       8 |             pp8 |       528.74 ± 95.55 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |       8 |            tg24 |        239.50 ± 6.88 |
+llama resident GPU energy: 5803 J total (bench run incl. load; pp8x2+tg24x2 ~64 gen tokens — attribution approximate, recorded not scored)
+--- llama ncmoe32 (frozen) ---
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 143155 MiB):
+  Device 0: NVIDIA H200, compute capability 9.0, VMM: yes, VRAM: 143155 MiB
+load_backend: loaded CUDA backend from /app/libggml-cuda.so
+load_backend: loaded CPU backend from /app/libggml-cpu-zen4.so
+| model                          |       size |     params | backend    | ngl |  n_cpu_moe | threads |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | ---------: | ------: | --------------: | -------------------: |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         32 |       8 |             pp8 |         33.38 ± 1.03 |
+| gpt-oss 120B MXFP4 MoE         |  59.02 GiB |   116.83 B | CUDA       |  99 |         32 |       8 |            tg24 |         24.43 ± 0.06 |
+llama ncmoe32 GPU energy: 5107 J total (bench run incl. load; pp8x2+tg24x2 ~64 gen tokens — attribution approximate, recorded not scored)
+--- llama perplexity (matched text, >=1024 tok) ---
+0.13 minutes
+0.57.682.178 I perplexity: 16.85 seconds per pass - ETA [1]20.7097,[2]19.7966,
+0.57.702.795 I Final estimate: PPL = 19.7966 +/- 2.67715
+
+ALLDONE
