@@ -42,11 +42,15 @@ def resolve_snapshot(model_id: str) -> str:
         HF_HUB_CACHE = os.path.expanduser("~/.cache/huggingface/hub")
     base = os.path.join(HF_HUB_CACHE,
                         f"models--{model_id.replace('/', '--')}", "snapshots")
-    cands = sorted(glob.glob(os.path.join(base, "*")))
+    cands = sorted(glob.glob(os.path.join(base, "*")), key=os.path.getmtime)
     if not cands:
         raise FileNotFoundError(
             f"no local snapshot for {model_id} under {base} — download it first "
             "(huggingface-cli download / snapshot_download)")
+    if len(cands) > 1:
+        print(f"WARNING: {len(cands)} cached snapshots for {model_id}; using the "
+              f"most recently modified — pass --snapshot to pin the one the "
+              f"artifact was built from", flush=True)
     return cands[-1]
 
 
@@ -70,7 +74,9 @@ def main() -> int:
     prov = art["provenance"]
     table = prov["file_hashes"]
     model_id = args.model or art.get("model")
-    snapshot = args.snapshot or resolve_snapshot(model_id)
+    art_snap = art.get("snapshot")
+    snapshot = args.snapshot or (art_snap if art_snap and os.path.isdir(art_snap)
+                                 else resolve_snapshot(model_id))
     index = json.load(open(os.path.join(snapshot, "model.safetensors.index.json")))
     weight_map = index["weight_map"]
 
