@@ -1,0 +1,106 @@
+{
+ "model": "Qwen3-235B-A22B-Instruct-2507",
+ "box": {
+  "gpu": "NVIDIA A100 80GB PCIe, 81920 MiB",
+  "link_gbps": 26.74,
+  "ours_pred_toks": 2.62,
+  "band": [
+   2.23,
+   3.02
+  ]
+ },
+ "ours": {
+  "harness": "bench/phase3/offload_generate_235b.py (stamped Phase-B, verbatim; redux)",
+  "bpw": "NF4 4-bit + fp32 absmax/64 (~4.5 eff), from released bf16",
+  "receipt": {
+   "model": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+   "layers": 94,
+   "h2d_gbps": 26.76451207983116,
+   "per_token_gb": 7.983857664,
+   "waterfall_toks": 3.3523283112266618,
+   "results": [
+    {
+     "prompt": "The key difference between mixture-of-experts and dense transformer models is",
+     "text": "The key difference between **Mixture-of-Experts (MoE)** and **dense (or dense) transformer models** lies in how they utilize their parameters during inference:\n\n### 1. **Parameter Efficiency**:\n- **Dense models activate all parameters for every input token.\n- **Mixture-of-Experts (MoE)**:\n- **Dense models**:\n  - **Mixture-of-Experts (MoE) models**:\n  - **Dense models**:\n  - **Mixture-of-Experts (MoE)**:\n  - A **dense** (or **dense) models**:\n  - In",
+     "n_tokens": 128,
+     "mode": "gpu",
+     "toks_per_s_off": 2.27758852372577,
+     "toks_per_s_on": 2.3468582289337934,
+     "prefetch_speedup": 1.0304136170719322,
+     "hit_rate": null,
+     "greedy_identical": true,
+     "distinct2": 0.5433070866141733
+    },
+    {
+     "prompt": "The key difference between mixture-of-experts and dense transformer models is",
+     "text": "The key difference between **Mixture-of-Experts (MoE)** and **dense (or dense) transformer models** lies in how they utilize their parameters during inference:\n\n### 1. **Parameter Efficiency**:\n- **Dense models activate all parameters for every input token.\n- **Mixture-of-Experts (MoE)**:\n- **Dense models**:\n  - **Mixture-of-Experts (MoE) models**:\n  - **Dense models**:\n  - **Mixture-of-Experts (MoE)**:\n  - A **dense** (or **dense) models**:\n  - In",
+     "n_tokens": 128,
+     "mode": "gpu_early",
+     "toks_per_s_off": 2.27758852372577,
+     "toks_per_s_on": 1.9803467399140795,
+     "prefetch_speedup": 0.8694927636334194,
+     "hit_rate": 0.775605097815222,
+     "greedy_identical": true,
+     "distinct2": 0.5433070866141733
+    },
+    {
+     "prompt": "Write a haiku about memory bandwidth.",
+     "text": "Silicon hums,  \ndata streams in swift rivers\u2014  \nmemory's fleeting cache.",
+     "n_tokens": 18,
+     "mode": "gpu",
+     "toks_per_s_off": 2.303559991517772,
+     "toks_per_s_on": 2.3539206016261303,
+     "prefetch_speedup": 1.021862078823125,
+     "hit_rate": null,
+     "greedy_identical": true,
+     "distinct2": 1.0
+    },
+    {
+     "prompt": "Write a haiku about memory bandwidth.",
+     "text": "Silicon hums,  \ndata streams in swift rivers\u2014  \nmemory's fleeting cache.",
+     "n_tokens": 18,
+     "mode": "gpu_early",
+     "toks_per_s_off": 2.303559991517772,
+     "toks_per_s_on": 1.9955251872377209,
+     "prefetch_speedup": 0.8662788008932676,
+     "hit_rate": 0.7925923028785983,
+     "greedy_identical": true,
+     "distinct2": 1.0
+    },
+    {
+     "prompt": "Explain, in two sentences, why quantization reduces energy per token:",
+     "text": "Quantization reduces energy per token by decreasing the precision of model weights and activations (e.g., from 32 to int8 or lower reduces the computational and memory requirements, enabling faster inference and lower power consumption per token.",
+     "n_tokens": 45,
+     "mode": "gpu",
+     "toks_per_s_off": 2.290878454107758,
+     "toks_per_s_on": 2.350402673067043,
+     "prefetch_speedup": 1.0259831414680918,
+     "hit_rate": null,
+     "greedy_identical": true,
+     "distinct2": 0.9772727272727273
+    },
+    {
+     "prompt": "Explain, in two sentences, why quantization reduces energy per token:",
+     "text": "Quantization reduces energy per token by decreasing the precision of model weights and activations (e.g., from 32 to int8 or lower reduces the computational and memory requirements, enabling faster inference and lower power consumption per token.",
+     "n_tokens": 45,
+     "mode": "gpu_early",
+     "toks_per_s_off": 2.290878454107758,
+     "toks_per_s_on": 2.000273533317674,
+     "prefetch_speedup": 0.8731469492547708,
+     "hit_rate": 0.7910474030037546,
+     "greedy_identical": true,
+     "distinct2": 0.9772727272727273
+    }
+   ],
+   "vram_peak_gb": 15.139193856,
+   "gpu": "NVIDIA A100 80GB PCIe"
+  }
+ },
+ "ik": {
+  "quant": "ubergarm mix-IQ3_K 3.903 BPW (author's ik-native quant)",
+  "config": "-ngl 99 -ot exps=CPU -fa -rtr -fmoe -t <phys>",
+  "bench_rows": [
+   "| qwen3moe 235B.A22B IQ3_K - 3.4325 bpw | 106.64 GiB |   235.09 B | CUDA       |  99 |   1 |         tg128 |      3.17 \u00b1 0.13 |"
+  ]
+ }
+}

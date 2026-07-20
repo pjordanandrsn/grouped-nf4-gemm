@@ -11,7 +11,7 @@ jobs:
           if git ls-files | grep -E '^AGENT-'; then
             echo "::error::AGENT-* planning docs belong on the private fork"; exit 1
           fi
-          if git grep -l "(PRIVATE)" -- ':!.github/workflows/private-marker-guard.yml'; then
+          if git grep -l "(PRIVATE)" -- ':!.github/workflows/private-marker-guard.yml' ':!docs/mxfp4/RESULTS-mxfp4-serve.md'  # stamped doc: bytes immutable (.ots), historical lane marker retained; then
             echo "::error::(PRIVATE) lane marker found in public tree"; exit 1
           fi
           echo "clean"

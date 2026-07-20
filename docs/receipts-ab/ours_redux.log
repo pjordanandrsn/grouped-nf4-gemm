@@ -1,0 +1,46 @@
+[05:35:58] downloading Qwen/Qwen3-235B-A22B-Instruct-2507 -> /root/hf
+Fetching 125 files:   0%|          | 0/125 [00:00<?, ?it/s]Fetching 125 files: 100%|██████████| 125/125 [00:00<00:00, 5585.79it/s]
+[05:35:59] download complete
+[05:36:01] prompts encoded: lengths [21, 16, 23]
+[05:36:03] link 26.8 GB/s; 7.98 GB/token -> waterfall 3.35 tok/s
+[05:37:09]   built layer 8/94 (66s)
+[05:38:11]   built layer 16/94 (129s)
+[05:39:21]   built layer 24/94 (199s)
+[05:40:37]   built layer 32/94 (274s)
+[05:41:54]   built layer 40/94 (351s)
+[05:43:10]   built layer 48/94 (427s)
+[05:44:34]   built layer 56/94 (512s)
+[05:45:53]   built layer 64/94 (590s)
+[05:47:18]   built layer 72/94 (675s)
+[05:48:35]   built layer 80/94 (753s)
+[05:50:00]   built layer 88/94 (837s)
+[05:51:10] build complete in 908s
+[05:52:54] PROMPT[gpu]: 'The key difference between mixture-of-experts and dense transformer models is'
+  off 2.28 -> on 2.35 tok/s (x1.030, hit -1.00, identical=True)
+  The key difference between **Mixture-of-Experts (MoE)** and **dense (or dense) transformer models** lies in how they utilize their parameters during inference:
+
+### 1. **Parameter Efficiency**:
+- **De
+[05:54:09] PROMPT[gpu_early]: 'The key difference between mixture-of-experts and dense transformer models is'
+  off 2.28 -> on 1.98 tok/s (x0.869, hit 0.78, identical=True)
+  The key difference between **Mixture-of-Experts (MoE)** and **dense (or dense) transformer models** lies in how they utilize their parameters during inference:
+
+### 1. **Parameter Efficiency**:
+- **De
+[05:54:38] PROMPT[gpu]: 'Write a haiku about memory bandwidth.'
+  off 2.30 -> on 2.35 tok/s (x1.022, hit -1.00, identical=True)
+  Silicon hums,  
+data streams in swift rivers—  
+memory's fleeting cache.
+[05:54:55] PROMPT[gpu_early]: 'Write a haiku about memory bandwidth.'
+  off 2.30 -> on 2.00 tok/s (x0.866, hit 0.79, identical=True)
+  Silicon hums,  
+data streams in swift rivers—  
+memory's fleeting cache.
+[05:55:54] PROMPT[gpu]: 'Explain, in two sentences, why quantization reduces energy per token:'
+  off 2.29 -> on 2.35 tok/s (x1.026, hit -1.00, identical=True)
+  Quantization reduces energy per token by decreasing the precision of model weights and activations (e.g., from 32 to int8 or lower reduces the computational and memory requirements, enabling faster in
+[05:56:28] PROMPT[gpu_early]: 'Explain, in two sentences, why quantization reduces energy per token:'
+  off 2.29 -> on 2.00 tok/s (x0.873, hit 0.79, identical=True)
+  Quantization reduces energy per token by decreasing the precision of model weights and activations (e.g., from 32 to int8 or lower reduces the computational and memory requirements, enabling faster in
+[05:56:28] wrote /root/ab/ours.json; VRAM peak 15.1 GB
