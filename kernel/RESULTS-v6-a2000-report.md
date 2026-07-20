@@ -97,5 +97,8 @@ is dtype-bought and unchanged by the register-LUT).
 
 Nothing in the A2000 data contradicts a published claim; the one registered
 band this leg can speak to — the paired register-LUT prefill gain — lands
-inside the confirmed 1.39–1.54 window on 8/8 cells at the lowest SM count in
-the fleet. v6's mainloop is architecture-robust from 26 SM to 170 SM.
+inside the confirmed 1.39–1.54 window on **7/8 cells**, with the eighth
+(Gemma-4 down, median 1.378 [1.377..1.382]) sitting 0.9 % below the band
+floor — within this card's stated contention jitter but honestly outside the
+window, and the A2000 range is reported as 1.38–1.53 accordingly. v6's
+mainloop is architecture-robust from 26 SM to 170 SM.
