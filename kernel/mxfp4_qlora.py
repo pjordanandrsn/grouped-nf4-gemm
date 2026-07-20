@@ -263,7 +263,9 @@ class ExpertsMxfp4LoRA(nn.Module):
         base = self.base
         next_states = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            expert_mask = F.one_hot(router_indices, num_classes=base.num_experts)
+            # num_classes=E+1: transformers pads ragged routing with index == E;
+            # one_hot at E would throw before the skip below can run
+            expert_mask = F.one_hot(router_indices, num_classes=base.num_experts + 1)
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in expert_hit:

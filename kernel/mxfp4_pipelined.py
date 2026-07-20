@@ -156,6 +156,15 @@ class Mxfp4PipelinedGptOss:
         in_dtype, in_dev = hidden_states.dtype, hidden_states.device
         x = hidden_states.to(device=self.device, dtype=self.cd)
         want = router_indices.reshape(-1).to(device=self.device, dtype=torch.long)
+        # the decode engine takes exactly k VALID ids; transformers' padded
+        # routing index (== num_experts) would index bias/expert data OOB.
+        # Checked eagerly only — a sync inside CUDA-graph capture is illegal.
+        if not torch.cuda.is_current_stream_capturing():
+            if bool((want >= self.gate_up_bias.shape[0]).any()):
+                raise ValueError(
+                    "padded routing index (== num_experts) reached the pipelined "
+                    "decode engine — drop padding upstream; this engine takes "
+                    "exactly k valid expert ids per token")
         k = self.k
         self._fetch(want)
         if self.a_buf is None or self.a_buf.dtype != self.cd:
