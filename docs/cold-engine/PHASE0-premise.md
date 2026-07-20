@@ -12,7 +12,7 @@ then the roofline table closes.
 |---|---|
 | memcpy ceiling (torch copy) | **~12 GB/s** plateau, saturates at 2 threads (1t: 8.8); triad peaks 15.3 |
 | naive torch NF4 dequant floor | **0.067 GB/s packed** = 0.6% of ceiling (139 ms/expert on [5760,2880]); +GEMV adds ~4% (decode dominates utterly) |
-| bnb 0.49.2 CPU dequantize_4bit | **0.041 GB/s** — SLOWER than naive: the AVX512 kernel cannot engage (no AVX-512 on this CPU); bnb silently falls back to its reference path |
+| bnb 0.49.2 CPU dequantize_4bit | **0.041 GB/s** — SLOWER than naive: the AVX512 kernel cannot engage (no AVX-512 on this CPU); bnb silently falls back to its reference path. *Measurement caveat: the banked receipt timed one reused (cache-hot) expert buffer, unlike the naive bench's cold multi-expert walk — a bias in bnb's favor, so the refutation is conservative; the bench now walks E distinct slices.* |
 
 **Verdict on the free floor: REFUTED on the target box.** The 0.3 scout's bnb
 finding stands only for AVX-512 fleets; the QNAP cell gets no free lunch —
