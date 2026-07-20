@@ -201,11 +201,34 @@ min-bytes dispatch floor (tiny cells route to the dequant path via
 `decode_dispatch()`), the register-LUT prefill mainloop (v6, confirmed),
 and the flagship offload pipeline (Phase A/B + the closed prefetch program
 + the UVA gather path + the bnb-CUDA-dequant baseline, whose registered
-prediction was refuted — see the flagship section). Pending: the v6 A2000
-report-only addendum; a bare-metal gen4 replication when stock returns.
-Parked: sm_120 (three consecutive cloud provisioning failures on 5090s —
-availability, not code). Ecosystem landing is calendar-gated on the
-bitsandbytes v0.50.0 release; see the coordination note on #1949.
+prediction was refuted — see the flagship section). The v6 A2000
+report-only addendum landed 2026-07-20
+([`kernel/RESULTS-v6-a2000-report.md`](kernel/RESULTS-v6-a2000-report.md)):
+paired prefill medians inside the confirmed band on 7/8 cells at 26 SM
+(the eighth 0.9% below the floor, quantified in-doc) — the mainloop is
+bracketed 26→170 SM with zero retune. Pending: a bare-metal gen4
+replication when stock returns. Parked: sm_120 (three consecutive cloud
+provisioning failures on 5090s — availability, not code). Ecosystem landing
+is calendar-gated on the bitsandbytes v0.50.0 release; see the coordination
+note on #1949.
+
+**Downstream serving** lives in the sibling package
+[`experts4bit-qlora`](https://pypi.org/project/experts4bit-qlora/): its
+`[fast]` extra routes frozen-expert inference through this kernel (3.65× at
+bs=1 decode on OLMoE geometry), and its hot-expert residency runs hot and
+cold stacks on the same kernel — with 2026-07-20 receipts showing decode
+gain tracks routing coverage (informed hot sets +56–120% on gpt-oss, +44%
+on Gemma-4). Division of labor: this kernel makes one expert-stack matmul
+cheap; e4b decides which bytes are where.
+
+**Cold-engine exploration** (CPU-resident third tier for the coldest
+experts) is at phase-0: premise measurements on the target NAS host are in
+[`docs/cold-engine/PHASE0-premise.md`](docs/cold-engine/PHASE0-premise.md).
+Honest status: the "free floor" premise (bnb's CPU `dequantize_4bit` as a
+ready-made decode arm) is **refuted** on that box — no AVX-512 means bnb
+falls back to its reference path at 0.041 GB/s against a ~12 GB/s DDR
+ceiling — so an AVX2 decode port is the mandated phase-2 step before any
+integration work. Design-stage; no registered claims.
 
 ## Cross-vendor projections (stamped, PROJECTED tier — help us confirm them)
 
