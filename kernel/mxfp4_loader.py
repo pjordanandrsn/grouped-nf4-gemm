@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import struct
 
 import torch
@@ -88,25 +89,42 @@ def layer_expert_names(layer: int, prefix: str = "model.layers") -> dict:
     return {s: base + s for s in EXPERT_SUFFIXES}
 
 
-def provenance_table(path: str, layers, prefix: str = "model.layers") -> dict:
+def _resolve_tensor_path(name, path, weight_map, snapshot):
+    """Sharded checkpoints keep each tensor in its own shard: with a
+    ``weight_map`` (the safetensors index), resolve per name; otherwise the
+    single ``path`` serves the whole checkpoint."""
+    if weight_map is None:
+        return path
+    if name not in weight_map:
+        raise KeyError(f"{name} not in the checkpoint index")
+    base = snapshot if snapshot is not None else os.path.dirname(path)
+    return os.path.join(base, weight_map[name])
+
+
+def provenance_table(path: str, layers, prefix: str = "model.layers", *,
+                     weight_map: dict = None, snapshot: str = None) -> dict:
     """Build the stamped provenance artifact: for every expert tensor in
     `layers`, the file-side sha256 (OpenAI's on-disk bytes). This is the demo
-    artifact; `verify_arena_matches` proves the loaded arena reproduces it."""
+    artifact; `verify_arena_matches` proves the loaded arena reproduces it.
+    Pass ``weight_map`` (+ ``snapshot``) for sharded checkpoints."""
     table = {}
     for L in layers:
         for suffix, name in layer_expert_names(L, prefix).items():
-            table[name] = file_tensor_sha256(path, name)
-    return {"algo": "sha256", "source": path, "n_tensors": len(table), "hashes": table}
+            table[name] = file_tensor_sha256(
+                _resolve_tensor_path(name, path, weight_map, snapshot), name)
+    return {"algo": "sha256", "source": snapshot or path, "n_tensors": len(table), "hashes": table}
 
 
-def verify_arena_matches(path: str, loaded: dict) -> dict:
+def verify_arena_matches(path: str, loaded: dict, *,
+                         weight_map: dict = None, snapshot: str = None) -> dict:
     """`loaded` maps tensor-name -> the uint8 tensor placed in the arena. Assert
     each equals the file's data-section bytes. Returns a per-tensor
     match report; raises on any mismatch (a provenance failure is not a
     tolerance)."""
     report = {}
     for name, t in loaded.items():
-        want = file_tensor_sha256(path, name)
+        want = file_tensor_sha256(
+            _resolve_tensor_path(name, path, weight_map, snapshot), name)
         got = tensor_sha256(t)
         report[name] = {"file": want, "arena": got, "match": want == got}
         if want != got:
