@@ -1,16 +1,17 @@
-# grouped-nf4-gemm — single-launch W4A16 GEMM over fused NF4 MoE expert stacks
+# grouped-nf4-gemm — single-launch 4-bit codebook GEMM over fused MoE expert stacks (NF4 + native MXFP4)
 
 [![CI](https://github.com/pjordanandrsn/grouped-nf4-gemm/actions/workflows/ci.yml/badge.svg)](https://github.com/pjordanandrsn/grouped-nf4-gemm/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/grouped-nf4-gemm)](https://pypi.org/project/grouped-nf4-gemm/)
 
-A Triton kernel that runs the grouped expert GEMM **directly on NF4-packed
+A Triton kernel that runs the grouped expert GEMM **directly on 4-bit-packed
 weights** — one launch for all active experts, LUT decode to fp32 in
-registers, blockwise fp32 absmax, fp32 accumulation, bf16 epilogue. No
+registers, blockwise fp32 scaling, fp32 accumulation, bf16 epilogue. No
 per-expert dequantize-then-`bmm` round trip, no bf16 weight materialization.
-It consumes the canonical packed layout and conventions of the bitsandbytes
-`gemm_4bit` family ([#1949](https://github.com/bitsandbytes-foundation/bitsandbytes/pull/1949)):
-`[E, N, K/2]` uint8 + fp32 blockwise absmax, with `(sizes, expert_ids)`
-supplied after the usual token→expert sort.
+Both 16-entry codebooks ship: **NF4** on the canonical bitsandbytes
+`gemm_4bit` layout ([#1949](https://github.com/bitsandbytes-foundation/bitsandbytes/pull/1949))
+— `[E, N, K/2]` uint8 + fp32 blockwise absmax — and **MXFP4 (OCP e2m1 +
+e8m0 per-32 scales), computing on a checkpoint's exact released bytes**
+(see the native-byte lane below).
 
 **Why:** for frozen 4-bit MoE experts, the standard path pays to decode the
 weights into bf16 and then reads them again — at batch-1 decode that round
@@ -22,11 +23,44 @@ materialize-to-bf16 baseline, in every cell ever measured here.**
 ## Install
 
 ```bash
-pip install grouped-nf4-gemm    # ships nf4_grouped + nf4_pack_ref + host_gather (torch + triton)
+pip install grouped-nf4-gemm    # nf4_grouped + nf4_pack_ref + host_gather,
+                                # plus the mxfp4_* lane + moonshot_gather + verify_provenance
 ```
 
 `pip install nf4gemm` and `pip install gnf4` are equivalent aliases.
 Published via trusted publishing; every wheel carries a PEP 740 attestation.
+
+## The MXFP4 native-byte lane (0.2.0)
+
+gpt-oss ships its experts as **MXFP4 blocks** — e2m1 is a 16-entry codebook,
+so the same in-register-decode mainloop serves it by table swap. The lane's
+point is **provenance**: compute on the checkpoint's *exact released bytes*
+(no requantization), which makes the served weights verifiable and deletes
+the conversion tax. Stamped, receipts in `docs/mxfp4/`:
+
+- **Serve** ([`RESULTS-mxfp4-serve.md`](docs/mxfp4/RESULTS-mxfp4-serve.md)):
+  fused-native exact-chunk ppl **26.72** on gpt-oss-120b = the
+  shipped-precision reference (26.75) — the measured **+9.4% ppl / KL 0.066
+  NF4-requant tax is deleted**; per-shard provenance
+  `sha256(loaded bytes) == sha256(file range)` 4/4 on real 120b shards.
+- **Train** ([`RESULTS-mxfp4-train.md`](docs/mxfp4/RESULTS-mxfp4-train.md)):
+  **gpt-oss-120b QLoRA at 9.82 GB peak VRAM on native bytes**
+  (recompute-in-backward + per-expert LoRA), step-0 ppl inside the stamped
+  serve band, **144/144** `sha256(file) == sha256(loaded) == sha256(post-train)`
+  — the frozen base is byte-identical after training.
+- **Verify it yourself**: `verify_provenance` re-hashes a checkpoint's expert
+  byte ranges against a served/trained arena from the artifact alone
+  (96/96 on the real shipped 20b bytes).
+- **Kimi K3** (native MXFP4 via QAT, weights promised 2026-07-27):
+  `moonshot_gather` — the DeepSeek-lineage per-expert → fused gather loader —
+  is included and **K2-verified** (live K2 index, 9/9 gates). Every
+  K3-specific number stays unclaimed until the weights drop and the oracle
+  re-adjudicates against K3's own dequant reference (the per-model STOP gate).
+
+The engine composes with the hot/cold serving work in
+[experts4bit-qlora](https://pypi.org/project/experts4bit-qlora/): hot sets
+are format-independent, and the pipelined-residency integration rail is the
+next e4b increment.
 
 **Using it inside a model?** [experts4bit-qlora](https://pypi.org/project/experts4bit-qlora/)
 ships this kernel as its optional inference path:

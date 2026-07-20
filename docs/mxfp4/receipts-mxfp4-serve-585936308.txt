@@ -1,0 +1,26 @@
+start-mxfp4-shardread-v3-control 2026-07-19T20:15:16Z
+NVIDIA H200, 143771 MiB
+stack OK
+=== MXFP4 SERVE shard-read (P1/P2/P3/P4) ===
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+[transformers] MXFP4 quantization requires the `kernels` package: `pip install kernels>=0.12.0`. We will default to dequantizing the model to bf16.
+Fetching 15 files:   0%|          | 0/15 [00:00<?, ?it/s]Fetching 15 files:   7%|▋         | 1/15 [00:30<07:05, 30.39s/it]Fetching 15 files:  13%|█▎        | 2/15 [00:45<04:39, 21.52s/it]Fetching 15 files:  67%|██████▋   | 10/15 [00:46<00:14,  2.93s/it]Fetching 15 files:  93%|█████████▎| 14/15 [00:50<00:02,  2.17s/it]Fetching 15 files: 100%|██████████| 15/15 [00:50<00:00,  1.92s/it]Fetching 15 files: 100%|██████████| 15/15 [00:50<00:00,  3.39s/it]
+Loading weights:   0%|          | 0/615 [00:00<?, ?it/s]Loading weights:   0%|          | 1/615 [00:00<03:19,  3.08it/s]Loading weights:   1%|          | 5/615 [00:00<01:20,  7.60it/s]Loading weights:   1%|          | 7/615 [00:01<02:50,  3.58it/s]Loading weights:   4%|▎         | 22/615 [00:02<00:52, 11.19it/s]Loading weights:   4%|▍         | 24/615 [00:03<01:14,  7.93it/s]Loading weights:   6%|▋         | 39/615 [00:03<00:35, 16.01it/s]Loading weights:   7%|▋         | 42/615 [00:03<00:44, 12.98it/s]Loading weights:   9%|▉         | 56/615 [00:04<00:31, 17.95it/s]Loading weights:  10%|▉         | 59/615 [00:04<00:35, 15.63it/s]Loading weights:  12%|█▏        | 73/615 [00:05<00:25, 21.05it/s]Loading weights:  12%|█▏        | 76/615 [00:05<00:33, 15.86it/s]Loading weights:  15%|█▍        | 90/615 [00:06<00:26, 19.90it/s]Loading weights:  15%|█▌        | 93/615 [00:06<00:38, 13.60it/s]Loading weights:  17%|█▋        | 107/615 [00:07<00:25, 20.22it/s]Loading weights:  18%|█▊        | 110/615 [00:07<00:31, 16.16it/s]Loading weights:  20%|██        | 124/615 [00:07<00:21, 23.16it/s]Loading weights:  21%|██        | 127/615 [00:08<00:28, 17.32it/s]Loading weights:  23%|██▎       | 141/615 [00:08<00:19, 24.33it/s]Loading weights:  24%|██▎       | 145/615 [00:08<00:20, 22.60it/s]Loading weights:  26%|██▌       | 158/615 [00:09<00:16, 28.43it/s]Loading weights:  29%|██▉       | 177/615 [00:09<00:09, 46.97it/s]Loading weights:  34%|███▍      | 209/615 [00:09<00:04, 83.23it/s]Loading weights:  40%|███▉      | 243/615 [00:09<00:03, 99.02it/s]Loading weights:  42%|████▏     | 260/615 [00:09<00:03, 92.66it/s]Loading weights:  44%|████▍     | 272/615 [00:14<00:29, 11.77it/s]Loading weights:  46%|████▌     | 281/615 [00:19<00:53,  6.29it/s]Loading weights:  48%|████▊     | 296/615 [00:23<01:03,  4.99it/s]Loading weights:  51%|█████     | 313/615 [00:28<01:06,  4.52it/s]Loading weights:  54%|█████▎    | 330/615 [00:32<01:07,  4.25it/s]Loading weights:  56%|█████▋    | 347/615 [00:37<01:06,  4.04it/s]Loading weights:  59%|█████▉    | 364/615 [00:42<01:04,  3.89it/s]Loading weights:  62%|██████▏   | 381/615 [00:46<01:01,  3.80it/s]Loading weights:  64%|██████▍   | 396/615 [00:49<00:51,  4.27it/s]Loading weights:  65%|██████▍   | 398/615 [00:54<01:14,  2.92it/s]Loading weights:  67%|██████▋   | 413/615 [00:54<00:45,  4.40it/s]Loading weights:  68%|██████▊   | 417/615 [00:58<01:07,  2.94it/s]Loading weights:  70%|███████   | 432/615 [01:03<01:00,  3.01it/s]Loading weights:  73%|███████▎  | 449/615 [01:08<00:51,  3.20it/s]Loading weights:  76%|███████▌  | 466/615 [01:13<00:44,  3.31it/s]Loading weights:  78%|███████▊  | 481/615 [01:15<00:34,  3.89it/s]Loading weights:  79%|███████▊  | 483/615 [01:20<00:49,  2.66it/s]Loading weights:  81%|████████▏ | 500/615 [01:25<00:38,  2.97it/s]Loading weights:  84%|████████▍ | 517/615 [01:29<00:30,  3.16it/s]Loading weights:  87%|████████▋ | 532/615 [01:30<00:18,  4.54it/s]Loading weights:  87%|████████▋ | 535/615 [01:34<00:26,  3.00it/s]Loading weights:  90%|████████▉ | 551/615 [01:39<00:20,  3.13it/s]Loading weights:  92%|█████████▏| 566/615 [01:42<00:12,  3.77it/s]Loading weights:  92%|█████████▏| 568/615 [01:46<00:18,  2.55it/s]Loading weights:  95%|█████████▌| 585/615 [01:51<00:10,  2.90it/s]Loading weights:  98%|█████████▊| 602/615 [01:56<00:04,  3.13it/s]Loading weights: 100%|██████████| 615/615 [01:56<00:00,  5.29it/s]
+loaded dequant in 170s, VRAM 128.6GB
+E=128 alpha=1.702 limit=7.0 n_layers=36
+CONTROL dequant-ppl skipped (OOM/err, non-fatal): RuntimeError
+after freeing dequant experts: VRAM 4.1GB
+after loading native from shards: VRAM 60.9GB
+P4 provenance sample: 4/4 sha256(shard-tensor)==sha256(file-range)
+expert compute patched to fused-native (all layers)
+text 1825 tok -> 3 chunks; ref (1536, 201088)
+SMOKE chunk-0 b_rel(fused-native vs A4 dequant ref) = 0.1040  (informational; fp32-accum vs bf16-ref divergence expected over 36 layers)
+P1 worst-b_rel over 3 chunks = 0.1713  FAIL
+P2 fused-mxfp4 EXACT-CHUNK ppl = 26.72   (A4 ref 26.75; NF4 29.27; band [26.55,27.05])
+P2 verdict: fused-ppl=26.72 vs control-dequant-ppl=None vs A4-ref 26.75
+P2: TAX DELETED (fused-native ppl in band = shipped precision)
+P3 fused decode layer-0 all-resident: 475 us/expert-layer
+ALLDONE-MX
+rc=0
+ALLDONE

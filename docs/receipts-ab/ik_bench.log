@@ -1,0 +1,7 @@
+ggml_cuda_init: found 1 CUDA devices:
+  Device 0: NVIDIA A100 80GB PCIe, compute capability 8.0, VMM: yes, VRAM: 81153 MiB
+| model                          |       size |     params | backend    | ngl | rtr |          test |              t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | --: | ------------: | ---------------: |
+| qwen3moe 235B.A22B IQ3_K - 3.4325 bpw | 106.64 GiB |   235.09 B | CUDA       |  99 |   1 |         tg128 |      3.17 ± 0.13 |
+
+build: 9d07d86 (1)

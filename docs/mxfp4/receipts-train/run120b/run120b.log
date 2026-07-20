@@ -1,0 +1,61 @@
+[00:35:39] snapshot /root/.cache/huggingface/hub/models--openai--gpt-oss-120b/snapshots/b5c939de8f754692c1647ca79fbf85e8c1e70f8a
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Generating test split:   0%|          | 0/4358 [00:00<?, ? examples/s]Generating test split: 100%|██████████| 4358/4358 [00:00<00:00, 40348.36 examples/s]Generating test split: 100%|██████████| 4358/4358 [00:00<00:00, 40250.10 examples/s]
+Generating train split:   0%|          | 0/36718 [00:00<?, ? examples/s]Generating train split:   3%|▎         | 1000/36718 [00:00<00:05, 6231.54 examples/s]Generating train split:  27%|██▋       | 10000/36718 [00:00<00:00, 33321.96 examples/s]Generating train split:  38%|███▊      | 14000/36718 [00:00<00:00, 34881.27 examples/s]Generating train split:  63%|██████▎   | 23000/36718 [00:00<00:00, 41728.32 examples/s]Generating train split: 100%|██████████| 36718/36718 [00:00<00:00, 53851.71 examples/s]
+Generating validation split:   0%|          | 0/3760 [00:00<?, ? examples/s]Generating validation split: 100%|██████████| 3760/3760 [00:00<00:00, 811077.10 examples/s]
+[00:35:47] data: 30 train + 8 eval chunks of 512
+[00:35:47] non-expert tensors: 471 loaded from 15 shards
+[00:35:50] layer 0 native-patched
+[00:36:07] layer 6 native-patched
+[00:36:24] layer 12 native-patched
+[00:36:41] layer 18 native-patched
+[00:36:58] layer 24 native-patched
+[00:37:14] layer 30 native-patched
+[00:37:27] all 36 layers native-patched, 144 tensors verified
+[00:37:27] rotary inv_freq re-initialized from a fresh config-built module
+[00:37:27] native build 100s rss=61.8GB
+[00:39:05] on cuda: loaded=5.43GB rss=62.3GB
+[00:39:12] canary (native, GPU): loss=5.1170 (no dequant arm — native load)
+[00:39:41] step-0 exact-chunk ppl = 26.697
+[00:39:41] ppl gate PASS: in [26.55, 27.05]
+[00:39:41] training 144 adapter tensors, 265.4M params
+[00:40:59] eval@0 5.1331
+[transformers] `use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.
+/root/k/run_mxfp4_20b_qlora.py:408: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:835.)
+  rec = dict(step=step, loss=float(loss), dt=round(dt, 2),
+[00:41:32] step 0 loss=5.5560 dt=32.3s peak=9.82GB
+[00:42:05] step 1 loss=2.6524 dt=33.3s peak=9.82GB
+[00:42:36] step 2 loss=3.1477 dt=30.8s peak=9.82GB
+[00:43:05] step 3 loss=2.5743 dt=29.6s peak=9.82GB
+[00:43:36] step 4 loss=2.1122 dt=30.9s peak=9.82GB
+[00:44:07] step 5 loss=2.3072 dt=30.4s peak=9.82GB
+[00:44:36] step 6 loss=2.2953 dt=29.6s peak=9.82GB
+[00:45:07] step 7 loss=1.8630 dt=30.3s peak=9.82GB
+[00:45:37] step 8 loss=2.4648 dt=30.8s peak=9.82GB
+[00:46:11] step 9 loss=1.8759 dt=33.2s peak=9.82GB
+[00:47:26] eval@10 2.1906
+[00:47:56] step 10 loss=1.9712 dt=30.3s peak=9.82GB
+[00:48:26] step 11 loss=2.3538 dt=30.6s peak=9.82GB
+[00:48:57] step 12 loss=1.5821 dt=30.8s peak=9.82GB
+[00:49:26] step 13 loss=3.0013 dt=28.7s peak=9.82GB
+[00:49:56] step 14 loss=1.9501 dt=30.3s peak=9.82GB
+[00:50:29] step 15 loss=1.9777 dt=32.4s peak=9.82GB
+[00:51:01] step 16 loss=1.9125 dt=31.8s peak=9.82GB
+[00:51:29] step 17 loss=2.7859 dt=28.7s peak=9.82GB
+[00:52:01] step 18 loss=1.5847 dt=31.4s peak=9.82GB
+[00:52:32] step 19 loss=1.8744 dt=31.1s peak=9.82GB
+[00:53:47] eval@20 2.1267
+[00:54:18] step 20 loss=2.6628 dt=30.2s peak=9.82GB
+[00:54:49] step 21 loss=2.0133 dt=31.7s peak=9.82GB
+[00:55:20] step 22 loss=1.7861 dt=31.1s peak=9.82GB
+[00:55:53] step 23 loss=1.6579 dt=32.3s peak=9.82GB
+[00:56:25] step 24 loss=1.7910 dt=32.5s peak=9.82GB
+[00:56:58] step 25 loss=1.5278 dt=32.7s peak=9.82GB
+[00:57:28] step 26 loss=1.9355 dt=30.4s peak=9.82GB
+[00:57:59] step 27 loss=2.2044 dt=30.3s peak=9.82GB
+[00:58:31] step 28 loss=2.0911 dt=32.0s peak=9.82GB
+[00:59:02] step 29 loss=2.6659 dt=31.1s peak=9.82GB
+[01:00:18] eval@30 2.1152 (was 5.1331)
+[01:01:20] post-training module hashes identical: True
+[01:01:20] DONE — artifact written
