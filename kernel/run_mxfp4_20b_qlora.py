@@ -70,6 +70,10 @@ def resolve_snapshot(model_id: str) -> str:
     cands = sorted(glob.glob(os.path.join(base, "*")), key=os.path.getmtime)
     if not cands:
         raise FileNotFoundError(f"no local snapshot under {base}")
+    if len(cands) > 1:
+        print(f"WARNING: {len(cands)} cached snapshots; using most recently "
+              f"modified — pin the revision if provenance must match a "
+              f"specific download", flush=True)
     snap = cands[-1]
     if not os.path.exists(os.path.join(snap, "model.safetensors.index.json")):
         raise FileNotFoundError(f"snapshot {snap} lacks the safetensors index")

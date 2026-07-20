@@ -293,7 +293,14 @@ class ExpertsMxfp4LoRA(nn.Module):
         base = self.base
         T, k = router_indices.shape
         flat_eids = router_indices.reshape(-1)
-        order = torch.argsort(flat_eids, stable=True)
+        # transformers pads ragged routing with index == num_experts; the loop
+        # path skips it — drop those pairs here too or blocks[e] reads OOB
+        valid = flat_eids < base.num_experts
+        if not bool(valid.all()):
+            keep = valid.nonzero(as_tuple=True)[0]
+            order = keep[torch.argsort(flat_eids[keep], stable=True)]
+        else:
+            order = torch.argsort(flat_eids, stable=True)
         eids_sorted = flat_eids[order]
         tok_of_pair = torch.div(order, k, rounding_mode="floor")
         pos_of_pair = order - tok_of_pair * k
