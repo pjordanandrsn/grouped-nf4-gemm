@@ -69,9 +69,10 @@ def main():
         out = model(input_ids=canary_ids.to("cuda"), labels=canary_ids.to("cuda"))
         loss = float(out.loss)
     d_smoke = abs(loss - smoke["canary"]["our_loss"])
-    d_ref = abs(loss - smoke["canary"]["ref_loss"])
+    ref_loss = smoke["canary"].get("ref_loss")
+    d_ref = abs(loss - ref_loss) if ref_loss is not None else None
     log(f"N2 canary: loss={loss:.4f} |Δ smoke-native|={d_smoke:.4f} "
-        f"|Δ dequant-ref|={d_ref:.4f}")
+        f"|Δ dequant-ref|={('%.4f' % d_ref) if d_ref is not None else 'n/a (native-load smoke)'}")
     assert d_smoke < 1e-2, (loss, smoke["canary"]["our_loss"])
 
     params = [p for w in wrappers for p in lora_parameters(w)]

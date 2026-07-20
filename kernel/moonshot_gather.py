@@ -38,6 +38,7 @@ release" claim, at per-expert granularity.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 from typing import Callable, Optional
 
@@ -215,17 +216,30 @@ def register_glu_variant(name: str, fn) -> None:
 # ---- provenance (per-source-tensor; concat reorders bytes) ------------------
 def file_sha256_map(path: str, layer: int, n_experts: int, *,
                     scale_suffix: Optional[str] = "weight_scale_inv",
-                    prefix: str = "model") -> dict:
+                    prefix: str = "model",
+                    weight_map: Optional[dict] = None,
+                    snapshot: Optional[str] = None) -> dict:
     """Per-expert-tensor sha256 of the file data-section byte ranges (the
-    release bytes). Reuses `mxfp4_loader.file_tensor_sha256`."""
+    release bytes). Reuses `mxfp4_loader.file_tensor_sha256`.
+
+    Sharded checkpoints (gpt-oss, K2/K3) keep each tensor in its own shard:
+    pass the index's ``weight_map`` (+ ``snapshot`` dir) so every name hashes
+    against its own file. ``path`` alone serves single-file checkpoints."""
     from mxfp4_loader import file_tensor_sha256
     kinds = ("weight",) + ((scale_suffix,) if scale_suffix else ())
+    base = snapshot if snapshot is not None else os.path.dirname(path)
     table = {}
     for e in range(n_experts):
         for proj in PROJ:
             for kind in kinds:
                 name = expert_tensor_name(layer, e, proj, kind, prefix)
-                table[name] = file_tensor_sha256(path, name)
+                if weight_map is not None:
+                    if name not in weight_map:
+                        raise KeyError(f"{name} not in the checkpoint index")
+                    tpath = os.path.join(base, weight_map[name])
+                else:
+                    tpath = path
+                table[name] = file_tensor_sha256(tpath, name)
     return table
 
 
