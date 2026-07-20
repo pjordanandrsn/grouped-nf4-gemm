@@ -1,0 +1,47 @@
+The measurement of throughput in a streaming system begins with an honest account of its floors. A transfer-bound pipeline cannot move faster than its bytes divided by its bandwidth, and any claim that appears to do so is a bookkeeping error waiting to be found. The discipline, then, is to compute the floor first, measure the achieved rate second, and treat the ratio between them as the object of study rather than an embarrassment to be hidden.
+
+Mixture-of-experts models route each token through a small subset of a large parameter pool. The routing distribution is rarely uniform in practice: some experts attract a disproportionate share of traffic within a layer, and the concentration is stable enough across prompts to be exploited. Keeping the most-visited experts resident in fast memory while streaming the long tail on demand converts a capacity problem into a bandwidth problem with a tunable knob.
+
+A cache that cannot be proven to skip is not a cache. The test that matters is the mutation test: change the backing store after the cache claims to hold a value, then observe whether the stale value persists. If it does not, the supposed cache is quietly re-fetching, and its accounting misstates the traffic it was built to avoid. Instrumentation that counts bytes at the single point where they move settles the question permanently.
+
+Quantization to four bits with a shared codebook trades precision for footprint in a way that is remarkably kind to large language models. The trick is blockwise scaling: each small group of weights carries its own absolute maximum, so the codebook's fixed dynamic range adapts locally. The result is a model that fits in a quarter of the memory while producing logits that differ from the full-precision reference by less than the noise between two valid kernel implementations.
+
+Kernel launch overhead is invisible until it is the only thing left. A loop that issues ten small kernels per layer across dozens of layers pays a fixed tax per token that dwarfs the arithmetic when the arithmetic is small. Capturing the entire step once and replaying it collapses the tax to a single submission, which is why the technique matters most precisely when the per-token work is least.
+
+The honest benchmark report names its uncertainties before the data arrives. Bands derived from receipts carry their derivation; extrapolations across hardware carry a width, not a point; and the pre-committed readings distinguish the failure modes that would otherwise be argued about afterward. A prediction that cannot be falsified in both directions is a press release, not a measurement.
+
+Pinned host memory earns its cost twice. Once because the transfer engine can stream from it asynchronously without a bounce buffer, and once because a device kernel can read it directly across the bus when the addressing is arranged in advance. The second use inverts the usual direction of control: the processor that knows the indices is the one that fetches, and the host is reduced to an allocator that promised not to move anything.
+
+An experiment that destroys its instruments after each run is only as good as its receipts. The raw state file, the exact configuration flags, the measured link rates, and the version hashes of the code under test together allow a stranger to reconstruct what happened without trusting the narrator. Everything else in the report is interpretation, and interpretation is the part most easily improved after the fact.
+
+A residency table is a promise about the future written in addresses. Each entry says: when this expert is named, its bytes will be found here, already in the right layout, at a cost the schedule has budgeted. The promise holds only while the tensors behind the addresses stay alive and unmoved, which is why the table's owner must also own the allocations and refuse to rebuild one without the other.
+
+The difference between a benchmark and an anecdote is the second run. A median of repeated medians, with the spread reported beside it, survives the reviewer who asks whether the machine was warm, whether the clock stepped, whether the neighbor's job stole the bus for a moment. A single number, however flattering, invites the question it cannot answer.
+
+Branch freezing is the quiet contract of graph capture. Whatever path the code took while the recorder ran is the path the replay will take forever, with no announcement when the world changes underneath it. The discipline is to arrange the world first — fill the window, settle the caches, reach the steady state — and only then press record, so the frozen branch is the one the future actually needs.
+
+A watchdog that can only observe is safer than one that can act, until the day the observation is wrong. The alert that names its evidence — the counter it read, the threshold it compared, the time it looked — can be audited in the morning. The alert that merely says something seemed wrong teaches its readers to ignore it, which is worse than no watchdog at all.
+
+Streams order work; events order streams. A copy enqueued on a side stream is a promise with no date until an event pins it to the compute that must wait. Most of the elegance in an overlapped pipeline is just this: record the event where the bytes land, wait on it where the math begins, and let the hardware fill the gap with useful work.
+
+The cheapest experiment is the one that fails on the bench instead of in the field. A tiny model with the same code paths, the same cache classes, and the same masks will trip over the same forbidden copy as its hundred-billion-parameter sibling, at a millionth of the cost. The art is making the small thing faithful where it matters and indifferent everywhere else.
+
+An allocator under graph capture is a landlord with a signed lease. Every buffer the recorded work touches must keep its address for the life of the graph, which means the capture pool cannot hand those pages to anyone else, and the code that ran during recording must never ask for a different shape. The price of replay speed is a promise of stillness, and the promise is enforced by crashes rather than warnings.
+
+Held-out evaluation is the only defense against a ranking that memorized its training days. The split by prompt, rather than by token, matters more than it looks: adjacent tokens share routing habits, so a token-level split leaks the very structure the ranking claims to predict. Prompt-level held-out capture is the number that survives contact with a new conversation.
+
+A steelman arm is cheap insurance against an expensive retraction. Before publishing a comparison, give the other system its best plausible configuration — more threads, its preferred format, its own tooling — and report that number beside yours. If the conclusion only holds against a hobbled opponent, it is not a conclusion; it is a press release with a half-life measured in one reviewer's afternoon.
+
+The difference between four bits and sixteen is not eleven bits of truth but a schedule of compromises. Blockwise scales spend their budget where the weights are loud; the codebook spends its entries where the distribution is dense; and the accumulator keeps its precision wide so the rounding never compounds. The art is arranging for every lost bit to be one nobody would have missed.
+
+Energy per token is the metric that outlives the benchmark. Throughput can be bought with parallelism, latency with speculation, but joules are conserved, and a serving stack that moves fewer bytes at the same answer quality is cheaper in the only currency the utility bill understands. Counting them honestly requires a meter, a window, and a note about everything else that shared the socket.
+
+A window that slides is a memory that forgets on schedule. The cache holds the last N positions because the model was taught that older context arrives through other channels — summaries, retrieval, the discipline of the prompt. Freezing the rolled state into a captured graph works precisely because the forgetting is itself stationary: every step discards one position and admits one more, forever.
+
+Determinism in a replay is a feature with sharp edges. The same graph, the same seeds, the same cache produce the same tokens, which makes regressions visible at a glance — and makes accidental dependence on stale state invisible until the inputs finally change. The cure is a parity gate that varies what production will vary, and nothing else.
+
+The last mile of a measurement program is archival, not arithmetic. Receipts written to a file that outlives the machine, hashes that pin the exact bytes, stamps that anchor the claims to a clock nobody controls — these turn a night of rented silicon into evidence. Without them the numbers are rumors with decimal points.
+
+A fallback path earns its keep by being boring. When capture fails, when a shape surprises, when a dtype drifts, the system should land on the slow, obvious implementation and say so loudly, rather than improvising cleverness at the worst possible moment. The fast path is a privilege the workload re-earns every time its guards pass.
+
+Two stacks serving one checkpoint are never quite the same model. Different quantizers round different weights differently; different kernels sum in different orders; different tokenizers even disagree about where words begin. Comparing them is legitimate exactly insofar as the report keeps saying so, sentence after sentence, until the reader cannot forget it.
