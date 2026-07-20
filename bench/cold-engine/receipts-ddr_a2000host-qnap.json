@@ -1,0 +1,44 @@
+{
+ "tool": "torch-copy/triad (not certified STREAM)",
+ "torch": "2.8.0+cu128",
+ "mb": 512,
+ "cpu_count": 12,
+ "rows": [
+  {
+   "threads": 1,
+   "copy_gbs": 9.58,
+   "triad_gbs": 9.64,
+   "read_gbs": 10.55
+  },
+  {
+   "threads": 2,
+   "copy_gbs": 10.87,
+   "triad_gbs": 10.75,
+   "read_gbs": 19.44
+  },
+  {
+   "threads": 4,
+   "copy_gbs": 9.66,
+   "triad_gbs": 12.73,
+   "read_gbs": 23.52
+  },
+  {
+   "threads": 6,
+   "copy_gbs": 13.0,
+   "triad_gbs": 11.44,
+   "read_gbs": 11.44
+  },
+  {
+   "threads": 8,
+   "copy_gbs": 11.3,
+   "triad_gbs": 13.65,
+   "read_gbs": 14.81
+  },
+  {
+   "threads": 12,
+   "copy_gbs": 4.49,
+   "triad_gbs": 10.25,
+   "read_gbs": 16.99
+  }
+ ]
+}

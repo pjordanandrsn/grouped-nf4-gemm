@@ -1,0 +1,10 @@
+{
+ "mode": "dequant+gemv",
+ "experts": 16,
+ "n": 5760,
+ "k": 2880,
+ "threads": 6,
+ "ms_per_expert": 144.85,
+ "packed_gbs": 0.064,
+ "torch": "2.8.0+cu128"
+}
