@@ -1,0 +1,10 @@
+{
+ "mode": "bnb-dequant+gemv",
+ "experts": 16,
+ "n": 5760,
+ "k": 2880,
+ "threads": 6,
+ "ms_per_expert": 259.021,
+ "packed_gbs": 0.036,
+ "bnb": "0.49.2"
+}
