@@ -23,6 +23,8 @@ states are de-nested on the host at repack), no bias, nf4 only.
 
 from __future__ import annotations
 
+import os
+
 import torch
 import triton
 import triton.language as tl
@@ -422,6 +424,15 @@ def gemm_4bit_grouped(
     T, K = a_cat.shape
     assert sum(sizes) == T, (sum(sizes), T)
     dev = a_cat.device
+    # CUDA-only in real use; TRITON_INTERPRET=1 runs the kernel on CPU tensors
+    # (the interpreter-contract suite), so exempt that path from the guard.
+    if dev.type != "cuda" and os.environ.get("TRITON_INTERPRET") != "1":
+        raise RuntimeError(
+            f"gemm_4bit_grouped runs the fused Triton kernel and requires CUDA tensors "
+            f"(got device '{dev.type}'). For a CPU-checkable decode of the same NF4 bytes, "
+            f"use dequant_ref(packed, absmax, N, K) — the pure-torch reference the property "
+            f"suite pins the kernel against."
+        )
     eids = (
         expert_ids
         if torch.is_tensor(expert_ids)
@@ -546,7 +557,15 @@ def gemm_4bit_grouped(
 def dequant_ref(packed_row_major: torch.Tensor, absmax: torch.Tensor, N: int, K: int):
     """Pure-torch reference decode (same LUT + nibble order as the kernel) —
     the property suite asserts this matches bnb's dequantize_4bit EXACTLY,
-    which pins both the codebook values and the high-nibble-first order."""
+    which pins both the codebook values and the high-nibble-first order.
+    Runs on CPU (no CUDA/Triton), so it is the checkable oracle for the kernel.
+
+    Example:
+        >>> from nf4_pack_ref import quantize_pack_nf4
+        >>> from nf4_grouped import dequant_ref
+        >>> packed, absmax = quantize_pack_nf4(torch.randn(128, 256))
+        >>> w = dequant_ref(packed, absmax, 128, 256)      # [128, 256] fp32
+    """
     lut = _lut(packed_row_major.device)
     flat = packed_row_major.reshape(-1).to(torch.int32)
     hi = (flat >> 4) & 0xF
