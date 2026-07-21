@@ -18,7 +18,8 @@ weights into bf16 and then reads them again — at batch-1 decode that round
 trip (plus ~3 kernel launches per active expert) dominates. Fusing the decode
 into the GEMM deletes it. The measured side effect worth stating plainly:
 **fp32 accumulation makes the fused path *more accurate* than the
-materialize-to-bf16 baseline, in every cell ever measured here.**
+materialize-to-bf16 baseline — the fused path has never measured less
+accurate than the baseline.**
 
 ## Install
 
@@ -105,7 +106,8 @@ the conversion tax. Stamped, receipts in `docs/mxfp4/`:
 - **Verify it yourself**: `verify_provenance` re-hashes a checkpoint's expert
   byte ranges against a served/trained arena from the artifact alone
   (96/96 on the real shipped 20b bytes).
-- **Kimi K3** (native MXFP4 via QAT, weights promised 2026-07-27):
+<!-- update same-day when shards land: format verdict (MXFP4 vs INT4) + first measurements or their absence -->
+- **Kimi K3** (native MXFP4 via QAT, weights announced for July 27, 2026):
   `moonshot_gather` — the DeepSeek-lineage per-expert → fused gather loader —
   is included and **K2-verified** (live K2 index, 9/9 gates). Every
   K3-specific number stays unclaimed until the weights drop and the oracle
@@ -243,6 +245,10 @@ in-repo):
   greedy output 6/6) and validates SM-issued UVA reads at ≥ copy-engine
   throughput at 7.98 GB/token.
 
+Every comparative "first/only/faster" claim above is backed by a verified,
+dated entry in [`docs/COMPETITIVE.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.2/docs/COMPETITIVE.md)
+(the credited prior-art table + the same-box ik_llama A/B) — no entry, no claim.
+
 ## Reproduce
 
 See [REPRO.md](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.2/REPRO.md) — suite, benchmark, and verdict reduction are each
@@ -304,8 +310,8 @@ note on #1949.
 
 **Downstream serving** lives in the sibling package
 [`experts4bit-qlora`](https://pypi.org/project/experts4bit-qlora/): its
-`[fast]` extra routes frozen-expert inference through this kernel (3.65× at
-bs=1 decode on OLMoE geometry), and its hot-expert residency runs hot and
+`[fast]` extra routes frozen-expert inference through this kernel (the measured
+3.65× above), and its hot-expert residency runs hot and
 cold stacks on the same kernel — with 2026-07-20 receipts showing decode
 gain tracks routing coverage (informed hot sets +56–120% on gpt-oss, +44%
 on Gemma-4). Division of labor: this kernel makes one expert-stack matmul
