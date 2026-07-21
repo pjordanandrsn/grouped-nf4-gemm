@@ -18,7 +18,21 @@ from nf4_grouped import BLOCKSIZE, NF4_LUT
 
 
 def quantize_pack_nf4(w: torch.Tensor):
-    """w [N, K] float -> (packed [N, K//2] uint8, absmax [N, K//64] fp32)."""
+    """w [N, K] float -> (packed [N, K//2] uint8, absmax [N, K//64] fp32).
+
+    Example:
+        >>> import torch
+        >>> from nf4_pack_ref import quantize_pack_nf4
+        >>> from nf4_grouped import dequant_ref
+        >>> w = torch.randn(256, 512)
+        >>> packed, absmax = quantize_pack_nf4(w)          # [256, 256] u8, [256, 8] f32
+        >>> wq = dequant_ref(packed, absmax, 256, 512)     # round-trips to ~0.09 rel-err
+    """
+    if w.dim() != 2:
+        raise ValueError(
+            f"expected 2-D [N, K] per-expert weight; got shape {tuple(w.shape)} — "
+            "pack per-expert and stack, or use make_stack() for synthetic fixtures."
+        )
     N, K = w.shape
     assert K % BLOCKSIZE == 0, f"K={K} must be a multiple of {BLOCKSIZE}"
     lut = torch.tensor(NF4_LUT, dtype=torch.float32, device=w.device)
