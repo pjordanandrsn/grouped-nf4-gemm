@@ -5,6 +5,14 @@ Entries carry a verification status and as-checked date; **"reported" entries
 may NOT back a public claim until upgraded to "verified."** Moves to the
 public repo at the gate.
 
+> **Engine-tier note.** Any serving/decode number sourced from the **v0
+> hot-residency** path (the added-stacks implementation) is superseded by
+> **`enable_pipelined_residency`** (one pinned arena + address-dispatched
+> gather + device-id GEMV) in experts4bit-qlora. When a comparison table
+> quotes a v0-hot number, say so and prefer the pipelined figure where one
+> exists — the composite (pipelined + routing-informed hot sets + NUMA
+> pinning) is the current-best home-silicon row.
+
 ## Unsloth (gpt-oss fine-tuning) — verified 2026-07-19
 
 - Fine-tunes gpt-oss by loading the native MXFP4 checkpoint and **converting
@@ -21,6 +29,12 @@ public repo at the gate.
   receipt** (native bytes, hash-identical pre/post) is not producible by a
   conversion path. 120b "~65 GB" figure: **reported, not re-verified** — do
   not quote without checking their current docs on gate day.
+- **License (SPDX-verified 2026-07-20, in-repo):** unsloth-zoo — where the
+  MoE kernels live — ships **LGPL-3.0** (`unsloth-zoo/LICENSE`); this kernel
+  is **MIT**. So the permissive-license framing is fair to state factually.
+  **Do NOT call it AGPL** — an earlier note said AGPL; the actual SPDX is
+  LGPL-3.0. (Unsloth's main-repo and Studio license were not verifiable from
+  the local clone; do not characterize them without checking on gate day.)
 
 ## Marlin / Machete + vLLM fused MoE — verified 2026-07-19
 
@@ -63,12 +77,21 @@ public repo at the gate.
   bench/cold-engine/receipts-*-qnap.json — the cold-engine lane's finding;
   upstream issue parked post-gate).
 
-## ik_llama.cpp / ktransformers (Qwen3-235B) — reported, NOT verified
+## ik_llama.cpp / ktransformers (Qwen3-235B) — same-box A/B VERIFIED 2026-07-19
 
-- Community figure ~7.4 tok/s (3090 + 128 GB, IQ3_K) — **do not use in any
-  public claim without verification**; quant-precision caveat (IQ3_K ≈ 3-bit
-  vs our NF4 4-bit) mandatory if ever cited. B3 already bans 235B
-  throughput-leadership claims regardless.
+- **Same-box A/B measured** (one config/arm, A100 80GB PCIe, link 26.74 GB/s;
+  `docs/RESULTS-ikllama-ab.md` + `docs/receipts-ab/`): **ik_llama.cpp 3.17 ±
+  0.13 tok/s** (ubergarm mix-IQ3_K, **3.43 bpw**, experts→CPU, `-fa -rtr
+  -fmoe`) vs **ours 2.29 tok/s** (NF4 **~4.5 bpw** from the released bf16,
+  host-streamed, K=0 pure-stream) at 15.1 GB. Our arm landed **in the
+  pre-registered transfer-law band [2.23, 3.02] — GREEN**.
+- **Cross-format caveat is mandatory whenever cited:** ik runs a ~1-bit-
+  smaller quant (3.43 vs 4.5 bpw) — this is not an iso-precision comparison,
+  and ik being faster on a fat-CPU box was the **pre-committed** reading
+  (CPU-compute + smaller quant). B3 bans any 235B throughput-leadership claim
+  either way; the honest line is the one in the RESULTS doc, verbatim.
+- Community figure ~7.4 tok/s (3090 + 128 GB, IQ3_K) stays **reported, NOT
+  verified** — do not cite without the quant-precision caveat.
 
 ## Watchlist tie-in (checked 2026-07-19, both clear)
 
