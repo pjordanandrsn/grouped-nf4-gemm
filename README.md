@@ -38,12 +38,12 @@ point is **provenance**: compute on the checkpoint's *exact released bytes*
 (no requantization), which makes the served weights verifiable and deletes
 the conversion tax. Stamped, receipts in `docs/mxfp4/`:
 
-- **Serve** ([`RESULTS-mxfp4-serve.md`](docs/mxfp4/RESULTS-mxfp4-serve.md)):
+- **Serve** ([`RESULTS-mxfp4-serve.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/docs/mxfp4/RESULTS-mxfp4-serve.md)):
   fused-native exact-chunk ppl **26.72** on gpt-oss-120b = the
   shipped-precision reference (26.75) — the measured **+9.4% ppl / KL 0.066
   NF4-requant tax is deleted**; per-shard provenance
   `sha256(loaded bytes) == sha256(file range)` 4/4 on real 120b shards.
-- **Train** ([`RESULTS-mxfp4-train.md`](docs/mxfp4/RESULTS-mxfp4-train.md)):
+- **Train** ([`RESULTS-mxfp4-train.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/docs/mxfp4/RESULTS-mxfp4-train.md)):
   **gpt-oss-120b QLoRA at 9.82 GB peak VRAM on native bytes**
   (recompute-in-backward + per-expert LoRA), step-0 ppl inside the stamped
   serve band, **144/144** `sha256(file) == sha256(loaded) == sha256(post-train)`
@@ -96,7 +96,7 @@ dequantize-then-matmul baseline on the same stacks:
   granite-3.1, Qwen3-Next) run **1.0–1.8× at median**; `k=2`-large shapes
   (Grok-1, Mixtral-8x22B) 1.0–1.24×, never slower.
 - **Versus the other execution classes** (same-run census on the v6
-  kernel, [receipts](bench/phase1/results/comparators_v6/RESULTS-comparators-v6.md)):
+  kernel, [receipts](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/bench/phase1/results/comparators_v6/RESULTS-comparators-v6.md)):
   the grouped-bf16-GEMM class that unsloth's MoE backend rides
   (`grouped_gemm.ops.gmm`, dequant inside the timed path as 4-bit storage
   requires) loses to the fused kernel on **every census cell — decode
@@ -121,19 +121,19 @@ dequantize-then-matmul baseline on the same stacks:
 Six blind confirmatories have run; the first five **did not fully pass as
 registered**, each results doc says exactly what failed and why, and the
 sixth passed clean:
-[v1](kernel/RESULTS-gate2-confirmatory.md) (caught the original per-shape
-config table overfitting its census), [v2](kernel/RESULTS-v2-confirmatory.md)
+[v1](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/kernel/RESULTS-gate2-confirmatory.md) (caught the original per-shape
+config table overfitting its census), [v2](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/kernel/RESULTS-v2-confirmatory.md)
 (validated the replacement single-constant config on 64-SM parts and the
-off-census `k≥6` wins), [v3](kernel/RESULTS-v3-confirmatory.md) (found the
+off-census `k≥6` wins), [v3](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/kernel/RESULTS-v3-confirmatory.md) (found the
 v2-era SM-conditional premise was measurement noise, quantified the
 `top_k=1` and tiny-shape loss classes, and established the methodology rule
 that latency-bound cells only support paired claims),
-[v4](kernel/RESULTS-v4-confirmatory.md) (dispatch floor + split-K work floor
+[v4](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/kernel/RESULTS-v4-confirmatory.md) (dispatch floor + split-K work floor
 + prefill config; caught its own dispatch-point regression),
-[v5](kernel/RESULTS-v5-confirmatory.md) (the load-time dispatch fix, clean on
+[v5](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/kernel/RESULTS-v5-confirmatory.md) (the load-time dispatch fix, clean on
 the A5000 11/11 with energy 8/8 on both devices; one contended-A2000 noise
 cell kept it from a full pass — the dispatch line is closed),
-[v6](kernel/RESULTS-v6-confirmatory.md) (**CONFIRMED**, all five criteria:
+[v6](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/kernel/RESULTS-v6-confirmatory.md) (**CONFIRMED**, all five criteria:
 the register-LUT M-tile mainloop, adjudicated on the instance-robust paired
 rewrite ratio after the dress rehearsal exposed the dequant baseline's
 host lottery). The preregs,
@@ -148,7 +148,7 @@ host pinned RAM (~128 GB)** and streamed per-token over PCIe, with this
 kernel as the sole MoE compute. Same discipline (prereg + OTS, receipts
 in-repo):
 
-- **[Phase A](bench/phase3/flagship/RESULTS-flagship-offload.md)** (synthetic
+- **[Phase A](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/bench/phase3/flagship/RESULTS-flagship-offload.md)** (synthetic
   weights, real GQA attention + router): **5.57 tok/s = 102–103% of the
   measured 44.3 GB/s link's waterfall ceiling** — the stream fully hides
   compute — on a **13.6 GB** working set. The dequantize-then-matmul path on
@@ -157,30 +157,30 @@ in-repo):
   measurement brackets every copy with a host sync, paying launch +
   sync-return latency the pipeline's continuously-queued copy stream never
   pays.)
-- **[The gap is architectural](bench/phase3/flagship/RESULTS-flagship-bnb-baseline.md)** —
+- **[The gap is architectural](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/bench/phase3/flagship/RESULTS-flagship-bnb-baseline.md)** —
   we registered the prediction that bnb's own CUDA dequant kernel would
   also hide under the copy shadow (which would have narrowed our claim),
   and it was **refuted**: the standard path reaches **40% of waterfall**
   (per-expert dequant+GEMM compute outlasts the shadow), versus 93–94%
   fused on the same pod. Against the strongest standard comparator the
   fused path is **2.33× tokens/s and 2.21× J/token**.
-- **[Phase B](bench/phase3/flagship/RESULTS-flagship-phaseB.md)** (the real
+- **[Phase B](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/bench/phase3/flagship/RESULTS-flagship-phaseB.md)** (the real
   438 GB checkpoint, stream-quantized to NF4 in place): **coherent greedy
   text at 4.3–4.4 tok/s on 15.2 GB VRAM**, replicated across five pods.
 - **Expert prefetch is measured CLOSED, negative** — four registered arcs
-  ([B2](bench/phase3/flagship/RESULTS-flagship-phaseB2.md) speculation:
+  ([B2](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/bench/phase3/flagship/RESULTS-flagship-phaseB2.md) speculation:
   token-to-token expert stickiness is only 0.44;
-  [B3](bench/phase3/flagship/RESULTS-flagship-phaseB3.md) early routing: the
+  [B3](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/bench/phase3/flagship/RESULTS-flagship-phaseB3.md) early routing: the
   pre-attention router predicts the post-attention top-8 at **0.93** but the
   CPU sync tax eats the win;
-  [B4](bench/phase3/flagship/RESULTS-flagship-phaseB4.md) threaded issuance:
+  [B4](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/bench/phase3/flagship/RESULTS-flagship-phaseB4.md) threaded issuance:
   GIL tax, 0.57×;
-  [B5](bench/phase3/flagship/RESULTS-flagship-phaseB5.md) GPU-driven
+  [B5](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/bench/phase3/flagship/RESULTS-flagship-phaseB5.md) GPU-driven
   zero-copy gather: hit rate H makes speculation move (2−H)× the bytes, and
   the observed loss matches that law to ~1% — break-even needs H ≳ 0.95,
   above this model's 0.93 predictor ceiling).
 - **Recommended configuration: `--prefetch-mode gpu`** — expert ids stay
-  GPU-resident and a triton kernel ([`kernel/host_gather.py`](kernel/host_gather.py))
+  GPU-resident and a triton kernel ([`kernel/host_gather.py`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/kernel/host_gather.py))
   gathers expert rows straight from pinned host RAM over UVA (zero-copy),
   with no per-layer memcpy launches and no GPU→CPU syncs. It is the fastest
   measured arm (4.39–4.41 tok/s, +1.5% over serialized memcpy, byte-identical
@@ -189,7 +189,7 @@ in-repo):
 
 ## Reproduce
 
-See [REPRO.md](REPRO.md) — suite, benchmark, and verdict reduction are each
+See [REPRO.md](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/REPRO.md) — suite, benchmark, and verdict reduction are each
 one command from a frozen tree. Requires an sm_86 GPU, `torch ≥ 2.8`,
 `bitsandbytes`, and a C compiler on PATH (triton builds launcher stubs at
 runtime).
@@ -237,7 +237,7 @@ and the flagship offload pipeline (Phase A/B + the closed prefetch program
 + the UVA gather path + the bnb-CUDA-dequant baseline, whose registered
 prediction was refuted — see the flagship section). The v6 A2000
 report-only addendum landed 2026-07-20
-([`kernel/RESULTS-v6-a2000-report.md`](kernel/RESULTS-v6-a2000-report.md)):
+([`kernel/RESULTS-v6-a2000-report.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/kernel/RESULTS-v6-a2000-report.md)):
 paired prefill medians inside the confirmed band on 7/8 cells at 26 SM
 (the eighth 0.9% below the floor, quantified in-doc) — the mainloop is
 bracketed 26→170 SM with zero retune. Pending: a bare-metal gen4
@@ -257,7 +257,7 @@ cheap; e4b decides which bytes are where.
 
 **Cold-engine exploration** (CPU-resident third tier for the coldest
 experts) is at phase-0: premise measurements on the target NAS host are in
-[`docs/cold-engine/PHASE0-premise.md`](docs/cold-engine/PHASE0-premise.md).
+[`docs/cold-engine/PHASE0-premise.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/docs/cold-engine/PHASE0-premise.md).
 Honest status: the "free floor" premise (bnb's CPU `dequantize_4bit` as a
 ready-made decode arm) is **refuted** on that box — no AVX-512 means bnb
 falls back to its reference path at 0.041 GB/s against a ~12 GB/s DDR
@@ -269,9 +269,9 @@ integration work. Design-stage; no registered claims.
 The waterfall arithmetic doesn't care which vendor's bus you're on, so we've
 extended it — under the same receipts discipline — into a stamped, pre-silicon
 projection table for AMD, Intel, and NVIDIA unified-memory parts:
-[`PROJECTIONS-multiarch.md`](PROJECTIONS-multiarch.md) (protocol:
-[`PROTOCOL-multiarch.md`](PROTOCOL-multiarch.md); model + R1 anchor gate:
-[`projections/`](projections/)). Both docs are OpenTimestamps-anchored (`.ots`)
+[`PROJECTIONS-multiarch.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/PROJECTIONS-multiarch.md) (protocol:
+[`PROTOCOL-multiarch.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/PROTOCOL-multiarch.md); model + R1 anchor gate:
+[`projections/`](https://github.com/pjordanandrsn/grouped-nf4-gemm/tree/v0.2.1/projections/)). Both docs are OpenTimestamps-anchored (`.ots`)
 **before any of this silicon was run** — the projections are a falsifiable
 prediction, not a marketing table.
 
@@ -302,9 +302,9 @@ Verdict: within band? / refutes row?   Attach: results JSONL
 
 ## License & attribution
 
-MIT ([LICENSE](LICENSE)). Portions developed with Claude Code as an AI
+MIT ([LICENSE](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/LICENSE)). Portions developed with Claude Code as an AI
 assistant under the author's direction and review — see
-[ATTRIBUTION.md](ATTRIBUTION.md). All claims are the author's responsibility.
+[ATTRIBUTION.md](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.1/ATTRIBUTION.md). All claims are the author's responsibility.
 
 ## Portability program
 
