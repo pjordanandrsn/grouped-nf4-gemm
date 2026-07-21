@@ -45,6 +45,9 @@ jobs:
           TRITON_INTERPRET: "1"
         run: cd kernel && python -m pytest test_interp_contract.py -q
 
+      - name: README CPU quickstart (executed) + CPU refusal guard
+        run: cd kernel && python -m pytest test_readme_cpu_block.py test_cpu_refusal.py -q
+
   wheel-smoke:
     # Built-artifact gate: the README's promised import surface must equal the
     # wheel's importable surface (scripts/wheel_smoke.py is the hardcoded

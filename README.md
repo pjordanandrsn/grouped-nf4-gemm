@@ -30,6 +30,60 @@ pip install grouped-nf4-gemm    # nf4_grouped + nf4_pack_ref + host_gather,
 `pip install nf4gemm` and `pip install gnf4` are equivalent aliases.
 Published via trusted publishing; every wheel carries a PEP 740 attestation.
 
+## Try it on CPU right now
+
+No GPU needed for the pack/decode/provenance surface — the fused GEMM is
+CUDA-only, but the reference decode and the provenance hashing are pure torch.
+These three blocks are extracted and executed by CI (`test_readme_cpu_block.py`),
+so they cannot drift from the API.
+
+<!-- CPU-QUICKSTART-START -->
+**1. NF4 round-trip** — pack a weight, decode it back, check the error:
+
+```python
+import torch
+from nf4_pack_ref import quantize_pack_nf4
+from nf4_grouped import dequant_ref
+
+w = torch.randn(256, 512)                      # a per-expert weight [N, K]
+packed, absmax = quantize_pack_nf4(w)          # [256, 256] uint8, [256, 8] fp32
+wq = dequant_ref(packed, absmax, 256, 512)     # decode back to [N, K]
+print("nf4 rel-err:", round(((wq - w).norm() / w.norm()).item(), 3))     # ~0.09
+print("nf4 re-pack idempotent:", torch.equal(quantize_pack_nf4(wq)[0], packed))  # True
+```
+
+**2. MXFP4 round-trip** — the gpt-oss expert format, same shape story:
+
+```python
+import torch
+from mxfp4_pack_ref import quantize_pack_mxfp4, dequant_mxfp4
+
+w = torch.randn(128, 256)                      # [.., K], K a multiple of 32
+blocks, scales = quantize_pack_mxfp4(w)        # [128, 8, 16] u8, [128, 8] u8 (e8m0)
+wq = dequant_mxfp4(blocks, scales)             # [128, 256]
+print("mxfp4 rel-err:", round(((wq - w).norm() / w.norm()).item(), 3))   # ~0.12
+```
+
+**3. Provenance in four lines** — hash on-disk bytes, catch a tampered one:
+
+```python
+import torch, json, struct, tempfile, os
+from mxfp4_loader import file_tensor_sha256, tensor_sha256
+
+t = torch.arange(64, dtype=torch.uint8)        # stand-in for an expert's packed bytes
+hdr = json.dumps({"w": {"dtype": "U8", "shape": [64], "data_offsets": [0, 64]}}).encode()
+path = tempfile.mktemp(suffix=".safetensors")
+with open(path, "wb") as f:
+    f.write(struct.pack("<Q", len(hdr))); f.write(hdr); f.write(t.numpy().tobytes())
+print("prov bytes match:", file_tensor_sha256(path, "w") == tensor_sha256(t))    # True
+b = bytearray(open(path, "rb").read()); b[-1] ^= 0xFF; open(path, "wb").write(bytes(b))
+print("prov tamper detected:", file_tensor_sha256(path, "w") != tensor_sha256(t))  # True
+os.remove(path)
+```
+
+That's the same instrument the 144/144 training receipt used.
+<!-- CPU-QUICKSTART-END -->
+
 ## The MXFP4 native-byte lane (0.2.0)
 
 gpt-oss ships its experts as **MXFP4 blocks** — e2m1 is a 16-entry codebook,
@@ -100,9 +154,11 @@ dequantize-then-matmul baseline on the same stacks:
   the grouped-bf16-GEMM class that unsloth's MoE backend rides
   (`grouped_gemm.ops.gmm`, dequant inside the timed path as 4-bit storage
   requires) loses to the fused kernel on **every census cell — decode
-  median 4.67×, prefill median 3.02×**. Axolotl/PEFT stacks have no kernel
-  of their own (their QLoRA forward is bitsandbytes `Linear4bit` — see the
-  flagship bnb baseline). GPTQ-Marlin is fidelity-excellent but per-expert
+  median 4.67×, prefill median 3.02×** (their kernel targets bf16-resident
+  training, a job it is excellent at; this comparison is the 4-bit-storage
+  regime, which both must serve when weights are quantized). Axolotl/PEFT
+  QLoRA forwards run bitsandbytes `Linear4bit` — see the flagship bnb
+  baseline. GPTQ-Marlin is fidelity-excellent but per-expert
   (launch-storm at MoE decode) and format-incompatible with NF4 checkpoints.
 - **Known losers:** `top_k=1` cells are **instance-unstable in both
   directions** (Scout `down` measured 0.47–1.12 across six contexts on
