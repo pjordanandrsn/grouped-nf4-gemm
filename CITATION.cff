@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "grouped-nf4-gemm: single-launch 4-bit codebook GEMM over fused MoE expert stacks"
+abstract: >-
+  A Triton kernel that runs the grouped expert GEMM directly on 4-bit-packed
+  MoE weights (NF4 and native MXFP4), decoding the codebook in-register inside
+  the mainloop with fp32 accumulation — no dequantize-then-matmul round trip.
+authors:
+  - family-names: Anderson
+    given-names: Jordan
+    email: jordan@cerinamroth.com
+repository-code: "https://github.com/pjordanandrsn/grouped-nf4-gemm"
+url: "https://cerinamroth.com/ml/"
+license: MIT
+keywords:
+  - mixture-of-experts
+  - quantization
+  - nf4
+  - mxfp4
+  - triton
+  - qlora
