@@ -23,6 +23,8 @@ states are de-nested on the host at repack), no bias, nf4 only.
 
 from __future__ import annotations
 
+import os
+
 import torch
 import triton
 import triton.language as tl
@@ -422,7 +424,9 @@ def gemm_4bit_grouped(
     T, K = a_cat.shape
     assert sum(sizes) == T, (sum(sizes), T)
     dev = a_cat.device
-    if dev.type != "cuda":
+    # CUDA-only in real use; TRITON_INTERPRET=1 runs the kernel on CPU tensors
+    # (the interpreter-contract suite), so exempt that path from the guard.
+    if dev.type != "cuda" and os.environ.get("TRITON_INTERPRET") != "1":
         raise RuntimeError(
             f"gemm_4bit_grouped runs the fused Triton kernel and requires CUDA tensors "
             f"(got device '{dev.type}'). For a CPU-checkable decode of the same NF4 bytes, "
