@@ -46,7 +46,13 @@ def _read_st_header(path: str):
 def file_tensor_sha256(path: str, name: str, chunk: int = 1 << 22) -> str:
     """sha256 of a tensor's raw bytes IN THE FILE'S DATA SECTION — streamed from
     the byte range in the header, no torch load, no dequant. This is the hash of
-    OpenAI's actual on-disk bytes for `name`."""
+    OpenAI's actual on-disk bytes for `name`.
+
+    Example:
+        >>> from mxfp4_loader import file_tensor_sha256, tensor_sha256
+        >>> file_tensor_sha256("model.safetensors", "model.layers.0.mlp.experts.gate_up_proj_blocks")
+        '9f2c…'   # == tensor_sha256(loaded_tensor); a flipped byte changes it
+    """
     hdr, data_start = _read_st_header(path)
     if name not in hdr:
         raise KeyError(f"{name} not in {path}")

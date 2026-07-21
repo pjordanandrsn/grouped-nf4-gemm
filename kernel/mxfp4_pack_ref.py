@@ -46,7 +46,13 @@ def _lut(device, dtype=torch.float32):
 def dequant_mxfp4(blocks: torch.Tensor, scales: torch.Tensor,
                   dtype=torch.float32) -> torch.Tensor:
     """blocks [..., n_blk, 16] uint8, scales [..., n_blk] uint8 (e8m0)
-    -> [..., n_blk*32] dequantized. `dtype` is the accumulation/output dtype."""
+    -> [..., n_blk*32] dequantized. `dtype` is the accumulation/output dtype.
+
+    Example:
+        >>> from mxfp4_pack_ref import quantize_pack_mxfp4, dequant_mxfp4
+        >>> blocks, scales = quantize_pack_mxfp4(torch.randn(128, 256))
+        >>> w = dequant_mxfp4(blocks, scales)              # [128, 256], ~0.12 rel-err
+    """
     assert blocks.dtype == torch.uint8 and scales.dtype == torch.uint8
     assert blocks.shape[-1] == 16 and blocks.shape[:-1] == scales.shape, \
         (blocks.shape, scales.shape)
@@ -69,7 +75,13 @@ def quantize_pack_mxfp4(w: torch.Tensor):
     Fixture generation for CI: per 32-block, choose the e8m0 scale as the
     power-of-two that puts max|w| at the top of e2m1's range (max 6.0), then
     round each scaled element to the nearest codebook entry. Not claimed
-    bit-identical to any producer; self-consistent with dequant_mxfp4."""
+    bit-identical to any producer; self-consistent with dequant_mxfp4.
+
+    Example:
+        >>> from mxfp4_pack_ref import quantize_pack_mxfp4, dequant_mxfp4
+        >>> blocks, scales = quantize_pack_mxfp4(torch.randn(64, 128))  # K % 32 == 0
+        >>> blocks.shape, scales.shape                     # ([64, 4, 16], [64, 4])
+    """
     *lead, K = w.shape
     assert K % MX_BLOCK == 0, f"K={K} must be a multiple of {MX_BLOCK}"
     nb = K // MX_BLOCK
