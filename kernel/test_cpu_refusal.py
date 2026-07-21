@@ -14,7 +14,12 @@ from nf4_grouped import gemm_4bit_grouped
 from nf4_pack_ref import make_stack
 
 
-def test_cpu_call_raises_taught_message():
+def test_cpu_call_raises_taught_message(monkeypatch):
+    # The guard is exempted under TRITON_INTERPRET=1 (interpreter mode runs the
+    # kernel on CPU by design). A sibling module (test_mxfp4_interp) sets that
+    # env at import, so a full-suite collection would leak it here — delete it
+    # for this test so the refusal assertion is order-independent.
+    monkeypatch.delenv("TRITON_INTERPRET", raising=False)
     # valid shapes, wrong device — read the true signature, no arity fumbles:
     # (a_cat [T,K] bf16, B [E,N,K//2] u8, absmax [E,N,K//64] f32, sizes, expert_ids)
     E, N, K = 2, 128, 128
