@@ -1,0 +1,1 @@
+measured pinned H2D: 26.98 GB/s
