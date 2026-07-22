@@ -1,0 +1,83 @@
+{
+ "model": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+ "layers": 94,
+ "h2d_gbps": 26.964645693920584,
+ "per_token_gb": 7.983857664,
+ "waterfall_toks": 3.377395593549573,
+ "results": [
+  {
+   "prompt": "The key difference between mixture-of-experts and dense transformer models is",
+   "text": "The key difference between **Mixture-of-Experts (MoE)** and **dense (or dense) transformer models** lies in how they utilize their parameters during inference:\n\n### 1. **Parameter Usage During Inference**:\n- **Mixture-of-Experts (MoE)**:\n  - **Sparse Activation**: Only a subset of experts (e.g., a few experts are activated per input.\n  - **Efficiency**: Since only a small number of experts are active per token, MoE models are **spars** (e.g., experts) are activated for each input, leading to **dynamic, input-conditional computation",
+   "n_tokens": 128,
+   "mode": "gpu",
+   "toks_per_s_off": 2.6029031292340905,
+   "toks_per_s_on": 2.6275655313899176,
+   "prefetch_speedup": 1.0094749596628607,
+   "hit_rate": null,
+   "greedy_identical": true,
+   "distinct2": 0.8661417322834646
+  },
+  {
+   "prompt": "The key difference between mixture-of-experts and dense transformer models is",
+   "text": "The key difference between **Mixture-of-Experts (MoE)** and **dense (or dense) transformer models** lies in how they utilize their parameters during inference:\n\n### 1. **Parameter Usage During Inference**:\n- **Mixture-of-Experts (MoE)**:\n  - **Sparse Activation**: Only a subset of experts (e.g., a few experts are activated per input.\n  - **Efficiency**: Since only a small number of experts are active per token, MoE models are **spars** (e.g., experts) are activated for each input, leading to **dynamic, input-conditional computation",
+   "n_tokens": 128,
+   "mode": "gpu_early",
+   "toks_per_s_off": 2.6029031292340905,
+   "toks_per_s_on": 2.1913638776701427,
+   "prefetch_speedup": 0.8418922137586258,
+   "hit_rate": 0.780147793802656,
+   "greedy_identical": true,
+   "distinct2": 0.8661417322834646
+  },
+  {
+   "prompt": "Write a haiku about memory bandwidth.",
+   "text": "Data streams flow fast\u2014  \nsilicon whispers,  \ncache holds the past.",
+   "n_tokens": 16,
+   "mode": "gpu",
+   "toks_per_s_off": 2.6088710249966516,
+   "toks_per_s_on": 2.630554376400833,
+   "prefetch_speedup": 1.0083113926278549,
+   "hit_rate": null,
+   "greedy_identical": true,
+   "distinct2": 1.0
+  },
+  {
+   "prompt": "Write a haiku about memory bandwidth.",
+   "text": "Data streams flow fast\u2014  \nsilicon whispers,  \ncache holds the past.",
+   "n_tokens": 16,
+   "mode": "gpu_early",
+   "toks_per_s_off": 2.6088710249966516,
+   "toks_per_s_on": 2.1959140762004736,
+   "prefetch_speedup": 0.8417104775056068,
+   "hit_rate": 0.7903091755319149,
+   "greedy_identical": true,
+   "distinct2": 1.0
+  },
+  {
+   "prompt": "Explain, in two sentences, why quantization reduces energy per token:",
+   "text": "Quantization reduces energy per token by decreasing the precision of model weights and activations (e.g., from 32 to int8 or lower reduces the computational and memory requirements, enabling faster inference and lower power consumption per token.",
+   "n_tokens": 45,
+   "mode": "gpu",
+   "toks_per_s_off": 2.6074471248193167,
+   "toks_per_s_on": 2.6300116677636094,
+   "prefetch_speedup": 1.0086538832291205,
+   "hit_rate": null,
+   "greedy_identical": true,
+   "distinct2": 0.9772727272727273
+  },
+  {
+   "prompt": "Explain, in two sentences, why quantization reduces energy per token:",
+   "text": "Quantization reduces energy per token by decreasing the precision of model weights and activations (e.g., from 32 to int8 or lower reduces the computational and memory requirements, enabling faster inference and lower power consumption per token.",
+   "n_tokens": 45,
+   "mode": "gpu_early",
+   "toks_per_s_off": 2.6074471248193167,
+   "toks_per_s_on": 2.2037309450015456,
+   "prefetch_speedup": 0.8451680281548387,
+   "hit_rate": 0.7934527534418022,
+   "greedy_identical": true,
+   "distinct2": 0.9772727272727273
+  }
+ ],
+ "vram_peak_gb": 15.136048128,
+ "gpu": "NVIDIA L40S"
+}
