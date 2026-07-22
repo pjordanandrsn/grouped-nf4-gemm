@@ -1,0 +1,30 @@
+=== amd_bootstrap start 2026-07-22T17:22:47Z ===
+
+
+============================ ROCm System Management Interface ============================
+hipcc: /opt/rocm-7.0.2/bin/hipcc | rocm trees: /opt/rocm /opt/rocm-7.0.2 
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+torch 2.10.0+rocm7.0 | hip 7.0.51831 | triton 3.5.1 | dev AMD Instinct MI300X VF | cu 304
+cmake: cmake version 3.31.10
+BNBBUILD rc=0 lib=bitsandbytes/libbitsandbytes_rocm70.so 
+Failed to load CPU gemm_4bit_forward from kernels-community: No module named 'kernels'. Please make sure you already `pip install kernels` and the kernels >= 0.11.1
+Traceback (most recent call last):
+  File "<stdin>", line 4, in <module>
+  File "/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py", line 529, in _lazy_init
+    torch._C._cuda_init()
+RuntimeError: Found no NVIDIA driver on your system. Please check that you have an NVIDIA GPU and installed a driver from http://www.nvidia.com/Download/index.aspx
+ORACLE-FAIL
+BOOTSTRAP-FAIL
+=== restore torch rocm7.0 (bnb clobbered it to cu130) 2026-07-22T17:28:57Z ===
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+torch restored: 2.10.0+rocm7.0
+  File "<stdin>", line 6
+    assert torch.isfinite(d).all(); print(ORACLE OK bnb, b.__version__)
+                                          ^^^^^^^^^
+SyntaxError: invalid syntax. Perhaps you forgot a comma?
+ORACLE-FAIL2
+DONE-FIX
+BOOTSTRAP-OK-MANUAL

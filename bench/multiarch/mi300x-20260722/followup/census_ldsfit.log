@@ -1,0 +1,57 @@
+== allenai/OLMoE-1B-7B-0924 gate_up N=2048 K=2048 E=64 k=8
+    prefill_s2048 dequant_grouped     2.145 ms  7639850.4 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           3.175 ms  5160427.0 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop        5.981 ms  2739175.2 tok/s  err 1.70e-03
+       decode_bs1 dequant_grouped     0.275 ms    29094.5 tok/s  err 2.23e-03
+       decode_bs1 fused_nf4           0.153 ms    52243.9 tok/s  err 1.66e-03
+       decode_bs1 fused_v5loop        0.153 ms    52127.6 tok/s  err 1.66e-03
+== allenai/OLMoE-1B-7B-0924 down N=2048 K=1024 E=64 k=8
+    prefill_s2048 dequant_grouped     2.113 ms  7752389.2 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           1.582 ms 10359379.0 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop        2.928 ms  5596377.6 tok/s  err 1.70e-03
+       decode_bs1 dequant_grouped     0.287 ms    27832.4 tok/s  err 2.25e-03
+       decode_bs1 fused_nf4           0.098 ms    81814.2 tok/s  err 1.67e-03
+       decode_bs1 fused_v5loop        0.098 ms    81730.2 tok/s  err 1.67e-03
+== Qwen/Qwen3-30B-A3B gate_up N=1536 K=2048 E=128 k=8
+    prefill_s2048 dequant_grouped     4.352 ms  3764297.4 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           2.634 ms  6219205.7 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop        4.602 ms  3560423.3 tok/s  err 1.70e-03
+       decode_bs1 dequant_grouped     0.291 ms    27470.3 tok/s  err 2.20e-03
+       decode_bs1 fused_nf4           0.153 ms    52284.8 tok/s  err 1.66e-03
+       decode_bs1 fused_v5loop        0.153 ms    52325.9 tok/s  err 1.66e-03
+== Qwen/Qwen3-30B-A3B down N=2048 K=768 E=128 k=8
+    prefill_s2048 dequant_grouped     5.333 ms  3072442.3 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           0.783 ms 20924568.6 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop        1.290 ms 12698028.6 tok/s  err 1.70e-03
+       decode_bs1 dequant_grouped     0.278 ms    28759.0 tok/s  err 2.23e-03
+       decode_bs1 fused_nf4           0.084 ms    95613.1 tok/s  err 1.66e-03
+       decode_bs1 fused_v5loop        0.083 ms    96212.2 tok/s  err 1.66e-03
+== google/gemma-4-26B-A4B gate_up N=1408 K=2816 E=128 k=8
+    prefill_s2048 dequant_grouped     4.287 ms  3822176.5 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           1.700 ms  9635989.3 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop        2.988 ms  5484030.8 tok/s  err 1.70e-03
+       decode_bs1 dequant_grouped     0.283 ms    28310.2 tok/s  err 2.26e-03
+       decode_bs1 fused_nf4           0.190 ms    42164.7 tok/s  err 1.66e-03
+       decode_bs1 fused_v5loop        0.190 ms    42200.3 tok/s  err 1.66e-03
+== google/gemma-4-26B-A4B down N=2816 K=704 E=128 k=8
+    prefill_s2048 dequant_grouped     4.335 ms  3779195.7 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           1.001 ms 16365016.2 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop        1.496 ms 10952699.1 tok/s  err 1.70e-03
+       decode_bs1 dequant_grouped     0.285 ms    28049.5 tok/s  err 2.22e-03
+       decode_bs1 fused_nf4           0.108 ms    73960.1 tok/s  err 1.65e-03
+       decode_bs1 fused_v5loop        0.109 ms    73646.2 tok/s  err 1.65e-03
+== openai/gpt-oss-120b gate_up N=5760 K=2880 E=128 k=4
+    prefill_s2048 dequant_grouped     5.208 ms  1572994.4 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           5.535 ms  1480029.2 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop        6.157 ms  1330565.1 tok/s  err 1.70e-03
+       decode_bs1 dequant_grouped     0.152 ms    26321.6 tok/s  err 2.27e-03
+       decode_bs1 fused_nf4           0.318 ms    12576.9 tok/s  err 1.68e-03
+       decode_bs1 fused_v5loop        0.318 ms    12582.4 tok/s  err 1.68e-03
+== openai/gpt-oss-120b down N=2880 K=2880 E=128 k=4
+    prefill_s2048 dequant_grouped     4.413 ms  1856286.9 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           2.990 ms  2739974.3 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop        3.309 ms  2475825.0 tok/s  err 1.70e-03
+       decode_bs1 dequant_grouped     0.153 ms    26101.2 tok/s  err 2.22e-03
+       decode_bs1 fused_nf4           0.196 ms    20409.5 tok/s  err 1.68e-03
+       decode_bs1 fused_v5loop        0.199 ms    20083.0 tok/s  err 1.68e-03
+receipts -> /root/mi300_census_fixed.json (48 cells)
