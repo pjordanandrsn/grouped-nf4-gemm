@@ -1,0 +1,22 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /usr/bin/python3.12
+cachedir: .pytest_cache
+rootdir: /root/g
+configfile: pyproject.toml
+plugins: anyio-4.14.2
+collecting ... collected 12 items
+
+test_mxfp4_qlora.py::test_bf16_decode_equals_fp32_downcast PASSED        [  8%]
+test_mxfp4_qlora.py::test_apply_gate_matches_transformers PASSED         [ 16%]
+test_mxfp4_qlora.py::test_forward_matches_transformers_reference[1] PASSED [ 25%]
+test_mxfp4_qlora.py::test_forward_matches_transformers_reference[64] PASSED [ 33%]
+test_mxfp4_qlora.py::test_lora_delta_exactly_zero_at_init PASSED         [ 41%]
+test_mxfp4_qlora.py::test_grads_match_dense_autograd PASSED              [ 50%]
+test_mxfp4_qlora.py::test_recompute_retains_no_dense_weights PASSED      [ 58%]
+test_mxfp4_qlora.py::test_bytes_bitidentical_after_training_steps PASSED [ 66%]
+test_mxfp4_qlora.py::test_loss_descends PASSED                           [ 75%]
+test_mxfp4_qlora.py::test_fused_matches_loop[1] PASSED                   [ 83%]
+test_mxfp4_qlora.py::test_fused_matches_loop[48] PASSED                  [ 91%]
+test_mxfp4_qlora.py::test_provenance_module_hashes_match_file_ranges PASSED [100%]
+
+============================= 12 passed in 24.14s ==============================
