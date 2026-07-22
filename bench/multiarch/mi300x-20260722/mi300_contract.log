@@ -1,0 +1,6 @@
+PASS gemv E4 N128 K128 G3: b_rel=1.734e-03
+PASS gemv E8 N384 K256 G8: b_rel=1.628e-03
+PASS gemv E2 N100 K192 G2: b_rel=1.578e-03
+PASS mtile E4 N128 K128 sizes[5, 9]: b_rel=1.680e-03
+PASS mtile E4 N256 K256 sizes[64, 32, 16]: b_rel=1.721e-03
+HW-CONTRACT PASS

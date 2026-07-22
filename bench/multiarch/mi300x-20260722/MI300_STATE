@@ -1,0 +1,107 @@
+start 2026-07-22T02:08:15Z
+
+
+============================ ROCm System Management Interface ============================
+====================================== Product Info ======================================
+hipcc: /opt/rocm/bin/hipcc | rocm: /opt/rocm /opt/rocm-7.0.2 
+PY /usr/bin/python3.12 | torch 2.9.1+rocm6.4 | hip 6.4.43484-123eb5128 | dev AMD Instinct MI300X VF | cu 304
+triton 3.5.1
+{
+ "backend": "hip",
+ "torch": "2.9.1+rocm6.4",
+ "cuda": null,
+ "hip": "6.4.43484-123eb5128",
+ "device": "AMD Instinct MI300X VF",
+ "cu_count": 304,
+ "arch": "gfx942:sramecc+:xnack-",
+ "triton": "3.5.1",
+ "bitsandbytes": null,
+ "warp_width": 64,
+ "pcie_linksta": "Speed 2.5GT/s, Width x1"
+}
+=== HW CONTRACT (bnb-free) ===
+CONTRACT rc=0 HW-CONTRACT PASS
+=== bnb source build (HIP) ===
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+cmake now: /usr/local/bin/cmake cmake version 3.31.10
+fatal: destination path '/root/bnb' already exists and is not an empty directory.
+BNBBUILD rc=0 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system packa
+bitsandbytes library load error: No compatible ROCm binary found at /root/bnb/bitsandbytes/libbitsandbytes_rocm64.so
+Traceback (most recent call last):
+  File "/root/bnb/bitsandbytes/cextension.py", line 393, in <module>
+    lib = get_native_library()
+          ^^^^^^^^^^^^^^^^^^^^
+  File "/root/bnb/bitsandbytes/cextension.py", line 359, in get_native_library
+    raise RuntimeError(f"No compatible {BNB_BACKEND} binary found at {cuda_binary_path}")
+RuntimeError: No compatible ROCm binary found at /root/bnb/bitsandbytes/libbitsandbytes_rocm64.so
+bnb 0.50.0.dev0
+=== property suite (needs bnb) ===
+SUITE rc=1 36 failed 8 passed 
+=== census (needs bnb) ===
+CENSUS rc=1
+ALLDONE
+=== REV5 coherent-7.0 rebuild 2026-07-22T02:21:57Z ===
+ERROR: Cannot uninstall typing_extensions 4.10.0, RECORD file not found. Hint: The package was installed by debian.
+torch 2.9.1+rocm6.4 | hip 6.4.43484-123eb5128 | dev AMD Instinct MI300X VF
+triton 3.5.1
+BNBBUILD70 rc=0 lib: bitsandbytes/libbitsandbytes_rocm70.so bitsandbytes/libbitsandbytes_rocm714.so 
+bitsandbytes library load error: No compatible ROCm binary found at /root/bnb/bitsandbytes/libbitsandbytes_rocm64.so
+Traceback (most recent call last):
+  File "/root/bnb/bitsandbytes/cextension.py", line 393, in <module>
+    lib = get_native_library()
+          ^^^^^^^^^^^^^^^^^^^^
+  File "/root/bnb/bitsandbytes/cextension.py", line 359, in get_native_library
+    raise RuntimeError(f"No compatible {BNB_BACKEND} binary found at {cuda_binary_path}")
+RuntimeError: No compatible ROCm binary found at /root/bnb/bitsandbytes/libbitsandbytes_rocm64.so
+Traceback (most recent call last):
+  File "<stdin>", line 5, in <module>
+  File "/root/bnb/bitsandbytes/functional.py", line 929, in quantize_4bit
+    _out, _absmax = torch.ops.bitsandbytes.quantize_4bit.default(
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/_ops.py", line 841, in __call__
+    return self._op(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/_compile.py", line 53, in inner
+    return disable_fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/_dynamo/eval_frame.py", line 1044, in _fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/library.py", line 732, in func_no_dynamo
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bnb/bitsandbytes/backends/cuda/ops.py", line 411, in _
+    fn(
+  File "/root/bnb/bitsandbytes/cextension.py", line 326, in throw_on_call
+    raise RuntimeError(f"{self.formatted_error}Native code method attempted to call: lib.{name}()")
+RuntimeError: Attempted to use bitsandbytes native library functionality but it's not available.
+
+This typically happens when you checked the code out from source and your torch installation doesn't detect ROCm on your machine.
+
+COMPILE FROM SOURCE for CPU-only:
+  `cmake -DCOMPUTE_BACKEND=cpu -S . && make`
+
+Original error: No compatible ROCm binary found at /root/bnb/bitsandbytes/libbitsandbytes_rocm64.so
+
+🔍 Run this command for detailed diagnostics:
+python -m bitsandbytes
+
+If you've tried everything and still have issues:
+1. Include ALL version info (operating system, bitsandbytes, pytorch, rocm, python)
+2. Describe what you've tried in detail
+3. Open an issue with this information:
+   https://github.com/bitsandbytes-foundation/bitsandbytes/issues
+
+Native code method attempted to call: lib.cquantize_blockwise_bf16_nf4()
+BNB70-PROBE-FAIL
+=== REV6 torch70 swap 2026-07-22T02:31:21Z ===
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+torch 2.10.0+rocm7.0 | hip 7.0.51831 | dev AMD Instinct MI300X VF
+triton 3.5.1
+bnb70 GPU bf16 quant+dequant OK | 0.50.0.dev0
+=== property suite (rev6) ===
+SUITE rc=0 44 passed 
+=== census (rev6) ===
+CENSUS rc=1
+ALLDONE
