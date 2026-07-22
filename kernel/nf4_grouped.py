@@ -380,6 +380,33 @@ def _lut(device):
     return _LUT_CACHE[key]
 
 
+_SHARED_LIMIT: dict[int, int] = {}
+
+
+def _device_shared_limit(dev) -> int:
+    """Per-device shared-memory (LDS) cap in bytes, cached; 0 if unqueryable.
+
+    NVIDIA SMs expose 100-228 KB; CDNA3 (MI300X, gfx942) exposes 64 KB. The
+    prefill M-tile config is tuned for the NVIDIA budget, so on a smaller-LDS
+    device it must be trimmed to fit (see the fit-down in ``gemm_4bit_grouped``).
+    Returning 0 (unqueryable — no CUDA/HIP device, interpreter mode, or a
+    driver that doesn't expose the property) makes the fit-down a no-op, so the
+    CPU/TRITON_INTERPRET path is never perturbed. Any failure -> 0.
+    """
+    try:
+        idx = getattr(dev, "index", None)
+        if idx is None:
+            if not torch.cuda.is_available():
+                return 0
+            idx = torch.cuda.current_device()
+        if idx not in _SHARED_LIMIT:
+            props = triton.runtime.driver.active.utils.get_device_properties(idx)
+            _SHARED_LIMIT[idx] = int(props["max_shared_mem"])
+        return _SHARED_LIMIT[idx]
+    except Exception:
+        return 0
+
+
 def _prefill_block_m(max_rows: int) -> int:
     """Group-size-keyed M-tile height (sweep basis in the wrapper comment)."""
     if max_rows <= 16:
@@ -525,6 +552,30 @@ def gemm_4bit_grouped(
     block_k = BLOCKSIZE * prefill_groups
     if prefill_groups != 1:
         assert prefill_groups == 2 and K % block_k == 0, (prefill_groups, K)
+    # --- fit the M-tile pipeline to the device's shared-memory (LDS) budget ---
+    # The M-tile mainloop stages, per pipeline stage, the activation tile plus
+    # (variant 0) a dequantized-B tile or (variant 1) the packed-B tile. The
+    # tuned (bm=128, stages=3) config needs 3*(128*64*2 + 128*64*2)=98304 B for
+    # variant 0 — fine on NVIDIA (100-228 KB LDS), but over CDNA3's 64 KB. Step
+    # stages (down to 2) then block_m (down to 64) then stages (to 1) until the
+    # estimate fits with ~8 KB headroom for the compiler's own scratch. No-op
+    # where the config already fits (every NVIDIA cell) or the limit is
+    # unqueryable. Only correctness-preserving knobs (tiling/pipelining) move.
+    _smem_cap = _device_shared_limit(dev)
+    if _smem_cap and prefill_config is None:
+        _hr = 8192
+
+        def _prefill_smem(bm: int, st: int) -> int:
+            a = bm * block_k * 2
+            b = block_n * block_k * 2 if prefill_variant == 0 else block_n * (block_k // 2)
+            return st * (a + b)
+
+        while stages > 2 and _prefill_smem(block_m, stages) > _smem_cap - _hr:
+            stages -= 1
+        while block_m > 64 and _prefill_smem(block_m, stages) > _smem_cap - _hr:
+            block_m //= 2
+        while stages > 1 and _prefill_smem(block_m, stages) > _smem_cap - _hr:
+            stages -= 1
     t_row0, t_rows, t_group = build_group_tiles(sizes, block_m, dev)
     grid = (t_row0.numel(), triton.cdiv(N, block_n))
     _gemm_nf4_grouped[grid](
