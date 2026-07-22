@@ -1,0 +1,57 @@
+== allenai/OLMoE-1B-7B-0924 gate_up N=2048 K=2048 E=64 k=8
+    prefill_s2048 dequant_grouped     2.019 ms  8116488.2 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           3.078 ms  5323310.6 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop     skipped: out of resource: shared memory, Required: 98304, Hardware limit: 65536. Reducing
+       decode_bs1 dequant_grouped     0.288 ms    27785.7 tok/s  err 2.23e-03
+       decode_bs1 fused_nf4           0.153 ms    52387.4 tok/s  err 1.66e-03
+       decode_bs1 fused_v5loop        0.152 ms    52566.7 tok/s  err 1.66e-03
+== allenai/OLMoE-1B-7B-0924 down N=2048 K=1024 E=64 k=8
+    prefill_s2048 dequant_grouped     2.172 ms  7543147.9 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           1.576 ms 10395038.6 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop     skipped: out of resource: shared memory, Required: 98304, Hardware limit: 65536. Reducing
+       decode_bs1 dequant_grouped     0.280 ms    28532.7 tok/s  err 2.25e-03
+       decode_bs1 fused_nf4           0.097 ms    82336.7 tok/s  err 1.67e-03
+       decode_bs1 fused_v5loop        0.098 ms    81880.8 tok/s  err 1.67e-03
+== Qwen/Qwen3-30B-A3B gate_up N=1536 K=2048 E=128 k=8
+    prefill_s2048 dequant_grouped     4.327 ms  3786496.4 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           2.495 ms  6565957.3 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop     skipped: out of resource: shared memory, Required: 98304, Hardware limit: 65536. Reducing
+       decode_bs1 dequant_grouped     0.287 ms    27878.9 tok/s  err 2.20e-03
+       decode_bs1 fused_nf4           0.152 ms    52678.0 tok/s  err 1.66e-03
+       decode_bs1 fused_v5loop        0.152 ms    52511.5 tok/s  err 1.66e-03
+== Qwen/Qwen3-30B-A3B down N=2048 K=768 E=128 k=8
+    prefill_s2048 dequant_grouped     4.284 ms  3824090.5 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           0.802 ms 20435323.5 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop     skipped: out of resource: shared memory, Required: 98304, Hardware limit: 65536. Reducing
+       decode_bs1 dequant_grouped     0.285 ms    28059.2 tok/s  err 2.23e-03
+       decode_bs1 fused_nf4           0.084 ms    95636.0 tok/s  err 1.66e-03
+       decode_bs1 fused_v5loop        0.085 ms    94592.8 tok/s  err 1.66e-03
+== google/gemma-4-26B-A4B gate_up N=1408 K=2816 E=128 k=8
+    prefill_s2048 dequant_grouped     4.399 ms  3724805.9 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           1.728 ms  9482891.7 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop     skipped: out of resource: shared memory, Required: 98304, Hardware limit: 65536. Reducing
+       decode_bs1 dequant_grouped     0.289 ms    27668.3 tok/s  err 2.26e-03
+       decode_bs1 fused_nf4           0.189 ms    42231.5 tok/s  err 1.66e-03
+       decode_bs1 fused_v5loop        0.189 ms    42312.1 tok/s  err 1.66e-03
+== google/gemma-4-26B-A4B down N=2816 K=704 E=128 k=8
+    prefill_s2048 dequant_grouped     4.445 ms  3685786.1 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           1.011 ms 16204654.8 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop     skipped: out of resource: shared memory, Required: 98304, Hardware limit: 65536. Reducing
+       decode_bs1 dequant_grouped     0.294 ms    27234.0 tok/s  err 2.22e-03
+       decode_bs1 fused_nf4           0.108 ms    74069.3 tok/s  err 1.65e-03
+       decode_bs1 fused_v5loop        0.108 ms    73782.0 tok/s  err 1.65e-03
+== openai/gpt-oss-120b gate_up N=5760 K=2880 E=128 k=4
+    prefill_s2048 dequant_grouped     5.393 ms  1519105.5 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           5.599 ms  1463202.8 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop        6.201 ms  1321015.0 tok/s  err 1.70e-03
+       decode_bs1 dequant_grouped     0.150 ms    26702.0 tok/s  err 2.27e-03
+       decode_bs1 fused_nf4           0.318 ms    12588.7 tok/s  err 1.68e-03
+       decode_bs1 fused_v5loop        0.396 ms    10102.9 tok/s  err 1.68e-03
+== openai/gpt-oss-120b down N=2880 K=2880 E=128 k=4
+    prefill_s2048 dequant_grouped     4.226 ms  1938418.8 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4           3.007 ms  2723981.1 tok/s  err 1.70e-03
+    prefill_s2048 fused_v5loop        3.332 ms  2458491.6 tok/s  err 1.70e-03
+       decode_bs1 dequant_grouped     0.144 ms    27683.6 tok/s  err 2.22e-03
+       decode_bs1 fused_nf4           0.194 ms    20597.0 tok/s  err 1.68e-03
+       decode_bs1 fused_v5loop        0.194 ms    20573.6 tok/s  err 1.68e-03
+receipts -> /root/mi300_census.json (48 cells)
