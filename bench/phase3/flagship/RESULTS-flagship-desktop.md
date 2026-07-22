@@ -86,3 +86,25 @@ Greedy identity: **6/6 byte-identical** across arms. VRAM peak **15.14 GB**.
 `cpu.txt`, `ram.txt`, `disk.txt`, `versions.txt`, `gnf4_sha.txt`,
 `SUMMARY.txt`, `driver-flag-desktop-run.sh` (the on-pod driver, verbatim).
 Checksums: `SHA256SUMS.desktop`.
+
+## Driver notes (review disclosures — the driver is preserved as run, not repaired)
+
+Three properties of the verbatim driver, flagged in review and disclosed
+here rather than edited away (editing the driver copy would falsify the
+receipt):
+
+1. **The clone is unpinned** (`git clone --depth 1` at floating HEAD); the
+   commit actually exercised is recorded in `gnf4_sha.txt` (`1a60c39`). To
+   re-run against the same harness code: `git clone … && git checkout
+   1a60c39` (a full clone, or `--depth 1` + `fetch --depth 1 origin
+   1a60c39`). Future drivers pin at clone time.
+2. **`AB-DONE` is an evidence-collection marker, not a success gate** — the
+   driver is continue-on-fail by design (receipts of failure are still
+   receipts). Ground truth is the per-phase artifacts: `suite.txt` carries
+   the pytest rc, and each `flag*.json` exists only if its phase completed.
+   All are present and parse here.
+3. **`SUMMARY.txt` is cosmetically broken**: the driver's summary step looks
+   up `tok_per_s`/`tokens_per_s`/`decode_toks` but the harness emits
+   `toks_per_s`, so it dumped raw dicts instead of one-line rates. Every
+   number in this doc reads from the `flag*.json` receipts directly;
+   `SUMMARY.txt` is retained only as the as-pulled artifact.
