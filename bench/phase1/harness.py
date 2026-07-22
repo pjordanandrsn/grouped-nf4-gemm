@@ -750,15 +750,28 @@ def main():
     if routings and "prefill_measured" not in args.regimes:
         args.regimes = list(args.regimes) + ["prefill_measured"]
 
+    def _driver_version():
+        # portable across vendors: nvidia-smi on NVIDIA, rocm-smi on AMD, and
+        # a missing tool is metadata-only — never fatal to the census.
+        for cmd in (
+            ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
+            ["rocm-smi", "--showdriverversion", "--csv"],
+        ):
+            try:
+                out = subprocess.run(
+                    cmd, capture_output=True, text=True
+                ).stdout.strip()
+                if out:
+                    return out.splitlines()[-1].strip()
+            except FileNotFoundError:
+                continue
+        return ""
+
     env = {
         "gpu": torch.cuda.get_device_name(0),
         "capability": ".".join(map(str, torch.cuda.get_device_capability(0))),
         "torch": torch.__version__,
-        "driver": subprocess.run(
-            ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
-            capture_output=True,
-            text=True,
-        ).stdout.strip(),
+        "driver": _driver_version(),
     }
     try:
         import bitsandbytes
