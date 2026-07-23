@@ -194,8 +194,14 @@ def main(out: Path):
     ct = (out / "cells.tsv")
     if ct.exists():
         for ln in ct.read_text().splitlines():
-            n, e, t = ln.split()
-            cells.setdefault(n, {})[e] = float(t)
+            parts = ln.split()
+            if len(parts) != 3:  # blank/torn line — skip, don't abort the energy pass
+                continue
+            n, e, t = parts
+            try:
+                cells.setdefault(n, {})[e] = float(t)
+            except ValueError:
+                continue
     samp = read_samples(out) if (out / "power.tsv").exists() else []
     if samp and cells:
         rng, src, notes = rapl_meta(out, samp)
@@ -249,6 +255,31 @@ def main(out: Path):
                 jtok(stem, d["toks_per_s"],
                      "window-mean W over the whole cell incl. setup; decode is a "
                      "small tail of the window — absolute figure is diluted")
+                # decode-window figure (docstring contract): the decode loop is the
+                # last thing in the cell, so window the trailing token-count seconds.
+                r = rows.get(stem)
+                if r and idle_w is not None and d.get("median_s_per_tok"):
+                    cfg = d.get("config") or {}
+                    n_all = (cfg.get("tokens") or 0) + (cfg.get("warmup_tokens") or 0)
+                    est = n_all * d["median_s_per_tok"] + 2.0
+                    w = r["w"]
+                    tail = [s for s in w if s[0] >= w[-1][0] - est]
+                    if n_all and len(tail) >= 3:
+                        mW = sum(x[1] for x in tail) / len(tail)
+                        dur = tail[-1][0] - tail[0][0]
+                        rate = d["toks_per_s"]
+                        line = (f"{stem} decode-window ({dur:.0f}s, post-hoc trailing "
+                                f"{n_all}-token estimate): GPU absolute {mW / rate:.1f} "
+                                f"J/tok, marginal {(mW - idle_w) / rate:.2f}")
+                        r0 = rng.get(0)
+                        col = [x[2][0] for x in tail]
+                        if isinstance(r0, int) or (r0 is None and idle_cpu):
+                            wraps = sum(1 for j in range(1, len(col)) if col[j] < col[j - 1])
+                            cJ = ((col[-1] - col[0]) + (wraps * r0 if isinstance(r0, int) else 0)) / 1e6
+                            if dur > 0 and idle_cpu:
+                                line += (f" | CPU pkg0 absolute {cJ / dur / rate:.1f}, "
+                                         f"marginal {(cJ / dur - idle_cpu) / rate:.2f}")
+                        lines_e.append(line)
         fb = _load(out / "flagB_real.json") if (out / "flagB_real.json").exists() else None
         if fb and fb.get("c_box_probe"):
             lines_e.append("flagB: c_box probe — J/token intentionally not derived")
