@@ -162,6 +162,13 @@ def main():
     ap.add_argument("--paired-tokens", type=int, default=64,
                     help="tokens for the prefetch-off paired run + identity check")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--c-box-probe", action="store_true",
+                    help="additive-law floor probe: disable the expert H2D stream and run the "
+                         "identical off-mode token loop (router, attention, MoE GEMMs on stale "
+                         "staged bytes, launches, syncs). Median per-token time IS c_box, "
+                         "measured directly instead of derived by subtraction "
+                         "(t_token = c_box + bytes/link). Text output is garbage by design; "
+                         "receipts are timing-only and labeled c_box_probe.")
     ap.add_argument("--capture", default=None,
                     help="router-probe: dir to dump contract streams (bs1 decode, per layer); "
                          "runs a capture pass instead of the prefetch benchmark. No-op if unset.")
@@ -345,6 +352,9 @@ def main():
     hits_total = [0, 0]  # (hits, opportunities) under prefetch
 
     def copy_slot(buf, j, lay, e):
+        if args.c_box_probe:  # floor probe: skip the H2D, keep id bookkeeping
+            buf_ids[buf][j] = e
+            return
         s = stage[buf]
         gu_b, gu_a, dn_b, dn_a = host[lay]
         s["gu_b"][j].copy_(gu_b[e], non_blocking=True)
@@ -531,8 +541,8 @@ def main():
             if CAP["on"]:
                 CAP["_tok"] += 1        # one decode step = one token; layer-major records share it
             cur = int(logits.argmax())
-            if cur == tokenizer.eos_token_id:
-                break
+            if cur == tokenizer.eos_token_id and not args.c_box_probe:
+                break  # probe logits are stale-byte garbage; never let them shorten timing
         if prefetch and mode in ("gpu", "gpu_early"):
             hr = (hit_counter.item() / opp_counter[0]) if opp_counter[0] else None
         else:
@@ -585,6 +595,26 @@ def main():
             one.unlink()
         return
     results = []
+    if args.c_box_probe:
+        for prompt, toks in zip(prompts, prompt_toks):
+            g_off, med_off, _ = generate(toks, args.paired_tokens, prefetch=False)
+            results.append({
+                "prompt": prompt, "mode": "c_box_probe", "n_tokens": len(g_off),
+                "c_box_ms": med_off * 1e3, "toks_per_s_off": 1.0 / med_off,
+                "text": "(c_box probe: stream disabled, staged bytes stale — timing-only)",
+            })
+            log(f"C-BOX-PROBE: {prompt!r} c_box = {med_off*1e3:.1f} ms/token")
+        out = {
+            "model": MODEL, "layers": layers, "c_box_probe": True,
+            "h2d_gbps": h2d_gbps, "per_token_gb": per_tok_bytes / 1e9,
+            "waterfall_toks": waterfall_toks, "results": results,
+            "vram_peak_gb": torch.cuda.max_memory_allocated() / 1e9,
+            "gpu": torch.cuda.get_device_name(0),
+        }
+        Path(args.out).write_text(json.dumps(out, indent=1))
+        meds = sorted(r["c_box_ms"] for r in results)
+        log(f"c_box (median across prompts) = {meds[len(meds)//2]:.1f} ms/token -> {args.out}")
+        return
     modes = [m.strip() for m in args.prefetch_mode.split(",") if m.strip()]
     for prompt, toks in zip(prompts, prompt_toks):
         g_off, med_off, _ = generate(toks, args.paired_tokens, prefetch=False)

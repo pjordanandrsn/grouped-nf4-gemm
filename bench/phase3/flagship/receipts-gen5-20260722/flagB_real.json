@@ -1,0 +1,83 @@
+{
+ "model": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+ "layers": 94,
+ "h2d_gbps": 56.68861295290773,
+ "per_token_gb": 7.983857664,
+ "waterfall_toks": 7.100403757011133,
+ "results": [
+  {
+   "prompt": "The key difference between mixture-of-experts and dense transformer models is",
+   "text": "The key difference between **Mixture-of-Experts (MoE)** and **dense (or dense) transformer models** lies in how they utilize their parameters during inference:\n\n### 1. **Parameter Usage During Inference**:\n- **Mixture-of-Experts (MoE)**:\n  - **Sparse Activation**: Only a subset of experts (e.g., 2. **Computation**:\n- **Mixture-of-Experts (MoE)**:\n- **Sparse Activation**: At any given input, only a small number of experts are activated per token. For example, in a 2** **Mixture-of-Experts",
+   "n_tokens": 128,
+   "mode": "gpu",
+   "toks_per_s_off": 4.0059442123080835,
+   "toks_per_s_on": 3.834189552592518,
+   "prefetch_speedup": 0.9571250495231917,
+   "hit_rate": null,
+   "greedy_identical": true,
+   "distinct2": 0.7244094488188977
+  },
+  {
+   "prompt": "The key difference between mixture-of-experts and dense transformer models is",
+   "text": "The key difference between **Mixture-of-Experts (MoE)** and **dense (or dense) transformer models** lies in how they utilize their parameters during inference:\n\n### 1. **Parameter Usage During Inference**:\n- **Mixture-of-Experts (MoE)**:\n  - **Sparse Activation**: Only a subset of experts (e.g., 2. **Computation**:\n- **Mixture-of-Experts (MoE)**:\n- **Sparse Activation**: At any given input, only a small number of experts are activated per token. For example, in a 2** **Mixture-of-Experts",
+   "n_tokens": 128,
+   "mode": "gpu_early",
+   "toks_per_s_off": 4.0059442123080835,
+   "toks_per_s_on": 3.2595794909780356,
+   "prefetch_speedup": 0.8136856926172672,
+   "hit_rate": 0.7806743538483507,
+   "greedy_identical": true,
+   "distinct2": 0.7244094488188977
+  },
+  {
+   "prompt": "Write a haiku about memory bandwidth.",
+   "text": "Silicon hums,  \ndata flows through vast corridors\u2014  \nmemory's swift stream.",
+   "n_tokens": 18,
+   "mode": "gpu",
+   "toks_per_s_off": 3.9242973529911302,
+   "toks_per_s_on": 3.796793255752536,
+   "prefetch_speedup": 0.9675090632106639,
+   "hit_rate": null,
+   "greedy_identical": true,
+   "distinct2": 1.0
+  },
+  {
+   "prompt": "Write a haiku about memory bandwidth.",
+   "text": "Silicon hums,  \ndata flows through vast corridors\u2014  \nmemory's swift stream.",
+   "n_tokens": 18,
+   "mode": "gpu_early",
+   "toks_per_s_off": 3.9242973529911302,
+   "toks_per_s_on": 3.2737623923454966,
+   "prefetch_speedup": 0.8342289326903858,
+   "hit_rate": 0.797011889862328,
+   "greedy_identical": true,
+   "distinct2": 1.0
+  },
+  {
+   "prompt": "Explain, in two sentences, why quantization reduces energy per token:",
+   "text": "Quantization reduces energy per token by decreasing the precision of model weights and activations (e.g., from 32 to 8-bit integers, requiring less memory and computation. This lower precision enables faster operations and lower power consumption during inference.",
+   "n_tokens": 48,
+   "mode": "gpu",
+   "toks_per_s_off": 3.9094070676389827,
+   "toks_per_s_on": 3.7883399967473164,
+   "prefetch_speedup": 0.9690318585921054,
+   "hit_rate": null,
+   "greedy_identical": true,
+   "distinct2": 1.0
+  },
+  {
+   "prompt": "Explain, in two sentences, why quantization reduces energy per token:",
+   "text": "Quantization reduces energy per token by decreasing the precision of model weights and activations (e.g., from 32 to 8-bit integers, requiring less memory and computation. This lower precision enables faster operations and lower power consumption during inference.",
+   "n_tokens": 48,
+   "mode": "gpu_early",
+   "toks_per_s_off": 3.9094070676389827,
+   "toks_per_s_on": 3.275583883222991,
+   "prefetch_speedup": 0.8378722979086498,
+   "hit_rate": 0.7951378483667966,
+   "greedy_identical": true,
+   "distinct2": 1.0
+  }
+ ],
+ "vram_peak_gb": 15.16108288,
+ "gpu": "NVIDIA H100 PCIe"
+}

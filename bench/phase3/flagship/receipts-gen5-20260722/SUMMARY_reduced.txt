@@ -1,0 +1,3 @@
+flagA_fused.json -> achieved 6.589 tok/s [moe=fused] (0.928x of waterfall 7.100)
+flagA_none.json -> achieved 6.676 tok/s [moe=none] (0.940x of waterfall 7.100)
+flagB_real.json -> achieved 3.924 tok/s (median off-mode) (0.553x of waterfall 7.100)
