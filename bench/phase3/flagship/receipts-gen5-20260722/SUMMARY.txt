@@ -1,0 +1,3 @@
+flagA_fused.json -> None
+flagA_none.json -> None
+flagB_real.json -> 7.100403757011133

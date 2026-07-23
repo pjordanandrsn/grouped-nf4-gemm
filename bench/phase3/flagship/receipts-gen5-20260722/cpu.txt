@@ -1,0 +1,3 @@
+CPU(s):                                  32
+Model name:                              AMD EPYC 9124 16-Core Processor
+CPU(s) scaling MHz:                      58%

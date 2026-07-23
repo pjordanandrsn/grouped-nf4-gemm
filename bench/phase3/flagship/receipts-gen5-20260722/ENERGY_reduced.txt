@@ -1,0 +1,15 @@
+cell          dur_s   gpu_meanW  gpu_J     pkg0_J(corr wraps naive)  pkg1_J(corr wraps naive)
+idle          60.0    52.9       3171.4    2534.1 w=0 naive=2534.1  ABSENT?
+suite         99.7    96.2       9589.0    7888.7 w=0 naive=7888.7  ABSENT?
+flagA_none    540.3   104.6      56503.9   40648.3 w=0 naive=40648.3  ABSENT?
+flagA_fused   542.5   109.4      59359.6   40771.7 w=1 naive=-24764.3  ABSENT?
+flagB         2911.7  65.4       190374.4  232566.5 w=3 naive=35958.5  ABSENT?
+note: pkg0: range INFERRED from 5 wrap event(s): max pre-wrap 65531825917 uJ -> 2^16 J = 65536 J
+note: pkg1: constant 0 with no rapl_meta.txt — cannot distinguish 'no such socket' from 'read failed' post-hoc; sampler now records which at run start
+idle baseline: GPU 52.9 W, CPU pkg0 42.2 W
+flagA_none: 6.676 tok/s | GPU J/token absolute 15.7, marginal-over-idle 7.75 | CPU pkg0 absolute 11.3, marginal 4.94  [window-mean W over the whole cell incl. setup; decode is a small tail of the window — absolute figure is diluted]
+flagA_none decode-window (11s, post-hoc trailing 68-token estimate): GPU absolute 17.3 J/tok, marginal 9.37 | CPU pkg0 absolute 11.4, marginal 5.03
+flagA_fused: 6.589 tok/s | GPU J/token absolute 16.6, marginal-over-idle 8.59 | CPU pkg0 absolute 11.4, marginal 5.00  [window-mean W over the whole cell incl. setup; decode is a small tail of the window — absolute figure is diluted]
+flagA_fused decode-window (11s, post-hoc trailing 68-token estimate): GPU absolute 17.5 J/tok, marginal 9.52 | CPU pkg0 absolute 11.5, marginal 5.10
+flagB: 3.924 tok/s | GPU J/token absolute 16.7, marginal-over-idle 3.19 | CPU pkg0 absolute 20.4, marginal 9.59  [window includes checkpoint download]
+flagB decode-tail (589s, post-hoc window W>idle+10, all decode modes pooled, rate=median off): GPU absolute 30.2 J/tok, marginal 16.78 | CPU pkg0 absolute 21.7, marginal 10.92

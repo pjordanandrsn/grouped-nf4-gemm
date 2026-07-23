@@ -205,3 +205,52 @@ not to hand-wave the number.
 
 Both are flagged for a forward-only pointer/amendment decision; neither is
 touched by this addendum.
+
+## Addendum 2 (2026-07-22) — first gen5 measurement: band graded, additive form promoted per-box
+
+**Forward-only.** Addendum 1's rows and prose are untouched; this addendum grades
+its standing prediction against the first gen5-class measurement and registers
+the model change that measurement forces.
+
+### The measurement
+
+Latitude `g3-h100-small` bare metal (H100 PCIe, measured pinned H2D **56.69
+GB/s**, single-socket EPYC 9124): real-checkpoint 235B off-mode decode
+**3.924 tok/s**, greedy-identical, receipts in
+`bench/phase3/flagship/receipts-gen5-20260722/` and analysis in
+`bench/phase3/flagship/RESULTS-flagship-gen5-metal.md`.
+
+### Grading the standing prediction
+
+- **Original gen5 rows (6.0–6.9): FALSIFIED**, exactly as Addendum 1
+  pre-registered they would be. The pure-waterfall model is dead on gen5.
+- **Addendum-1 revised band (4.0–5.0, falsify <3.6 or >5.5): MISSED, narrowly,
+  on the low side** — 3.924 sits below the band's floor and above the
+  falsification line. Graded a miss, not a falsification. The prediction that
+  "the original rows falsify while the revised rows hold" was therefore **half
+  right**: the falsification half held; the hold half did not.
+- The revised **gen4 band (2.4–3.0) was CONFIRMED** by the desktop L40S
+  measurement (2.60–2.61 tok/s, `receipts-desktop-20260721/`).
+- `PROTOCOL-multiarch.md` Amendment 1's pass floor (≥0.80× of the Addendum-1
+  prediction → ≥3.2 tok/s) **passes** at 3.924.
+
+### Why the band missed, and the model going forward
+
+The band was built from t_s ∈ [53.5, 86.0] ms fitted on five virtualized fat-host
+pods. The gen5 bare-metal box measures **t_s (= c_box) = 114.0 ms** — outside the
+fitted range. Two further hosts also settle Addendum 1's registered open fork
+("per-host serial variance" vs "flat per-token total"): per-token totals of
+383.5 ms (desktop) and 254.8 ms (gen5) refute the flat-total reading. The model
+going forward, on every surface:
+
+```
+t_token ≈ c_box + cold_bytes / L
+```
+
+with **c_box a per-box measured constant** — seven receipt-derived values span
+**53.5–114.0 ms and are not ordered by link speed** (full table in the gen5
+doc). Range-transferred bands are retired for host classes with no measured c;
+the honest form is a **two-microbench prediction** (measured link + measured
+c_box — a direct `--c-box-probe` now exists in both harnesses) with the fraction
+printed as a derived output. Seven hosts' spread is a characterization, not a
+confirmed law; no new band is registered here.

@@ -108,3 +108,35 @@ receipt):
    `toks_per_s`, so it dumped raw dicts instead of one-line rates. Every
    number in this doc reads from the `flag*.json` receipts directly;
    `SUMMARY.txt` is retained only as the as-pulled artifact.
+
+## Addendum 1 (2026-07-22) — the fraction is NOT the box-invariant; additive law supersedes
+
+**Forward-only correction.** The sections above are stamped and untouched
+(pre-addendum proof: `RESULTS-flagship-desktop.md.pre-addendum1.ots`); two of
+their claims are superseded by a measurement:
+
+- *"The fraction is the box-invariant; the link sets the absolute number"*
+  (What-replicates §1) — **retired.**
+- *"real decode carries the universal 0.77× serialization fraction, exactly as
+  on every stamped host"* (What-this-doc-does-not-claim §2) — **retired.**
+
+The gen5 bare-metal run ([`RESULTS-flagship-gen5-metal.md`](RESULTS-flagship-gen5-metal.md),
+Latitude H100 PCIe, measured 56.69 GB/s link) achieved **3.924 tok/s = 0.553× of
+its waterfall** with a correct, greedy-identical kernel. The 0.77 agreement
+between this doc and phaseB5 was a coincidence of two hosts whose per-box
+overheads happened to scale with their links — and the wider record (phaseB3
+0.628, phaseB4 0.671, DO H200 0.639) never supported a constant. The standing
+model is the additive form registered in `PROJECTIONS-multiarch.md` Addendum 1:
+
+```
+t_token ≈ c_box + cold_bytes / L
+```
+
+with `c_box` measured per box (this host: **87.4 ms**; seven-host range
+**53.5–114.0 ms**, not ordered by link speed — full receipt-derived table in the
+gen5 doc). The fraction is a *derived output* that falls as the link gets
+faster. This doc's own numbers are unaffected (they are measurements, not the
+law); note 3's "cosmetically broken SUMMARY.txt" typo class became load-bearing
+on the gen5 run (a `None`-printing summary under an evidence-complete banner)
+and is retired by the committed schema-aware reducer
+([`ab_reduce.py`](ab_reduce.py), CELL-VOID rule).
