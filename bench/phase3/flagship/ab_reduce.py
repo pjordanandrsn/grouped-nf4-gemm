@@ -90,7 +90,7 @@ def summarize_cell(p: Path):
 
 
 def read_samples(out: Path):
-    samp = []
+    samp, width = [], None
     for ln in (out / "power.tsv").read_text().splitlines():
         parts = ln.split()
         if len(parts) < 3:
@@ -100,6 +100,10 @@ def read_samples(out: Path):
             w = float(parts[1]) if parts[1].replace(".", "", 1).isdigit() else 0.0
             counters = [int(x) for x in parts[2:]]
         except ValueError:
+            continue
+        if width is None:
+            width = len(counters)
+        if len(counters) != width:  # ragged row (torn write) — drop, keep width stable
             continue
         samp.append((t, w, counters))
     return samp
@@ -113,14 +117,24 @@ def rapl_meta(out: Path, samp):
     if meta.exists():
         for ln in meta.read_text().splitlines():
             # format: "pkg<N> present=<0|1> max_energy_range_uj=<int|na>"
-            f = dict(kv.split("=", 1) for kv in ln.split()[1:])
-            i = int(ln.split()[0].removeprefix("pkg"))
+            parts = ln.split()
+            if not parts or not parts[0].startswith("pkg"):
+                continue  # blank/foreign line — meta is advisory, never crash on it
+            try:
+                i = int(parts[0].removeprefix("pkg"))
+            except ValueError:
+                continue
+            f = dict(kv.split("=", 1) for kv in parts[1:] if "=" in kv)
             if f.get("present") == "0":
                 ranges[i] = "ABSENT"
                 source[i] = "meta"
             else:
                 r = f.get("max_energy_range_uj", "na")
                 ranges[i] = int(r) if r.isdigit() else None
+                source[i] = "meta"
+        for i in list(ranges):  # meta may declare packages the sampler never wrote
+            if not isinstance(ranges[i], str) and i >= npkg:
+                ranges[i] = "NOT-SAMPLED"
                 source[i] = "meta"
     for i in range(npkg):
         if i in ranges:
