@@ -62,13 +62,13 @@ def summarize_cell(p: Path):
         return f"CELL-VOID {p.name} reason={reason}"
     if "results" in d:  # Phase-B real-checkpoint schema
         if d.get("c_box_probe"):  # no-stream floor probe: fraction is n/a by design
-            cbs = sorted(r["c_box_ms"] for r in d["results"] if r.get("c_box_ms"))
+            cbs = sorted(r["c_box_ms"] for r in (d.get("results") or []) if r.get("c_box_ms"))
             if not cbs:
                 VOID.append((p.name, "c_box_probe with no c_box_ms rows"))
                 return f"CELL-VOID {p.name} reason=c_box_probe-no-rows"
             return (f"{p.name} -> C-BOX-PROBE c_box = {cbs[len(cbs) // 2]:.1f} ms/token "
                     f"(median across prompts, stream disabled)")
-        offs = sorted(r["toks_per_s_off"] for r in d.get("results", [])
+        offs = sorted(r["toks_per_s_off"] for r in (d.get("results") or [])
                       if r.get("toks_per_s_off"))
         if not offs:
             VOID.append((p.name, "no toks_per_s_off rows"))
@@ -254,7 +254,7 @@ def main(out: Path):
             lines_e.append("flagB: c_box probe — J/token intentionally not derived")
             fb = None
         if fb:
-            offs = sorted(r["toks_per_s_off"] for r in fb.get("results", [])
+            offs = sorted(r["toks_per_s_off"] for r in (fb.get("results") or [])
                           if r.get("toks_per_s_off"))
             if offs:
                 med = offs[len(offs) // 2]
