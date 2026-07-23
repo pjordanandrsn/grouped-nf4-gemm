@@ -230,7 +230,7 @@ in-repo):
   `c_box` measured at 53.5–114.0 ms across seven hosts (gen4 desktop
   L40S: 2.6 tok/s; gen5 bare-metal H100 PCIe: 3.9 tok/s — same kernel,
   greedy-identical; see
-  [the gen5 doc](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/bench/phase3/flagship/RESULTS-flagship-gen5-metal.md)).
+  [the gen5 doc](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.2/bench/phase3/flagship/RESULTS-flagship-gen5-metal.md)).
   A fixed "fraction of waterfall" is NOT the law — the two 0.77 readings
   that once suggested one were a two-host coincidence, retired 2026-07-22.
 - **Expert prefetch is measured CLOSED, negative** — four registered arcs
