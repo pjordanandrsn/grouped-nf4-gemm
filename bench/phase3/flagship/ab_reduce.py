@@ -45,16 +45,21 @@ VOID = []
 
 def _load(p: Path):
     try:
-        return json.loads(p.read_text())
+        d = json.loads(p.read_text())
     except Exception as e:  # noqa: BLE001 - reason is reported, run is voided
         VOID.append((p.name, f"unparseable-json: {e}"))
         return None
+    if not isinstance(d, dict):  # literal null/list/scalar parses fine but is no cell
+        VOID.append((p.name, f"not-a-json-object: {type(d).__name__}"))
+        return None
+    return d
 
 
 def summarize_cell(p: Path):
     d = _load(p)
     if d is None:
-        return f"CELL-VOID {p.name} reason=unparseable-json"
+        reason = next((r for n, r in reversed(VOID) if n == p.name), "unparseable-json")
+        return f"CELL-VOID {p.name} reason={reason}"
     if "results" in d:  # Phase-B real-checkpoint schema
         if d.get("c_box_probe"):  # no-stream floor probe: fraction is n/a by design
             cbs = sorted(r["c_box_ms"] for r in d["results"] if r.get("c_box_ms"))
@@ -271,8 +276,8 @@ def main(out: Path):
     print(s_txt)
     print(e_txt, end="")
     if VOID:
-        print(f"\nCELL-VOID: {len(VOID)} cell(s) produced no parseable row — "
-              f"run is NOT evidence-complete", file=sys.stderr)
+        print(f"\nCELL-VOID: {len({n for n, _ in VOID})} cell(s) produced no "
+              f"parseable row — run is NOT evidence-complete", file=sys.stderr)
         return 3
     return 0
 
