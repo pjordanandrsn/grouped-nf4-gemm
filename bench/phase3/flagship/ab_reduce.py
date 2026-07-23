@@ -166,6 +166,7 @@ def cell_energy(samp, a, b, rng):
 
 
 def main(out: Path):
+    VOID.clear()  # module-level accumulator; reset per invocation
     lines_s, lines_e = [], []
     for p in sorted(out.glob("flag*.json")):
         lines_s.append(summarize_cell(p))
@@ -222,11 +223,17 @@ def main(out: Path):
 
         for stem in ("flagA_none", "flagA_fused"):
             d = _load(out / f"{stem}.json") if (out / f"{stem}.json").exists() else None
+            if d and "c_box_ms" in d:  # probe contract: timing-only, no throughput/energy rows
+                lines_e.append(f"{stem}: c_box probe — J/token intentionally not derived")
+                continue
             if d and d.get("toks_per_s"):
                 jtok(stem, d["toks_per_s"],
                      "window-mean W over the whole cell incl. setup; decode is a "
                      "small tail of the window — absolute figure is diluted")
         fb = _load(out / "flagB_real.json") if (out / "flagB_real.json").exists() else None
+        if fb and fb.get("c_box_probe"):
+            lines_e.append("flagB: c_box probe — J/token intentionally not derived")
+            fb = None
         if fb:
             offs = sorted(r["toks_per_s_off"] for r in fb.get("results", [])
                           if r.get("toks_per_s_off"))
