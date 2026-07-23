@@ -1,0 +1,7 @@
+cell          dur_s   gpu_meanW  gpu_J    rapl0_J  rapl1_J
+idle          60.0    52.9       3171.4   2534.1   0.0
+suite         99.7    96.2       9589.0   7888.7   0.0
+flagA_none    540.3   104.6      56503.9  40648.3  0.0
+flagA_fused   542.5   109.4      59359.6  -24764.3 0.0
+flagB         2911.7  65.4       190374.4 35958.5  0.0
+flagB: decode ~3.924 tok/s; cell meanW 65.4 -> upper-bound GPU J/token ~= 16.7

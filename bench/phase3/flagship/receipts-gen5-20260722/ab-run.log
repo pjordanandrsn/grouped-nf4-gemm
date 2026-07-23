@@ -1,0 +1,55 @@
+== FLAG-METAL start 2026-07-23T00:06:08Z ==
+NVIDIA H100 PCIe, 81559 MiB, 580.173.02, 5, 16
+CPU(s):                                  32
+Model name:                              AMD EPYC 9124 16-Core Processor
+CPU(s) scaling MHz:                      58%
+               total        used        free      shared  buff/cache   available
+Mem:             188           2         186           0           0         186
+Swap:              0           0           0
+/dev/nvme0n1p2  3.5T   17G  3.3T   1% /
+CUDA-OK NVIDIA H100 PCIe
+measured pinned H2D: 56.64 GB/s
+link class: gen5 band
+Cloning into 'g'...
+d41d967d3043dcd8265af2daf5514d1bd6701dde
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+bitsandbytes library load error: Configured CUDA binary not found at /usr/local/lib/python3.12/dist-packages/bitsandbytes/libbitsandbytes_cuda132.so
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.12/dist-packages/bitsandbytes/cextension.py", line 320, in <module>
+    lib = get_native_library()
+          ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/bitsandbytes/cextension.py", line 288, in get_native_library
+    raise RuntimeError(f"Configured {BNB_BACKEND} binary not found at {cuda_binary_path}")
+RuntimeError: Configured CUDA binary not found at /usr/local/lib/python3.12/dist-packages/bitsandbytes/libbitsandbytes_cuda132.so
+triton 3.7.1 bnb 0.49.2
+bnb GPU lib mismatch -> BNB_CUDA_VERSION=130 (bundled: libbitsandbytes_cuda118.so libbitsandbytes_cuda120.so libbitsandbytes_cuda121.so libbitsandbytes_cuda122.so libbitsandbytes_cuda123.so libbitsandbytes_cuda124.so libbitsandbytes_cuda125.so libbitsandbytes_cuda126.so libbitsandbytes_cuda128.so libbitsandbytes_cuda129.so libbitsandbytes_cuda130.so )
+BNB-GPU-OK (BNB_CUDA_VERSION=130)
+== property suite ==
+SUITE rc=0 44 passed 
+== PHASE-A: none then fused 00:09:22Z ==
+  tok 56/68: 150 ms
+  tok 64/68: 150 ms
+MODE=none: 6.68 tok/s (waterfall 7.10, 94%), VRAM peak 13.6 GB -> /root/ab-out/flagA_none.json
+  tok 56/68: 152 ms
+  tok 64/68: 152 ms
+MODE=fused: 6.59 tok/s (waterfall 7.10, 93%), VRAM peak 13.6 GB -> /root/ab-out/flagA_fused.json
+== PHASE-B real checkpoint 00:27:25Z ==
+memory's swift stream.
+[01:14:52] PROMPT[gpu]: 'Explain, in two sentences, why quantization reduces energy per token:'
+  off 3.91 -> on 3.79 tok/s (x0.969, hit -1.00, identical=True)
+  Quantization reduces energy per token by decreasing the precision of model weights and activations (e.g., from 32 to 8-bit integers, requiring less memory and computation. This lower precision enables
+[01:15:13] PROMPT[gpu_early]: 'Explain, in two sentences, why quantization reduces energy per token:'
+  off 3.91 -> on 3.28 tok/s (x0.838, hit 0.80, identical=True)
+  Quantization reduces energy per token by decreasing the precision of model weights and activations (e.g., from 32 to 8-bit integers, requiring less memory and computation. This lower precision enables
+[01:15:13] wrote /root/ab-out/flagB_real.json; VRAM peak 15.2 GB
+cell          dur_s   gpu_meanW  gpu_J    rapl0_J  rapl1_J
+idle          60.0    52.9       3171.4   2534.1   0.0
+suite         99.7    96.2       9589.0   7888.7   0.0
+flagA_none    540.3   104.6      56503.9  40648.3  0.0
+flagA_fused   542.5   109.4      59359.6  -24764.3 0.0
+flagB         2911.7  65.4       190374.4 35958.5  0.0
+flagB: decode ~3.924 tok/s; cell meanW 65.4 -> upper-bound GPU J/token ~= 16.7
+flagA_fused.json -> None
+flagA_none.json -> None
+flagB_real.json -> 7.100403757011133
+AB-DONE — evidence complete 2026-07-23T01:15:56Z

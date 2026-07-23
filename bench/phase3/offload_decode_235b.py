@@ -107,6 +107,12 @@ def main():
     ap.add_argument("--tokens", type=int, default=64)
     ap.add_argument("--warmup-tokens", type=int, default=4)
     ap.add_argument("--moe", choices=["fused", "dequant", "bnb_dequant", "none"], default="fused")
+    ap.add_argument("--no-stream", action="store_true",
+                    help="c_box probe: disable the expert H2D stream; everything else "
+                         "(attention, router cadence, MoE compute on stale staged bytes, "
+                         "launches, syncs) runs identically. Per-token time IS the "
+                         "non-stream floor c_box, measured directly instead of derived "
+                         "by subtraction. Outputs are timing-only, never text claims.")
     ap.add_argument("--vram-cap-gb", type=float, default=20.0)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
@@ -205,6 +211,9 @@ def main():
         s = stage[buf]
         eids = eids_all[tok, lay]
         with torch.cuda.stream(copy_stream):
+            if args.no_stream:  # c_box probe: skip the copies, keep the event cadence
+                copy_done[buf].record(copy_stream)
+                return
             for j, e in enumerate(eids.tolist()):
                 gu_b, gu_a, dn_b, dn_a = host[lay]
                 s["gu_b"][j].copy_(gu_b[e], non_blocking=True)
@@ -301,7 +310,6 @@ def main():
         "token_ms": [round(t * 1e3, 1) for t in times],
         "median_s_per_tok": med,
         "toks_per_s": 1.0 / med,
-        "achieved_fraction_of_waterfall": (1.0 / med) / waterfall_toks,
         "vram_peak_gb": peak_gb,
         "mean_power_w": mean_w,
         "joules_per_token": j_per_tok,
@@ -309,10 +317,21 @@ def main():
         "power_err": _pwr.get("err"),
         "gpu": torch.cuda.get_device_name(0),
     }
+    if args.no_stream:
+        # fraction-of-waterfall is meaningless with the stream disabled; the
+        # measured quantity IS the additive-law floor. Labeled, never None.
+        out["c_box_ms"] = med * 1e3
+    else:
+        out["achieved_fraction_of_waterfall"] = (1.0 / med) / waterfall_toks
     Path(args.out).write_text(json.dumps(out, indent=1))
-    print(f"MODE={args.moe}: {1.0/med:.2f} tok/s (waterfall {waterfall_toks:.2f}, "
-          f"{out['achieved_fraction_of_waterfall']*100:.0f}%), VRAM peak {peak_gb:.1f} GB "
-          f"-> {args.out}", flush=True)
+    if args.no_stream:
+        print(f"MODE={args.moe} C-BOX-PROBE (no-stream): c_box = {med*1e3:.1f} ms/token "
+              f"({1.0/med:.2f} tok/s floor), VRAM peak {peak_gb:.1f} GB -> {args.out}",
+              flush=True)
+    else:
+        print(f"MODE={args.moe}: {1.0/med:.2f} tok/s (waterfall {waterfall_toks:.2f}, "
+              f"{out['achieved_fraction_of_waterfall']*100:.0f}%), VRAM peak {peak_gb:.1f} GB "
+              f"-> {args.out}", flush=True)
 
 
 if __name__ == "__main__":

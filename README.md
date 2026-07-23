@@ -224,7 +224,15 @@ in-repo):
   fused path is **2.33× tokens/s and 2.21× J/token**.
 - **[Phase B](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.2/bench/phase3/flagship/RESULTS-flagship-phaseB.md)** (the real
   438 GB checkpoint, stream-quantized to NF4 in place): **coherent greedy
-  text at 4.3–4.4 tok/s on 15.2 GB VRAM**, replicated across five pods.
+  text at 4.3–4.4 tok/s on 15.2 GB VRAM**, replicated across five pods —
+  all at 45–55 GB/s datacenter links. The per-token rate is **link- and
+  host-dependent**: `t_token ≈ c_box + bytes/link`, with the per-box floor
+  `c_box` measured at 53.5–114.0 ms across seven hosts (gen4 desktop
+  L40S: 2.6 tok/s; gen5 bare-metal H100 PCIe: 3.9 tok/s — same kernel,
+  greedy-identical; see
+  [the gen5 doc](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/bench/phase3/flagship/RESULTS-flagship-gen5-metal.md)).
+  A fixed "fraction of waterfall" is NOT the law — the two 0.77 readings
+  that once suggested one were a two-host coincidence, retired 2026-07-22.
 - **Expert prefetch is measured CLOSED, negative** — four registered arcs
   ([B2](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.2/bench/phase3/flagship/RESULTS-flagship-phaseB2.md) speculation:
   token-to-token expert stickiness is only 0.44;
@@ -337,15 +345,21 @@ projection table for AMD, Intel, and NVIDIA unified-memory parts:
 **before any of this silicon was run** — the projections are a falsifiable
 prediction, not a marketing table.
 
-**Every row is `PROJECTED` — none is confirmed on its hardware.** Streaming rows
-(discrete GPU) are anchored to the measured flagship numbers to <2%; unified-memory
-rows are *ceilings only* and real decode sits below them. Headlines, all
-projected: 235B-A22B at **3.0–3.5 tok/s** on a gen4-×16 desktop, **6.0–6.9** on
-gen5 (5090 / RDNA4) — **both revised down by Addendum 1** (a measured
-serialization term; real-decode bands now **2.4–3.0** gen4 / **4.0–5.0** gen5,
-see `PROJECTIONS-multiarch.md`) — and a **17–22 tok/s ceiling** on 128 GB unified boxes
-(Strix Halo / DGX Spark / Jetson Thor). NF4-vs-bf16 is a **3.56×** byte reduction
-(absmax-inclusive), not the round 4×.
+**Streaming rows are now graded against measurements** (Addendum 2): the
+original pure-waterfall gen5 row (6.0–6.9) is **falsified**, as Addendum 1
+pre-registered it would be; Addendum 1's revised **gen4 band (2.4–3.0) is
+CONFIRMED** (desktop L40S measured 2.60–2.61) and its revised **gen5 band
+(4.0–5.0) missed narrowly** (bare-metal H100 PCIe measured **3.924** — below
+the band, above the 3.6 falsification line; that box's floor `c_box = 114 ms`
+lies outside the five-pod fitted range). The standing model is **additive,
+per-box**: `t_token ≈ c_box + bytes/link` with `c_box` measured (53.5–114.0 ms
+across seven hosts, not ordered by link speed) — a fixed fraction-of-waterfall
+is retired as a law (`PROJECTIONS-multiarch.md` Addendum 2,
+`bench/phase3/flagship/RESULTS-flagship-gen5-metal.md`). Unified-memory rows
+remain *ceilings only*: **17–22 tok/s ceiling** on 128 GB unified boxes
+(Strix Halo / DGX Spark / Jetson Thor), real decode below them by that same
+per-box floor. NF4-vs-bf16 is a **3.56×** byte reduction (absmax-inclusive),
+not the round 4×.
 
 **Call for confirmatories.** If you own any listed part, run
 `PROTOCOL-multiarch.md` and file the result — **pass or fail** — as an issue.
