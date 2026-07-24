@@ -42,11 +42,19 @@ def _get(cfg, key, default=None):
     return getattr(cfg, key, default)
 
 
-def derive(cfg, n_layers: int | None = None, bytes_per_elem: int = BYTES_PER_ELEM) -> dict:
+def derive(cfg, n_layers: int | None = None, bytes_per_elem: int = BYTES_PER_ELEM,
+           full_depth: int | None = None) -> dict:
     """Derive KV cost from a config (dict or HF config object).
 
-    Returns slope_b (unbounded bytes/token) and floor_b (bounded constant).
-    Total KV bytes at context C = slope_b * C + floor_b.
+    Returns slope_b (unbounded bytes/token) and floor_b (the sliding asymptote);
+    use kv_bytes() for the total at a context, which is piecewise.
+
+    `n_layers` evaluates a truncated stack (the rung-one probe). `full_depth` is
+    the model's REAL depth, which must be supplied when `n_layers` truncates a
+    model that uses KV sharing: the elided range is anchored at
+    `real_depth - num_kv_shared_layers`, not at the truncated depth, so deriving
+    a 6-layer probe of a 30-layer model with 5 shared layers must still treat
+    the cutoff as 25 (i.e. none of the probe's layers are elided) rather than 1.
     """
     layers = n_layers if n_layers is not None else _get(cfg, "num_hidden_layers")
     heads = _get(cfg, "num_attention_heads")
@@ -74,7 +82,9 @@ def derive(cfg, n_layers: int | None = None, bytes_per_elem: int = BYTES_PER_ELE
 
     window = _get(cfg, "sliding_window")
     shared = _get(cfg, "num_kv_shared_layers", 0) or 0
-    first_shared = layers - shared
+    # anchored to the model's real depth, NOT the (possibly truncated) `layers`
+    depth = full_depth or _get(cfg, "num_hidden_layers") or layers
+    first_shared = depth - shared
     n_full = sum(1 for i, x in enumerate(layer_types)
                  if x == "full_attention" and i < first_shared)
     n_slide = sum(1 for i, x in enumerate(layer_types)

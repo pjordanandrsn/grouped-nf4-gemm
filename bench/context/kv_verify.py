@@ -93,7 +93,8 @@ def probe(name: str, l_probe: int, ctxs: tuple[int, int]) -> dict:
     t.num_hidden_layers = l_probe
     if getattr(t, "layer_types", None):
         t.layer_types = list(t.layer_types)[:l_probe]
-    probe_derived = derive(t, l_probe)           # what this probe should measure
+    # full_depth: KV-share cutoff must anchor to the real depth, not the probe depth
+    probe_derived = derive(t, l_probe, full_depth=real_layers)
 
     for attr, val in SHRINK:
         if hasattr(t, attr):
