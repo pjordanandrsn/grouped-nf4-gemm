@@ -1,0 +1,2 @@
+NVIDIA RTX A2000 12GB, 575.64.05, 12282 MiB
+torch 2.8.0+cu128 transformers 5.14.0

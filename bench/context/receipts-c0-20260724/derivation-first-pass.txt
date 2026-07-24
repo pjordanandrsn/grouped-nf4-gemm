@@ -1,0 +1,47 @@
+==============================================================================
+Qwen/Qwen3-235B-A22B-Instruct-2507
+  per-layer per-token = 2 x n_kv_heads 4 x head_dim 128 x 2B = 2048 B
+  all 94 layers full attention (no window)
+  slope = 2048 x 94 = 192512 B/token = 188.0 KB/token
+==============================================================================
+Qwen/Qwen3-30B-A3B
+  per-layer per-token = 2 x n_kv_heads 4 x head_dim 128 x 2B = 2048 B
+  all 48 layers full attention (no window)
+  slope = 2048 x 48 = 98304 B/token = 96.0 KB/token
+==============================================================================
+openai/gpt-oss-20b
+  per-layer per-token = 2 x n_kv_heads 8 x head_dim 64 x 2B = 2048 B
+  layers: 12 full (unbounded) + 12 sliding (bounded at window=128)
+  UNBOUNDED slope = 2048 x 12 = 24576 B/token = 24.0 KB/token
+  BOUNDED floor  = 2048 x 12 x 128 = 3145728 B = 3.00 MB (constant once ctx>=128)
+==============================================================================
+openai/gpt-oss-120b
+  per-layer per-token = 2 x n_kv_heads 8 x head_dim 64 x 2B = 2048 B
+  layers: 18 full (unbounded) + 18 sliding (bounded at window=128)
+  UNBOUNDED slope = 2048 x 18 = 36864 B/token = 36.0 KB/token
+  BOUNDED floor  = 2048 x 18 x 128 = 4718592 B = 4.50 MB (constant once ctx>=128)
+==============================================================================
+google/gemma-4-26B-A4B
+  per-layer per-token = 2 x n_kv_heads 8 x head_dim 256 x 2B = 8192 B
+  layers: 5 full (unbounded) + 25 sliding (bounded at window=1024)
+  UNBOUNDED slope = 8192 x 5 = 40960 B/token = 40.0 KB/token
+  BOUNDED floor  = 8192 x 25 x 1024 = 209715200 B = 200.00 MB (constant once ctx>=1024)
+==============================================================================
+allenai/OLMoE-1B-7B-0924
+  per-layer per-token = 2 x n_kv_heads 16 x head_dim 128 x 2B = 8192 B
+  all 16 layers full attention (no window)
+  slope = 8192 x 16 = 131072 B/token = 128.0 KB/token
+==============================================================================
+moonshotai/Kimi-K2-Instruct
+  MLA (compressed latent): cache/token/layer = (kv_lora_rank 512 + qk_rope_head_dim 64) x 2B = 1152 B
+  x 61 layers = 70272 B/token = 68.6 KB/token   [no 2x: joint latent, not separate K,V]
+
+==============================================================================
+model                                        KB/tok        4K        8K        32K       128K
+Qwen/Qwen3-235B-A22B-Instruct-2507            188.0     0.73G     1.47G      5.88G     23.50G
+Qwen/Qwen3-30B-A3B                             96.0     0.38G     0.75G      3.00G     12.00G
+openai/gpt-oss-20b                             24.0     0.10G     0.19G      0.75G      3.00G
+openai/gpt-oss-120b                            36.0     0.15G     0.29G      1.13G      4.50G
+google/gemma-4-26B-A4B                         40.0     0.35G     0.51G      1.45G      5.20G
+allenai/OLMoE-1B-7B-0924                      128.0     0.50G     1.00G      4.00G     16.00G
+moonshotai/Kimi-K2-Instruct                    68.6     0.27G     0.54G      2.14G      8.58G
