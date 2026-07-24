@@ -1,0 +1,24 @@
+model                                     KB/tok     floor               tier       4K      8K      32K     128K
+Qwen/Qwen3-235B-A22B-Instruct-2507         188.0     0.0MB   MEASURED (A2000)   0.73G   1.47G   5.88G  23.50G
+Qwen/Qwen3-30B-A3B                          96.0     0.0MB   MEASURED (A2000)   0.38G   0.75G   3.00G  12.00G
+openai/gpt-oss-20b                          24.0     3.0MB   MEASURED (A2000)   0.10G   0.19G   0.75G   3.00G
+openai/gpt-oss-120b                         36.0     4.5MB   MEASURED (A2000)   0.14G   0.29G   1.13G   4.50G
+google/gemma-4-26B-A4B                      20.0   199.8MB   MEASURED (A2000)   0.27G   0.35G   0.82G   2.70G
+allenai/OLMoE-1B-7B-0924                   128.0     0.0MB   MEASURED (A2000)   0.50G   1.00G   4.00G  16.00G
+moonshotai/Kimi-K2-Instruct                 68.6     0.0MB derived-only (no local weights)   0.27G   0.54G   2.14G   8.58G
+
+per-model arithmetic:
+  Qwen/Qwen3-235B-A22B-Instruct-2507
+    94F (uniform): 2x4x128x2B x94L
+  Qwen/Qwen3-30B-A3B
+    48F (uniform): 2x4x128x2B x48L
+  openai/gpt-oss-20b
+    12F+12S win128: full 2048B/tok/L x12; sliding 2048B x12 x127 bounded
+  openai/gpt-oss-120b
+    18F+18S win128: full 2048B/tok/L x18; sliding 2048B x18 x127 bounded
+  google/gemma-4-26B-A4B
+    5F+25S win1024: full 4096B/tok/L x5; sliding 8192B x25 x1023 bounded
+  allenai/OLMoE-1B-7B-0924
+    16F (uniform): 2x16x128x2B x16L
+  moonshotai/Kimi-K2-Instruct
+    MLA latent: (r512+rope64)x2B x61L
