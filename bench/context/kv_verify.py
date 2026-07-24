@@ -33,7 +33,7 @@ import torch
 from transformers import AutoConfig, AutoModelForCausalLM
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from kv_budget import BYTES_PER_ELEM, derive  # single source of truth
+from kv_budget import derive  # single source of truth for the derivation
 
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
@@ -166,13 +166,20 @@ def main() -> int:
               f" | {'PASS' if r['passed'] else 'FAIL'} ({r['err_pct']:.2f}% err)")
         print(f"  -> full model: {r['full_model_slope_kb_per_token']:.1f} KB/token"
               f" + {r['full_model_floor_mb']:.1f} MB floor")
-    print(f"\nrung-one: {'ALL PASS' if ok and results else 'FAILURES PRESENT'}"
-          f" ({len(results)} models)")
+    # An empty run is a FAILURE, not a pass: if every model skipped (missing
+    # cache, load error) there is no verification, and a caller that trusts the
+    # exit code would treat "nothing ran" as "rung one is green".
+    verified = bool(results) and ok
+    if not results:
+        print("\nrung-one: NO MODELS RAN (all skipped) — not a pass")
+    else:
+        print(f"\nrung-one: {'ALL PASS' if ok else 'FAILURES PRESENT'}"
+              f" ({len(results)} models)")
     if args.json:
         with open(args.json, "w") as fh:
             json.dump(results, fh, indent=1, default=str)
         print(f"receipt: {args.json}")
-    return 0 if ok else 1
+    return 0 if verified else 1
 
 
 if __name__ == "__main__":
