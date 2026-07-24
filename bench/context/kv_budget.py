@@ -91,8 +91,19 @@ def derive(cfg, n_layers: int | None = None, bytes_per_elem: int = BYTES_PER_ELE
 
 
 def kv_bytes(d: dict, context: int) -> int:
-    """Total KV bytes at a given context length."""
-    return d["slope_b"] * context + d["floor_b"]
+    """Total KV bytes at a given context length.
+
+    Piecewise in context for hybrid models: a sliding layer holds
+    min(context, window - 1) tokens, so `floor_b` is the *asymptote*, reached
+    only once context >= window - 1. Adding the full floor below that overstates
+    KV (Gemma-4 at 512 tokens against a 1024 window: 220 MB vs the true 115 MB),
+    which would corrupt any short-context plan.
+    """
+    floor = d["floor_b"]
+    if d["kind"] == "hybrid" and d.get("window"):
+        cap = d["window"] - 1
+        floor = d["per_layer_sliding"] * d["n_sliding"] * min(context, cap)
+    return d["slope_b"] * context + floor
 
 
 def main() -> int:
