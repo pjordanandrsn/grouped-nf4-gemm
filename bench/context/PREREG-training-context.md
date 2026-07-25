@@ -91,3 +91,80 @@ as the scout so the numbers compose.
    rather than claiming offload is beaten in general.
 3. LoRA means the optimizer state is tiny and the backward is cheaper than a
    full fine-tune's. A full fine-tune would shift the fwd:bwd ratio T1a assumes.
+
+## Outcome — the idea does not transfer, and the reason is structural
+
+OLMoE-1B-7B, LoRA r=8 (58.7M trainable), batch 1, median of 2, A100-SXM-80GB.
+
+**Weights resident** — the half that completed:
+
+| seq | policy | s/step | peak VRAM |
+|---:|---|---:|---:|
+| 8192 | `none` | 2.357 | 39.76 GiB |
+| 8192 | `recompute` | 3.799 | 10.33 GiB |
+| 8192 | `offload` | 6.637 | 10.79 GiB |
+| 32768 | `none` | **OOM** | — |
+| 32768 | `recompute` | **7.439** | 28.15 GiB |
+| 32768 | `offload` | **20.882** | 30.01 GiB |
+
+**Weights streamed** — did not run, and *that is the finding*:
+
+```
+RuntimeError: backward re-dequantization read an offload-evicted expert
+(0-element placeholder). Offloaded training requires gradient checkpointing
+(use_reentrant=False) so the recompute re-stages the layer before its backward
+runs — non-checkpointed offload training is unsupported
+```
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| T1a recompute/none @8192 | [1.15, 1.50] | **1.612** | **outside interval** |
+| T1b offload peak ≤ 1.25× recompute | ≤1.25 | **1.066** | **CONFIRMED** |
+| T1c gap widens when weights stream | ≥0.15 | — | **VOID** |
+| T1d activation bytes / link | ±35% | — | **VOID** |
+
+### Offload never wins — not even where it was supposed to
+
+T1c's whole premise was that offload would be *competitive on an idle link* and
+lose once weight streaming saturated it. That premise is wrong at the root. With
+weights **resident** — nothing else on PCIe, offload's most favourable case — it
+is **2.81× slower than recompute at 32768** (20.882 s vs 7.439 s) and **saves no
+memory** (30.01 vs 28.15 GiB, slightly *worse*). There was never a regime for the
+busy link to take away.
+
+### And with weights streamed, recompute is not better — it is mandatory
+
+The guard above is e4b's own, and it is structural rather than incidental: a
+streamed expert is **evicted after its forward**, so a backward that was not
+re-staged by a checkpoint recompute has nothing to dequantize from. Checkpointing
+is what re-stages it. So on a streaming box, `none` and `offload` are not slow
+options — **they are not options.**
+
+**The pre-committed decision fires, but not on T1c.** T1c as specified is VOID:
+its arms never ran. The decision it gated — *the tier idea does not transfer to
+training; context in training is bought with recompute* — fires on the two
+results above, which are stronger than the timing comparison would have been.
+Recording it this way rather than back-filling T1c as "confirmed", because a
+prediction whose arms did not execute has not been tested.
+
+### Two errors of mine, recorded
+
+1. **The harness caught only `OutOfMemoryError`.** A `RuntimeError` therefore
+   killed the process and took the streamed half with it. `none`-at-32768 OOMing
+   was anticipated and handled; the guard that actually fired was not. That
+   defect is what voided T1c and T1d, and it cost the run's second half.
+2. **T1a's textbook anchor missed high** (1.612 against [1.15, 1.50]). Confound
+   #3 named this in advance — LoRA changes the fwd:bwd ratio the +33% rule of
+   thumb assumes — so the interval was set from a rule that this fixture was
+   already known not to satisfy. Registering a confound and then predicting as
+   though it did not apply is a specification error, not a discovery.
+
+**Confound #2 still stands and limits the claim:** `save_on_cpu` offloads *every*
+saved tensor, so these numbers are a **lower bound on offload's quality**. A
+boundary-only offload would move far less. What is established is that the
+*naive* tier translation loses badly and the streamed path forbids it outright —
+not that no offload scheme could ever win.
+
+**Open, unmeasured:** what recompute costs *when the link is busy* — the one arm
+that both runs and matters on a streaming box. It was launched and lost to the
+teardown clock.
