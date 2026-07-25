@@ -199,12 +199,23 @@ amendments, evidence JSONs, sweeps, and mechanical reducers are all
 committed; `.ots` files anchor the protocols to Bitcoin before the data
 existed.
 
-## Flagship: a 235B MoE decoding at the PCIe physical limit on ≤16 GB of VRAM
+## Flagship: a 235B MoE decoding at the PCIe physical limit on ≤16 GB of VRAM (at ~5K context)
 
 `bench/phase3/` runs Qwen3-235B-A22B with **all expert weights NF4-packed in
 host pinned RAM (~128 GB)** and streamed per-token over PCIe, with this
 kernel as the sole MoE compute. Same discipline (prereg + OTS, receipts
 in-repo):
+
+> **Read the VRAM figure with its context.** The stamped 15.2 GB is peak at
+> **seq-512 decode**, so it is weights + hot set + activations and carries
+> essentially no KV cache (0.09 GB at 512 tokens). KV grows linearly at
+> **188.0 KB/token** for this model, which puts the 16 GB ceiling at **~4,974
+> tokens** — beyond that the figure is no longer the whole cost. 32K needs
+> 20.98 GB and 128K needs 38.61 GB, both of which a 24 or 48 GB card carries
+> fine. Nothing here was mis-measured; the qualifier was simply never attached,
+> which is the class of silent-wrongness `docs/context-budgets.md` exists to
+> remove — see its finding #1 for the derivation and #10/#12 for the 3.56×
+> NF4 KV cache that moves the ceiling.
 
 - **[Phase A](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.2/bench/phase3/flagship/RESULTS-flagship-offload.md)** (synthetic
   weights, real GQA attention + router): **5.57 tok/s = 102–103% of the
@@ -224,7 +235,8 @@ in-repo):
   fused path is **2.33× tokens/s and 2.21× J/token**.
 - **[Phase B](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.2/bench/phase3/flagship/RESULTS-flagship-phaseB.md)** (the real
   438 GB checkpoint, stream-quantized to NF4 in place): **coherent greedy
-  text at 4.3–4.4 tok/s on 15.2 GB VRAM**, replicated across five pods —
+  text at 4.3–4.4 tok/s on 15.2 GB VRAM at seq-512 decode** (KV note above),
+  replicated across five pods —
   all at 45–55 GB/s datacenter links. The per-token rate is **link- and
   host-dependent**: `t_token ≈ c_box + bytes/link`, with the per-box floor
   `c_box` measured at 53.5–114.0 ms across seven hosts (gen4 desktop
