@@ -1,8 +1,29 @@
-# Preregistration — KV context work, experiments A and B
+# PREREG — KV context work: attention-selection (A) and fused decode (B)
 
-Hypotheses, predictions, and the analysis plan, **written before the runs**.
-Committed ahead of results so the predictions can be scored rather than
-narrated.
+**Tier: EXPLORATORY (first-look measurement, not a confirmatory replication).
+Status: STAMPED.** Code under test: gnf4 `kernel/nf4-kv-cache` local branch
+(`cd25df5..a489b71`), e4b `claude/e4b-gemma-inflight-d41f93` (`0cb3577..60e9db5`).
+Both local, unpushed.
+
+Hypotheses, predictions, and the analysis plan. Committed and stamped so the
+predictions can be scored rather than narrated.
+
+## Stamp-ordering disclosure — read before trusting any B1–B4 verdict
+
+The repo rule is **"NO box fires before the stamp"** (see
+`bench/homelab/PREREG-session4-replication.md`). That rule was **followed for
+Experiment A and for B5**, which had not run when this document was stamped.
+
+It was **not** followed for **B1–B4**. Those predictions were committed to git
+(`a489b71`) before the benchmark ran, so their ordering is established *within
+the repository*, but a git commit date is author-controlled and is not an
+external timestamp. B1–B4 therefore carry **weaker evidential status than the
+stamp on this file implies**, and the honest reading is: predictions written
+before the run, ordering attested only by git.
+
+Recorded rather than repaired, per the receipts convention — re-stamping to make
+the sequence look clean would destroy the very property a stamp exists to
+provide. B5 and Experiment A are covered properly.
 
 ## Why this document exists
 
@@ -154,6 +175,57 @@ apples-to-apples baseline for a quantized path; it is the reference a user would
 otherwise run.
 
 ---
+
+## Outcome of B1–B4, and an amendment (B5)
+
+Run before this section was written; results in
+`receipts-*/fused_latency.json`.
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| B1 fused vs two-pass @32K | 1.8–3.0× | **0.79×** | **FALSIFIED** |
+| B2 fused vs fp16 @32K | 0.8–1.4× | **2.66×** | **FALSIFIED** |
+| B3 ratio improves with ctx | 32K < 4K | 2.66× < 3.64× | confirmed |
+| B4 numerics < 2e-3 | — | passes, incl. scale=1.0 @ logits ~40× | confirmed |
+
+**Why B1/B2 failed: the traffic model was not wrong, it was incomplete — it
+counted bytes and ignored occupancy.** The fused kernel launches `grid=(H_q,)` =
+64 programs, each looping over `T/BLOCK_T` = 256 token blocks *sequentially*.
+The two-pass scores kernel launches `(H_q, cdiv(T, BLOCK_T))` = 16,384 programs.
+On 26 SMs the fused version leaves the device largely idle while 64 programs
+grind serial loops, which is why it wins slightly at 4K (32 iterations) and
+loses at 32K (256). B3 confirms the scores-intermediate term is real; it is
+simply dominated by the parallelism lost to fusing.
+
+Not reinterpreted as a success: at 32K the single-pass kernel as written is the
+wrong shape, and the "fused path becomes the default" decision does not trigger.
+
+### B5 — flash-decoding (split token axis + combine)
+
+The standard fix: partition the token axis across `S` programs, each producing a
+partial `(m, l, acc)`, then a cheap second kernel merges them by log-sum-exp.
+Parallelism becomes `H_q × S` while the scores intermediate still never reaches
+memory — the partials are `[H_q, S, D]`, ~2 MB at S=8 against the 33.6 MB the
+two-pass path moves. S is chosen to target ≥ ~500 programs.
+
+Predictions, with lower confidence than B1/B2 carried — that pair was stated
+with equal confidence and both failed:
+
+- **B5a.** split-K vs two-pass @32K: **1.2–2.5×** faster.
+  *Falsified if* ≤ 1.0× (i.e. still no better than two-pass).
+- **B5b.** split-K vs fp16 SDPA @32K: **1.0–2.2×**.
+  *Falsified if* > 2.66× (no better than the un-split fused kernel).
+- **B5c.** The 4K case does **not** regress below the un-split fused kernel's
+  1.11× vs two-pass. *Falsified if* it does.
+- **B5d.** Numerics unchanged: agrees with two-pass < 2e-3, including the
+  extreme-logit case. The combine step is a second place for the rescale to be
+  wrong, so this is not a formality.
+
+**Pre-committed decision.** If B5a and B5b both hold, the split path becomes the
+decode default and the latency caveat comes out of the docs. If B5a fails, the
+conclusion is that a 4-bit cache cannot be read competitively at decode shapes
+on this hardware without a different data layout, and the memory dial keeps its
+documented latency cost.
 
 ## Scoring
 

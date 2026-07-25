@@ -18,7 +18,9 @@ import pytest
 import torch
 
 from nf4_grouped import BLOCKSIZE
-from nf4_kv import (PERCHANNEL_GROUP, attend_nf4_kv, dequant_kv_ref,
+from nf4_kv import (PERCHANNEL_GROUP, attend_nf4_kv, attend_nf4_kv_fused,
+                    attend_nf4_kv_split,
+                    dequant_kv_ref,
                     kv_cache_bytes, kv_cache_bytes_perchannel, kv_scores_nf4,
                     kv_weighted_sum_nf4, quantize_kv, quantize_kv_perchannel)
 
@@ -390,3 +392,80 @@ def test_reference_rejects_mismatched_absmax_layout_like_the_kernels():
     p_ch, a_ch = quantize_kv_perchannel(x)
     with pytest.raises(ValueError, match="does not match per-token blockwise"):
         dequant_kv_ref(p_ch, a_ch, 128)
+
+
+@cuda
+@pytest.mark.parametrize("T,H_q,H_kv,D", SHAPES)
+def test_fused_matches_two_pass(T, H_q, H_kv, D):
+    """The fused kernel must agree with the two-pass path it replaces. Online
+    softmax reorders the reduction, so this is a numerics check as well as a
+    correctness one — a wrong rescale still produces a valid distribution."""
+    _, kp, ka = _cache(T, H_kv, D, seed=30)
+    _, vp, va = _cache(T, H_kv, D, seed=31)
+    q = torch.randn(H_q, D, device="cuda", dtype=torch.float32) * 0.5
+    two = attend_nf4_kv(q, kp, ka, vp, va)
+    one = attend_nf4_kv_fused(q, kp, ka, vp, va)
+    assert ((one - two).norm() / two.norm()).item() < 2e-3
+
+
+@cuda
+def test_fused_survives_extreme_logits():
+    """Online softmax exists to be numerically stable; a large scale makes the
+    running-max rescale load-bearing rather than incidental."""
+    T, H, D = 512, 4, 128
+    _, kp, ka = _cache(T, H, D, seed=32)
+    _, vp, va = _cache(T, H, D, seed=33)
+    q = torch.randn(H, D, device="cuda", dtype=torch.float32) * 40.0
+    one = attend_nf4_kv_fused(q, kp, ka, vp, va, scale=1.0)
+    two = attend_nf4_kv(q, kp, ka, vp, va, scale=1.0)
+    assert torch.isfinite(one).all()
+    assert ((one - two).norm() / two.norm()).item() < 2e-3
+
+
+@cuda
+def test_fused_rejects_mixed_scaling_modes():
+    T, H, D = 256, 4, 128
+    kp, ka = quantize_kv_perchannel(_outlier_cache(T, H, D, 34))
+    _, vp, va = _cache(T, H, D, seed=35)
+    q = torch.randn(H, D, device="cuda", dtype=torch.float32)
+    with pytest.raises(ValueError, match="one scaling mode"):
+        attend_nf4_kv_fused(q, kp, ka, vp, va, k_token_group=PERCHANNEL_GROUP)
+
+
+@cuda
+@pytest.mark.parametrize("T,H_q,H_kv,D", SHAPES)
+def test_split_matches_two_pass(T, H_q, H_kv, D):
+    """B5d: the combine step is a second place for the softmax rescale to be
+    wrong, and a wrong merge still yields a plausible vector."""
+    _, kp, ka = _cache(T, H_kv, D, seed=40)
+    _, vp, va = _cache(T, H_kv, D, seed=41)
+    q = torch.randn(H_q, D, device="cuda", dtype=torch.float32) * 0.5
+    two = attend_nf4_kv(q, kp, ka, vp, va)
+    got = attend_nf4_kv_split(q, kp, ka, vp, va)
+    assert ((got - two).norm() / two.norm()).item() < 2e-3
+
+
+@cuda
+@pytest.mark.parametrize("splits", [1, 2, 3, 8, 64])
+def test_split_count_does_not_change_the_answer(splits):
+    """Partitioning is an implementation detail; any split count must agree.
+    Includes splits > blocks available, and a non-divisor (3)."""
+    T, H, D = 512, 4, 128
+    _, kp, ka = _cache(T, H, D, seed=42)
+    _, vp, va = _cache(T, H, D, seed=43)
+    q = torch.randn(H, D, device="cuda", dtype=torch.float32) * 0.5
+    ref = attend_nf4_kv(q, kp, ka, vp, va)
+    got = attend_nf4_kv_split(q, kp, ka, vp, va, splits=splits)
+    assert ((got - ref).norm() / ref.norm()).item() < 2e-3, splits
+
+
+@cuda
+def test_split_survives_extreme_logits():
+    T, H, D = 4096, 4, 128
+    _, kp, ka = _cache(T, H, D, seed=44)
+    _, vp, va = _cache(T, H, D, seed=45)
+    q = torch.randn(H, D, device="cuda", dtype=torch.float32) * 40.0
+    got = attend_nf4_kv_split(q, kp, ka, vp, va, scale=1.0)
+    ref = attend_nf4_kv(q, kp, ka, vp, va, scale=1.0)
+    assert torch.isfinite(got).all()
+    assert ((got - ref).norm() / ref.norm()).item() < 2e-3

@@ -45,6 +45,8 @@ __all__ = [
     "kv_scores_nf4",
     "kv_weighted_sum_nf4",
     "attend_nf4_kv",
+    "attend_nf4_kv_fused",
+    "attend_nf4_kv_split",
     "kv_cache_bytes",
     "kv_cache_bytes_perchannel",
 ]
@@ -377,3 +379,236 @@ def attend_nf4_kv(q: torch.Tensor, k_packed: torch.Tensor, k_absmax: torch.Tenso
     probs = torch.softmax(scores, dim=-1)
     return kv_weighted_sum_nf4(probs, v_packed, v_absmax, D, block_t=block_t,
                                token_group=v_token_group)
+
+
+@triton.jit
+def _kv_attend_fused(
+    q_ptr, k_ptr, ka_ptr, v_ptr, va_ptr, out_ptr, lut_ptr,
+    T, D, GQA, scale,
+    stride_kt, stride_kh, stride_kat, stride_kah,
+    stride_vt, stride_vh, stride_vat, stride_vah,
+    BLOCK_T: tl.constexpr, BLOCK_D: tl.constexpr, QBLK: tl.constexpr,
+    TGRP: tl.constexpr,
+):
+    """One decode step, ONE pass over the cache: online-softmax flash decode.
+
+    The v1 path reads the cache twice — once for scores, once for the weighted
+    sum — which is why it cost 2.5-3x fp16 SDPA despite moving 4x fewer bytes.
+    Here each token block's K and V are loaded once and consumed immediately,
+    carrying the running max/denominator so the softmax never needs a second
+    look at the scores.
+    """
+    h = tl.program_id(0)
+    hkv = h // GQA
+    offs_d = tl.arange(0, BLOCK_D)
+    d_mask = offs_d < D
+    q = tl.load(q_ptr + h * D + offs_d, mask=d_mask, other=0.0).to(tl.float32)
+
+    m_i = float("-inf")                      # running max
+    l_i = 0.0                                # running denominator
+    acc = tl.zeros([BLOCK_D], dtype=tl.float32)
+
+    for lo in range(0, T, BLOCK_T):
+        offs_t = lo + tl.arange(0, BLOCK_T)
+        t_mask = offs_t < T
+        m2 = t_mask[:, None] & d_mask[None, :]
+
+        kb = k_ptr + offs_t[:, None] * stride_kt + hkv * stride_kh
+        kby = tl.load(kb + (offs_d[None, :] // 2), mask=m2, other=0).to(tl.int32)
+        knib = tl.where((offs_d[None, :] % 2) == 0, (kby >> 4) & 0xF, kby & 0xF)
+        kam = tl.load(ka_ptr + (offs_t[:, None] // TGRP) * stride_kat
+                      + hkv * stride_kah + (offs_d[None, :] // QBLK),
+                      mask=m2, other=0.0)
+        s = tl.sum(tl.load(lut_ptr + knib) * kam * q[None, :], axis=1) * scale
+        s = tl.where(t_mask, s, float("-inf"))
+
+        m_new = tl.maximum(m_i, tl.max(s, axis=0))
+        corr = tl.exp(m_i - m_new)
+        p = tl.exp(s - m_new)
+        p = tl.where(t_mask, p, 0.0)
+
+        vb = v_ptr + offs_t[:, None] * stride_vt + hkv * stride_vh
+        vby = tl.load(vb + (offs_d[None, :] // 2), mask=m2, other=0).to(tl.int32)
+        vnib = tl.where((offs_d[None, :] % 2) == 0, (vby >> 4) & 0xF, vby & 0xF)
+        vam = tl.load(va_ptr + (offs_t[:, None] // TGRP) * stride_vat
+                      + hkv * stride_vah + (offs_d[None, :] // QBLK),
+                      mask=m2, other=0.0)
+        v = tl.load(lut_ptr + vnib) * vam
+
+        acc = acc * corr + tl.sum(p[:, None] * v, axis=0)
+        l_i = l_i * corr + tl.sum(p, axis=0)
+        m_i = m_new
+
+    tl.store(out_ptr + h * D + offs_d, acc / l_i, mask=d_mask)
+
+
+def attend_nf4_kv_fused(q: torch.Tensor, k_packed: torch.Tensor, k_absmax: torch.Tensor,
+                        v_packed: torch.Tensor, v_absmax: torch.Tensor,
+                        scale: float | None = None, block_t: int = 128,
+                        k_token_group: int | None = None,
+                        v_token_group: int | None = None) -> torch.Tensor:
+    """Single-pass equivalent of :func:`attend_nf4_kv`. ``q [H_q, D]`` -> ``[H_q, D]``.
+
+    Requires K and V to share a scaling mode, since one kernel reads both with
+    the same constexpr divisors. Mixed modes must use the two-pass path.
+    """
+    H_q, D = q.shape
+    T, H_kv, _ = k_packed.shape
+    _check(D)
+    _require_inner_contig(k_packed=k_packed, k_absmax=k_absmax,
+                          v_packed=v_packed, v_absmax=v_absmax)
+    _check_cache(k_packed, k_absmax, D, k_token_group, "k")
+    _check_cache(v_packed, v_absmax, D, v_token_group, "v")
+    if k_token_group != v_token_group:
+        raise ValueError(
+            f"fused path needs one scaling mode for K and V (got {k_token_group} "
+            "and {v_token_group}); use attend_nf4_kv for mixed modes.")
+    if k_packed.shape[0] != v_packed.shape[0] or k_packed.shape[1] != v_packed.shape[1]:
+        raise ValueError("K and V must agree on token count and kv-head count")
+    gqa = _gqa(H_q, H_kv)
+    out = torch.empty(H_q, D, dtype=torch.float32, device=q.device)
+    _kv_attend_fused[(H_q,)](
+        q.contiguous(), k_packed, k_absmax, v_packed, v_absmax, out, _lut(q.device),
+        T, D, gqa, D ** -0.5 if scale is None else scale,
+        k_packed.stride(0), k_packed.stride(1), k_absmax.stride(0), k_absmax.stride(1),
+        v_packed.stride(0), v_packed.stride(1), v_absmax.stride(0), v_absmax.stride(1),
+        BLOCK_T=block_t, BLOCK_D=triton.next_power_of_2(D),
+        QBLK=1 if k_token_group else BLOCKSIZE, TGRP=k_token_group or 1,
+    )
+    return out
+
+
+@triton.jit
+def _kv_attend_split(
+    q_ptr, k_ptr, ka_ptr, v_ptr, va_ptr,
+    om_ptr, ol_ptr, oacc_ptr, lut_ptr,
+    T, D, GQA, scale, SPLIT_T,
+    stride_kt, stride_kh, stride_kat, stride_kah,
+    stride_vt, stride_vh, stride_vat, stride_vah,
+    BLOCK_T: tl.constexpr, BLOCK_D: tl.constexpr, QBLK: tl.constexpr,
+    TGRP: tl.constexpr, S: tl.constexpr,
+):
+    """Flash-decoding pass 1: partial (m, l, acc) over one slice of the tokens.
+
+    The single-program-per-head version of this kernel was measured SLOWER than
+    the two-pass path at 32K (0.79x) because 64 programs cannot fill 26 SMs
+    while each walks 256 blocks serially. Splitting the token axis restores
+    parallelism to H_q x S without putting the scores intermediate back in
+    memory: the partials are [H_q, S, D], ~2 MB at S=8 against 33.6 MB.
+    """
+    h = tl.program_id(0)
+    sp = tl.program_id(1)
+    hkv = h // GQA
+    offs_d = tl.arange(0, BLOCK_D)
+    d_mask = offs_d < D
+    q = tl.load(q_ptr + h * D + offs_d, mask=d_mask, other=0.0).to(tl.float32)
+
+    t_start = sp * SPLIT_T
+    t_end = tl.minimum(t_start + SPLIT_T, T)
+    m_i = float("-inf")
+    l_i = 0.0
+    acc = tl.zeros([BLOCK_D], dtype=tl.float32)
+
+    for lo in range(t_start, t_end, BLOCK_T):
+        offs_t = lo + tl.arange(0, BLOCK_T)
+        t_mask = offs_t < t_end
+        m2 = t_mask[:, None] & d_mask[None, :]
+
+        kb = k_ptr + offs_t[:, None] * stride_kt + hkv * stride_kh
+        kby = tl.load(kb + (offs_d[None, :] // 2), mask=m2, other=0).to(tl.int32)
+        knib = tl.where((offs_d[None, :] % 2) == 0, (kby >> 4) & 0xF, kby & 0xF)
+        kam = tl.load(ka_ptr + (offs_t[:, None] // TGRP) * stride_kat
+                      + hkv * stride_kah + (offs_d[None, :] // QBLK),
+                      mask=m2, other=0.0)
+        s = tl.sum(tl.load(lut_ptr + knib) * kam * q[None, :], axis=1) * scale
+        s = tl.where(t_mask, s, float("-inf"))
+
+        m_new = tl.maximum(m_i, tl.max(s, axis=0))
+        corr = tl.exp(m_i - m_new)
+        p = tl.where(t_mask, tl.exp(s - m_new), 0.0)
+
+        vb = v_ptr + offs_t[:, None] * stride_vt + hkv * stride_vh
+        vby = tl.load(vb + (offs_d[None, :] // 2), mask=m2, other=0).to(tl.int32)
+        vnib = tl.where((offs_d[None, :] % 2) == 0, (vby >> 4) & 0xF, vby & 0xF)
+        vam = tl.load(va_ptr + (offs_t[:, None] // TGRP) * stride_vat
+                      + hkv * stride_vah + (offs_d[None, :] // QBLK),
+                      mask=m2, other=0.0)
+        acc = acc * corr + tl.sum(p[:, None] * (tl.load(lut_ptr + vnib) * vam), axis=0)
+        l_i = l_i * corr + tl.sum(p, axis=0)
+        m_i = m_new
+
+    tl.store(om_ptr + h * S + sp, m_i)
+    tl.store(ol_ptr + h * S + sp, l_i)
+    tl.store(oacc_ptr + (h * S + sp) * D + offs_d, acc, mask=d_mask)
+
+
+@triton.jit
+def _kv_combine(m_ptr, l_ptr, acc_ptr, out_ptr, D,
+                BLOCK_D: tl.constexpr, S_P2: tl.constexpr, S: tl.constexpr):
+    """Flash-decoding pass 2: log-sum-exp merge of the per-split partials.
+
+    An empty split leaves m = -inf and l = 0, so its exp(m - M) weight is 0 and
+    it drops out without a special case — provided at least one split saw a
+    token, which the launcher guarantees by construction.
+    """
+    h = tl.program_id(0)
+    sp = tl.arange(0, S_P2)
+    s_mask = sp < S
+    m = tl.load(m_ptr + h * S + sp, mask=s_mask, other=float("-inf"))
+    l = tl.load(l_ptr + h * S + sp, mask=s_mask, other=0.0)
+    M = tl.max(m, axis=0)
+    w = tl.where(s_mask, tl.exp(m - M), 0.0)
+    denom = tl.sum(l * w, axis=0)
+
+    offs_d = tl.arange(0, BLOCK_D)
+    d_mask = offs_d < D
+    a = tl.load(acc_ptr + (h * S + sp[:, None]) * D + offs_d[None, :],
+                mask=s_mask[:, None] & d_mask[None, :], other=0.0)
+    num = tl.sum(a * w[:, None], axis=0)
+    tl.store(out_ptr + h * D + offs_d, num / denom, mask=d_mask)
+
+
+def attend_nf4_kv_split(q: torch.Tensor, k_packed: torch.Tensor, k_absmax: torch.Tensor,
+                        v_packed: torch.Tensor, v_absmax: torch.Tensor,
+                        scale: float | None = None, block_t: int = 128,
+                        token_group: int | None = None,
+                        splits: int | None = None) -> torch.Tensor:
+    """Flash-decoding: split the token axis, then combine. ``q [H_q, D]``.
+
+    ``splits`` defaults to whatever brings the program count to roughly 512,
+    bounded by the number of token blocks available — one program per block is
+    the finest split that does any good.
+    """
+    H_q, D = q.shape
+    T, H_kv, _ = k_packed.shape
+    _check(D)
+    _require_inner_contig(k_packed=k_packed, k_absmax=k_absmax,
+                          v_packed=v_packed, v_absmax=v_absmax)
+    _check_cache(k_packed, k_absmax, D, token_group, "k")
+    _check_cache(v_packed, v_absmax, D, token_group, "v")
+    if k_packed.shape[:2] != v_packed.shape[:2]:
+        raise ValueError("K and V must agree on token count and kv-head count")
+    gqa = _gqa(H_q, H_kv)
+    n_blocks = max(1, (T + block_t - 1) // block_t)
+    if splits is None:
+        splits = max(1, min(n_blocks, -(-512 // H_q)))
+    split_t = -(-T // splits) if splits > 1 else T
+    split_t = max(split_t, block_t)                  # never smaller than a block
+    splits = max(1, -(-T // split_t))
+
+    m = torch.empty(H_q, splits, dtype=torch.float32, device=q.device)
+    l = torch.empty(H_q, splits, dtype=torch.float32, device=q.device)
+    acc = torch.empty(H_q, splits, D, dtype=torch.float32, device=q.device)
+    out = torch.empty(H_q, D, dtype=torch.float32, device=q.device)
+    bd = triton.next_power_of_2(D)
+    _kv_attend_split[(H_q, splits)](
+        q.contiguous(), k_packed, k_absmax, v_packed, v_absmax, m, l, acc,
+        _lut(q.device), T, D, gqa, D ** -0.5 if scale is None else scale, split_t,
+        k_packed.stride(0), k_packed.stride(1), k_absmax.stride(0), k_absmax.stride(1),
+        v_packed.stride(0), v_packed.stride(1), v_absmax.stride(0), v_absmax.stride(1),
+        BLOCK_T=block_t, BLOCK_D=bd,
+        QBLK=1 if token_group else BLOCKSIZE, TGRP=token_group or 1, S=splits,
+    )
+    _kv_combine[(H_q,)](m, l, acc, out, D, BLOCK_D=bd,
+                        S_P2=triton.next_power_of_2(splits), S=splits)
+    return out
