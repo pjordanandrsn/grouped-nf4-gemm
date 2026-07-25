@@ -1,0 +1,10 @@
+enable_gqa vs fp32 truth : 2.343e-03   <- is the fast path CORRECT?
+repeat     vs fp32 truth : 2.347e-03
+fused nf4  vs fp32 truth : 1.668e-03
+enable_gqa vs repeat     : 2.976e-03
+
+bf16 SDPA enable_gqa :   0.324 ms  ( 207.4 GB/s of KV)
+bf16 SDPA repeat_int :   6.184 ms   <- what #12 most likely measured
+fused nf4            :   3.792 ms  (   5.0 GB/s of KV)
+
+A2000 HBM is ~288 GB/s; bf16 KV here is 67 MB

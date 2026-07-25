@@ -470,6 +470,103 @@ compute did not. The levers that remain are the ones that move *bytes*: NF4
 (shipped, 3.56×) and split residency (shipped, exact). That is the honest end of
 this line.
 
+## Amendment 3 — D1 promoted from deferred to registered-and-running
+
+Written **before the integration was built**. D1's gate was "needs a real
+attention integration, which is per-architecture" — and on inspection that gate
+is smaller than it looked: `attend_nf4_kv_gqa` takes
+`k_packed [T, H_kv, D/2]` and `k_absmax [T, H_kv, D/64]`, which is **exactly**
+what an nf4 slot already holds. No repacking, no format bridge.
+
+**Why this is now the biggest remaining lever, and why the A2000 can answer it.**
+Prefetch is closed, split residency and NF4 are shipped, and the dominant
+per-step cost is not the transfer — it is the **dequantization**, 968 ms of a
+1254 ms streamed load at 32K. D1 deletes that entirely: the kernel reads nibbles
+in the mainloop and never materializes a bf16 layer. And the regime where it
+pays is a *geometry*, not a model — #12 measured it on this same card at
+T=32768, H_kv=4, H_q=64, so no rented box is needed to find out whether the
+integration delivers what the kernel promised.
+
+Baselines from #12 on this device, same shape: gqa-batched **4.975 ms**,
+fp16 SDPA **6.055 ms**, two-pass 13.997 ms.
+
+- **D1a.** Fused per decode step / (dequant + SDPA) at GQA 16:1, T=32768 ∈
+  **[0.25, 0.50]**. *Falsified outside.* The current path pays a full dequant of
+  K and V plus an SDPA; the fused path pays neither.
+- **D1b.** Fused / fp16 SDPA over a bf16 cache ∈ **[0.70, 1.10]**, i.e. the
+  integration does not lose what #12's 0.82× measured for the kernel alone.
+  *Falsified outside [0.60, 1.40].*
+- **D1c — gate.** Fused agrees with dequant-then-SDPA to **< 2e-3** relative,
+  #12's own numerics bound. *Any excess voids D1a/D1b* — this is a different
+  arithmetic path, not a different schedule, so it is the one place a wrong
+  answer can hide.
+- **D1d.** GPU peak for the attention step drops below **40%** of the dequant
+  path's, since the bf16 layer (67 MB for K+V at 32K) is never built.
+  *Falsified at ≥ 40%.*
+
+**Stated, not scored — and it is the reason this is not a free win.** D1 removes
+the dequant, which is precisely the compute the streamed tier's transfer was
+hiding behind. With D1 the transfer becomes **exposed**, so a streamed+D1 step is
+`transfer + fused` where today it is `max(transfer, dequant) + SDPA`. D1 and
+streaming *interact negatively*, exactly as the B1/D1 substitution predicted
+before either ran. A combined number is a separate measurement and must not be
+assembled from these two.
+
+**Pre-committed decision.** If D1a and D1c hold, the fused path becomes the
+default for **high-GQA decode** and a rented GQA-16:1 model is worth renting to
+validate end-to-end. If D1a fails, the kernel line is closed at #12's numbers
+and nothing is rented, because there is then nothing money answers.
+
+## Outcome of D1 — and it corrects #12
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| D1a fused / (dequant+SDPA) | [0.25, 0.50] | **0.366** | **CONFIRMED** |
+| D1b fused / fp16 SDPA | [0.70, 1.10] | **12.689** | **FALSIFIED** |
+| D1c relative error | < 2e-3 | **2.899e-3** | **FALSIFIED** |
+| D1d peak fused / dequant | < 0.40 | **0.058** | **CONFIRMED** |
+
+**The first run was thrown away, and it was the flattering one.** Its harness
+compared against a baseline that (a) ran in fp32 and (b) materialized a 16×
+replicated cache via `repeat_interleave` — 1.07 GB no real attention path
+builds. That gave fused/(dequant+SDPA) = 0.094 and fused/fp16 = 0.227, i.e. a
+10.7× win. Rebuilt with bf16 and `enable_gqa=True`, the same code gives 0.366
+and 12.689. Recorded because discarding a result that favours the hypothesis is
+the only version of this that means anything.
+
+**D1c is falsified against the wrong reference, and the right one inverts it.**
+2.899e-3 is fused-vs-bf16-SDPA — two independent errors added. Against an
+**fp32** reference the fused kernel measures **1.668e-3** and bf16 SDPA measures
+**2.343e-3**: the fused path is *more* accurate than the baseline it failed
+against. Scored as registered; the interpretation is recorded, not substituted.
+
+**D1b is the real result, and it does not stop at D1.** Chasing the 12.689 found
+that `scaled_dot_product_attention` has taken `enable_gqa=True` since torch 2.5,
+and #12's fp16 baseline did not use it:
+
+| bf16 SDPA baseline | time | KV bandwidth |
+|---|---:|---:|
+| `repeat_interleave` | 6.205 ms | 10.8 GB/s |
+| `enable_gqa=True` | **0.324 ms** | **206.8 GB/s** |
+| fused NF4 | 3.760 ms | 5.0 GB/s |
+
+6.205 reproduces #12's 6.055, which is how the baseline was identified. Both are
+correct — each lands 2.34e-3 from fp32 truth. **So #12's "0.82× fp16 SDPA" is
+really ≈11.6× slower**, its pre-committed decision was taken on a bad baseline,
+and an erratum now sits in front of it in `docs/context-budgets.md`.
+
+**Pre-committed decision.** D1c did not hold, and D1b failed by 12×, so the
+fused path does **not** become the default and **nothing is rented** — the
+decision said a rented GQA-16:1 model is worth it only if D1 confirms, and it
+did not. There is now no question a rented box answers.
+
+**What this opens.** Every latency arm across #1–#16 compares NF4-cache
+configurations *against each other*. None compares against a bf16 cache with
+attention invoked properly, and the shipped path measures **10.750 ms** against
+that baseline's **0.324**. The memory dial's latency cost is unmeasured and
+evidently large. That is the next measurement, it is free on this card, and it
+gets its own preregistration rather than being folded into this one.
+
 ## Scoring
 
 Results land in `receipts-faster-20260725/`. Every prediction is marked

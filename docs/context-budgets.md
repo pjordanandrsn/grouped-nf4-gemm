@@ -461,6 +461,44 @@ bookkeeping error.
 
 ### 12. The 4-bit cache reads at or below fp16 cost — once dequant stops running per query head
 
+> ## ⚠ ERRATUM (2026-07-25) — this finding's headline is WRONG
+>
+> **The fp16 baseline it was measured against materialized a 16× replicated
+> cache.** `torch.scaled_dot_product_attention` has taken `enable_gqa=True`
+> since torch 2.5, which broadcasts kv heads inside the kernel instead. Same
+> device, same shape (T=32768, H_kv=4, H_q=64, bf16), measured 2026-07-25:
+>
+> | bf16 SDPA baseline | time | effective KV bandwidth |
+> |---|---:|---:|
+> | `repeat_interleave` (what #12 measured) | **6.205 ms** | 10.8 GB/s |
+> | **`enable_gqa=True`** (correct) | **0.324 ms** | **206.8 GB/s** |
+> | fused NF4 `attend_nf4_kv_gqa` | 3.760 ms | 5.0 GB/s |
+>
+> 6.205 ms reproduces #12's reported 6.055 ms, which is how the baseline was
+> identified. The correct baseline runs at **72% of the A2000's ~288 GB/s**, i.e.
+> it is memory-bound as a decode kernel should be; the NF4 kernel runs at **1.7%
+> of peak** and is nowhere near memory-bound despite moving 3.56× fewer bytes.
+>
+> Both baselines are **correct** — each lands 2.34e-3 from an fp32 reference, so
+> `enable_gqa` is not skipping work.
+>
+> **So "0.82× fp16 SDPA" should read "≈11.6× SLOWER than fp16 SDPA".** #12's
+> pre-committed decision — make the GQA-batched kernel the decode default and
+> remove the latency caveat — was taken on that wrong baseline and does not
+> stand. Even at tf32 (#12's 2.355 ms) the kernel is 7.3× slower.
+>
+> The finding is left below **as written and as scored**, because editing a
+> falsified conclusion to match later evidence is the one thing this document
+> forbids. What is corrected is the claim, here, in front of it.
+>
+> **This also opens a hole nothing in #1–#16 measured**: every latency arm in
+> this document compares NF4-cache configurations against *each other*. None
+> compares against a **bf16 cache with attention invoked properly** — and the
+> shipped path (dequant a layer, then SDPA) measures **10.750 ms** against that
+> baseline's 0.324. The memory dial's true latency cost is unmeasured and is
+> evidently large. See finding #17.
+
+
 Three registered attempts, the first two falsified (see the stamped
 `bench/context/PREREG-kv-context.md`):
 
