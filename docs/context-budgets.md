@@ -172,8 +172,20 @@ and "expensive context" are close to independent axes.
 - **C2** — `plan_placement()` takes `context_len` and subtracts `KV(context)`
   from the budget **before** hot-set sizing, and records the planned context in
   its receipt (a plan computed at 512 and run at 32K is the failure mode).
-- **C3** — KV q8 (and q4 behind a fidelity gate) scales every number in the KB/token
-  column by ~½ (and ~¼), moving the 235B 32K case from 5.88 GB to ~2.94 GB.
+- **C3** — KV quantization. **Implemented and measured** for nf4: `kernel/nf4_kv.py`
+  (attention that reads a 4-bit cache in the mainloop) with `kernel/test_nf4_kv.py`,
+  21/21 on the A2000. Corrections to the estimate this document originally carried:
+  the saving is **3.56×, not 4×** — the fp32 blockwise absmax is a side channel
+  (per token per head: 64 nibble-bytes + 2×4 B absmax = 72 vs 256 bf16) — so the
+  235B 32K case measures **5.88 GB → 1.65 GB**, not 2.94. And it is not free:
+  the decode attention step costs **2.5–3× fp16 SDPA** (15.4 vs 6.3 ms at 32K),
+  because v1 reads the cache twice (scores, then weighted sum). Fidelity on an
+  iid fixture: 9.3% relative error end-to-end, decomposing to **K-only 1.3% /
+  V-only 9.2%** — the softmax *contracts* K error (9.2% logit → 1.4%) while V
+  error passes through unattenuated. That inverts the usual "K is the sensitive
+  one" guidance, which derives from per-channel outliers an iid fixture does not
+  have; the asymmetric-precision decision therefore belongs to the real-scale
+  perplexity gate, not to this fixture.
 - **C4** — for the batch regime, KV becomes a streamed tier alongside the weights;
   the transfer law gains a KV term (`bytes_per_token = cold_weights + 2 × KV_layer_slice`).
 
