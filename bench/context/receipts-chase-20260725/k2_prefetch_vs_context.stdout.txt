@@ -1,0 +1,24 @@
+[2048] packed KV at prompt: 75.5 MB -> 12.2 ms/step at 6.20 GB/s
+[2048] resident        283.50 ms/step  peak= 4902.5 MB  kv_on_device=   76.4 MB
+[2048] streamed        314.92 ms/step  peak= 4832.8 MB  kv_on_device=    0.0 MB
+[2048] streamed+pre    258.14 ms/step  peak= 4832.8 MB  kv_on_device=    0.0 MB
+[2048] P1a prefetched/streamed = 0.820   <=0.95 confirms, >=1.00 falsifies  CONFIRMED
+[2048] E1d exposed transfer: 31.42 ms -> -25.36 ms/step
+[4096] packed KV at prompt: 151.0 MB -> 24.4 ms/step at 6.20 GB/s
+[4096] resident        182.64 ms/step  peak= 5214.5 MB  kv_on_device=  151.9 MB
+[4096] streamed        222.41 ms/step  peak= 4926.5 MB  kv_on_device=    0.0 MB
+[4096] streamed+pre    264.08 ms/step  peak= 4940.0 MB  kv_on_device=    0.0 MB
+[4096] P1a prefetched/streamed = 1.187   <=0.95 confirms, >=1.00 falsifies  FALSIFIED
+[4096] E1d exposed transfer: 39.77 ms -> 81.44 ms/step
+[8192] packed KV at prompt: 302.0 MB -> 48.7 ms/step at 6.20 GB/s
+[8192] resident        235.78 ms/step  peak= 5943.5 MB  kv_on_device=  302.9 MB
+[8192] streamed        314.72 ms/step  peak= 5367.5 MB  kv_on_device=    0.0 MB
+[8192] streamed+pre    305.49 ms/step  peak= 5394.5 MB  kv_on_device=    0.0 MB
+[8192] P1a prefetched/streamed = 0.971   <=0.95 confirms, >=1.00 falsifies  outside interval
+[8192] E1d exposed transfer: 78.93 ms -> 69.70 ms/step
+[16384] packed KV at prompt: 604.0 MB -> 97.4 ms/step at 6.20 GB/s
+[16384] resident        295.33 ms/step  peak= 7401.6 MB  kv_on_device=  604.9 MB
+[16384] streamed        382.57 ms/step  peak= 6249.6 MB  kv_on_device=    0.0 MB
+[16384] streamed+pre    383.76 ms/step  peak= 6303.6 MB  kv_on_device=    0.0 MB
+[16384] P1a prefetched/streamed = 1.003   <=0.95 confirms, >=1.00 falsifies  FALSIFIED
+[16384] E1d exposed transfer: 87.23 ms -> 88.43 ms/step

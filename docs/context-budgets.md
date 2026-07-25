@@ -880,7 +880,13 @@ Two things that run did *not* settle, recorded as unresolved: the fused dequant
 reached **276.5 GB/s** on a 7.1× faster memory system — capturing ~35% of the
 improvement, so neither purely bandwidth-bound nor purely kernel-bound — and
 prefetch's crossover is **not** the transfer-share law #16 implied, since the
-A100 *wins* at a 17.3% share where the A2000 *loses* at 17.8%.
+A100 *wins* at a 17.3% share where the A2000 *loses* at 17.8%. A follow-up
+attempt to model that crossover on the A2000 (K2) came back **void** — the
+prefetched arm measured *faster than a fully resident cache*, and the resident
+baseline was non-monotonic in context, both impossible. Two runs of identical
+code on that card disagree about the sign of the effect. **All A2000-based
+prefetch guidance is withdrawn**; what stands is the A100's two points, taken
+where variance was 0.28%.
 
 **Scope.** Two devices now. The synthetic harness's "compute" was
 dequantization rather than attention, and the argument that a real decode has
@@ -980,9 +986,13 @@ End-to-end at 4096, OLMoE-1B-7B: **1.679× → 1.133×**, and the decomposition
 collapses to **wrapper 0.987, dequant 1.148**. The wrapper is free; what remains
 is real arithmetic.
 
-**Two honest limits.** 99.9 GB/s is ~35% of this card's ~288 GB/s, so the kernel
-is written rather than tuned and there is more left — not pursued, because the
-registered thresholds had already cleared. And per-channel keys keep the
+**Two honest limits — one of which turned out to be my stopwatch.** The 99.9 and
+113 GB/s figures were timed with `torch.cuda.synchronize()` around a single call.
+Amortizing the launch (K1) puts the same kernel at **248.7 GB/s, 86% of this
+card's ~288** — **~50% of the original measurement was sync round-trips**. So
+there is no unexplained headroom and no kernel deficit; the kernel is essentially
+at memory bandwidth. Every synced bandwidth recorded in #18 and in the rented run
+is inflated in the same direction, most at the smallest problem sizes. And per-channel keys keep the
 reference: their absmax is grouped over *runs of tokens*, a different indexing
 problem, and that dial is off by default and measured worse (#9).
 

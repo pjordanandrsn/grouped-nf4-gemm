@@ -1,0 +1,14 @@
+      T  bytes MB  synced us  amort us  sync GB/s  amort GB/s  sync/amort
+   1024       5.4      104.0      79.9       51.7        67.2      1.301x
+   4096      21.5      194.3     107.1      110.6       200.8      1.815x
+   8192      43.0      291.8     461.6      147.3        93.1      0.632x
+  16384      86.0      463.5     345.0      185.5       249.2      1.343x
+  32768     172.0      854.2     690.0      201.3       249.2      1.238x
+  65536     343.9     1805.8    1395.9      190.5       246.4      1.294x
+
+=== scoring ===
+K1a GB/s(32768)/GB/s(4096), amortized = 1.241   >=1.30 confirms, <1.05 falsifies  outside interval
+K1b amortized faster than synced @4096 = 44.9%   >=5% confirms, <0% falsifies  CONFIRMED
+K1c GATE: CONFIRMED (bit-identical)
+
+for the record: peak amortized 249.2 GB/s at T=32768; A2000 HBM is ~288 GB/s
