@@ -1,0 +1,16 @@
+  ok  T= 4096 H=16 D=128 bfloat16 bit-identical
+  ok  T= 4096 H=16 D=128 float32  bit-identical
+  ok  T= 1024 H= 4 D=128 bfloat16 bit-identical
+  ok  T= 1024 H= 4 D=128 float32  bit-identical
+  ok  T=  777 H= 3 D= 64 bfloat16 bit-identical
+  ok  T=  777 H= 3 D= 64 float32  bit-identical
+  ok  T=  256 H= 2 D=256 bfloat16 bit-identical
+  ok  T=  256 H= 2 D=256 float32  bit-identical
+  ok  T=    1 H= 1 D=128 bfloat16 bit-identical
+  ok  T=    1 H= 1 D=128 float32  bit-identical
+H1b GATE: CONFIRMED
+
+[4096,16,128] -> bf16
+  reference    2.781 ms   (   7.7 GB/s)
+  fused        0.222 ms   (  96.9 GB/s)
+  H1a speedup = 12.54x   (>=5 confirms, <2 falsifies)

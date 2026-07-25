@@ -1,0 +1,4 @@
+98ff76062fea178306026fdb35c6082fc1ee87ecc0922591c7cdfd49e4fce903  bench/context/receipts-fused-dequant-20260725/fused_dequant_gate.stdout.txt
+c42b9b3de6a0ee09655ef01084bdc1b531cf7abfc5bc42eb0bd8ae9997540007  bench/context/receipts-fused-dequant-20260725/kv_vs_bf16_h1.json
+63ffd1e77e9b6a6f6cdb10b7fb669811fd973b25d36c32b1d84b06424efdd1ab  bench/context/receipts-fused-dequant-20260725/kv_vs_bf16_h1.stdout.txt
+e301f9bfa28168a02eab40a9c619b331549f6359480c842151ae682bd0281ad1  bench/context/receipts-fused-dequant-20260725/test_fused_dequant.py

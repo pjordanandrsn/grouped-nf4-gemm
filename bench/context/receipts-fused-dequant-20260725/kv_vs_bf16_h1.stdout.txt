@@ -1,0 +1,26 @@
+allenai/OLMoE-1B-7B-0924  contexts=[4096, 16384]  new=32
+ctx=  4096 bf16        206.55 ms/step  peak= 5406.4 MB  cache=  541.1 MB (on device  541.1)
+ctx=  4096 nf4-raw     203.78 ms/step  peak= 5406.4 MB  cache=  541.1 MB (on device  541.1)
+ctx=  4096 nf4         233.97 ms/step  peak= 5039.6 MB  cache=  152.2 MB (on device  152.2)
+ctx=  4096 nf4-host    254.40 ms/step  peak= 4900.1 MB  cache=  152.2 MB (on device    0.0)
+ctx= 16384 bf16        257.86 ms/step  peak= 8169.5 MB  cache= 2151.7 MB (on device 2151.7)
+ctx= 16384 nf4-raw     273.79 ms/step  peak= 8169.5 MB  cache= 2151.7 MB (on device 2151.7)
+ctx= 16384 nf4         320.68 ms/step  peak= 6697.5 MB  cache=  605.2 MB (on device  605.2)
+ctx= 16384 nf4-host    591.28 ms/step  peak= 6121.5 MB  cache=  605.2 MB (on device    0.0)
+
+=== scoring ===
+F1a nf4/bf16 @4096      = 1.133   [1.2,2.0], falsify outside [1.0,3.0]  outside interval
+F1b ratio 4096->16384    = 1.133 -> 1.244   must not fall  CONFIRMED
+F1c bf16 peak - nf4 peak = +366.8 MB  [300,450]  CONFIRMED
+F1d nf4-host/bf16 @4096  = 1.232   [1.4,2.6]  outside interval
+
+=== G1 decomposition ===
+ctx=  4096  path_overhead=0.987  dequant=1.148  product=1.133  measured_total=1.133  closes=YES
+ctx= 16384  path_overhead=1.062  dequant=1.171  product=1.244  measured_total=1.244  closes=YES
+G1a path_overhead @4096 = 0.987  [1.0,1.3]  outside interval
+G1b dequant       @4096 = 1.148  [1.4,1.9]  FALSIFIED
+G1  which is the target: DEQUANT
+
+reported: greedy ids diverge at position None of 33 (bf16 vs nf4; lossy by design, see finding #10)
+
+wrote /root/g/bench/context/kv_vs_bf16_h1.json

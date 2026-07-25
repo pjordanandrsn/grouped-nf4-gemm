@@ -865,7 +865,16 @@ move **bytes**: NF4 (3.56×) and split residency — both shipped, both exact.
 dequantization rather than attention, and the argument that a real decode has
 more to hide behind was made in advance, tested, and **wrong**.
 
-### 17. The control that was never run: NF4 KV costs 1.9–2.6× decode
+### 17. The control that was never run: NF4 KV costs ~1.13× decode
+
+> **RESTATED 2026-07-25 (finding #18).** This finding first published
+> **1.9–2.6×**. That number was measuring `dequant_kv_ref` — a function whose
+> own docstring calls it a *test oracle* — sitting in the decode hot path.
+> Replacing it with a fused kernel (bit-identical, 12.6× faster) brings the same
+> measurement to **1.133× at 4K** and **1.244× at 16K**. The tables below are
+> left as measured, with the pre-fix figures intact; the headline is corrected
+> here. What the finding got right is the *shape* of the omission — there was no
+> bf16 control — and that stands.
 
 Sixteen findings of KV latency, every control another NF4 configuration. This
 one is `DynamicCache` — transformers' own bf16 cache, what a user runs by
@@ -885,8 +894,9 @@ All four predictions confirmed (F1a 1.887, F1b 1.887→2.552, F1c +366.8 MB,
 F1d 2.174).
 
 **So the trade is not "3.56× memory for ~2.1% perplexity".** It is 3.56× memory
-for ~2.1% perplexity **and 1.9× decode**, and the streamed tier is 2.2×. Both
-numbers now travel with the claim, in `kv_cache.py` and in C3 below.
+for ~2.1% perplexity **and a decode cost** — measured at 1.9× with the oracle in
+the path, and **1.133× once that is a real kernel** (#18). Both numbers travel
+with the claim, in `kv_cache.py` and in C3 below.
 
 **And the cost grows with context — the worst possible direction**, because the
 dial exists *for* long context. 1.89× at 4K, 2.55× at 16K, still climbing:
@@ -921,6 +931,53 @@ cache on both sides, so the dequant cancelled and became invisible. A control
 that shares your feature with the treatment measures everything except your
 feature.
 
+### 18. Three quarters of #17's slowdown was a test oracle in the hot path
+
+G1 split #17's cost into **wrapper 1.138×** and **dequant 1.475×**, which named
+the target. The thing doing the dequantizing was `dequant_kv_ref`, whose own
+docstring says *"Reference dequant of a packed cache. Test oracle."* — and which
+is written like one: an int32 widening, two masks, a `stack`, a float32 LUT
+gather, a `repeat_interleave` expanding each scale into 64 copies, the product,
+and a cast. **Seven full-size intermediates, most of them 4-byte, for a 2-byte
+result.**
+
+A fused Triton kernel doing the same arithmetic in registers
+(`dequant_kv_fused`), registered and stamped before it was written:
+
+| | reference | fused |
+|---|---:|---:|
+| `[4096,16,128]` → bf16 | 2.717 ms | **0.215 ms** |
+| effective bandwidth | 7.9 GB/s | **99.9 GB/s** |
+| | | **12.62×** |
+
+**Bit-identical**, `torch.equal`, across five shapes and both dtypes — including
+`777×3×64` and `1×1×128`, because a dequant correct only on round numbers is
+wrong in production. Both paths multiply an fp32 codebook value by an fp32 scale
+and round once, so equality was the right gate rather than a tolerance.
+
+End-to-end at 4096, OLMoE-1B-7B: **1.679× → 1.133×**, and the decomposition
+collapses to **wrapper 0.987, dequant 1.148**. The wrapper is free; what remains
+is real arithmetic.
+
+**Two honest limits.** 99.9 GB/s is ~35% of this card's ~288 GB/s, so the kernel
+is written rather than tuned and there is more left — not pursued, because the
+registered thresholds had already cleared. And per-channel keys keep the
+reference: their absmax is grouped over *runs of tokens*, a different indexing
+problem, and that dial is off by default and measured worse (#9).
+
+**What this reopens.** #16 closed prefetch because "the transfer is 9% of a step
+and machinery to hide 9% costs more than 9%." With the dequant gone, the
+streamed arm at 16384 now exposes **46%** of its step. That closure rested on a
+ratio this change invalidated. Prefetch is *not* reopened here — doing so on an
+argument rather than a registration is the failure mode this document set
+exists to prevent — but it is no longer settled, and it would inherit three
+prior falsifications.
+
+**The generalizable lesson.** A function named `_ref` or `_oracle` is a
+correctness artifact, and this one was load-bearing in decode for as long as the
+KV cache has existed. #17 measured it faithfully and attributed it to 4-bit KV.
+The control was right; the conclusion inherited whatever was in the path.
+
 ## What this changes downstream
 
 - **C1** — every published VRAM figure gains its context qualifier; serving docs
@@ -947,8 +1004,9 @@ feature.
   would be API with no caller.
 - **C3** — KV quantization. **Implemented and measured** for nf4, and the trade
   is memory-for-latency, not memory-for-free: 3.56× smaller, ~2.1% perplexity,
-  and **1.9× slower decode at 4K rising to 2.55× at 16K** against a bf16 cache
-  (finding #17). `kernel/nf4_kv.py`
+  and **1.13× slower decode at 4K, 1.24× at 16K** against a bf16 cache
+  (findings #17 and #18 — #17's original 1.9–2.6× was an oracle in the hot
+  path). `kernel/nf4_kv.py`
   (attention that reads a 4-bit cache in the mainloop) with `kernel/test_nf4_kv.py`,
   21/21 on the A2000. Corrections to the estimate this document originally carried:
   the saving is **3.56×, not 4×** — the fp32 blockwise absmax is a side channel

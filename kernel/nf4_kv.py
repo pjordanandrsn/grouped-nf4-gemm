@@ -42,6 +42,7 @@ __all__ = [
     "quantize_kv_perchannel",
     "PERCHANNEL_GROUP",
     "dequant_kv_ref",
+    "dequant_kv_fused",
     "kv_scores_nf4",
     "kv_weighted_sum_nf4",
     "attend_nf4_kv",
@@ -177,6 +178,70 @@ def dequant_kv_ref(packed: torch.Tensor, absmax: torch.Tensor, D: int,
         return (vals.reshape(-1, D) * am).reshape(T, H, D).to(dtype)
     am = absmax.repeat_interleave(token_group, dim=0)[:T]     # [T, H, D]
     return (vals * am).to(dtype)
+
+
+@triton.jit
+def _dequant_kv_kernel(packed_ptr, absmax_ptr, out_ptr, lut_ptr, n_rows,
+                       D: tl.constexpr, BLOCKSIZE_C: tl.constexpr,
+                       ROWS: tl.constexpr, HALF: tl.constexpr,
+                       NBLK: tl.constexpr):
+    """One pass: unpack nibbles, gather the codebook, scale, store.
+
+    The oracle this replaces materializes seven full-size intermediates -- an
+    int32 widening, two masks, a stack, a float32 LUT gather, a
+    repeat_interleave that expands each scale into BLOCKSIZE copies, and the
+    product -- for a two-byte result. Nothing here leaves registers.
+    """
+    pid = tl.program_id(0)
+    rows = pid * ROWS + tl.arange(0, ROWS)
+    live = rows < n_rows
+    i = tl.arange(0, HALF)                                  # byte index in a row
+
+    b = tl.load(packed_ptr + rows[:, None] * HALF + i[None, :],
+                mask=live[:, None], other=0).to(tl.int32)
+    hi = (b >> 4) & 0xF                                     # even element
+    lo = b & 0xF                                            # odd element
+    vhi = tl.load(lut_ptr + hi)
+    vlo = tl.load(lut_ptr + lo)
+
+    # element 2i lives in block (2i)//BLOCKSIZE, element 2i+1 in (2i+1)//BLOCKSIZE
+    am_hi = tl.load(absmax_ptr + rows[:, None] * NBLK + ((2 * i) // BLOCKSIZE_C)[None, :],
+                    mask=live[:, None], other=0.0)
+    am_lo = tl.load(absmax_ptr + rows[:, None] * NBLK + ((2 * i + 1) // BLOCKSIZE_C)[None, :],
+                    mask=live[:, None], other=0.0)
+
+    base = rows[:, None] * D
+    tl.store(out_ptr + base + (2 * i)[None, :], vhi * am_hi, mask=live[:, None])
+    tl.store(out_ptr + base + (2 * i + 1)[None, :], vlo * am_lo, mask=live[:, None])
+
+
+def dequant_kv_fused(packed: torch.Tensor, absmax: torch.Tensor, D: int,
+                     dtype=torch.float32) -> torch.Tensor:
+    """Fused dequant of a packed cache -> ``[T, H_kv, D]``.
+
+    Bit-identical to :func:`dequant_kv_ref` by construction: both multiply an
+    fp32 codebook value by an fp32 scale and round once at the store. The
+    property suite asserts equality rather than a tolerance, because anything
+    else would mean the two disagree about arithmetic and not just speed.
+
+    Per-channel (``token_group``) scaling is NOT handled -- its absmax is
+    grouped over runs of tokens rather than within a row, which is a different
+    indexing problem. Callers fall back to the reference, as they do elsewhere
+    for that dial.
+    """
+    _require_inner_contig(packed=packed, absmax=absmax)
+    _check_cache(packed, absmax, D, None, "cache")
+    T, H, _ = packed.shape
+    n_rows = T * H
+    out = torch.empty(n_rows, D, dtype=dtype, device=packed.device)
+    rows_per_prog = 4
+    grid = (triton.cdiv(n_rows, rows_per_prog),)
+    _dequant_kv_kernel[grid](
+        packed.reshape(n_rows, D // 2), absmax.reshape(n_rows, D // BLOCKSIZE),
+        out, _lut(packed.device), n_rows,
+        D=D, BLOCKSIZE_C=BLOCKSIZE, ROWS=rows_per_prog,
+        HALF=D // 2, NBLK=D // BLOCKSIZE, num_warps=4)
+    return out.reshape(T, H, D)
 
 
 def kv_cache_bytes(n_tokens: int, kv_heads: int, head_dim: int,
