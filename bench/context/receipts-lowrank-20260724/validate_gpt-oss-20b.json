@@ -1,0 +1,41 @@
+{
+  "model": "openai/gpt-oss-20b",
+  "tokens": 1024,
+  "rows": [
+    {
+      "config": "fp16 DynamicCache (ref)",
+      "ppl": 143.756103515625,
+      "agree_ref": 1.0,
+      "agree_ctrl": null,
+      "cache_bytes": null
+    },
+    {
+      "config": "NF4KVCache raw (control)",
+      "ppl": 143.756103515625,
+      "agree_ref": 1.0,
+      "agree_ctrl": 1.0,
+      "cache_bytes": 50331648
+    },
+    {
+      "config": "K4 V4",
+      "ppl": 291.9859924316406,
+      "agree_ref": 0.4423828125,
+      "agree_ctrl": 0.4423828125,
+      "cache_bytes": 14155776
+    },
+    {
+      "config": "K4 V16 (keys only)",
+      "ppl": 469.62371826171875,
+      "agree_ref": 0.40234375,
+      "agree_ctrl": 0.40234375,
+      "cache_bytes": 32243712
+    },
+    {
+      "config": "K16 V4 (values only)",
+      "ppl": 143.67738342285156,
+      "agree_ref": 0.8603515625,
+      "agree_ctrl": 0.8603515625,
+      "cache_bytes": 32243712
+    }
+  ]
+}

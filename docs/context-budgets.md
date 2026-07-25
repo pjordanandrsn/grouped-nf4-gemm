@@ -317,6 +317,63 @@ the kernel level (matches its oracle to 1e-5), the cost is genuinely equal, and
 an architecture that does not rotate its keys may land differently. It is a
 measurement others can repeat, not a recommendation.
 
+### 10. Cross-architecture validation: ~2% is the generalizable number, the K/V knee is not
+
+Findings #7-#9 all came from OLMoE-1B-7B, which has **no GQA** (16 kv heads = 16
+attention heads) while every other model in the table above uses it. Re-ran the
+teacher-forced gate on three more architectures
+(`bench/context/validate_arch.py`), each with a **control arm** — the same cache
+class with quantization disabled — so cache semantics are separated from
+quantization:
+
+| model | GQA | head_dim | base ppl | K4V4 rel | keys-only | values-only | K/V gap |
+|---|---|---:|---:|---:|---:|---:|---:|
+| OLMoE-1B-7B | 1:1 | 128 | 5.978 | +2.07% | +0.083 | +0.013 | 6.4x |
+| Gemma-4-26B-A4B | 2:1 | 256 | 3.824 | +2.17% | +0.070 | +0.041 | **1.7x** |
+| SmolLM2-135M | 3:1 | 64 | 10.507 | +16.6% | +1.294 | +0.139 | 9.3x |
+| gpt-oss-20b | 8:1 | 64 | *see below* | — | +325.9 | -0.079 | direction only |
+
+**What replicates.** Keys are the sensitive tensor in 4/4. And the headline cost
+is stable where it matters: full NF4 KV is **+2.1% relative perplexity on both
+real MoE models** — two independent architectures, different GQA, different
+head_dim, one hybrid. SmolLM2's +16.6% is a 135M model with little redundancy to
+spare, not a counterexample to the trend.
+
+**What does NOT replicate — and corrects finding #7.** The values-only "knee"
+was sold off OLMoE as 1.56x for +0.2%. On Gemma-4 it is 1.56x for +1.1%, while
+full quantization buys 3.56x for +2.2% — so on Gemma you take the full
+quantization and the knee is pointless. The K/V gap ranges 1.7x to 9.3x and is
+**architecture-dependent**; treat values-only as a dial to measure per model,
+not a recommended default.
+
+Also worth recording as a dead hypothesis: GQA does not explain the gap. The
+ratio was the reason for running this at all (one kv head feeding many query
+heads should amplify its error), but 1:1 -> 6.4x, 2:1 -> 1.7x, 3:1 -> 9.3x is
+not a trend in either direction.
+
+**gpt-oss is excluded on fixture grounds, not model grounds.** Its wikitext
+perplexity is 143.8 where a 135M model scores 10.5, which initially looked like
+the mxfp4 -> nf4 expert requant corrupting weights. It is not: the model answers
+correctly ("The capital of France is" -> " Paris.", and it continues
+"1, 2, 3, 4," -> " 5, 6, 7, 8, 9,") and then switches into assistant mode
+mid-continuation. It is a chat model and raw wikitext is out of its
+distribution, so perplexity on this fixture is not a meaningful metric for it.
+Its K/V direction (keys catastrophic, values free) is consistent with the other
+three; its magnitudes are not usable.
+
+**The control arm earned its place.** It matched the fp16 reference to four
+decimals on all four models, which settles the hybrid-cache question: the cache
+does not implement sliding-window truncation, but transformers builds the mask
+from `config.layer_types` independently, so outputs are correct. The open cost
+is memory, not correctness — past the window a sliding layer should hold
+`window - 1` tokens (finding #3) and this cache holds all of them.
+
+Two bugs in the cache surfaced here that OLMoE could not reach: `get_mask_sizes`
+omitted the tokens about to be written, giving a zero-width mask on any model
+using an explicit additive mask (gpt-oss, via attention sinks), and the harness
+held two full fp32 logit tensors, which OOMs at Gemma's 262k vocab. Neither was
+a quantization bug; both were only findable on a second architecture.
+
 ## What this changes downstream
 
 - **C1** — every published VRAM figure gains its context qualifier; serving docs

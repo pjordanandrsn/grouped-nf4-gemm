@@ -1,0 +1,18 @@
+/opt/conda/lib/python3.11/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[03:42:05]   fusing + quantizing experts (up to 24x32) to nf4 (streaming)...
+[03:42:41]   quantized experts on 24/24 MoE layers (32 experts each)
+[03:42:41]   offloaded 24 layers' 4-bit experts to pinned CPU RAM (streamed to GPU one layer at a time during train/eval)
+[03:42:41]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+Using the latest cached version of the dataset since Salesforce/wikitext couldn't be found on the Hugging Face Hub (offline mode is enabled).
+Found the latest cached dataset configuration 'wikitext-2-raw-v1' at /root/.cache/huggingface/datasets/Salesforce___wikitext/wikitext-2-raw-v1/0.0.0/b08601e04326c79dfdd32d625aee71d232d685c3 (last modified on Sun Jul 19 21:10:42 2026).
+
+=== openai/gpt-oss-20b  (1024 tokens) ===
+config                         ppl   d-ppl  agree/ref  agree/ctrl  cache MB
+fp16 DynamicCache (ref)    143.756  +0.000    100.00% - -
+NF4KVCache raw (control)   143.756  +0.000    100.00%     100.00%    48.00
+K4 V4                      291.986 +148.230     44.24%      44.24%    13.50
+K4 V16 (keys only)         469.624 +325.868     40.23%      40.23%    30.75
+K16 V4 (values only)       143.677  -0.079     86.04%      86.04%    30.75
+
+control check: raw cache vs fp16 DynamicCache  d-ppl +0.0000  -> SEMANTICS MATCH

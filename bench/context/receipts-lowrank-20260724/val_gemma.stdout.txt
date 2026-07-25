@@ -1,0 +1,18 @@
+/opt/conda/lib/python3.11/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[03:49:23]   fusing + quantizing experts (up to 30x128) to nf4 (streaming)...
+[03:51:46]   quantized experts on 30/30 MoE layers (128 experts each)
+[03:51:46]   offloaded 30 layers' 4-bit experts to pinned CPU RAM (streamed to GPU one layer at a time during train/eval)
+[03:51:46]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+Using the latest cached version of the dataset since Salesforce/wikitext couldn't be found on the Hugging Face Hub (offline mode is enabled).
+Found the latest cached dataset configuration 'wikitext-2-raw-v1' at /root/.cache/huggingface/datasets/Salesforce___wikitext/wikitext-2-raw-v1/0.0.0/b08601e04326c79dfdd32d625aee71d232d685c3 (last modified on Sun Jul 19 21:10:42 2026).
+
+=== google/gemma-4-26B-A4B  (1024 tokens, gqa 16:8) ===
+config                           ppl     d-ppl    agree  cache MB
+fp16 DynamicCache (ref)        3.824    +0.000  100.00% -
+NF4KVCache raw (control)       3.824    +0.000  100.00%   220.00
+K4 V4                          3.907    +0.083   95.41%    61.88
+K4 V16 (keys only)             3.894    +0.070   95.41%   140.94
+K16 V4 (values only)           3.865    +0.041   96.78%   140.94
+
+control: raw vs fp16  d-ppl +0.0000 -> SEMANTICS MATCH

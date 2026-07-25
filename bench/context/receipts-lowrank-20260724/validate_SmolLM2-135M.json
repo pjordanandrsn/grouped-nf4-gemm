@@ -1,0 +1,36 @@
+{
+  "model": "HuggingFaceTB/SmolLM2-135M",
+  "tokens": 1024,
+  "rows": [
+    {
+      "config": "fp16 DynamicCache (ref)",
+      "ppl": 10.507393836975098,
+      "agree_ref": 1.0,
+      "cache_bytes": null
+    },
+    {
+      "config": "NF4KVCache raw (control)",
+      "ppl": 10.507393836975098,
+      "agree_ref": 1.0,
+      "cache_bytes": 23592960
+    },
+    {
+      "config": "K4 V4",
+      "ppl": 12.25131893157959,
+      "agree_ref": 0.8701171875,
+      "cache_bytes": 6635520
+    },
+    {
+      "config": "K4 V16 (keys only)",
+      "ppl": 11.801820755004883,
+      "agree_ref": 0.861328125,
+      "cache_bytes": 15114240
+    },
+    {
+      "config": "K16 V4 (values only)",
+      "ppl": 10.646162986755371,
+      "agree_ref": 0.9619140625,
+      "cache_bytes": 15114240
+    }
+  ]
+}

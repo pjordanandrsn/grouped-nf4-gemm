@@ -1,0 +1,36 @@
+{
+  "model": "google/gemma-4-26B-A4B",
+  "tokens": 1024,
+  "rows": [
+    {
+      "config": "fp16 DynamicCache (ref)",
+      "ppl": 3.8237202167510986,
+      "agree_ref": 1.0,
+      "cache_bytes": null
+    },
+    {
+      "config": "NF4KVCache raw (control)",
+      "ppl": 3.8237202167510986,
+      "agree_ref": 1.0,
+      "cache_bytes": 230686720
+    },
+    {
+      "config": "K4 V4",
+      "ppl": 3.9069762229919434,
+      "agree_ref": 0.9541015625,
+      "cache_bytes": 64880640
+    },
+    {
+      "config": "K4 V16 (keys only)",
+      "ppl": 3.8936285972595215,
+      "agree_ref": 0.9541015625,
+      "cache_bytes": 147783680
+    },
+    {
+      "config": "K16 V4 (values only)",
+      "ppl": 3.8645851612091064,
+      "agree_ref": 0.9677734375,
+      "cache_bytes": 147783680
+    }
+  ]
+}
