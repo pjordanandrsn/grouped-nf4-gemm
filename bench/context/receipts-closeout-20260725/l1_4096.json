@@ -1,0 +1,140 @@
+{
+  "rows": [
+    {
+      "arm": "resident",
+      "prefetch": false,
+      "s_per_step": 0.10423546461970545,
+      "peak_bytes": 5468802560,
+      "device_bytes": 151879680,
+      "kv_packed_bytes": 150994944.0
+    },
+    {
+      "arm": "streamed",
+      "prefetch": false,
+      "s_per_step": 0.12081172023317777,
+      "peak_bytes": 5166812672,
+      "device_bytes": 0,
+      "kv_packed_bytes": 150994944.0
+    },
+    {
+      "arm": "streamed+pre",
+      "prefetch": true,
+      "s_per_step": 0.1139031604786093,
+      "peak_bytes": 5180968448,
+      "device_bytes": 0,
+      "kv_packed_bytes": 150994944.0
+    }
+  ],
+  "verdicts": {
+    "P1a": {
+      "measured": 0.9428154839511075
+    },
+    "P1b": {
+      "measured": 0.4167744462720252
+    },
+    "P1c": {
+      "ok": true
+    },
+    "E1a": {
+      "measured": 1.092748623457243,
+      "interval": [
+        1.0,
+        1.2
+      ],
+      "verdict": "CONFIRMED",
+      "inside_interval": true
+    },
+    "E1b": {
+      "measured_hidden": 0.4167744462720252,
+      "threshold": 0.9,
+      "verdict": "FALSIFIED"
+    },
+    "E1c": {
+      "identical": true,
+      "verdict": "CONFIRMED"
+    }
+  },
+  "tokens": {
+    "resident": [
+      209,
+      139,
+      229,
+      209,
+      139,
+      229,
+      209,
+      139,
+      229,
+      209,
+      139,
+      229,
+      209,
+      139,
+      229,
+      209,
+      139,
+      229,
+      209,
+      139,
+      229,
+      209,
+      139,
+      229,
+      209
+    ],
+    "streamed": [
+      209,
+      139,
+      229,
+      209,
+      139,
+      229,
+      209,
+      139,
+      229,
+      209,
+      139,
+      229,
+      209,
+      139,
+      229,
+      209,
+      139,
+      229,
+      209,
+      139,
+      229,
+      209,
+      139,
+      229,
+      209
+    ],
+    "streamed+pre": [
+      209,
+      139,
+      229,
+      209,
+      139,
+      229,
+      209,
+      139,
+      229,
+      209,
+      139,
+      229,
+      209,
+      139,
+      229,
+      209,
+      139,
+      229,
+      209,
+      139,
+      229,
+      209,
+      139,
+      229,
+      209
+    ]
+  }
+}

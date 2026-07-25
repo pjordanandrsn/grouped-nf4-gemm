@@ -1,0 +1,12 @@
+Warning: Permanently added '[157.157.221.29]:18607' (ED25519) to the list of known hosts.
+NVIDIA A100-SXM4-80GB
+L2b GATE bit-identical: CONFIRMED
+
+      T       MB  sync GB/s  amort GB/s       best cfg
+   4096     21.5      234.3       409.6   rows=8 w=1
+  16384     86.0      632.2      1184.5   rows=4 w=2
+  65536    343.9     1070.2      1406.3   rows=4 w=2
+ 262144   1375.7     1295.0      1412.0   rows=4 w=2
+
+L2a amortized peak = 1412.0 GB/s   >=800 confirms, <400 falsifies  CONFIRMED
+     that is 69.3% of this card's ~2039 GB/s (A2000 amortized reached 86% of its ~288)

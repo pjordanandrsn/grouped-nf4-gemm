@@ -876,11 +876,16 @@ travels with it (wrapper 1.002/0.987, dequant 1.142/1.148). **So it carries no
 device qualifier.** Variance on a dedicated card is **MAD 0.28%** against this
 A2000's ±12%, which is where every error band in #13–#18 came from.
 
-Two things that run did *not* settle, recorded as unresolved: the fused dequant
-reached **276.5 GB/s** on a 7.1× faster memory system — capturing ~35% of the
-improvement, so neither purely bandwidth-bound nor purely kernel-bound — and
-prefetch's crossover is **not** the transfer-share law #16 implied, since the
-A100 *wins* at a 17.3% share where the A2000 *loses* at 17.8%. A follow-up
+**Both of that run's open items are now closed (2026-07-25, second A100, $0.46).**
+The dequant kernel measures **1423.8 GB/s amortized — 69.8% of an A100's
+~2039**, against 248.7 (86%) on the A2000: **bandwidth-bound on both**, and the
+earlier 276.5 GB/s was 5.15× low because it was synced per call at the smallest
+problem size. There was never a portable kernel limit. And prefetch's behaviour
+is now four clean points rather than a disputed law: it **loses at ctx 2048
+(1.064) and wins monotonically from 4096 (0.943 → 0.885 → 0.872 at 16384)**,
+crossover near 4096. NF4's cost rises only **0.042 across an 8× context
+increase** (1.114 → 1.156), so the "grows with context" warning is real but
+mild. A follow-up
 attempt to model that crossover on the A2000 (K2) came back **void** — the
 prefetched arm measured *faster than a fully resident cache*, and the resident
 baseline was non-monotonic in context, both impossible. Two runs of identical

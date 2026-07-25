@@ -1,0 +1,140 @@
+{
+  "rows": [
+    {
+      "arm": "resident",
+      "prefetch": false,
+      "s_per_step": 0.09391798961830015,
+      "peak_bytes": 6232198656,
+      "device_bytes": 302874624,
+      "kv_packed_bytes": 301989888.0
+    },
+    {
+      "arm": "streamed",
+      "prefetch": false,
+      "s_per_step": 0.12922422393846014,
+      "peak_bytes": 5628218880,
+      "device_bytes": 0,
+      "kv_packed_bytes": 301989888.0
+    },
+    {
+      "arm": "streamed+pre",
+      "prefetch": true,
+      "s_per_step": 0.11440718785161152,
+      "peak_bytes": 5656530432,
+      "device_bytes": 0,
+      "kv_packed_bytes": 301989888.0
+    }
+  ],
+  "verdicts": {
+    "P1a": {
+      "measured": 0.885338556229946
+    },
+    "P1b": {
+      "measured": 0.41967194667339636
+    },
+    "P1c": {
+      "ok": true
+    },
+    "E1a": {
+      "measured": 1.2181605283139387,
+      "interval": [
+        1.0,
+        1.2
+      ],
+      "verdict": "CONFIRMED",
+      "inside_interval": false
+    },
+    "E1b": {
+      "measured_hidden": 0.41967194667339636,
+      "threshold": 0.9,
+      "verdict": "FALSIFIED"
+    },
+    "E1c": {
+      "identical": true,
+      "verdict": "CONFIRMED"
+    }
+  },
+  "tokens": {
+    "resident": [
+      1336,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279
+    ],
+    "streamed": [
+      1336,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279
+    ],
+    "streamed+pre": [
+      1336,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279,
+      246,
+      279
+    ]
+  }
+}

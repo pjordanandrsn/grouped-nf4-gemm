@@ -72,3 +72,70 @@ registered part is unavailable, as in the previous run.
   devices and the earlier cross-device puzzle was entirely instrumentation.
 - **L3a falsified** → #17's context warning is restored to its original strength
   wherever #18 softened it.
+
+## Outcome — L2 resolves R1a, L3 confirms, L1's gate fails on a defect in the gate
+
+A100-SXM4-80GB (substitution as before; registered part unavailable).
+~20 minutes, **$0.46**, terminated and verified at zero pods.
+
+### L2 — CONFIRMED, and it closes R1a
+
+| T | synced GB/s | **amortized GB/s** |
+|---:|---:|---:|
+| 4096 | 261.9 | 413.1 |
+| 16384 | 694.2 | 1185.6 |
+| 65536 | 1141.8 | 1408.6 |
+| 262144 | 1309.7 | **1423.8** |
+
+**1423.8 GB/s — 69.8% of this card's ~2039**, against the A2000's amortized
+248.7 (86% of its ~288). *The kernel is bandwidth-bound on both devices.*
+L2b's gate held.
+
+**R1a is resolved and its earlier answer was entirely instrumentation.** It
+measured 276.5 GB/s and concluded the kernel "captured ~35% of a 7.1× memory
+improvement". The same kernel, measured properly, does **1423.8** — 5.15× the
+recorded figure. There was never a portable kernel limit to explain.
+
+### L3 — CONFIRMED
+
+| ctx | bf16 | NF4 | ratio |
+|---:|---:|---:|---:|
+| 4096 | 82.54 | 91.93 | **1.114** |
+| 32768 | 89.56 | 103.55 | **1.156** |
+
+Rise across an **8× context increase: 0.042**, against ≤0.10 predicted.
+**#17's "the cost rises with context, which is the worst direction" is real but
+mild**, and #18's softening of it was right. The A2000's steeper 1.133 → 1.244
+was noise. The wrapper is free on this card too (0.977 at 4K).
+
+### L1 — gate FAILS, and the gate was wrong
+
+| ctx | resident | streamed | +prefetch | prefetched/streamed |
+|---:|---:|---:|---:|---:|
+| 2048 | 94.33 | 101.97 | 108.48 | **1.064** loses |
+| 4096 | 104.24 | 120.81 | 113.90 | **0.943** wins |
+| 8192 | 93.92 | 129.22 | 114.41 | **0.885** wins |
+| 16384 | 96.70 | 126.63 | 110.39 | **0.872** wins |
+
+L1a required resident time **strictly increasing** in context. Measured 94.33,
+104.24, 93.92, 96.70 — flat with noise. **The gate fails, so L1b and L1c are
+void and no fit is reported.** The pre-committed decision stands.
+
+**But the gate was a bad gate, and that is worth more than the result it
+blocked.** It assumed resident step time rises with context. For a 1B-active MoE
+below 16K, attention is a small share of a step dominated by expert compute, so
+resident time is *expected* to be flat — the assumption was wrong, not the card.
+The pathology L1a actually existed to catch (K2's prefetched arm beating a fully
+resident cache) **did not occur**: prefetched ≥ resident at every context here.
+
+So the model stays unfitted, as registered. What is reported is four direct
+measurements, which need no fit: **prefetch loses at 2048 and wins monotonically
+from 4096**, with the win deepening to 0.872. The crossover sits near 4096 — and
+the previous A100 pod measured 1.047 there against this one's 0.943, which is
+exactly what a point near a crossover looks like.
+
+**One over-generalization corrected.** R1d's MAD of 0.28% was measured on the
+*dequant microbenchmark*, and I quoted it as if it characterized this card for
+everything. Two A100 pods disagree by ~10% on end-to-end decode at 4096. **The
+0.28% applies to the kernel timing loop, not to end-to-end decode**, which has
+allocator, model and scheduling variance the microbenchmark does not.

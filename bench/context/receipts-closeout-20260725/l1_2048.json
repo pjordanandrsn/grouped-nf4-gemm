@@ -1,0 +1,140 @@
+{
+  "rows": [
+    {
+      "arm": "resident",
+      "prefetch": false,
+      "s_per_step": 0.09433454921236262,
+      "peak_bytes": 5140690432,
+      "device_bytes": 76382208,
+      "kv_packed_bytes": 75497472.0
+    },
+    {
+      "arm": "streamed",
+      "prefetch": false,
+      "s_per_step": 0.1019737092331828,
+      "peak_bytes": 5067552256,
+      "device_bytes": 0,
+      "kv_packed_bytes": 75497472.0
+    },
+    {
+      "arm": "streamed+pre",
+      "prefetch": true,
+      "s_per_step": 0.10848485329188406,
+      "peak_bytes": 5067552256,
+      "device_bytes": 0,
+      "kv_packed_bytes": 75497472.0
+    }
+  ],
+  "verdicts": {
+    "P1a": {
+      "measured": 1.0638512034882663
+    },
+    "P1b": {
+      "measured": -0.8523376969399037
+    },
+    "P1c": {
+      "ok": true
+    },
+    "E1a": {
+      "measured": 1.1500012900646484,
+      "interval": [
+        1.0,
+        1.2
+      ],
+      "verdict": "CONFIRMED",
+      "inside_interval": true
+    },
+    "E1b": {
+      "measured_hidden": -0.8523376969399037,
+      "threshold": 0.9,
+      "verdict": "FALSIFIED"
+    },
+    "E1c": {
+      "identical": true,
+      "verdict": "CONFIRMED"
+    }
+  },
+  "tokens": {
+    "resident": [
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209
+    ],
+    "streamed": [
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209
+    ],
+    "streamed+pre": [
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209
+    ]
+  }
+}
