@@ -623,8 +623,12 @@ At batch 8 on the reference box the breakdown is **14 resident-already-fits, 6
 window, 1 impossible** (Qwen3-235B at 128K, whose 3.8 tok/s ceiling no batching
 can lift). So:
 
-- **At batch 1, C4 is unnecessary everywhere.** Finding #10's NF4 cache already
-  fits every cell — C3 solved the single-sequence case outright.
+- **At batch 1, C4 is unnecessary everywhere** — Finding #10's NF4 cache already
+  fits every cell, so C3 solved the single-sequence case outright. This is the
+  one headline here that is *not* robust to its assumption, and it is the free-KV
+  budget it turns on, not the link: windows at batch 1 go **3 / 1 / 0 / 0** for
+  2 / 4 / 8 / 16 GB free. Below ~4 GB — a 12 GB card with streamed weights — the
+  single-sequence case reopens.
 - **C4 is a batch-regime capacity feature**, exactly as the C4 line said, and its
   value is monotone in batch.
 - **On the A2000 the window is 1/21 and that cell is OLMoE-1B-7B.** Building and
