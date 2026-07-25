@@ -865,6 +865,52 @@ move **bytes**: NF4 (3.56×) and split residency — both shipped, both exact.
 dequantization rather than attention, and the argument that a real decode has
 more to hide behind was made in advance, tested, and **wrong**.
 
+### 17. The control that was never run: NF4 KV costs 1.9–2.6× decode
+
+Sixteen findings of KV latency, every control another NF4 configuration. This
+one is `DynamicCache` — transformers' own bf16 cache, what a user runs by
+default. Registered in `PREREG-kv-vs-bf16.md` and stamped before the harness was
+written. OLMoE-1B-7B, 4-bit weights resident, greedy decode:
+
+| ctx | cache | ms/step | vs bf16 | peak VRAM | KV bytes |
+|---:|---|---:|---:|---:|---:|
+| 4096 | bf16 | 143.58 | 1.00× | 5406.4 MB | 541.1 MB |
+| 4096 | **NF4** | 270.96 | **1.89×** | 5039.6 MB | 152.2 MB |
+| 4096 | NF4 streamed | 312.17 | 2.17× | 4900.1 MB | **0 on device** |
+| 16384 | bf16 | 237.27 | 1.00× | 8169.5 MB | 2151.7 MB |
+| 16384 | **NF4** | 605.58 | **2.55×** | 6697.5 MB | 605.2 MB |
+| 16384 | NF4 streamed | 741.88 | 3.13× | 6121.5 MB | **0 on device** |
+
+All four predictions confirmed (F1a 1.887, F1b 1.887→2.552, F1c +366.8 MB,
+F1d 2.174).
+
+**So the trade is not "3.56× memory for ~2.1% perplexity".** It is 3.56× memory
+for ~2.1% perplexity **and 1.9× decode**, and the streamed tier is 2.2×. Both
+numbers now travel with the claim, in `kv_cache.py` and in C3 below.
+
+**And the cost grows with context — the worst possible direction**, because the
+dial exists *for* long context. 1.89× at 4K, 2.55× at 16K, still climbing:
+attention and dequant both scale with context while the MLP does not, so the
+ratio is heading for an asymptote it has not reached by 16K. Anyone reaching for
+this at 128K should expect worse than 2.6×, not better.
+
+**Greedy ids diverge at position 1 of 33.** The first generated token can
+already differ. That is what a lossy cache means and it is consistent with
+#10's perplexity number — it belongs *next to* it rather than in a separate
+finding, because together they are the actual trade.
+
+**Scope, and it is an upper bound.** `DynamicCache` and `NF4KVCache` are
+different objects on different code paths, so some of the gap is Python
+overhead rather than dequant arithmetic. The ratio bounds the dequant's cost
+from above; it is not a measurement of the dequant alone. One model, one device,
+GQA 1:1 — which is neutral for this path, since none of #12's `enable_gqa`
+effect applies at 1:1.
+
+**Why this took seventeen findings to run.** Every earlier comparison had an NF4
+cache on both sides, so the dequant cancelled and became invisible. A control
+that shares your feature with the treatment measures everything except your
+feature.
+
 ## What this changes downstream
 
 - **C1** — every published VRAM figure gains its context qualifier; serving docs
@@ -889,7 +935,10 @@ more to hide behind was made in advance, tested, and **wrong**.
   `bench/context/kv_budget.py` already provides from config alone. No accessor
   was added to e4b to wrap it: nothing in that library sizes hot sets, so it
   would be API with no caller.
-- **C3** — KV quantization. **Implemented and measured** for nf4: `kernel/nf4_kv.py`
+- **C3** — KV quantization. **Implemented and measured** for nf4, and the trade
+  is memory-for-latency, not memory-for-free: 3.56× smaller, ~2.1% perplexity,
+  and **1.9× slower decode at 4K rising to 2.55× at 16K** against a bf16 cache
+  (finding #17). `kernel/nf4_kv.py`
   (attention that reads a 4-bit cache in the mainloop) with `kernel/test_nf4_kv.py`,
   21/21 on the A2000. Corrections to the estimate this document originally carried:
   the saving is **3.56×, not 4×** — the fp32 blockwise absmax is a side channel

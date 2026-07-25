@@ -1,0 +1,17 @@
+allenai/OLMoE-1B-7B-0924  contexts=[4096, 16384]  new=32
+ctx=  4096 bf16        143.58 ms/step  peak= 5406.4 MB  cache=  541.1 MB (on device  541.1)
+ctx=  4096 nf4         270.96 ms/step  peak= 5039.6 MB  cache=  152.2 MB (on device  152.2)
+ctx=  4096 nf4-host    312.17 ms/step  peak= 4900.1 MB  cache=  152.2 MB (on device    0.0)
+ctx= 16384 bf16        237.27 ms/step  peak= 8169.5 MB  cache= 2151.7 MB (on device 2151.7)
+ctx= 16384 nf4         605.58 ms/step  peak= 6697.5 MB  cache=  605.2 MB (on device  605.2)
+ctx= 16384 nf4-host    741.88 ms/step  peak= 6121.5 MB  cache=  605.2 MB (on device    0.0)
+
+=== scoring ===
+F1a nf4/bf16 @4096      = 1.887   [1.2,2.0], falsify outside [1.0,3.0]  CONFIRMED
+F1b ratio 4096->16384    = 1.887 -> 2.552   must not fall  CONFIRMED
+F1c bf16 peak - nf4 peak = +366.8 MB  [300,450]  CONFIRMED
+F1d nf4-host/bf16 @4096  = 2.174   [1.4,2.6]  CONFIRMED
+
+reported: greedy ids diverge at position 1 of 33 (bf16 vs nf4; lossy by design, see finding #10)
+
+wrote /root/g/bench/context/kv_vs_bf16.json
