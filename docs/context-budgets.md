@@ -1075,6 +1075,58 @@ The control was right; the conclusion inherited whatever was in the path.
   pipeline; 94 slices cost 1.00× one blob), and do not measure this on the
   A2000, whose 6.20 GB/s gen3 ×8 link opens only 1/21 cells.
 
+## Finding #19 — at 235B, context is free, because the step is not byte-bound
+
+Qwen3-235B-A22B, NF4 experts streamed from 122 GB of pinned host RAM, on an
+A100-SXM. Step time is **flat across a 64× change in context**:
+
+| ctx | ms/step | peak | KV on device |
+|---:|---:|---:|---:|
+| 512 | 6266.5 | 18.62 GiB | 0 |
+| 32768 (KV resident) | 6095.7 | 28.46 GiB | 1774.8 MB |
+| 32768 (KV streamed) | 6124.1 | 26.81 GiB | **0** |
+
+Streaming 1.77 GB of KV per step costs **28 ms — 0.5% of the step**, against a
+predicted 6–25%. The reason is this project's own `c_box` law rather than
+bandwidth: **94 layers × ~65 ms of per-layer fixed cost ≈ 6.1 s**, against ~1.3 s
+of bytes. The step is **fixed-cost dominated**, and KV's bytes disappear inside
+it. So "context is affordable when weights stream" holds at flagship scale, and
+holds *more* strongly the deeper the model — for a reason that has nothing to do
+with the KV cache being small.
+
+**The working-set claim did not survive.** Peak at 32K is **28.79 GB** against a
+≤16 GB target, and the seq-512 arm alone measured **18.62 GiB / 0.160 tok/s**
+where the stamped flagship records 15.2 GB / 4.3–4.4 tok/s. That gap — 27× in
+time — is between *this* harness (loader defaults) and the tuned hot-residency
+configuration the flagship was measured on; it is **not** evidence the stamped
+number is wrong. Until it is resolved, the 235B row is the least trustworthy
+figure in the project, and the README flagship heading keeps its `~5K context`
+qualifier rather than gaining a 32K one.
+
+## Finding #20 — the tier idea does not transfer to training
+
+Decode's per-token VRAM term is the KV cache; training's is the activation stack.
+The obvious translation — offload activations to pinned host instead of
+recomputing them — **loses, and then turns out to be forbidden.**
+
+| seq | policy | s/step | peak |
+|---:|---|---:|---:|
+| 32768 | `none` | **OOM** | — |
+| 32768 | `recompute` | **7.439** | 28.15 GiB |
+| 32768 | `offload` | **20.882** | 30.01 GiB |
+
+With weights **resident** — nothing else on the link, offload's best case —
+offload is **2.81× slower and saves no memory**. And with weights **streamed** it
+cannot run at all: a streamed expert is evicted after its forward, so a backward
+not re-staged by a checkpoint recompute has nothing to dequantize from. On a
+streaming box, **gradient checkpointing is mandatory, not preferable.**
+
+Caveat that bounds the claim: the offload arm used `save_on_cpu`, which moves
+*every* saved tensor, so these numbers are a **lower bound on offload's quality**
+— a boundary-only scheme would move far less. What is established is that the
+naive translation loses badly and the streamed path forbids it, not that no
+offload scheme could win.
+
 ## Reproducing
 
 `bench/context/kv_budget.py` (derivation, from config.json only) and
@@ -1092,3 +1144,11 @@ post-hoc diagnostics are `_oracle.py` (future-knowing selection), `_sinks.py`
 (static sink/recent sweep), `_chunk.py` (protocol confound) and `_h2o_chunk.py`
 (the one that falsified the tidy conclusion). Receipts, including a copy of each
 script as it ran: `bench/context/receipts-attnsel-20260725/`.
+
+Finding #19: `bench/context/flagship.py` under `PREREG-flagship-context.md`
+(2×A100-SXM-80GB, taken for 2 TB of host RAM rather than the GPUs).
+
+Finding #20: `bench/context/train_context_bench.py` under
+`PREREG-training-context.md`. The streamed-weight half of that harness did not
+run — it caught only `OutOfMemoryError`, and the guard that fired was a
+`RuntimeError` — so T1c and T1d are recorded VOID rather than back-filled.
