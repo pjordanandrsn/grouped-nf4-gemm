@@ -39,12 +39,26 @@ from nf4_grouped import BLOCKSIZE, NF4_LUT, _lut
 
 __all__ = [
     "quantize_kv",
+    "quantize_kv_perchannel",
+    "PERCHANNEL_GROUP",
     "dequant_kv_ref",
     "kv_scores_nf4",
     "kv_weighted_sum_nf4",
     "attend_nf4_kv",
     "kv_cache_bytes",
+    "kv_cache_bytes_perchannel",
 ]
+
+
+#: Token-group size for per-channel scaling. Setting it equal to ``BLOCKSIZE``
+#: is what makes this free: both schemes then store exactly one fp32 scale per
+#: 64 quantized values — per-token groups 64 channels within a token,
+#: per-channel groups 64 tokens within a channel — so the side channel is
+#: byte-for-byte identical for ANY head_dim (T*H*D/16 either way). Per-channel
+#: keys are therefore a pure fidelity change, not a memory trade. Any other
+#: group size breaks the equality: G < 64 costs more, G > 64 costs less and
+#: scales over more tokens.
+PERCHANNEL_GROUP = BLOCKSIZE
 
 
 def _check(head_dim: int) -> None:
@@ -85,6 +99,38 @@ def quantize_kv(x: torch.Tensor, chunk_rows: int = 1 << 14):
             absmax.reshape(T, H, D // BLOCKSIZE).contiguous())
 
 
+def quantize_kv_perchannel(x: torch.Tensor, group: int = PERCHANNEL_GROUP):
+    """``[T, H, D]`` -> (``[T, H, D//2]`` u8, ``[ceil(T/group), H, D]`` f32).
+
+    Groups the absmax along **tokens** instead of along the head row, giving
+    every channel its own scale. Measured motivation (docs/context-budgets.md
+    finding #7): keys carry per-channel outliers, so under per-token blockwise
+    scaling one loud channel sets the absmax for the 63 quiet channels sharing
+    its block and costs them precision. Values do not have this problem, which
+    is why this is offered for K and not applied blanket.
+
+    The packed layout is byte-identical to :func:`quantize_kv` — only the
+    grouping of the scales differs — so the same kernels read both.
+    """
+    if x.dim() != 3:
+        raise ValueError(f"expected [T, H, D]; got {tuple(x.shape)}")
+    T, H, D = x.shape
+    _check(D)
+    lut = _lut(x.device)
+    n_grp = (T + group - 1) // group
+    pad = n_grp * group - T
+    xp = x.float()
+    if pad:
+        # zero-pad the last group; zeros cannot raise an amax, and an all-zero
+        # group is caught by the clamp below
+        xp = torch.cat([xp, xp.new_zeros(pad, H, D)], dim=0)
+    absmax = xp.abs().reshape(n_grp, group, H, D).amax(dim=1).clamp_min(1e-12)
+    scaled = (xp / absmax.repeat_interleave(group, dim=0))[:T]
+    codes = (scaled.reshape(-1, D, 1) - lut).abs().argmin(dim=2).reshape(T, H, D)
+    packed = ((codes[..., 0::2] << 4) | codes[..., 1::2]).to(torch.uint8)
+    return packed.contiguous(), absmax.contiguous()
+
+
 def _require_inner_contig(**tensors) -> None:
     """The kernels index the head-dim as ``base + t*stride_t + h*stride_h + j``,
     i.e. they assume the innermost dim is packed. Token/head strides ARE passed,
@@ -107,7 +153,7 @@ def _require_inner_contig(**tensors) -> None:
 
 
 def dequant_kv_ref(packed: torch.Tensor, absmax: torch.Tensor, D: int,
-                   dtype=torch.float32) -> torch.Tensor:
+                   dtype=torch.float32, token_group: int | None = None) -> torch.Tensor:
     """Reference dequant of a packed cache -> ``[T, H_kv, D]``. Test oracle."""
     T, H, _ = packed.shape
     # Same layout contract as the kernels. Without this the oracle would
@@ -121,9 +167,12 @@ def dequant_kv_ref(packed: torch.Tensor, absmax: torch.Tensor, D: int,
     hi = (b >> 4) & 0xF
     lo = b & 0xF
     codes = torch.stack([hi, lo], dim=2).reshape(-1, D)      # even=hi, odd=lo
-    vals = lut[codes]
-    am = absmax.reshape(-1, D // BLOCKSIZE).repeat_interleave(BLOCKSIZE, dim=1)
-    return (vals * am).reshape(T, H, D).to(dtype)
+    vals = lut[codes].reshape(T, H, D)
+    if token_group is None:
+        am = absmax.reshape(-1, D // BLOCKSIZE).repeat_interleave(BLOCKSIZE, dim=1)
+        return (vals.reshape(-1, D) * am).reshape(T, H, D).to(dtype)
+    am = absmax.repeat_interleave(token_group, dim=0)[:T]     # [T, H, D]
+    return (vals * am).to(dtype)
 
 
 def kv_cache_bytes(n_tokens: int, kv_heads: int, head_dim: int,
@@ -135,12 +184,26 @@ def kv_cache_bytes(n_tokens: int, kv_heads: int, head_dim: int,
     return 2 * per                                             # K and V
 
 
+def kv_cache_bytes_perchannel(n_tokens: int, kv_heads: int, head_dim: int,
+                              group: int = PERCHANNEL_GROUP) -> int:
+    """Bytes for ONE per-channel-scaled tensor (K or V), nibbles + grouped absmax.
+
+    Equals the per-token blockwise cost exactly when ``group == BLOCKSIZE``
+    (see :data:`PERCHANNEL_GROUP`), for any head_dim. Asserted in the suite
+    rather than left as prose, because "free fidelity" is only true where the
+    arithmetic actually lands.
+    """
+    n_grp = (n_tokens + group - 1) // group
+    return n_tokens * kv_heads * (head_dim // 2) + n_grp * kv_heads * head_dim * 4
+
+
 @triton.jit
 def _kv_scores_nf4(
     q_ptr, k_ptr, ka_ptr, out_ptr, lut_ptr,
     T, D, GQA,
     stride_kt, stride_kh, stride_at, stride_ah,
     BLOCK_T: tl.constexpr, BLOCK_D: tl.constexpr, QBLK: tl.constexpr,
+    TGRP: tl.constexpr,
 ):
     """scores[h, t] = q[h, :] . dequant(K[t, h//GQA, :]) — reduce over head_dim.
 
@@ -161,7 +224,10 @@ def _kv_scores_nf4(
                    mask=t_mask[:, None] & d_mask[None, :], other=0).to(tl.int32)
     nib = tl.where((offs_d[None, :] % 2) == 0, (byts >> 4) & 0xF, byts & 0xF)
     w = tl.load(lut_ptr + nib)
-    am = tl.load(ka_ptr + offs_t[:, None] * stride_at + hkv * stride_ah
+    # One index expression covers both groupings: per-token blockwise is
+    # (TGRP=1, QBLK=64) -> a scale per 64 channels of each token; per-channel is
+    # (TGRP=G, QBLK=1) -> a scale per channel, shared across G tokens.
+    am = tl.load(ka_ptr + (offs_t[:, None] // TGRP) * stride_at + hkv * stride_ah
                  + (offs_d[None, :] // QBLK),
                  mask=t_mask[:, None] & d_mask[None, :], other=0.0)
     acc = tl.sum(w * am * q[None, :], axis=1)
@@ -174,6 +240,7 @@ def _kv_wsum_nf4(
     T, D, GQA,
     stride_vt, stride_vh, stride_at, stride_ah,
     BLOCK_T: tl.constexpr, BLOCK_D: tl.constexpr, QBLK: tl.constexpr,
+    TGRP: tl.constexpr,
 ):
     """out[h, d] = sum_t p[h, t] * dequant(V[t, h//GQA, d]) — reduce over tokens."""
     h = tl.program_id(0)
@@ -190,11 +257,40 @@ def _kv_wsum_nf4(
                        mask=t_mask[:, None] & d_mask[None, :], other=0).to(tl.int32)
         nib = tl.where((offs_d[None, :] % 2) == 0, (byts >> 4) & 0xF, byts & 0xF)
         w = tl.load(lut_ptr + nib)
-        am = tl.load(va_ptr + offs_t[:, None] * stride_at + hkv * stride_ah
+        am = tl.load(va_ptr + (offs_t[:, None] // TGRP) * stride_at + hkv * stride_ah
                      + (offs_d[None, :] // QBLK),
                      mask=t_mask[:, None] & d_mask[None, :], other=0.0)
         acc += tl.sum(w * am * p[:, None], axis=0)
     tl.store(out_ptr + h * D + offs_d, acc, mask=d_mask)
+
+
+def _check_cache(packed: torch.Tensor, absmax: torch.Tensor, D: int,
+                 token_group: int | None, name: str) -> None:
+    """Validate packed/absmax shapes against the declared head_dim and grouping.
+
+    Load-bearing since per-channel scaling landed: there are now TWO legal
+    absmax layouts for identical packed bytes — ``[T, H, D/64]`` per-token and
+    ``[ceil(T/G), H, D]`` per-channel — so passing one while the kernel is
+    configured for the other silently reads the wrong scales, and on the
+    per-token path a per-channel absmax is also SHORTER than the kernel's index
+    range, i.e. an out-of-bounds read rather than merely a wrong answer.
+    """
+    if packed.dim() != 3 or packed.shape[-1] != D // 2:
+        raise ValueError(
+            f"{name}_packed last dim must be head_dim//2 = {D // 2}; "
+            f"got shape {tuple(packed.shape)} (head_dim inferred as {D})")
+    T, H = packed.shape[0], packed.shape[1]
+    if token_group is None:
+        want = (T, H, D // BLOCKSIZE)
+        hint = "per-token blockwise"
+    else:
+        want = ((T + token_group - 1) // token_group, H, D)
+        hint = f"per-channel, group {token_group}"
+    if tuple(absmax.shape) != want:
+        raise ValueError(
+            f"{name}_absmax shape {tuple(absmax.shape)} does not match {hint} "
+            f"scaling of a [{T}, {H}, {D}] cache (expected {want}). Pass "
+            f"token_group= to match how the tensor was quantized.")
 
 
 def _gqa(n_q_heads: int, n_kv_heads: int) -> int:
@@ -204,12 +300,14 @@ def _gqa(n_q_heads: int, n_kv_heads: int) -> int:
 
 
 def kv_scores_nf4(q: torch.Tensor, k_packed: torch.Tensor, k_absmax: torch.Tensor,
-                  block_t: int = 128) -> torch.Tensor:
+                  block_t: int = 128,
+                  token_group: int | None = None) -> torch.Tensor:
     """``q [H_q, D]`` against a packed key cache -> ``scores [H_q, T]`` fp32."""
     H_q, D = q.shape
     T, H_kv, _ = k_packed.shape
     _check(D)
     _require_inner_contig(k_packed=k_packed, k_absmax=k_absmax)
+    _check_cache(k_packed, k_absmax, D, token_group, "k")
     gqa = _gqa(H_q, H_kv)
     out = torch.empty(H_q, T, dtype=torch.float32, device=q.device)
     block_d = triton.next_power_of_2(D)
@@ -219,19 +317,22 @@ def kv_scores_nf4(q: torch.Tensor, k_packed: torch.Tensor, k_absmax: torch.Tenso
         T, D, gqa,
         k_packed.stride(0), k_packed.stride(1),
         k_absmax.stride(0), k_absmax.stride(1),
-        BLOCK_T=block_t, BLOCK_D=block_d, QBLK=BLOCKSIZE,
+        BLOCK_T=block_t, BLOCK_D=block_d,
+        QBLK=1 if token_group else BLOCKSIZE, TGRP=token_group or 1,
     )
     return out
 
 
 def kv_weighted_sum_nf4(probs: torch.Tensor, v_packed: torch.Tensor,
                         v_absmax: torch.Tensor, head_dim: int,
-                        block_t: int = 128) -> torch.Tensor:
+                        block_t: int = 128,
+                        token_group: int | None = None) -> torch.Tensor:
     """``probs [H_q, T]`` against a packed value cache -> ``out [H_q, D]`` fp32."""
     H_q, T = probs.shape
     _, H_kv, _ = v_packed.shape
     _check(head_dim)
     _require_inner_contig(v_packed=v_packed, v_absmax=v_absmax)
+    _check_cache(v_packed, v_absmax, head_dim, token_group, "v")
     gqa = _gqa(H_q, H_kv)
     out = torch.empty(H_q, head_dim, dtype=torch.float32, device=probs.device)
     _kv_wsum_nf4[(H_q,)](
@@ -239,14 +340,17 @@ def kv_weighted_sum_nf4(probs: torch.Tensor, v_packed: torch.Tensor,
         T, head_dim, gqa,
         v_packed.stride(0), v_packed.stride(1),
         v_absmax.stride(0), v_absmax.stride(1),
-        BLOCK_T=block_t, BLOCK_D=triton.next_power_of_2(head_dim), QBLK=BLOCKSIZE,
+        BLOCK_T=block_t, BLOCK_D=triton.next_power_of_2(head_dim),
+        QBLK=1 if token_group else BLOCKSIZE, TGRP=token_group or 1,
     )
     return out
 
 
 def attend_nf4_kv(q: torch.Tensor, k_packed: torch.Tensor, k_absmax: torch.Tensor,
                   v_packed: torch.Tensor, v_absmax: torch.Tensor,
-                  scale: float | None = None, block_t: int = 128) -> torch.Tensor:
+                  scale: float | None = None, block_t: int = 128,
+                  k_token_group: int | None = None,
+                  v_token_group: int | None = None) -> torch.Tensor:
     """One decode attention step over a 4-bit cache. ``q [H_q, D]`` -> ``[H_q, D]``.
 
     Softmax runs in fp32 on the fp32 scores; only the two matmuls touch the
@@ -255,6 +359,12 @@ def attend_nf4_kv(q: torch.Tensor, k_packed: torch.Tensor, k_absmax: torch.Tenso
     """
     H_q, D = q.shape
     scale = D ** -0.5 if scale is None else scale
-    scores = kv_scores_nf4(q, k_packed, k_absmax, block_t=block_t) * scale
+    if k_packed.shape[0] != v_packed.shape[0]:
+        raise ValueError(
+            f"K and V hold different token counts ({k_packed.shape[0]} vs "
+            f"{v_packed.shape[0]}); the softmax over K would not align with V.")
+    scores = kv_scores_nf4(q, k_packed, k_absmax, block_t=block_t,
+                           token_group=k_token_group) * scale
     probs = torch.softmax(scores, dim=-1)
-    return kv_weighted_sum_nf4(probs, v_packed, v_absmax, D, block_t=block_t)
+    return kv_weighted_sum_nf4(probs, v_packed, v_absmax, D, block_t=block_t,
+                               token_group=v_token_group)

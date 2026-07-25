@@ -270,6 +270,53 @@ effectively exact." It is not; the other two arms are what expose it as luck.
 Quote teacher-forced agreement and delta-perplexity. Treat a free-running match
 as an anecdote about one prompt.
 
+### 9. Per-channel key scaling loses — and it fails for the same reason low-rank did
+
+Finding #7 said keys are the sensitive tensor and blamed per-channel outliers
+blowing up a 64-element block's shared absmax. The obvious remedy is to group
+the absmax along **tokens** instead, giving every channel its own scale — the
+move the KV-quantization literature converged on. Implemented (one kernel,
+two constexpr divisors; `quantize_kv_perchannel`) and measured at identical
+bytes, since both schemes store one fp32 scale per 64 quantized values:
+
+| config | ppl | delta | argmax | cache |
+|---|---:|---:|---:|---:|
+| K4 V4 per-token | 6.102 | +0.124 | 93.2% | 36.00 MB |
+| K4 V4 per-channel | 6.311 | **+0.333** | 90.5% | 36.00 MB |
+| K4 V16 per-token | 6.061 | +0.083 | 94.6% | 82.00 MB |
+| K4 V16 per-channel | 6.253 | **+0.275** | 92.4% | 82.00 MB |
+
+3.3x worse at the same cost. The group-size sweep says why — degradation is
+monotone in how many tokens share a scale (+0.035 at group 8, +0.210 at 16,
++0.269 at 32, +0.275 at 64). So key magnitude varies strongly **across tokens**,
+and sharing a channel's scale over 64 of them lets one loud token spoil the
+other 63: precisely the failure per-channel scaling was adopted to fix, moved
+to the other axis. Group 8 does beat per-token (+0.035) but at 96 MB, where the
+absmax equals the packed bytes — 8 bits/value, outside 4-bit territory
+altogether, and int8 would serve that budget better.
+
+**The unifying result.** Both rejected schemes group along the TOKEN axis: a
+basis fit across tokens (#6) and a scale shared across tokens (#9). Both lose.
+Per-token blockwise groups *within* a token and wins. Post-RoPE keys are
+hostile to cross-token grouping, and rotation is a sufficient explanation for
+both — it makes a channel's value oscillate with position, which inflates
+apparent rank and inflates within-group magnitude spread at the same time. The
+prediction that falls out: cross-token schemes should be applied to **pre-RoPE**
+keys, which is what MLA does and why it needs a decoupled rope key. For a
+post-hoc cache on a RoPE model, group within the token.
+
+**Method note, twice earned.** Both times a synthetic fixture endorsed the idea
+and the model rejected it. The iid fixture had no outliers, so it made V look
+dominant (#7); the outlier fixture had token-invariant channel gains, so it made
+per-channel look like a win. Each fixture confirmed the hypothesis built into
+it. `_outlier_cache` in `kernel/test_nf4_kv.py` carries this caveat inline, and
+its test is named for the precondition rather than the conclusion.
+
+The dial (`key_scaling="per_channel"`) is kept, defaulted off: it is correct at
+the kernel level (matches its oracle to 1e-5), the cost is genuinely equal, and
+an architecture that does not rotate its keys may land differently. It is a
+measurement others can repeat, not a recommendation.
+
 ## What this changes downstream
 
 - **C1** — every published VRAM figure gains its context qualifier; serving docs
