@@ -104,12 +104,18 @@ evidence**: a one-sided interval that passes on a 24×-wrong prediction has not
 tested much. The finding is N1d's, not N1b's.
 
 **Why context is free here.** The step is ~6.1 s at *both* 512 and 32768 tokens
-— flat. That is this project's own `c_box` law: 94 layers × ~65 ms of per-layer
-fixed cost ≈ 6.1 s, against ~1.3 s of bytes. The step is **fixed-cost dominated,
-not byte dominated**, so KV's bytes vanish inside it. Streaming 1.77 GB of KV per
-step costs **28 ms**. That is the sixth mechanism-derived prediction falsified
-today, and it fell the same way the others did: the byte model was right about
-direction and wrong about what dominates.
+— flat. Whatever dominates it does not scale with context, so KV's bytes vanish
+inside it: streaming 1.77 GB per step costs **28 ms**. That is the sixth
+mechanism-derived prediction falsified today, and it fell the same way the others
+did — the byte model was right about direction and wrong about what dominates.
+
+**Correction, made against my own first write-up.** I initially explained the
+6.1 s as "94 layers × ~65 ms of `c_box`". That is retracted. `c_box` is a
+**whole-box** constant — 53.5–114 ms across seven receipted boxes for the entire
+per-token forward — not per-layer. I divided the measurement by the layer count,
+got 65 ms, and presented the quotient as though the law had predicted it. That is
+the exact failure mode this document set exists to catch, committed while writing
+up a finding about that failure mode. The dominant term is **unidentified.**
 
 ### The working-set claim falls, and the short arm is why
 

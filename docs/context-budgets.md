@@ -1087,12 +1087,18 @@ A100-SXM. Step time is **flat across a 64× change in context**:
 | 32768 (KV streamed) | 6124.1 | 26.81 GiB | **0** |
 
 Streaming 1.77 GB of KV per step costs **28 ms — 0.5% of the step**, against a
-predicted 6–25%. The reason is this project's own `c_box` law rather than
-bandwidth: **94 layers × ~65 ms of per-layer fixed cost ≈ 6.1 s**, against ~1.3 s
-of bytes. The step is **fixed-cost dominated**, and KV's bytes disappear inside
-it. So "context is affordable when weights stream" holds at flagship scale, and
-holds *more* strongly the deeper the model — for a reason that has nothing to do
-with the KV cache being small.
+predicted 6–25%. Whatever dominates that 6.1 s **does not scale with
+context**, so KV's bytes disappear inside it. So "context is affordable when
+weights stream" holds at flagship scale — but for a reason not yet identified.
+
+**Withdrawn attribution.** An earlier draft of this finding explained the 6.1 s as
+"94 layers × ~65 ms of `c_box`". That is wrong and is retracted: `c_box` is a
+**whole-box** constant, fixed by the gen5 receipts at **53.5–114 ms** for the
+entire per-token forward, not a per-layer quantity — two orders of magnitude
+below what is measured here. The 65 ms was back-solved from the result (6.1 s /
+94) and then presented as derivation. The flatness and the 0.5% are measurements
+and stand; the mechanism is **unidentified**, and is almost certainly the same
+unknown as the 27× gap below.
 
 **The working-set claim did not survive.** Peak at 32K is **28.79 GB** against a
 ≤16 GB target, and the seq-512 arm alone measured **18.62 GiB / 0.160 tok/s**
