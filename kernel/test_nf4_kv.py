@@ -196,3 +196,37 @@ def test_head_dim_must_be_blocksize_multiple():
     """A head_dim the blocksize cannot tile is refused, not silently truncated."""
     with pytest.raises(ValueError, match="multiple of the quant blocksize"):
         quantize_kv(torch.zeros(4, 2, 96))
+
+
+@cuda
+def test_strided_inner_dim_is_rejected_not_silently_wrong():
+    """Bugbot #14: the kernels assume a packed innermost dim. A view that breaks
+    that assumption must fail loudly — silent wrong scores are the worst outcome
+    for a cache, since nothing downstream can detect them."""
+    T, H, D = 256, 4, 128
+    _, kp, ka = _cache(T, H, D, seed=1)
+    bad_p = kp[:, :, ::2]                             # strided packed dim
+    q = torch.randn(H, D, device="cuda", dtype=torch.float32)
+    with pytest.raises(ValueError, match="contiguous innermost dim"):
+        kv_scores_nf4(q, bad_p, ka)
+    with pytest.raises(ValueError, match="contiguous innermost dim"):
+        kv_weighted_sum_nf4(torch.softmax(torch.randn(H, T, device="cuda"), -1),
+                            bad_p, ka, D)
+
+
+@cuda
+def test_outer_slicing_still_works():
+    """The complement of the guard: token-axis slicing (what a sliding window or
+    an evicted prefix produces) keeps stride(-1)==1 and must stay supported —
+    the guard would be useless if it also blocked the legitimate case."""
+    T, H, D, keep = 256, 4, 128, 128
+    _, kp, ka = _cache(T, H, D, seed=3)
+    _, vp, va = _cache(T, H, D, seed=4)
+    q = torch.randn(H, D, device="cuda", dtype=torch.float32)
+    got = attend_nf4_kv(q, kp[keep:], ka[keep:], vp[keep:], va[keep:])
+    k = dequant_kv_ref(kp[keep:], ka[keep:], D).float()
+    v = dequant_kv_ref(vp[keep:], va[keep:], D).float()
+    probs = torch.softmax(torch.einsum("hd,thd->ht", q, k) * D ** -0.5, dim=-1)
+    ref = torch.einsum("ht,thd->hd", probs, v)
+    rel = ((got - ref).norm() / ref.norm()).item()
+    assert rel < 1e-4, f"sliced-cache attention diverged: {rel}"

@@ -170,6 +170,27 @@ def _kv_wsum_nf4(
     tl.store(out_ptr + h * D + offs_d, acc, mask=d_mask)
 
 
+def _require_inner_contig(**tensors) -> None:
+    """The kernels index the head-dim as ``base + t*stride_t + h*stride_h + j``,
+    i.e. they assume the innermost dim is packed. Token/head strides ARE passed,
+    so an outer-sliced view is fine; a strided inner dim is not.
+
+    This raises rather than calling ``.contiguous()`` on purpose. ``q`` and
+    ``probs`` are one row per head and free to copy, but the cache is the large
+    object — silently materializing a contiguous copy of a 32K cache would
+    double peak memory, which is precisely the cost this module exists to avoid.
+    A caller that hits this wants to fix its layout, not pay for a hidden copy.
+    """
+    for name, t in tensors.items():
+        if t.stride(-1) != 1:
+            raise ValueError(
+                f"{name} must have a contiguous innermost dim (stride(-1)==1); "
+                f"got shape {tuple(t.shape)} strides {t.stride()}. Slice along "
+                "tokens/heads (those strides are honoured) or re-pack; this is "
+                "not copied for you because the cache is the big allocation."
+            )
+
+
 def _gqa(n_q_heads: int, n_kv_heads: int) -> int:
     if n_q_heads % n_kv_heads != 0:
         raise ValueError(f"q heads {n_q_heads} not divisible by kv heads {n_kv_heads}")
@@ -182,6 +203,7 @@ def kv_scores_nf4(q: torch.Tensor, k_packed: torch.Tensor, k_absmax: torch.Tenso
     H_q, D = q.shape
     T, H_kv, _ = k_packed.shape
     _check(D)
+    _require_inner_contig(k_packed=k_packed, k_absmax=k_absmax)
     gqa = _gqa(H_q, H_kv)
     out = torch.empty(H_q, T, dtype=torch.float32, device=q.device)
     block_d = triton.next_power_of_2(D)
@@ -203,6 +225,7 @@ def kv_weighted_sum_nf4(probs: torch.Tensor, v_packed: torch.Tensor,
     H_q, T = probs.shape
     _, H_kv, _ = v_packed.shape
     _check(head_dim)
+    _require_inner_contig(v_packed=v_packed, v_absmax=v_absmax)
     gqa = _gqa(H_q, H_kv)
     out = torch.empty(H_q, head_dim, dtype=torch.float32, device=probs.device)
     _kv_wsum_nf4[(H_q,)](
