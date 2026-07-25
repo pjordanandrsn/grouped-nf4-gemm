@@ -230,3 +230,15 @@ def test_outer_slicing_still_works():
     ref = torch.einsum("ht,thd->hd", probs, v)
     rel = ((got - ref).norm() / ref.norm()).item()
     assert rel < 1e-4, f"sliced-cache attention diverged: {rel}"
+
+
+@cuda
+def test_reference_and_kernel_share_a_validity_domain():
+    """The oracle must reject exactly what the kernels reject. If dequant_kv_ref
+    silently accepted a strided view (reshape would copy it) while the kernels
+    raised, the two would disagree about which inputs are legal -- and any test
+    comparing them on such an input compares a value against an exception."""
+    _, kp, ka = _cache(128, 4, 128, seed=11)
+    bad = kp[:, :, ::2]
+    with pytest.raises(ValueError, match="contiguous innermost dim"):
+        dequant_kv_ref(bad, ka, 128)
