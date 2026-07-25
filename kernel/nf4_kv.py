@@ -85,10 +85,37 @@ def quantize_kv(x: torch.Tensor, chunk_rows: int = 1 << 14):
             absmax.reshape(T, H, D // BLOCKSIZE).contiguous())
 
 
+def _require_inner_contig(**tensors) -> None:
+    """The kernels index the head-dim as ``base + t*stride_t + h*stride_h + j``,
+    i.e. they assume the innermost dim is packed. Token/head strides ARE passed,
+    so an outer-sliced view is fine; a strided inner dim is not.
+
+    This raises rather than calling ``.contiguous()`` on purpose. ``q`` and
+    ``probs`` are one row per head and free to copy, but the cache is the large
+    object — silently materializing a contiguous copy of a 32K cache would
+    double peak memory, which is precisely the cost this module exists to avoid.
+    A caller that hits this wants to fix its layout, not pay for a hidden copy.
+    """
+    for name, t in tensors.items():
+        if t.stride(-1) != 1:
+            raise ValueError(
+                f"{name} must have a contiguous innermost dim (stride(-1)==1); "
+                f"got shape {tuple(t.shape)} strides {t.stride()}. Slice along "
+                "tokens/heads (those strides are honoured) or re-pack; this is "
+                "not copied for you because the cache is the big allocation."
+            )
+
+
 def dequant_kv_ref(packed: torch.Tensor, absmax: torch.Tensor, D: int,
                    dtype=torch.float32) -> torch.Tensor:
     """Reference dequant of a packed cache -> ``[T, H_kv, D]``. Test oracle."""
     T, H, _ = packed.shape
+    # Same layout contract as the kernels. Without this the oracle would
+    # silently accept (via reshape's copy) inputs the kernels reject, so the
+    # two would disagree about the valid DOMAIN rather than just the values --
+    # and a test comparing them on such an input would be comparing a number
+    # against an exception.
+    _require_inner_contig(packed=packed, absmax=absmax)
     lut = _lut(packed.device)
     b = packed.reshape(-1, D // 2).to(torch.int32)
     hi = (b >> 4) & 0xF
@@ -168,27 +195,6 @@ def _kv_wsum_nf4(
                      mask=t_mask[:, None] & d_mask[None, :], other=0.0)
         acc += tl.sum(w * am * p[:, None], axis=0)
     tl.store(out_ptr + h * D + offs_d, acc, mask=d_mask)
-
-
-def _require_inner_contig(**tensors) -> None:
-    """The kernels index the head-dim as ``base + t*stride_t + h*stride_h + j``,
-    i.e. they assume the innermost dim is packed. Token/head strides ARE passed,
-    so an outer-sliced view is fine; a strided inner dim is not.
-
-    This raises rather than calling ``.contiguous()`` on purpose. ``q`` and
-    ``probs`` are one row per head and free to copy, but the cache is the large
-    object — silently materializing a contiguous copy of a 32K cache would
-    double peak memory, which is precisely the cost this module exists to avoid.
-    A caller that hits this wants to fix its layout, not pay for a hidden copy.
-    """
-    for name, t in tensors.items():
-        if t.stride(-1) != 1:
-            raise ValueError(
-                f"{name} must have a contiguous innermost dim (stride(-1)==1); "
-                f"got shape {tuple(t.shape)} strides {t.stride()}. Slice along "
-                "tokens/heads (those strides are honoured) or re-pack; this is "
-                "not copied for you because the cache is the big allocation."
-            )
 
 
 def _gqa(n_q_heads: int, n_kv_heads: int) -> int:

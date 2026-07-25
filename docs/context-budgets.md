@@ -110,6 +110,31 @@ changes the slope at real depth. Until it is green, those two rows are labelled
 *rung-2 pending* and **must not** be promoted onto the READMEs or research pages
 (C1's gate).
 
+## Exactness tiers
+
+Every result this project has published so far has been *fidelity-neutral*: the
+census is bit-accurate per cell, the 235B decode is greedy-identical, the MI300X
+run is correctness-confirmed. Those claims are about a kernel reproducing a
+reference on given bytes, and they all still hold — the KV work adds files and
+does not touch the weight path.
+
+KV quantization is the first feature that is **lossy at the model level**, and
+that is a different kind of claim, because the cache is state the model
+generates rather than a format the user chose. There is no "the NF4-KV model" to
+serve as ground truth the way a 4-bit checkpoint does for weights. So fidelity
+now needs its own axis, separate from the engine tiers (which grade performance
+maturity):
+
+| tier | meaning | members |
+|---|---|---|
+| **exact** | greedy-identical to the reference; differences bounded by fp accumulation | every weight-path result: census, property suite, flagship decode, multiarch |
+| **approximate** | measurably changes model output; ships only with a fidelity receipt | NF4 KV cache (below) |
+
+The rule this exists to enforce: an approximate feature must not inherit the
+bit-accurate framing by sitting next to exact code. That is why the rejected
+low-rank path lives under `bench/` and not `kernel/` (finding #6), and why the
+NF4 KV dials are off by default.
+
 ## Findings
 
 ### 1. The published "235B on ≤16 GB" figure covers ~5K of context, not 128K
@@ -164,6 +189,86 @@ long-context model here per token despite being the second largest, because half
 its layers are windowed and it uses 8 KV heads of dim 64. MLA (Kimi) and
 hybrid+global-GQA (Gemma-4) are the two cheapest designs per token. "Big model"
 and "expensive context" are close to independent axes.
+
+### 6. Low-rank KV codes: built, measured, rejected
+
+Compression *before* quantization looked orthogonal to NF4 — cache rank-r codes
+against a pinned per-head basis and absorb the up-projection into the query
+(`q @ (C@B).T == (q@B.T) @ C.T`), so the cache is never reconstructed. The
+algebra is exact and implemented (11/11), but on real caches the premise fails.
+Measured on OLMoE-1B-7B, 1024 wikitext tokens, basis fit on the first half and
+scored on the second (`bench/context/lowrank_probe.py`):
+
+| rank | ratio | K held-out | V held-out |
+|---:|---:|---:|---:|
+| 64 | 2.00x | 48.2% | 43.0% |
+| 96 | 1.33x | 35.0% | 27.8% |
+| 124 | **1.03x** | 15.2% | **9.1%** |
+
+V reaches NF4-parity error only at a 1.03x saving: there is no operating point,
+and the method is dominated by plain NF4 across the whole curve. Ranks the
+64-element blocksize cannot pack were measured too, so the packer is
+demonstrably not the binding constraint. Even an *oracle* basis fit to the
+tokens it is scored on costs 21-23% at rank 64 — so this is not a
+generalization failure alone; post-hoc, KV is not low-rank enough at any useful
+rank.
+
+The probe did find real structure: keys are strongly low-rank **before** RoPE
+(16.9% vs 48.2% at rank 64), because rotation spreads identical content across
+directions by position. That independently reproduces why MLA carries a
+*decoupled* RoPE key. It is still not cashable post-hoc — pre-RoPE storage
+forces an `r -> D` lift before rotating, forfeiting the absorption, and V has no
+RoPE excuse at 43%. The generalizable lesson: rank works when the model is
+*trained* with the bottleneck; post-hoc SVD does not recover a structure the
+model never had.
+
+### 7. Keys are the sensitive tensor — the iid fixture said the opposite
+
+Teacher-forced on OLMoE-1B-7B over 1024 tokens, 4-bit weights held constant so
+the cache is the only variable (`bench/context/kv_fidelity.json`):
+
+| config | ppl | delta | argmax agreement |
+|---|---:|---:|---:|
+| fp16 cache | 5.978 | — | 100% |
+| K4 V4 (3.56x) | 6.102 | +0.124 | 93.2% |
+| K4 V16 (keys only) | 6.061 | +0.083 | 94.6% |
+| K16 V4 (values only) | 5.991 | **+0.013** | 97.3% |
+
+Quantizing K alone costs ~6x more perplexity than quantizing V alone — the
+reverse of the iid fixture in C3, which measured V-dominant error and would have
+argued for coarse keys. Real keys carry per-channel outliers that blow up a
+64-element block's shared absmax; Gaussian noise has none, so the fixture could
+not see it. This is why the finding is recorded here and not inferred: the
+fixture was measuring a property of the fixture.
+
+Two consequences. First, there is a knee worth exposing as a dial: **values-only
+is 1.56x for +0.2% perplexity**, while the remaining 2x costs six times more.
+Second, the format lever for keys is granularity, not bit-width — per-channel
+scaling, which is what the KV-quantization literature converged on and now has a
+local reason.
+
+### 8. Free-running output identity is not a fidelity metric
+
+The same three configs, greedy-decoding 96 tokens from a 256-token prompt:
+
+| config | delta ppl | argmax agreement | free-running |
+|---|---:|---:|---|
+| K4 V4 | +0.124 | 93.2% | **identical, 96/96** |
+| K4 V16 | +0.083 | 94.6% | diverges at token 31 |
+| K16 V4 | **+0.013** | **97.3%** | diverges at token **13** |
+
+The ordering inverts: the config that is best on both rigorous metrics diverges
+earliest, and the worst one reproduces the reference exactly. Free-running
+identity is a single Bernoulli draw over whether some early step happened to be
+near-tied — once one flips, the continuations are simply different text, and the
+match count after that point measures nothing.
+
+Recorded because it is a live trap rather than a curiosity: the natural
+experiment is to run the one interesting config (K4 V4), and on that evidence
+alone the honest-looking conclusion is "output is byte-identical, so this is
+effectively exact." It is not; the other two arms are what expose it as luck.
+Quote teacher-forced agreement and delta-perplexity. Treat a free-running match
+as an anecdote about one prompt.
 
 ## What this changes downstream
 
