@@ -74,3 +74,63 @@ it cannot hold the expert stack. That costs ~$0.15 to learn instead of $5.
 - **N1b falsified** → context is expensive at flagship scale in a way the scout
   did not predict, and the scout's additivity result gets a scale caveat it
   currently does not have.
+
+## Outcome — the gate holds, context is free, and the working-set claim falls
+
+Qwen3-235B-A22B-Instruct-2507, NF4 experts streamed from pinned host RAM,
+2×A100-SXM-80GB (used for the **2 TB of host RAM**, not the GPUs), greedy,
+12 new tokens, median of 2. Load: 1186 s, 122 GB pinned.
+
+| arm | ctx | ms/step | tok/s | peak | KV on device |
+|---|---:|---:|---:|---:|---:|
+| `short` | 512 | 6266.5 | 0.160 | 18.62 GiB | 0 |
+| `long-resident-KV` | 32768 | 6095.7 | 0.164 | 28.46 GiB | 1774.8 MB |
+| `long` | 32768 | 6124.1 | 0.163 | **26.81 GiB** | **0** |
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| N1a working set | ≤ 16.0 GB | **28.79 GB** | **FALSIFIED** |
+| N1b cost of 64× context | ≥ 0.85 | **1.023** | **CONFIRMED — but see below** |
+| N1c gate: KV off device, deterministic | both | both | **CONFIRMED** |
+| N1d KV share of step | [6%, 25%] | **0.5%** | **FALSIFIED** |
+
+### N1b and N1d are the same quantity, and only one interval caught the error
+
+Both describe what context costs. N1b asked for ≥0.85 and got 1.023; N1d asked
+for 6–25% and got 0.5%. **I was wrong about the magnitude by 24× in both cases**
+— N1b's interval was one-sided and absorbed the error, N1d's was two-sided and
+caught it. So N1b is recorded as CONFIRMED and simultaneously as **weak
+evidence**: a one-sided interval that passes on a 24×-wrong prediction has not
+tested much. The finding is N1d's, not N1b's.
+
+**Why context is free here.** The step is ~6.1 s at *both* 512 and 32768 tokens
+— flat. That is this project's own `c_box` law: 94 layers × ~65 ms of per-layer
+fixed cost ≈ 6.1 s, against ~1.3 s of bytes. The step is **fixed-cost dominated,
+not byte dominated**, so KV's bytes vanish inside it. Streaming 1.77 GB of KV per
+step costs **28 ms**. That is the sixth mechanism-derived prediction falsified
+today, and it fell the same way the others did: the byte model was right about
+direction and wrong about what dominates.
+
+### The working-set claim falls, and the short arm is why
+
+N1a failed at **28.79 GB against a ≤16 GB target** — but the more serious number
+is that the **`short` arm alone measured 18.62 GiB and 0.160 tok/s**, where the
+stamped flagship records **15.2 GB and 4.3–4.4 tok/s at seq-512**. That is
+**27× slower and 1.2× larger at the flagship's own operating point.**
+
+**This does not show the stamped flagship number is wrong, and it is not reported
+as showing that.** This harness ran `load_moe_4bit_streaming` at its defaults; the
+stamped figure came from a tuned configuration (hot residency, E-pinning) that
+was not reproduced here. What it does establish is narrower and sufficient:
+**nothing measured on this box supports extending the flagship claim to 32K**,
+and the discrepancy at the shared operating point has to be resolved before any
+235B number is quoted with more confidence than it has earned.
+
+**Pre-committed decision fires (N1a falsified).** The README heading keeps its
+`(at ~5K context)` qualifier. The 32K claim does **not** go on the flagship line.
+The transferable result — *when weights stream, 64× the context is free because
+the step is fixed-cost bound* — is a finding about **streaming**, not a headline
+about 235B, and it is filed that way.
+
+**Open, and named rather than buried:** why 0.160 tok/s against a stamped 4.3.
+Until that closes, the 235B row is the least trustworthy number in the project.
