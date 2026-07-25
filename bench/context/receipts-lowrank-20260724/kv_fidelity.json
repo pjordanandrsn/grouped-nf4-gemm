@@ -1,0 +1,26 @@
+[
+  {
+    "config": "fp16 cache (baseline)",
+    "ppl": 5.9779181480407715,
+    "argmax_agree": 1.0,
+    "logit_rel": 0.0
+  },
+  {
+    "config": "K4 V4  (both nf4)",
+    "ppl": 6.101529121398926,
+    "argmax_agree": 0.931640625,
+    "logit_rel": 0.06611984223127365
+  },
+  {
+    "config": "K4 V16 (keys only)",
+    "ppl": 6.060911178588867,
+    "argmax_agree": 0.9462890625,
+    "logit_rel": 0.059951141476631165
+  },
+  {
+    "config": "K16 V4 (values only)",
+    "ppl": 5.991092681884766,
+    "argmax_agree": 0.97265625,
+    "logit_rel": 0.03781246766448021
+  }
+]

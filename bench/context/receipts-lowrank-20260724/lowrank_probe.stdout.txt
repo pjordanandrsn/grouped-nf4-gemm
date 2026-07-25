@@ -1,0 +1,43 @@
+/opt/conda/lib/python3.11/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[03:06:30]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[03:07:10]   quantized experts on 16/16 MoE layers (64 experts each)
+[03:07:10]   offloaded 16 layers' 4-bit experts to pinned CPU RAM (streamed to GPU one layer at a time during train/eval)
+[03:07:10]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+Using the latest cached version of the dataset since Salesforce/wikitext couldn't be found on the Hugging Face Hub (offline mode is enabled).
+Found the latest cached dataset configuration 'wikitext-2-raw-v1' at /root/.cache/huggingface/datasets/Salesforce___wikitext/wikitext-2-raw-v1/0.0.0/b08601e04326c79dfdd32d625aee71d232d685c3 (last modified on Sun Jul 19 21:10:42 2026).
+allenai/OLMoE-1B-7B-0924  1024 tokens, 16 layers, rank 64
+layer   K held  K in-samp   V held  V in-samp  r90 real  r90 iid
+    0   0.2009     0.0304   0.2561     0.1801       7.2     98.0
+    1   0.3214     0.1380   0.3788     0.2920      19.6     97.9
+    2   0.4488     0.1883   0.4291     0.3298      29.8     97.9
+    3   0.4726     0.2301   0.4084     0.3140      38.9     98.0
+    4   0.4969     0.2066   0.4322     0.3307      36.9     98.0
+    5   0.5293     0.2329   0.4296     0.3134      42.3     97.8
+    6   0.4882     0.2138   0.4045     0.2949      38.8     98.0
+    7   0.5095     0.2145   0.4064     0.2935      39.5     98.0
+    8   0.5081     0.2164   0.4212     0.2973      42.9     97.9
+    9   0.5193     0.2147   0.4624     0.3251      41.4     98.0
+   10   0.5440     0.2360   0.4618     0.3249      45.9     97.9
+   11   0.5703     0.2299   0.4524     0.3131      44.6     97.9
+   12   0.5236     0.2240   0.4636     0.3245      43.5     97.9
+   13   0.5271     0.2233   0.4968     0.3506      43.2     97.9
+   14   0.4978     0.2066   0.4945     0.3456      37.4     98.0
+   15   0.5463     0.2346   0.4861     0.3398      43.3     97.9
+
+held-out rel err @ rank 64: K mean 0.4815 (max 0.5703), V mean 0.4303 (max 0.4968)
+K pre-RoPE @ rank 64: 0.1690  (post-RoPE 0.4815) | V control 0.4303 must equal V 0.4303
+
+ rank  ratio   K held   V held  packable
+    8 16.00x    0.745    0.792  no
+   16  8.00x    0.686    0.709  no
+   32  4.00x    0.605    0.596  no
+   48  2.67x    0.542    0.508  no
+   64  2.00x    0.482    0.430  yes
+   80  1.60x    0.419    0.356  no
+   96  1.33x    0.350    0.278  no
+  112  1.14x    0.262    0.189  no
+  120  1.07x    0.200    0.131  no
+  124  1.03x    0.152    0.091  no
+  128  1.00x    0.000    0.000  yes
+receipt -> /root/g/bench/context/lowrank_probe.json
