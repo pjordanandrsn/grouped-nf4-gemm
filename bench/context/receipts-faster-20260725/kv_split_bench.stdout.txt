@@ -1,0 +1,13 @@
+94L x 4kv x 128d @ ctx 32768   link 6.2 GB/s   reps 8
+resident baseline:    966.6 ms  peak  2108.0 MB  device 1.774 GB
+f=0.0   resident=     0  load=  1254.2 ms  over=  287.6 ms  streamed=1.774 GB  peak=  425.0 MB  device=0.000 GB
+f=0.25  resident=  8192  load=  1239.2 ms  over=  272.6 ms  streamed=1.331 GB  peak=  757.8 MB  device=0.444 GB
+f=0.5   resident= 16384  load=  1167.2 ms  over=  200.6 ms  streamed=0.887 GB  peak= 1090.5 MB  device=0.887 GB
+f=0.75  resident= 24576  load=  1098.1 ms  over=  131.5 ms  streamed=0.444 GB  peak= 1589.0 MB  device=1.331 GB
+
+=== scoring ===
+A1a fitted B = 8.21 GB/s          [5.0, 7.5]   FALSIFIED
+A1b fitted c = 88.0 ms            < 25 ms      FALSIFIED
+A1d peak(f=.5)/peak(f=0) = 2.566   [0.4, 0.65]  FALSIFIED
+
+wrote /root/g/bench/context/kv_split_bench.json

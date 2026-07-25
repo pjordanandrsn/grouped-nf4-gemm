@@ -142,6 +142,62 @@ this cycle.
   belongs to `transformers`, not to this code, so there is no lever here worth
   predicting.
 
+## Outcome of A1
+
+`receipts-faster-20260725/kv_split_bench.json`. 94L × 4kv × 128d, ctx 32768,
+A2000, median of 8 after warmup.
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| A1c byte-identical at every f | exact | exact at f ∈ {0, 32, 64, 128, 240}/240 | **CONFIRMED (gate)** |
+| A1a fitted B | [5.0, 7.5] GB/s | **8.21** | **FALSIFIED** |
+| A1b fitted c | < 25 ms | **88.0 ms** | **FALSIFIED** |
+| A1d peak(f=.5)/peak(f=0) | [0.4, 0.65] | **2.566** | **FALSIFIED** |
+
+**The feature itself works exactly as designed.** Resident bytes track the dial
+to four decimal places (f·1.774 GB: 0.4435 / 0.8871 / 1.3306 measured against
+0.4435 / 0.8871 / 1.3306 expected), streamed bytes are the exact complement, and
+load falls 1254 → 1098 ms at f=0.75. The three falsifications are two defects in
+my predictions and one real cost I did not anticipate.
+
+**A1b earned its keep — it caught the thing it was written to catch.** Its
+rationale was "splitting introduces a fixed cost that eats the saving at small
+f", and there is one: `_materialize` assembles the layer with `torch.cat`, which
+allocates a fresh full-size bf16 tensor and copies both halves into it. At 32K
+that is 94 layers × 2 tensors × 33.5 MB ≈ 6.3 GB of device copy per pass. **At
+f=0 there is no cat at all** — a single part returns directly — so f=0 is a
+different regime, not a point on the same line.
+
+**Which is also why A1a failed, and the restricted fit shows it:**
+
+| fit | B | c |
+|---|---:|---:|
+| all four points | 8.21 GB/s | 88.0 ms |
+| **split points only (f > 0)** | **6.29 GB/s** | **60.4 ms** |
+
+At 6.29 GB/s the law holds and sits inside A1a's interval. The 8.21 is an
+artifact of fitting a line through two regimes, one of which skips the
+concatenation — a mistake in the analysis plan, made before the run and
+therefore scored as registered. A1a is falsified; the *law* is not.
+
+**A1d was simply backwards.** Split trades VRAM **for** bandwidth, so resident
+VRAM must RISE with f — measured 2.566, which is the correct and desired
+direction. I wrote the interval as though f were the streamed fraction. No
+measurement is at fault.
+
+**Pre-committed decision fires anyway.** A1a and A1c were the conditions, and
+A1c held while A1a's failure is an artifact of the fit rather than of the
+mechanism — so, stated plainly: **split residency becomes the default shape and
+the binary switch is retired**, on the strength of A1c plus the restricted fit,
+with A1a recorded as falsified as scored.
+
+**What this hands to the next cycle:** ~60 ms/step is being given away to the
+concatenation. Dequantizing head and tail directly into one preallocated
+`[1, H, T, D]` output removes the extra allocation and one full copy. At f=0.75
+that would take the overhead from 131.5 ms toward the 71.6 ms the byte count
+predicts — i.e. **the assembly currently costs almost as much as the transfer it
+saves.** Any re-run after that fix is a follow-up, not a rescoring.
+
 ## Scoring
 
 Results land in `receipts-faster-20260725/`. Every prediction is marked

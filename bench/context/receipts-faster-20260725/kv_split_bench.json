@@ -1,0 +1,69 @@
+{
+  "rows": [
+    {
+      "residence": "gpu",
+      "resident_tokens": 0,
+      "fraction": 0.0,
+      "load_s": 0.9665957336425781,
+      "streamed_bytes": 0,
+      "cache_bytes": 1774190592,
+      "device_bytes": 1774190592,
+      "steady_peak_bytes": 2210398720
+    },
+    {
+      "residence": "host",
+      "resident_tokens": 0,
+      "fraction": 0.0,
+      "load_s": 1.2541634521484375,
+      "streamed_bytes": 1774190592.0,
+      "cache_bytes": 1774190592,
+      "device_bytes": 0,
+      "steady_peak_bytes": 445645312,
+      "overhead_s": 0.2875677185058594
+    },
+    {
+      "residence": "host",
+      "resident_tokens": 8192,
+      "fraction": 0.25,
+      "load_s": 1.2391826171875,
+      "streamed_bytes": 1330642944.0,
+      "cache_bytes": 1774190592,
+      "device_bytes": 443547648,
+      "steady_peak_bytes": 794558976,
+      "overhead_s": 0.2725868835449219
+    },
+    {
+      "residence": "host",
+      "resident_tokens": 16384,
+      "fraction": 0.5,
+      "load_s": 1.1672215576171876,
+      "streamed_bytes": 887095296.0,
+      "cache_bytes": 1774190592,
+      "device_bytes": 887095296,
+      "steady_peak_bytes": 1143472640,
+      "overhead_s": 0.20062582397460949
+    },
+    {
+      "residence": "host",
+      "resident_tokens": 24576,
+      "fraction": 0.75,
+      "load_s": 1.0980662231445313,
+      "streamed_bytes": 443547648.0,
+      "cache_bytes": 1774190592,
+      "device_bytes": 1330642944,
+      "steady_peak_bytes": 1666187776,
+      "overhead_s": 0.13147048950195317
+    }
+  ],
+  "fit": {
+    "c_s": 0.08799954223632814,
+    "B_GBs": 8.210002647948635
+  },
+  "link_GBs": 6.2,
+  "ctx": 32768,
+  "geometry": {
+    "layers": 94,
+    "h_kv": 4,
+    "head_dim": 128
+  }
+}
