@@ -1,3 +1,5 @@
 2b9153e4835ace2976cc9cc8f49fa6baecc689dad0c2f5e821f2062ea0990fe7  bench/context/receipts-vs-bf16-20260725/kv_vs_bf16.json
 9b380de1381b210fc9e5c39e2ad08e35ff69014fbf655ff66d657d0ed64415db  bench/context/receipts-vs-bf16-20260725/kv_vs_bf16.stdout.txt
-e3b86a25f2d6ebeff4b3dc9e81737c019eafa926723f1605285d5ccba2d66ff7  bench/context/receipts-vs-bf16-20260725/kv_vs_bf16_bench.py
+dab820f2a6c0d6b4c637332e72cd313e7faab0d780f453630e6277ee38ad1228  bench/context/receipts-vs-bf16-20260725/kv_vs_bf16_bench.py
+3ffbf7aed38fe9ba83fc49aaef4e337347a9bcdaed71c1e888e5d62386d2c153  bench/context/receipts-vs-bf16-20260725/kv_vs_bf16_g1.json
+89e974f63f00a7f289382da3ff583f9f82a82172f852dc462d89cfa1b16a64b4  bench/context/receipts-vs-bf16-20260725/kv_vs_bf16_g1.stdout.txt

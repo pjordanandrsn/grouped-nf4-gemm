@@ -131,6 +131,91 @@ code-path overhead rather than dequant arithmetic, since `DynamicCache` and
 `NF4KVCache` are different objects. The ratio is therefore an **upper bound** on
 the dequant's own cost, and the finding says so.
 
+## Amendment 1 — G1: decompose the 1.887 into path overhead and dequant
+
+Written after F1, **before the third arm was measured**. #17 states its ratio is
+an **upper bound** on the dequant's cost because `DynamicCache` and
+`NF4KVCache` are different objects on different code paths. That caveat is
+honest but useless to act on: it does not say whether to optimize the dequant or
+the wrapper.
+
+**The control needed already exists.** `NF4KVCache(quantize_keys=False,
+quantize_values=False)` stores raw bf16 through the *same* object, the *same*
+`update()` bookkeeping, the *same* append and load path — and skips the
+quantize/dequant entirely. So:
+
+```
+path_overhead = NF4KVCache(raw)  / DynamicCache        our wrapper, no arithmetic
+dequant_cost  = NF4KVCache(nf4)  / NF4KVCache(raw)     arithmetic, same wrapper
+total         = path_overhead × dequant_cost           must reproduce 1.887
+```
+
+**A back-of-envelope that makes this worth doing.** The measured gap at 4096 is
+127 ms over 16 layers ≈ **8 ms per layer**. Dequantizing one layer's K and V is
+~17 MB of output from ~9 MB of packed input; at this card's bandwidth that is
+**tenths of a millisecond**, not 8. So most of the gap is probably *not* dequant
+arithmetic — and if so, #17's number is dominated by something fixable that has
+nothing to do with 4-bit.
+
+- **G1a.** `path_overhead` at 4096 ∈ **[1.0, 1.3]**. *Falsified above 1.6.*
+- **G1b.** `dequant_cost` at 4096 ∈ **[1.4, 1.9]**. *Falsified outside
+  [1.2, 2.5].*
+- **G1c.** The decomposition is clean: `path_overhead × dequant_cost` reproduces
+  F1a's 1.887 to within **±5%**. *Falsified outside* — a product that does not
+  close means the two arms differ in something besides the named factor.
+- **G1d.** At 16384 the dequant factor grows and the path factor does not:
+  `dequant_cost(16384) > dequant_cost(4096)` **and**
+  `path_overhead(16384) ≤ path_overhead(4096) + 0.10`. Dequant scales with
+  context; per-layer wrapper bookkeeping is a constant number of Python calls.
+  *Falsified if either half fails.*
+
+**Pre-committed decision.** If G1a > 1.3, the wrapper is the target and #17's
+number is an artifact of this implementation rather than a property of 4-bit KV
+— which would mean the reframing in #17 overstates the cost of the *idea* while
+correctly stating the cost of the *code*. If G1b > G1a, the dequant is the
+target and a fused dequant is worth registering.
+
+## Outcome of G1 — the dequant is the target, and one arm is not trustworthy
+
+| ctx | path_overhead | dequant | product | measured total |
+|---:|---:|---:|---:|---:|
+| 4096 | **1.138** | **1.475** | 1.679 | 1.679 |
+| 16384 | *0.736* | *2.920* | 2.150 | 2.150 |
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| G1a path_overhead @4096 | [1.0, 1.3] | **1.138** | **CONFIRMED** |
+| G1b dequant @4096 | [1.4, 1.9] | **1.475** | **CONFIRMED** |
+| G1c product closes to ±5% | — | exact | **VACUOUS — see below** |
+| G1d dequant grows, path does not | both | 1.475→2.920, 1.138→0.736 | **CONFIRMED** |
+
+**G1c was not a test.** `path_overhead × dequant = (raw/bf16) × (nf4/raw) =
+nf4/bf16 = total` **algebraically**. It closes by construction and could not have
+failed. That is a prediction that cannot be wrong, which this document set
+treats as worthless — the fourth specification error of the day, after A1a's
+two-regime fit, A1d's inverted sign and E1's decision omitting E1b.
+
+**The 16384 row is contaminated and is not reported as a result.**
+`path_overhead = 0.736` says our wrapper is *faster* than `DynamicCache` while
+doing strictly more work on identical data (both arms measure a 2151.7 MB cache
+and an 8169.5 MB peak). That is not physical. The cause is visible in the peak:
+**8.17 GB of ~8.6 GB free**, so the arms are running against the allocator's
+limit and the ordering between them decides who pays for fragmentation. Only the
+4096 decomposition is trustworthy.
+
+**Which also puts a variance band on #17.** The same F1 arms re-measured here
+give **1.679** where the first run gave **1.887**, and 2.150 where it gave 2.552
+— roughly **±12%** run to run on a shared, near-full card. #17's headline is
+therefore restated as **~1.7–1.9× at 4K** rather than a precise 1.887, and the
+16K figure as **~2.2–2.6×**. The direction and magnitude survive; the third digit
+never existed.
+
+**Pre-committed decision fires: G1b (1.475) > G1a (1.138), so the DEQUANT is the
+target.** The wrapper costs ~14% and is not worth attacking. `dequant_kv_ref` is
+a *reference* implementation by name, and replacing it with a fused kernel is
+worth registering as its own experiment — with the caveat that D1 is a standing
+warning about assuming a hand-written kernel beats a vendor path.
+
 ## Scoring
 
 Results in `receipts-vs-bf16-20260725/`. Each prediction marked

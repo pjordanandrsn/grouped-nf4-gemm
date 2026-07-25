@@ -57,6 +57,11 @@ def make(kind, ctx):
         return DynamicCache()
     if kind == "nf4":
         return NF4KVCache()
+    if kind == "nf4-raw":
+        # G1's control: OUR object, OUR update()/append/load bookkeeping, and no
+        # quantization at all. The gap to DynamicCache is therefore the wrapper;
+        # the gap from here to "nf4" is the arithmetic.
+        return NF4KVCache(quantize_keys=False, quantize_values=False)
     return NF4KVCache(residence="host", max_context=ctx + NEW + 64)
 
 
@@ -80,7 +85,7 @@ def main():
     rows, toks = [], {}
     for ctx in CONTEXTS:
         ids = torch.randint(100, 20000, (1, ctx), device="cuda")
-        for kind in ("bf16", "nf4", "nf4-host"):
+        for kind in ("bf16", "nf4-raw", "nf4", "nf4-host"):
             ts = []
             for _ in range(REPS):
                 c = make(kind, ctx)
@@ -123,6 +128,25 @@ def main():
           f"{'CONFIRMED' if 300 <= f1c <= 450 else 'FALSIFIED'}")
     print(f"F1d nf4-host/bf16 @{c0}  = {f1d:.3f}   [1.4,2.6]  "
           f"{'CONFIRMED' if 1.4 <= f1d <= 2.6 else ('FALSIFIED' if not (1.0 <= f1d <= 3.5) else 'outside interval')}")
+    print("\n=== G1 decomposition ===")
+    for ctx in CONTEXTS:
+        po = g(ctx, "nf4-raw")["s_per_step"] / g(ctx, "bf16")["s_per_step"]
+        dq = g(ctx, "nf4")["s_per_step"] / g(ctx, "nf4-raw")["s_per_step"]
+        tot = g(ctx, "nf4")["s_per_step"] / g(ctx, "bf16")["s_per_step"]
+        print(f"ctx={ctx:>6}  path_overhead={po:.3f}  dequant={dq:.3f}  "
+              f"product={po * dq:.3f}  measured_total={tot:.3f}  "
+              f"closes={'YES' if abs(po * dq - tot) / tot < 0.05 else 'NO'}")
+        v[f"G1_{ctx}"] = dict(path_overhead=po, dequant=dq, product=po * dq,
+                              total=tot)
+    po0 = v[f"G1_{CONTEXTS[0]}"]["path_overhead"]
+    dq0 = v[f"G1_{CONTEXTS[0]}"]["dequant"]
+    print(f"G1a path_overhead @{CONTEXTS[0]} = {po0:.3f}  [1.0,1.3]  "
+          f"{'CONFIRMED' if 1.0 <= po0 <= 1.3 else ('FALSIFIED' if po0 > 1.6 else 'outside interval')}")
+    print(f"G1b dequant       @{CONTEXTS[0]} = {dq0:.3f}  [1.4,1.9]  "
+          f"{'CONFIRMED' if 1.4 <= dq0 <= 1.9 else ('FALSIFIED' if not (1.2 <= dq0 <= 2.5) else 'outside interval')}")
+    print(f"G1  which is the target: "
+          f"{'DEQUANT' if dq0 > po0 else 'WRAPPER'}")
+
     a, b = toks[(c0, "bf16")], toks[(c0, "nf4")]
     div = next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), None)
     print(f"\nreported: greedy ids diverge at position {div} of {len(a)} "

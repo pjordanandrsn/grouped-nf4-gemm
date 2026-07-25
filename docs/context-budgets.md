@@ -899,10 +899,20 @@ already differ. That is what a lossy cache means and it is consistent with
 #10's perplexity number — it belongs *next to* it rather than in a separate
 finding, because together they are the actual trade.
 
-**Scope, and it is an upper bound.** `DynamicCache` and `NF4KVCache` are
-different objects on different code paths, so some of the gap is Python
-overhead rather than dequant arithmetic. The ratio bounds the dequant's cost
-from above; it is not a measurement of the dequant alone. One model, one device,
+**Decomposed (G1), because "upper bound" is not actionable.**
+`NF4KVCache(quantize=False)` runs the same object, the same bookkeeping and the
+same append/load path with no arithmetic, which splits the ratio cleanly:
+at 4096 the **wrapper costs 1.138×** and the **dequant 1.475×**. So the dequant
+is the target and the wrapper is not worth attacking — and `dequant_kv_ref` is
+a *reference* implementation by name.
+
+**Two honesty notes on the numbers above.** The 16384 decomposition is
+**contaminated** and is not used: it puts the wrapper at 0.736×, i.e. faster
+than `DynamicCache` while doing strictly more work on identical data, which is
+not physical — peak is 8.17 GB of ~8.6 GB free and the arms are fighting the
+allocator. And re-measuring F1 gave **1.679** where the first run gave 1.887, so
+the honest headline is **~1.7–1.9× at 4K** and **~2.2–2.6× at 16K**; the third
+digit never existed on a shared card. One model, one device,
 GQA 1:1 — which is neutral for this path, since none of #12's `enable_gqa`
 effect applies at 1:1.
 
