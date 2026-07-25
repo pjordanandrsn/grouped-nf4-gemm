@@ -1,0 +1,27 @@
+geometry: 94L x 4kv x 128d (Qwen3-235B)   link 6.2 GB/s   reps 10
+ctx=  4096  nf4  gpu  load=   125.5ms  step=   206.4ms  append=   80.9ms  peak=  353.6MB  free=8294MB
+ctx=  4096  nf4 host  load=   172.6ms  step=   276.6ms  append=  104.1ms  peak=  142.6MB  free=8604MB
+ctx=  8192  nf4  gpu  load=   260.3ms  step=   262.4ms  append=    2.1ms  peak=  565.1MB  free=8034MB
+ctx=  8192  nf4 host  load=   318.0ms  step=   486.9ms  append=  169.0ms  peak=  142.6MB  free=8602MB
+ctx= 32768  nf4  gpu  load=   968.1ms  step=  1009.0ms  append=   40.9ms  peak= 2112.0MB  free=6392MB
+ctx= 32768  nf4 host  load=  1254.5ms  step=  1525.4ms  append=  270.9ms  peak=  429.0MB  free=8316MB
+ctx=  8192 bf16  gpu  load=     0.1ms  step=    14.4ms  append=   14.4ms  peak= 1514.0MB  free=7218MB
+ctx=  8192 bf16 host  load=   271.5ms  step=   322.1ms  append=   50.7ms  peak=   28.0MB  free=8718MB
+ctx=  4096 bf16  gpu  load=     0.1ms  step=     7.1ms  append=    7.0ms  peak=  758.0MB  free=7978MB
+ctx=  4096 bf16 host  load=   136.3ms  step=   177.7ms  append=   41.4ms  peak=   16.0MB  free=8736MB
+
+=== scoring ===
+   ctx=  4096 overhead=    47.1ms predicted=    35.8ms  ratio=1.316
+   ctx=  8192 overhead=    57.6ms predicted=    71.5ms  ratio=0.806
+S1 ctx= 32768 overhead=   286.4ms predicted=   286.2ms  ratio=1.001
+S2 bf16/nf4 overhead @8192 = 4.709  (exact byte ratio 3.5556)
+S3 overhead 32K/8K = 4.970  (exact context ratio 4.0)
+S4 peak GPU streamed/resident @32K = 0.2031  (< 0.10)
+S5 append 32K/4K: resident=0.51 (>=4.0)  host=2.60 (0.5-2.0)
+  S1: CONFIRMED
+  S2: FALSIFIED
+  S3: FALSIFIED
+  S4: FALSIFIED
+  S5: FALSIFIED
+
+wrote /root/g/bench/context/kv_stream_bench_postfix.json

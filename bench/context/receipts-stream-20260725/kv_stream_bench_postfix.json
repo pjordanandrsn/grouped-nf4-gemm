@@ -1,0 +1,186 @@
+{
+  "rows": [
+    {
+      "context": 4096,
+      "dtype": "nf4",
+      "residence": "gpu",
+      "load_s": 0.12549411392211912,
+      "step_s": 0.20639662170410156,
+      "append_s": 0.08090250778198244,
+      "peak_bytes": 370737664,
+      "cache_bytes": 222423552,
+      "device_bytes": 222423552,
+      "packed_bytes": 221773824,
+      "free_vram_mb": 8294,
+      "total_vram_mb": 11903
+    },
+    {
+      "context": 4096,
+      "dtype": "nf4",
+      "residence": "host",
+      "load_s": 0.17255404663085938,
+      "step_s": 0.27662451171875,
+      "append_s": 0.10407046508789064,
+      "peak_bytes": 149553664,
+      "cache_bytes": 222423552,
+      "device_bytes": 0,
+      "packed_bytes": 221773824,
+      "free_vram_mb": 8604,
+      "total_vram_mb": 11903
+    },
+    {
+      "context": 8192,
+      "dtype": "nf4",
+      "residence": "gpu",
+      "load_s": 0.26031276702880857,
+      "step_s": 0.26238739013671875,
+      "append_s": 0.0020746231079101785,
+      "peak_bytes": 592511488,
+      "cache_bytes": 444197376,
+      "device_bytes": 444197376,
+      "packed_bytes": 443547648,
+      "free_vram_mb": 8034,
+      "total_vram_mb": 11903
+    },
+    {
+      "context": 8192,
+      "dtype": "nf4",
+      "residence": "host",
+      "load_s": 0.31795095825195313,
+      "step_s": 0.48693095397949215,
+      "append_s": 0.16897999572753902,
+      "peak_bytes": 149553664,
+      "cache_bytes": 444197376,
+      "device_bytes": 0,
+      "packed_bytes": 443547648,
+      "free_vram_mb": 8602,
+      "total_vram_mb": 11903
+    },
+    {
+      "context": 32768,
+      "dtype": "nf4",
+      "residence": "gpu",
+      "load_s": 0.9680567016601562,
+      "step_s": 1.0089917297363282,
+      "append_s": 0.040935028076172,
+      "peak_bytes": 2214593024,
+      "cache_bytes": 1774840320,
+      "device_bytes": 1774840320,
+      "packed_bytes": 1774190592,
+      "free_vram_mb": 6392,
+      "total_vram_mb": 11903
+    },
+    {
+      "context": 32768,
+      "dtype": "nf4",
+      "residence": "host",
+      "load_s": 1.2544906616210938,
+      "step_s": 1.5253728637695314,
+      "append_s": 0.2708822021484376,
+      "peak_bytes": 449839616,
+      "cache_bytes": 1774840320,
+      "device_bytes": 0,
+      "packed_bytes": 1774190592,
+      "free_vram_mb": 8316,
+      "total_vram_mb": 11903
+    },
+    {
+      "context": 8192,
+      "dtype": "bf16",
+      "residence": "gpu",
+      "load_s": 6.464000046253204e-05,
+      "step_s": 0.014445008277893067,
+      "append_s": 0.014380368277430534,
+      "peak_bytes": 1587544576,
+      "cache_bytes": 1579368448,
+      "device_bytes": 1579368448,
+      "packed_bytes": 1577058304,
+      "free_vram_mb": 7218,
+      "total_vram_mb": 11903
+    },
+    {
+      "context": 8192,
+      "dtype": "bf16",
+      "residence": "host",
+      "load_s": 0.2714664459228516,
+      "step_s": 0.3221314697265625,
+      "append_s": 0.05066502380371091,
+      "peak_bytes": 29360640,
+      "cache_bytes": 1579368448,
+      "device_bytes": 0,
+      "packed_bytes": 1577058304,
+      "free_vram_mb": 8718,
+      "total_vram_mb": 11903
+    },
+    {
+      "context": 4096,
+      "dtype": "bf16",
+      "residence": "gpu",
+      "load_s": 7.275200262665749e-05,
+      "step_s": 0.007122431993484497,
+      "append_s": 0.00704967999085784,
+      "peak_bytes": 794821120,
+      "cache_bytes": 790839296,
+      "device_bytes": 790839296,
+      "packed_bytes": 788529152,
+      "free_vram_mb": 7978,
+      "total_vram_mb": 11903
+    },
+    {
+      "context": 4096,
+      "dtype": "bf16",
+      "residence": "host",
+      "load_s": 0.13629808044433595,
+      "step_s": 0.17769819641113282,
+      "append_s": 0.04140011596679688,
+      "peak_bytes": 16777728,
+      "cache_bytes": 790839296,
+      "device_bytes": 0,
+      "packed_bytes": 788529152,
+      "free_vram_mb": 8736,
+      "total_vram_mb": 11903
+    }
+  ],
+  "verdicts": {
+    "S1": {
+      "measured": 1.0009581607328313,
+      "interval": [
+        0.85,
+        1.25
+      ],
+      "verdict": "CONFIRMED"
+    },
+    "S2": {
+      "measured": 4.708714832352475,
+      "interval": [
+        3.0,
+        4.1
+      ],
+      "verdict": "FALSIFIED"
+    },
+    "S3": {
+      "measured": 4.969516806174866,
+      "interval": [
+        3.4,
+        4.6
+      ],
+      "verdict": "FALSIFIED"
+    },
+    "S4": {
+      "measured": 0.20312518423249581,
+      "threshold": 0.1,
+      "verdict": "FALSIFIED"
+    },
+    "S5": {
+      "resident_ratio": 0.505979718038957,
+      "host_ratio": 2.6028729853342103,
+      "verdict": "FALSIFIED"
+    }
+  },
+  "link_GBs": 6.2,
+  "geometry": {
+    "layers": 94,
+    "h_kv": 4,
+    "head_dim": 128
+  }
+}

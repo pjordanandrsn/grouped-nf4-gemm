@@ -642,6 +642,63 @@ as arguments for that reason. The KV side of every figure is derived exactly
 from config; the weight side is a single anchored point and is labelled wherever
 it is used.
 
+### 15. #14's transfer model is measured, not assumed — and `pinned` is only half of `fast`
+
+#14 derived C4's whole window table from one unmeasured claim:
+`step_time = bytes / link`. `NF4KVCache(residence="host")` now exists and is
+byte-exact, so that claim was preregistered (`PREREG-kv-streaming.md`, stamped
+before any arm ran) and tested against the geometry of Qwen3-235B — 94 layers,
+4 kv heads, head_dim 128, synthetic, no weights, which is what lets a
+235B-shaped cache be measured on a 12 GB card.
+
+**The model holds to 1%.** Per-step transfer overhead, `t_host − t_gpu`, against
+the packed byte count over the measured 6.20 GB/s asymptote:
+
+| arm | bytes | predicted | measured | ratio |
+|---|---:|---:|---:|---:|
+| nf4 32K | 1.774 GB | 286.2 ms | 288.6 ms | **1.009** |
+| nf4 32K (replicate) | 1.774 GB | 286.2 ms | 286.4 ms | **1.001** |
+| bf16 8K | 1.578 GB | 254.4 ms | 271.4 ms | 1.067 |
+| bf16 4K | 0.789 GB | 127.2 ms | 136.2 ms | 1.071 |
+
+So #14's ceilings and `batch*` are describing the tier that actually exists, and
+**a faster link changes only the constant** — the shape of that window table
+does not need a rented box to be trusted. This also reverses the scoping call in
+#14: a *slow* link is the better place to test the law, because the transfer term
+dominates everything else.
+
+**The run's most valuable output was a bug it was not looking for.** The
+unquantized host path allocated its arena `[1, H, cap, D]` and handed out prefix
+views sliced on **dim 2** — non-contiguous. `is_pinned()` returns **True** for
+such a view, so every guard passed while the DMA collapsed to **0.09 GB/s
+against 0.95** on the same device, a 17× penalty across the full cache. Fixed by
+making the arena token-major `[cap, H, D]`, matching the packed layout.
+**Pinned is necessary and not sufficient; contiguous is the other half, and no
+API surface says so** — the only symptom is a number that looks like bad
+hardware.
+
+**Capacity delivers, at 4.9× rather than the 20× predicted.** Peak GPU allocated
+at 32K is 429 MB streamed against 2112 MB resident, and cache residency itself
+is zero. The registered `< 0.10` threshold was falsified because peak is
+dominated by ~340 MB of prefill transients present in *both* arms, which a ratio
+cannot cancel — a defect in how the prediction was operationalized, not in the
+feature.
+
+**Two other registered predictions failed and one is a methodology warning.**
+The resident path's append *is* O(T) (`torch.cat` reallocates the packed store
+per layer per step) but at device bandwidth that is ~9 ms, so per-call overhead
+across 94 layers dominates and the ratio runs backwards. And `t_host − t_gpu` is
+a difference of two separately-timed loops carrying ~±15 ms of noise: fine
+against a 286 ms overhead, useless against a 36 ms one. One prediction confirmed
+at 3.961 in the first run and would falsify at 4.970 in the second **from
+identical code**. Any future claim off this harness needs a difference large
+relative to that floor, or a direct measurement instead of a subtraction.
+
+**Scope.** One device, one geometry, no prefetch — copies and dequant serialize
+on the default stream, which is exactly what makes an *additive* model the right
+one to test. A prefetched implementation would break additivity by design and
+must not be scored against this.
+
 ## What this changes downstream
 
 - **C1** — every published VRAM figure gains its context qualifier; serving docs

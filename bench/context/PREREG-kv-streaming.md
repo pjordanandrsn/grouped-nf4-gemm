@@ -104,9 +104,83 @@ predicted overheads **35.8 / 71.5 / 286.2 ms** per step.
    leave safe headroom next to voice-tts on a 12 GB card. S2 is therefore scored
    at 8192, which is where it was registered, not chosen after seeing 32K fail.
 
+## Outcome
+
+Scored on the **registered run** (`receipts-stream-20260725/kv_stream_bench.json`).
+A2000, 94L × 4kv × 128d, median of 10 after warmup.
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| S1 overhead / (bytes/link) @32K | [0.85, 1.25] | **1.009** | **CONFIRMED** |
+| S2 bf16/nf4 overhead @8K | [3.0, 4.1] | **59.05** | **FALSIFIED** |
+| S3 overhead 32K/8K | [3.4, 4.6] | **3.961** | **CONFIRMED** |
+| S4 peak GPU streamed/resident @32K | < 0.10 | **0.2031** | **FALSIFIED** |
+| S5 append 32K/4K resident ≥ 4.0 | ≥ 4.0 | **0.63** | **FALSIFIED** |
+
+**S1 is the one that mattered and it is confirmed to 1%.** Measured overhead
+288.6 ms against 286.2 ms predicted from the packed byte count and the measured
+6.20 GB/s asymptote. It replicated at **1.001** on an independent later run.
+**Finding #14's model is validated on hardware**: `step_time = bytes / link`
+describes the streamed tier that exists, so the window table's shape stands and
+a faster link changes only the constant. The pre-committed decision fires — no
+rented box is needed to trust that table.
+
+**S2 was falsified by a real bug, which is the most useful thing this run did.**
+The raw (bf16) host path allocated its arena as `[1, H, cap, D]` and handed out
+prefix views sliced on **dim 2** — not contiguous. `is_pinned()` still returns
+**True** for such a view, so the harness precondition (confound 3) passed while
+the DMA fell off a cliff: **0.09 GB/s against 0.95** on the same device, a 17×
+penalty on the full cache. Fixed by making the raw arena token-major
+`[cap, H, D]`, matching the packed layout. The lesson is worth more than the
+fix: **pinned is necessary but not sufficient — contiguous is the other half,
+and nothing in the API says so.**
+
+**S4 was falsified by my threshold, not by the feature.** Peak GPU allocated is
+429 MB streamed against 2112 MB resident — a real **4.9×** reduction, and cache
+residency itself is 0 (`device_bytes()`). The 0.10 threshold assumed peak would
+be dominated by the cache; it is dominated by ~340 MB of prefill transients
+present in *both* arms, which the ratio cannot cancel. The prediction was
+measured after `build()`, so it scored peak-including-prefill rather than steady
+state. Recorded as falsified rather than re-operationalized.
+
+**S5 was falsified in the direction I did not consider.** The resident append
+*is* O(T) — `torch.cat` reallocates the whole packed store per layer per step —
+but at 1.77 GB against the A2000's ~200 GB/s of device bandwidth that is ~9 ms,
+small enough that per-call overhead across 94 layers dominates and the ratio
+runs *backwards* (0.63). The mechanism is real; the prediction that it would be
+visible at these sizes was wrong.
+
+### Post-fix follow-up — reported, NOT a rescoring
+
+Re-run after the contiguity fix (`kv_stream_bench_postfix.json`). The registered
+verdicts above stand; this is what the fixed code does.
+
+| arm | predicted | run 1 | run 2 (post-fix) |
+|---|---:|---:|---:|
+| nf4 32768 | 286.2 ms | 288.6 (1.009) | 286.4 (**1.001**) |
+| bf16 8192 | 254.4 ms | 4302.3 (16.9×) | 271.4 (**1.067**) |
+| bf16 4096 | 127.2 ms | 4531.1 (35.6×) | 136.2 (**1.071**) |
+| nf4 8192 | 71.5 ms | 72.9 (1.018) | 57.6 (0.806) |
+| nf4 4096 | 35.8 ms | 37.6 (1.052) | 47.1 (1.316) |
+
+Once the layout is fixed **every arm obeys the law**, bf16 included — which is
+the S2 hypothesis (the mechanism is bytes) confirmed by a route S2's own ratio
+form could not deliver.
+
+**A harness defect this exposes, stated plainly.** `t_host − t_gpu` is a
+difference of two separately-timed loops carrying ~±15 ms of noise. That is
+negligible against a 286 ms overhead (S1: 1.009 and 1.001 across runs) and
+crippling against a 36–72 ms one. **S3 confirmed at 3.961 in run 1 and would
+falsify at 4.970 in run 2 from identical code**, purely because its denominator
+is a small noisy difference; S2's ratio form has the same defect (4.709 post-fix
+against an exact 3.556). S1's interval was safe by luck of magnitude, not by
+design. Any future prediction built on this harness must be scored on a
+difference large relative to that floor, or measure the transfer directly rather
+than by subtraction.
+
 ## Scoring
 
-Results land in `receipts-stream-20260725/`. Each prediction is marked
+Results in `receipts-stream-20260725/`. Each prediction is marked
 **confirmed / falsified / void** with the measured value beside the predicted
 interval. Falsified entries stay in this document and are not edited to match
 what happened.
