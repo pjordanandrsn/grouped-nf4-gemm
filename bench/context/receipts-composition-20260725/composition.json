@@ -1,0 +1,91 @@
+{
+  "rows": [
+    {
+      "context": 4096,
+      "arm": "neither",
+      "weights_streamed": false,
+      "kv_streamed": false,
+      "s_per_step": 0.3122413853125181,
+      "peak_bytes": 25180957184,
+      "kv_device_bytes": 113688576
+    },
+    {
+      "context": 4096,
+      "arm": "W-only",
+      "weights_streamed": true,
+      "kv_streamed": false,
+      "s_per_step": 0.9306737575680017,
+      "peak_bytes": 25180957184,
+      "kv_device_bytes": 113688576
+    },
+    {
+      "context": 4096,
+      "arm": "KV-only",
+      "weights_streamed": false,
+      "kv_streamed": true,
+      "s_per_step": 0.30246469064150006,
+      "peak_bytes": 25067710976,
+      "kv_device_bytes": 0
+    },
+    {
+      "context": 4096,
+      "arm": "both",
+      "weights_streamed": true,
+      "kv_streamed": true,
+      "s_per_step": 0.9342296661925502,
+      "peak_bytes": 25067710976,
+      "kv_device_bytes": 0
+    },
+    {
+      "context": 32768,
+      "arm": "neither",
+      "weights_streamed": false,
+      "kv_streamed": false,
+      "s_per_step": 0.28242419831804,
+      "peak_bytes": 34803968512,
+      "kv_device_bytes": 906412032
+    },
+    {
+      "context": 32768,
+      "arm": "W-only",
+      "weights_streamed": true,
+      "kv_streamed": false,
+      "s_per_step": 0.9413664448074996,
+      "peak_bytes": 34803968512,
+      "kv_device_bytes": 906412032
+    },
+    {
+      "context": 32768,
+      "arm": "KV-only",
+      "weights_streamed": false,
+      "kv_streamed": true,
+      "s_per_step": 0.39268268609885126,
+      "peak_bytes": 33896950272,
+      "kv_device_bytes": 0
+    },
+    {
+      "context": 32768,
+      "arm": "both",
+      "weights_streamed": true,
+      "kv_streamed": true,
+      "s_per_step": 1.0227380625437945,
+      "peak_bytes": 33896950272,
+      "kv_device_bytes": 0
+    }
+  ],
+  "scoring": {
+    "M1a_4096": {
+      "w_cost_ms": 618.4323722554836,
+      "kv_cost_ms": -9.77669467101805,
+      "both_cost_ms": 621.9882808800321,
+      "additivity": 1.0219050011140598
+    },
+    "M1a_32768": {
+      "w_cost_ms": 658.9422464894596,
+      "kv_cost_ms": 110.25848778081127,
+      "both_cost_ms": 740.3138642257545,
+      "additivity": 0.962445602613834
+    }
+  },
+  "gate": true
+}

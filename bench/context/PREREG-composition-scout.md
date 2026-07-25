@@ -78,3 +78,51 @@ varies.
    flagship, not easier.
 3. This measures decode only. Prefill streams the same weights but pays the KV
    write rather than the read, and is not covered.
+
+## Outcome — the transfer law composes
+
+A100-SXM4-80GB, host link 18.89 GB/s, ~35 minutes, **$0.81**, terminated and
+verified at zero pods. Qwen3-30B-A3B, 48 layers, GQA 8:1, greedy decode.
+
+| ctx | neither | W-only | KV-only | both | W adds | KV adds | both adds | **additivity** |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 4096 | 312.2 | 930.7 | 302.5 | 934.2 | 618.4 | −9.8 | 622.0 | **1.022** |
+| 32768 | 282.4 | 941.4 | 392.7 | 1022.7 | 658.9 | 110.3 | 740.3 | **0.962** |
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| M1b **gate** ids identical across residence | exact | True | **CONFIRMED** |
+| M1a additivity @4096 | [0.85, 1.20] | **1.022** | **CONFIRMED** |
+| M1d does not degrade with context | ≥ a₀ − 0.20 | 1.022 → **0.962** | **CONFIRMED** |
+| M1c both-arm peak | < 10 GiB | **31.57 GiB** | **FALSIFIED — harness** |
+
+**The two streams add, with a hair of overlap.** At 32K the parts sum to
+769.2 ms and the composition costs 740.3 — **3.8% cheaper than the sum**, not
+more expensive. No interference. The flagship-with-context arithmetic is
+arithmetic.
+
+**And the shape is the useful part.** Weight streaming is the dominant term by
+6×: at 32K it adds **658.9 ms** against KV's **110.3 ms**. So on a
+weight-streamed decode, **going from 4K to 32K of context costs ~11% of the
+step** — 934 → 1023 ms — while holding **zero KV bytes on the device**. That is
+the claim the flagship needs, measured on a model whose GQA 8:1 makes it *harder*
+on the KV side than the 235B's 16:1.
+
+**M1c is falsified by my harness, not the configuration.** The script loads
+*both* model copies into one process so the arms can share a download — 22.16 GiB
+of resident weights sit unused during the streamed arms and land in every peak.
+Subtracting them puts the `both` arm near 9.4 GiB, which is under the threshold,
+but **that is an inference and not a measurement**; the clean number needs a
+single-model process and is not claimed here. What *is* measured: the `both` arm
+holds **0 MB of KV** on the device against 906 MB resident.
+
+**One weak arm, named rather than glossed.** At 4096 the KV term measured
+**−9.8 ms** — noise around a true cost of ~6 ms (110 MB at 18.89 GB/s). So
+M1a@4096's denominator is nearly all weight-cost, and the 1.022 is really a
+statement that adding a negligible term changes nothing. **The 32K row is the
+one that tests additivity**, and it is the one that carries the result.
+
+**Pre-committed decision fires: M1a confirmed → the 235B flagship run is worth
+its download.** Extrapolating the shape rather than the numbers: at 32K the
+235B's KV is ~1.65 GB/token against ~11.7 GB/token of weights — **~12% of the
+composed step**, which is what this scout measured at 11%.

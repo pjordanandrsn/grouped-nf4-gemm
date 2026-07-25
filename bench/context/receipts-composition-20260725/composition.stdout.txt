@@ -1,0 +1,31 @@
+Warning: Permanently added '[157.157.221.29]:18928' (ED25519) to the list of known hosts.
+  warnings.warn(
+[21:59:27]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[21:59:50]   quantized experts on 48/48 MoE layers (128 experts each)
+[21:59:50]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+loaded weights_streamed=False: resident 18.69 GiB
+[21:59:58]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[22:01:07]   quantized experts on 48/48 MoE layers (128 experts each)
+[22:01:07]   offloaded 48 layers' 4-bit experts to pinned CPU RAM (streamed to GPU one layer at a time during train/eval)
+[22:01:07]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+loaded weights_streamed=True: resident 22.16 GiB
+Qwen/Qwen3-30B-A3B: L=48 q=32 kv=4 (GQA 8:1)
+ctx=  4096 neither     312.2 ms/step  peak= 23.45 GiB  kv_on_device=  113.7 MB
+ctx=  4096 W-only      930.7 ms/step  peak= 23.45 GiB  kv_on_device=  113.7 MB
+ctx=  4096 KV-only     302.5 ms/step  peak= 23.35 GiB  kv_on_device=    0.0 MB
+ctx=  4096 both        934.2 ms/step  peak= 23.35 GiB  kv_on_device=    0.0 MB
+ctx= 32768 neither     282.4 ms/step  peak= 32.41 GiB  kv_on_device=  906.4 MB
+ctx= 32768 W-only      941.4 ms/step  peak= 32.41 GiB  kv_on_device=  906.4 MB
+ctx= 32768 KV-only     392.7 ms/step  peak= 31.57 GiB  kv_on_device=    0.0 MB
+ctx= 32768 both       1022.7 ms/step  peak= 31.57 GiB  kv_on_device=    0.0 MB
+
+=== M1 scoring ===
+ctx=  4096  W adds   618.4 ms | KV adds    -9.8 ms | both adds   622.0 ms | additivity 1.022
+ctx= 32768  W adds   658.9 ms | KV adds   110.3 ms | both adds   740.3 ms | additivity 0.962
+
+M1a @4096 = 1.022   [0.85,1.20] confirms, outside [0.70,1.60] falsifies  CONFIRMED
+M1b GATE ids identical across residence = True   CONFIRMED
+M1c both-arm peak = 31.57 GiB   <10 confirms, >14 falsifies  FALSIFIED
+M1d additivity 4096->32768: 1.022 -> 0.962   CONFIRMED
+
+wrote /root/work/composition.json
