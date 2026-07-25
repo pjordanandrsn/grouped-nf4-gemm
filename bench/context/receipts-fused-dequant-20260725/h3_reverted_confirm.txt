@@ -1,0 +1,4 @@
+   64      8    0.327     65.7
+
+BEST: 118.5 GB/s at rows=8 warps=8 (0.181 ms)
+H2a >=150 GB/s: FALSIFIED

@@ -179,3 +179,62 @@ rediscover it.
 
 The reference re-measured at **3.052 ms** here against 2.717 ms in H1 — the same
 ±12% band. The honest speedup is therefore **~13–16×**, not a point estimate.
+
+## Amendment 2 — H3: replace the codebook gather with a select tree
+
+Registered before it was written. H2 named the bottleneck and did not fix it:
+every output element does `tl.load(lut_ptr + code)`, **8.4M indexed loads per
+call** against a 16-entry table. The codebook is small enough to evaluate in
+registers — four levels of `tl.where` on the bits of `code`, 15 selects, no
+memory touched.
+
+**Track record.** I have now predicted this kernel's bandwidth once and been
+wrong: H2a said ≥150 GB/s and measured 113.1. The floor argument says the DRAM
+traffic is ~21.5 MB, which at this card's ~288 GB/s is 0.075 ms — so ~287 GB/s
+is the ceiling and there is room. Having room is not the same as reaching it,
+which is exactly what H2a got wrong.
+
+- **H3a.** Bandwidth ≥ **150 GB/s** at `[4096,16,128]` → bf16.
+  *Falsified below 130* — 113.1 plus this card's ±12% is ~127, so anything under
+  130 is indistinguishable from H2's kernel.
+- **H3b — gate.** Bit-identical to `dequant_kv_ref`, same shapes as H1b/H2b.
+  The 16 constants are read from `NF4_LUT` at call time and passed in, never
+  transcribed, so the tree cannot silently disagree with the reference about the
+  codebook. *Any mismatch discards it.*
+
+Reported, not predicted: end-to-end nf4/bf16 at 4096, currently 1.133×.
+
+## Outcome of H3 — falsified, and the diagnosis was wrong
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| H3b **gate** bit-identical | exact | exact, 4 shapes × 2 dtypes | **CONFIRMED** |
+| H3a bandwidth | ≥ 150 GB/s | **92.8 GB/s** | **FALSIFIED** |
+
+Not merely short of the target — **worse than the kernel it replaced**. The
+gather version reached 113.1 GB/s over the same 28-point sweep; the select tree
+peaked at 92.8 (rows=8, warps=2). **Reverted.** The gather is the shipped kernel.
+
+**H2 named the codebook gather as the bottleneck and H2 was wrong.** Fifteen
+`tl.where`s per element are 126M select operations per call, while the gather
+they replaced reads a **16-entry table that lives in L1** — a broadcast hit, not
+a trip to DRAM. Trading memory for ALU is the right instinct when the memory is
+far away, and this memory was not far away.
+
+So the remaining headroom from 113 GB/s toward the ~287 the byte count allows is
+**unexplained**, and no third diagnosis is offered here. Two have now been
+tested: strided stores (real, worth +13%) and the codebook gather (wrong, −18%).
+
+**Config drift, recorded rather than chased.** Re-sweeping the reverted kernel
+puts the peak at **117.3 GB/s at rows=8, warps=2**, where H2's sweep of the
+same code said 113.1 at rows=8, warps=1. The peak is a broad plateau and the
+argmax wanders inside this card's ±12%; the pinned `rows=8` is on that plateau
+under every sweep taken and is left alone. Re-pinning to whichever config won
+the most recent noisy sweep would be fitting the noise.
+
+**Running tally on this kernel, since it is the point of keeping score:** H1a
+confirmed (12.6×), H2a falsified (113 vs ≥150), H3a falsified (92.8 vs ≥150).
+Both performance *diagnoses* I have offered for it have been half right and
+fully wrong respectively, while the one prediction grounded in an existing
+measurement rather than a mechanism — H1 — landed. That is the same pattern F1
+noted and it is now three preregs deep.
