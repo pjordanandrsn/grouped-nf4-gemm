@@ -124,6 +124,63 @@ speed only, not values, and speed is not measured here. (iii) Selecting at chunk
 boundaries with chunk 128 is coarser than per-token H2O and should, if anything,
 *understate* H2O.
 
+### Amendment 3 — Experiment A pre-run specification
+
+Written and stamped **before A ran**, because implementing A surfaced six places
+where the text above does not determine what to do, and choosing after seeing
+results is the exact failure this document exists to prevent. Nothing here
+changes a prediction or an interval; it fixes free parameters and the
+arithmetic used to score them.
+
+1. **K is set so H2O and recency hold the same number of tokens.** The Arms
+   paragraph names `top-K` without a value. Standing rule 1 is matched BYTES,
+   and equal token counts at equal quantization *is* matched bytes, so
+   K = 64: sink4 + rec64 + top64 = 132 = sink4 + rec128.
+2. **A3 is scored at two budgets, both registered.** The Arms paragraph says
+   recency = sink4+rec128, but A3's interval is anchored to "recency's +3.316",
+   which is #11's sink4+**rec256** arm (+4.536 was rec128). The document is
+   internally inconsistent and I am not going to pick the convenient reading
+   after the fact. **Primary for A3: the 260-token pair** (recency sink4+rec256
+   vs H2O sink4+rec64+top192), because that is where A3's own cited reference
+   number lives. **Secondary: the 132-token pair**, because that is what Arms
+   lists. Both are reported with verdicts.
+3. **The keep-set is per LAYER, not per head.** The prereg accumulates attention
+   per (layer, kv head, key position) but never says at what granularity
+   selection happens. Per-head is not representable: the packed store is
+   `[T, H, D]` with one token axis shared by every head. Scores are therefore
+   summed over kv heads. This is coarser than published H2O and, like confound
+   (iii), should if anything **understate** H2O.
+4. **Induction runs 3 seeds (0, 1, 2); A1/A2 are scored on the mean**, per-seed
+   values reported. The fixture is one draw of 256 random ids and the seed was
+   never specified; a single draw invites a lucky or unlucky sequence to decide
+   a threshold.
+5. **Ratio thresholds are evaluated in log space.** A1 is falsified if recency
+   "retains more than half the full-cache induction gain", where gain =
+   ppl(first copy) / ppl(second copy); half of a multiplicative quantity is
+   `log g_recency / log g_full > 0.5`. A2's "lands closer to recency than to
+   full cache" is likewise a log-distance on second-copy ppl. Log space is the
+   natural reading for a ratio and is the choice that makes **my own
+   predictions easier to falsify** (a gain of 270x counts as "half" of 74,000x),
+   which is why it is chosen rather than the linear alternative.
+6. **A4 is read strictly**: the incremental Δppl from quantizing is computed for
+   *every* registered policy arm on both fixtures — wikitext on all-token ppl,
+   induction on second-copy ppl — and A4 is falsified if **any** value falls
+   outside [+0.05, +0.40]. An absolute-ppl interval transfers badly between
+   fixtures whose baselines differ by orders of magnitude; that is a defect in
+   the prediction as written, and it gets marked rather than reinterpreted.
+
+Two further disclosures, also pre-run:
+
+- **A2's budget clause is missed by 0.8pp.** 132 tokens is 25.8% of the
+  induction fixture's 512, against A2's "≤ 25%". A larger budget favours H2O, so
+  a *failed* A2 at 25.8% would also have failed at 25%. If A2 **passes**, it is
+  re-run at exactly 128 tokens before being called confirmed.
+- **All arms run eager attention**, not just H2O's. Confound (ii) accepted a
+  kernel difference between arms; there is no reason to, since the cost is speed
+  and speed is not measured here. The consequence is that this experiment's
+  full-fp16 baseline need not reproduce #11's 5.968 exactly, and it is reported
+  as its own absolute number per standing rule 3.
+
 ---
 
 ## Experiment B — single-pass fused decode kernel
