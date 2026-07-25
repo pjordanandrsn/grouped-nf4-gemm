@@ -1,0 +1,6 @@
+[4096,16,128] -> bf16 on NVIDIA RTX A2000 12GB
+  reference  synced   2.737 ms   amortized   2.461 ms  (   8.7 GB/s)
+  fused      synced   0.191 ms   amortized   0.099 ms  ( 217.4 GB/s)
+  speedup    synced  14.33x     amortized  24.89x
+  -> the synced ratio UNDERSTATES by 1.74x, because the
+     ~48% sync overhead on the fused arm is only ~10% on the reference

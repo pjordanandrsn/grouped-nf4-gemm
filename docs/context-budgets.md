@@ -931,10 +931,12 @@ the path, and **1.133× once that is a real kernel** (#18). Both numbers travel
 with the claim, in `kv_cache.py` and in C3 below.
 
 **And the cost grows with context — the worst possible direction**, because the
-dial exists *for* long context. 1.89× at 4K, 2.55× at 16K, still climbing:
-attention and dequant both scale with context while the MLP does not, so the
-ratio is heading for an asymptote it has not reached by 16K. Anyone reaching for
-this at 128K should expect worse than 2.6×, not better.
+dial exists *for* long context. ~~1.89× at 4K, 2.55× at 16K, still climbing…
+expect worse than 2.6× at 128K.~~ **Superseded.** With the oracle out of the path
+and measured on a quiet card, the growth is **1.114× at 4K → 1.156× at 32768**:
+**0.042 across an 8× context increase**. The direction was right and the
+magnitude was the A2000's noise plus the oracle. The warning stands as "mild and
+real", not as "expect worse than 2.6×".
 
 **Greedy ids diverge at position 1 of 33.** The first generated token can
 already differ. That is what a lossy cache means and it is consistent with
@@ -976,11 +978,16 @@ result.**
 A fused Triton kernel doing the same arithmetic in registers
 (`dequant_kv_fused`), registered and stamped before it was written:
 
-| | reference | fused |
-|---|---:|---:|
-| `[4096,16,128]` → bf16 | 2.717 ms | **0.215 ms** |
-| effective bandwidth | 7.9 GB/s | **99.9 GB/s** |
-| | | **12.62×** |
+| `[4096,16,128]` → bf16 | reference | fused | speedup |
+|---|---:|---:|---:|
+| synced per call (as first measured) | 2.729 ms | 0.187 ms | 14.6× |
+| **amortized** (K1's corrected stopwatch) | **2.544 ms** | **0.098 ms** | **26.1×** |
+| effective bandwidth, amortized | 8.4 GB/s | **220.3 GB/s** | |
+
+The synced figure **understates the speedup by 1.79×**: sync round-trips are ~48%
+of the fused arm and only ~7% of the reference, so the instrument flattered the
+thing it was measuring against. The honest number is **26×**, not the 12.6×
+first recorded.
 
 **Bit-identical**, `torch.equal`, across five shapes and both dtypes — including
 `777×3×64` and `1×1×128`, because a dequant correct only on round numbers is
