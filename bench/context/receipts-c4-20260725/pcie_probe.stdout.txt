@@ -1,0 +1,21 @@
+NVIDIA RTX A2000 12GB  link={'gen_max': '3', 'gen_current': '1', 'width_max': '16', 'width_current': '8', 'theoretical_GBs': 15.76}
+
+      MB  pinned GB/s  pageable GB/s  pinned ms
+  0.0625         2.47           2.16      0.027
+    0.25         5.16           4.38      0.051
+       1         5.89           4.90      0.178
+       4         6.08           5.14      0.689
+      16         5.96           5.74      2.815
+      64         6.20           5.70     10.820
+     256         6.20           5.29     43.327
+
+fit  t = c + n/B :  c = 25.6 us   B = 6.20 GB/s
+
+ layers  slice MB  split ms  blob ms  overhead  implied c
+     94      18.9    299.53   299.44     1.00x       0.9us
+     94       2.4     38.00    37.76     1.01x       2.6us
+     48      18.0    145.47   145.77     1.00x      -6.2us
+     30       6.4     32.52    32.35     1.01x       5.7us
+     16      36.0     97.02    96.87     1.00x       9.6us
+
+wrote /root/g/bench/context/pcie_probe.json

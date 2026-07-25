@@ -572,6 +572,72 @@ arbitrary-keep-set primitive (`NF4KVCache.evict_index`) is in e4b and tested; th
 H2O policy stays in `bench/context/`, unpromoted, exactly as the rejected
 low-rank probe did.
 
+### 14. Streaming the KV cache (C4) is worth nothing at batch 1, and the link decides the rest
+
+C4 says the cache becomes a streamed tier alongside the weights. Derived before
+building any of it, because the arithmetic is cheap and the conclusion is not
+the expected one.
+
+**The asymmetry that makes this its own problem.** Streamed *weights* amortize
+over a batch — one H2D copy of an expert serves every sequence in the step.
+Streamed *KV does not*: each sequence owns its cache, so
+
+```
+step_bytes = W + batch × KV(ctx)          tok/s = batch × link / step_bytes
+```
+
+Two numbers follow, and they are the whole decision:
+
+- **ceiling = link / KV(ctx)** — per-token KV bytes are constant in batch, so
+  this caps aggregate throughput at *every* batch size. It is also exactly what
+  you get when the weights are resident and only the cache streams.
+- **batch\* = W / KV(ctx)** — where KV traffic overtakes weight traffic. Past it
+  the thing you increased to amortize the weights is what you are now paying for.
+
+**NF4 moves batch\* by exactly 32/9.** bf16 KV costs 2 B/element; NF4 costs
+0.5 + 4/64 = 0.5625. For Qwen3-235B at 32K against the one anchored weight
+stream (~11.7 GB/token, back-solved from `RESULTS-ikllama-ab.md`'s 26.74 GB/s ÷
+2.29 tok/s, valid only if that arm was purely transfer-bound), batch\* goes
+**1.9 → 6.6**. That is a justification for KV quantization with nothing to do
+with fitting in VRAM: in a streamed regime it buys *batch headroom*.
+
+**The measured link, and one refuted concern.** The A2000 sustains **6.20 GB/s**
+pinned H2D — consistent with PCIe 3.0 x8, and **4.3× below** the 26.74 GB/s box
+the transfer law was measured on. The fit gives a 25.6 µs per-copy fixed cost,
+which looked alarming (a 94-layer model paying `94 × c` per token), but the
+decode shape refutes it: **94 separate slices cost 1.00× one blob of the same
+bytes**. Queued copies pipeline, so `L × c` is not a term — it only bites a
+design that synchronizes per layer, which is therefore the design to avoid.
+
+**Whether C4 pays at all, as a function of batch.** A cell is a genuine window
+only if the resident NF4 cache does *not* fit **and** the streamed ceiling still
+meets the target. 21 model×context cells, 8 GB free for KV, 5 tok/s target:
+
+| target batch | link 6.20 (A2000) | link 26.74 (reference box) |
+|---|---:|---:|
+| 1 | 0 / 21 | **0 / 21** |
+| 8 | 1 / 21 | 6 / 21 |
+| 32 | — | 10 / 21 |
+
+At batch 8 on the reference box the breakdown is **14 resident-already-fits, 6
+window, 1 impossible** (Qwen3-235B at 128K, whose 3.8 tok/s ceiling no batching
+can lift). So:
+
+- **At batch 1, C4 is unnecessary everywhere.** Finding #10's NF4 cache already
+  fits every cell — C3 solved the single-sequence case outright.
+- **C4 is a batch-regime capacity feature**, exactly as the C4 line said, and its
+  value is monotone in batch.
+- **On the A2000 the window is 1/21 and that cell is OLMoE-1B-7B.** Building and
+  measuring C4 here would characterize a regime that does not exist; the honest
+  perf number needs a gen4/5 ×16 link.
+
+**Scope.** The window criteria (free VRAM, target batch, target tok/s) are
+parameters, not facts — the table above uses plausible defaults, and a real
+deployment target changes which cells light up. `kv_stream_budget.py` takes them
+as arguments for that reason. The KV side of every figure is derived exactly
+from config; the weight side is a single anchored point and is labelled wherever
+it is used.
+
 ## What this changes downstream
 
 - **C1** — every published VRAM figure gains its context qualifier; serving docs
@@ -596,13 +662,25 @@ low-rank probe did.
   have; the asymmetric-precision decision therefore belongs to the real-scale
   perplexity gate, not to this fixture.
 - **C4** — for the batch regime, KV becomes a streamed tier alongside the weights;
-  the transfer law gains a KV term (`bytes_per_token = cold_weights + 2 × KV_layer_slice`).
+  the transfer law gains a KV term. **Scoped by finding #14 and not built**: the
+  term is `W + batch × KV(ctx)` (KV does not amortize over batch the way weights
+  do), which makes C4 worth **nothing at batch 1** — the resident NF4 cache
+  already fits every cell measured — and worth progressively more as batch grows
+  (6/21 cells at batch 8, 10/21 at batch 32, on a 26.74 GB/s link). Two design
+  constraints fall out of the probe: never synchronize per layer (queued copies
+  pipeline; 94 slices cost 1.00× one blob), and do not measure this on the
+  A2000, whose 6.20 GB/s gen3 ×8 link opens only 1/21 cells.
 
 ## Reproducing
 
 `bench/context/kv_budget.py` (derivation, from config.json only) and
 `bench/context/kv_verify.py` (the A2000 rung-one probe). Receipts:
 `bench/context/receipts-c0-20260724/`.
+
+Finding #14: `bench/context/pcie_probe.py` (link characterization — device
+measurement, no hypothesis, so no prereg) and `bench/context/kv_stream_budget.py`
+(the C4 derivation; `--link`, `--vram-free`, `--target-batch`, `--target-tps`).
+Receipts: `bench/context/receipts-c4-20260725/`.
 
 Finding #13: `bench/context/attn_select.py` is the registered harness (both
 fixtures, all policies) with `attn_select_smoke.py` as its pre-flight; the four

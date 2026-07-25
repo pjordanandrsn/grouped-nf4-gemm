@@ -1,0 +1,122 @@
+NF4 KV compression: 3.5556x  (0.5625 vs 2.0 B/element, derived)
+link: 26.74 GB/s  per-copy fixed cost: 0.0 us  [argument]
+
+=== KV per SEQUENCE, and the aggregate tok/s ceiling it imposes ===
+ceiling = link / KV(ctx): the cap as batch -> inf, i.e. what you get
+when the weights are RESIDENT and only the cache streams.
+
+model                                ctx   bf16 GB   nf4 GB  bf16 tok/s  nf4 tok/s
+Qwen/Qwen3-235B-A22B-Instruct-2507    4096     0.789    0.222        33.9      120.6
+Qwen/Qwen3-235B-A22B-Instruct-2507   32768     6.308    1.774         4.2       15.1
+Qwen/Qwen3-235B-A22B-Instruct-2507  131072    25.233    7.097         1.1        3.8
+Qwen/Qwen3-30B-A3B                  4096     0.403    0.113        66.4      236.1
+Qwen/Qwen3-30B-A3B                 32768     3.221    0.906         8.3       29.5
+Qwen/Qwen3-30B-A3B                131072    12.885    3.624         2.1        7.4
+openai/gpt-oss-20b                  4096     0.104    0.029       257.6      916.1
+openai/gpt-oss-20b                 32768     0.808    0.227        33.1      117.6
+openai/gpt-oss-20b                131072     3.224    0.907         8.3       29.5
+openai/gpt-oss-120b                 4096     0.156    0.044       171.8      610.7
+openai/gpt-oss-120b                32768     1.213    0.341        22.1       78.4
+openai/gpt-oss-120b               131072     4.837    1.360         5.5       19.7
+google/gemma-4-26B-A4B              4096     0.293    0.083        91.1      324.1
+google/gemma-4-26B-A4B             32768     0.881    0.248        30.4      108.0
+google/gemma-4-26B-A4B            131072     2.894    0.814         9.2       32.9
+allenai/OLMoE-1B-7B-0924            4096     0.537    0.151        49.8      177.1
+allenai/OLMoE-1B-7B-0924           32768     4.295    1.208         6.2       22.1
+allenai/OLMoE-1B-7B-0924          131072    17.180    4.832         1.6        5.5
+moonshotai/Kimi-K2-Instruct         4096     0.288    0.081        92.9      330.3
+moonshotai/Kimi-K2-Instruct        32768     2.303    0.648        11.6       41.3
+moonshotai/Kimi-K2-Instruct       131072     9.211    2.591         2.9       10.3
+
+=== batch* = W / KV : where KV traffic overtakes weight traffic ===
+Below batch*, batching amortizes the weight stream and KV rides along.
+Above it, further batching mostly buys more KV traffic.
+
+model                                ctx   fmt  W=2GB  W=6GB  W=12GB  W=24GB
+Qwen/Qwen3-235B-A22B-Instruct-2507    4096  bf16      2.5      7.6     15.2     30.4
+Qwen/Qwen3-235B-A22B-Instruct-2507    4096   nf4      9.0     27.1     54.1    108.2
+Qwen/Qwen3-235B-A22B-Instruct-2507   32768  bf16      0.3      1.0      1.9      3.8
+Qwen/Qwen3-235B-A22B-Instruct-2507   32768   nf4      1.1      3.4      6.8     13.5
+Qwen/Qwen3-235B-A22B-Instruct-2507  131072  bf16      0.1      0.2      0.5      1.0
+Qwen/Qwen3-235B-A22B-Instruct-2507  131072   nf4      0.3      0.8      1.7      3.4
+Qwen/Qwen3-30B-A3B                  4096  bf16      5.0     14.9     29.8     59.6
+Qwen/Qwen3-30B-A3B                  4096   nf4     17.7     53.0    106.0    211.9
+Qwen/Qwen3-30B-A3B                 32768  bf16      0.6      1.9      3.7      7.5
+Qwen/Qwen3-30B-A3B                 32768   nf4      2.2      6.6     13.2     26.5
+Qwen/Qwen3-30B-A3B                131072  bf16      0.2      0.5      0.9      1.9
+Qwen/Qwen3-30B-A3B                131072   nf4      0.6      1.7      3.3      6.6
+openai/gpt-oss-20b                  4096  bf16     19.3     57.8    115.6    231.2
+openai/gpt-oss-20b                  4096   nf4     68.5    205.6    411.1    822.2
+openai/gpt-oss-20b                 32768  bf16      2.5      7.4     14.8     29.7
+openai/gpt-oss-20b                 32768   nf4      8.8     26.4     52.8    105.6
+openai/gpt-oss-20b                131072  bf16      0.6      1.9      3.7      7.4
+openai/gpt-oss-20b                131072   nf4      2.2      6.6     13.2     26.5
+openai/gpt-oss-120b                 4096  bf16     12.8     38.5     77.1    154.2
+openai/gpt-oss-120b                 4096   nf4     45.7    137.0    274.1    548.1
+openai/gpt-oss-120b                32768  bf16      1.6      4.9      9.9     19.8
+openai/gpt-oss-120b                32768   nf4      5.9     17.6     35.2     70.4
+openai/gpt-oss-120b               131072  bf16      0.4      1.2      2.5      5.0
+openai/gpt-oss-120b               131072   nf4      1.5      4.4      8.8     17.6
+google/gemma-4-26B-A4B              4096  bf16      6.8     20.5     40.9     81.8
+google/gemma-4-26B-A4B              4096   nf4     24.2     72.7    145.4    290.8
+google/gemma-4-26B-A4B             32768  bf16      2.3      6.8     13.6     27.3
+google/gemma-4-26B-A4B             32768   nf4      8.1     24.2     48.5     96.9
+google/gemma-4-26B-A4B            131072  bf16      0.7      2.1      4.1      8.3
+google/gemma-4-26B-A4B            131072   nf4      2.5      7.4     14.7     29.5
+allenai/OLMoE-1B-7B-0924            4096  bf16      3.7     11.2     22.4     44.7
+allenai/OLMoE-1B-7B-0924            4096   nf4     13.2     39.7     79.5    158.9
+allenai/OLMoE-1B-7B-0924           32768  bf16      0.5      1.4      2.8      5.6
+allenai/OLMoE-1B-7B-0924           32768   nf4      1.7      5.0      9.9     19.9
+allenai/OLMoE-1B-7B-0924          131072  bf16      0.1      0.3      0.7      1.4
+allenai/OLMoE-1B-7B-0924          131072   nf4      0.4      1.2      2.5      5.0
+moonshotai/Kimi-K2-Instruct         4096  bf16      6.9     20.8     41.7     83.4
+moonshotai/Kimi-K2-Instruct         4096   nf4     24.7     74.1    148.2    296.5
+moonshotai/Kimi-K2-Instruct        32768  bf16      0.9      2.6      5.2     10.4
+moonshotai/Kimi-K2-Instruct        32768   nf4      3.1      9.3     18.5     37.1
+moonshotai/Kimi-K2-Instruct       131072  bf16      0.2      0.7      1.3      2.6
+moonshotai/Kimi-K2-Instruct       131072   nf4      0.8      2.3      4.6      9.3
+
+=== anchored point: Qwen3-235B, W = 11.7 GB/token ===
+Back-solved from RESULTS-ikllama-ab.md (26.74 GB/s / 2.29 tok/s), which
+assumes that arm was purely transfer-bound. Verify before building on it.
+
+    ctx   fmt   KV GB  batch*  KV share @b=1  tok/s @b=1
+   4096  bf16   0.789    14.8           6.3%        2.15
+   4096   nf4   0.222    52.7           1.9%        2.25
+  32768  bf16   6.308     1.9          35.1%        1.49
+  32768   nf4   1.774     6.6          13.2%        1.99
+ 131072  bf16  25.233     0.5          68.4%        0.72
+ 131072   nf4   7.097     1.6          37.8%        1.42
+
+=== does C4 have a window? (free VRAM 8 GB, target batch 8, target 5 tok/s aggregate) ===
+Streaming only earns its build if BOTH hold: the resident NF4 cache
+does NOT fit, AND the streamed ceiling still meets the target. If the
+cache fits, C3 already solved it; if the ceiling is below target, no
+amount of engineering on this link gets there.
+
+model                                ctx resident b streamed b  ceiling  verdict
+Qwen/Qwen3-235B-A22B-Instruct-2507    4096         36       1695    120.6  resident already fits — C3 is enough
+Qwen/Qwen3-235B-A22B-Instruct-2507   32768          4        211     15.1  **WINDOW** — streaming is the only way to fit
+Qwen/Qwen3-235B-A22B-Instruct-2507  131072          1         52      3.8  IMPOSSIBLE — ceiling 3.8 < target
+Qwen/Qwen3-30B-A3B                  4096         70       1695    236.1  resident already fits — C3 is enough
+Qwen/Qwen3-30B-A3B                 32768          8        211     29.5  resident already fits — C3 is enough
+Qwen/Qwen3-30B-A3B                131072          2         52      7.4  **WINDOW** — streaming is the only way to fit
+openai/gpt-oss-20b                  4096        274       3288    916.1  resident already fits — C3 is enough
+openai/gpt-oss-20b                 32768         35        422    117.6  resident already fits — C3 is enough
+openai/gpt-oss-20b                131072          8        105     29.5  resident already fits — C3 is enough
+openai/gpt-oss-120b                 4096        182       3288    610.7  resident already fits — C3 is enough
+openai/gpt-oss-120b                32768         23        422     78.4  resident already fits — C3 is enough
+openai/gpt-oss-120b               131072          5        105     19.7  **WINDOW** — streaming is the only way to fit
+google/gemma-4-26B-A4B              4096         96       1454    324.1  resident already fits — C3 is enough
+google/gemma-4-26B-A4B             32768         32        484    108.0  resident already fits — C3 is enough
+google/gemma-4-26B-A4B            131072          9        147     32.9  resident already fits — C3 is enough
+allenai/OLMoE-1B-7B-0924            4096         52        423    177.1  resident already fits — C3 is enough
+allenai/OLMoE-1B-7B-0924           32768          6         52     22.1  **WINDOW** — streaming is the only way to fit
+allenai/OLMoE-1B-7B-0924          131072          1         13      5.5  **WINDOW** — streaming is the only way to fit
+moonshotai/Kimi-K2-Instruct         4096         98       3014    330.3  resident already fits — C3 is enough
+moonshotai/Kimi-K2-Instruct        32768         12        376     41.3  resident already fits — C3 is enough
+moonshotai/Kimi-K2-Instruct       131072          3         94     10.3  **WINDOW** — streaming is the only way to fit
+
+6/21 cells are a genuine window for C4 at this link and budget.
+
+wrote receipts-c4-20260725/kv_stream_link2674.json
