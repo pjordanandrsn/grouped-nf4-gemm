@@ -703,9 +703,26 @@ must not be scored against this.
 
 - **C1** — every published VRAM figure gains its context qualifier; serving docs
   gain a 512-vs-32K worked example.
-- **C2** — `plan_placement()` takes `context_len` and subtracts `KV(context)`
-  from the budget **before** hot-set sizing, and records the planned context in
-  its receipt (a plan computed at 512 and run at 32K is the failure mode).
+- **C2** — **CLOSED, not built.** The original item was `plan_placement()`
+  taking `context_len` and subtracting `KV(context)` from the budget before
+  hot-set sizing. That function does not exist, and building it would put the
+  **first policy** into a library that is deliberately mechanism-only
+  everywhere else: `enable_hot_residency` and `enable_pipelined_residency` both
+  *take* `hot_sets` rather than computing them, `expert_profile` emits routing
+  data without deciding anything, `serve.py`'s `vram_fraction` is a cap rather
+  than a plan, and both rejected KV policies (low-rank, H2O selection) were kept
+  in `bench/` for exactly this reason.
+  A planner also needs facts the library cannot have — batch size, target
+  throughput, whether weights stream, and how much VRAM belongs to some other
+  process. That last one is not hypothetical: the A2000 these results were
+  measured on permanently holds ~3 GB for an unrelated home-lab service, so a
+  planner reading free VRAM would plan against a number that moves for reasons
+  the model knows nothing about. **Placement policy belongs to the deployment.**
+  The failure mode C2 named — a plan computed at 512 and run at 32K — is real,
+  and what it actually needs is the KV term being *visible* at plan time, which
+  `bench/context/kv_budget.py` already provides from config alone. No accessor
+  was added to e4b to wrap it: nothing in that library sizes hot sets, so it
+  would be API with no caller.
 - **C3** — KV quantization. **Implemented and measured** for nf4: `kernel/nf4_kv.py`
   (attention that reads a 4-bit cache in the mainloop) with `kernel/test_nf4_kv.py`,
   21/21 on the A2000. Corrections to the estimate this document originally carried:
