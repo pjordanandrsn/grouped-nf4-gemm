@@ -227,6 +227,105 @@ conclusion is that a 4-bit cache cannot be read competitively at decode shapes
 on this hardware without a different data layout, and the memory dial keeps its
 documented latency cost.
 
+### Outcome of B5, and amendment 1 (B6)
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| B5a split vs two-pass @32K | 1.2–2.5× | **0.90×** | **FALSIFIED** |
+| B5b split vs fp16 @32K | 1.0–2.2× | 2.63× | outside interval |
+| B5c 4K no regression | ≥ 1.11× | **0.96×** | **FALSIFIED** |
+| B5d numerics < 2e-3 | — | passes, incl. splits 1/2/3/8/64 | confirmed |
+
+Split-K improved exactly what it targeted (17.32 → 15.46 ms at 32K, so the
+occupancy diagnosis was directionally right) and still lost to the plain
+two-pass path. **The pre-committed decision fires: two-pass stays the decode
+default, the fused and split kernels are experimental, and the docs keep the
+2.5–3× latency caveat.** That is not reopened by what follows.
+
+**Diagnostic (exploratory, not a registered test).** At 32K the NF4 path moves
+~19 MB against fp16's ~67 MB — 3.5× fewer bytes, 2.4× slower — so it was never
+memory-bound and the B1/B5 traffic-and-occupancy models were both answering the
+wrong question. Holding H_kv=4 and varying H_q, with **byte-identical inputs**:
+
+| H_q | GQA | ms |
+|---:|---|---:|
+| 4 | 1:1 | 5.593 |
+| 8 | 2:1 | 5.332 |
+| 16 | 4:1 | 4.598 |
+| 32 | 8:1 | 8.334 |
+| 64 | 16:1 | 13.834 |
+
+Below H_q=16 time falls as occupancy fills; above it, time scales linearly with
+query heads at constant bytes. `grid=(H_q, ...)` makes each query head
+re-dequantize the same kv bytes, so GQA 16:1 does **16× redundant dequant ALU**.
+At 1:1 with 4 heads the kernel is 5.59 ms against fp16's 5.87 ms for 16× more
+query heads.
+
+### B6 — one program per KV head, dequantize once, batch the query heads
+
+Restructure to `grid=(H_kv, block)`: dequantize each K/V block once, then
+compute scores for all `GQA` query heads sharing it. Dequant work drops by the
+GQA factor and the per-head GEMV becomes a small `[GQA, D] x [D, BLOCK_T]` GEMM.
+
+**Track record disclosure:** B1, B2, B5a and B5c were all falsified, so my
+predictions about this kernel's performance have been wrong four times. The
+interval below is deliberately wide and the mechanism is measured rather than
+modelled — but treat the point estimate as weakly held.
+
+- **B6a.** GQA-batched vs two-pass @32K, H_q=64: **1.5–6.0×** faster.
+  *Falsified if* ≤ 1.0×.
+- **B6b.** GQA-batched vs fp16 SDPA @32K: **≤ 1.3×**, i.e. at or near parity.
+  *Falsified if* > 2.0×.
+- **B6c.** The speedup tracks the GQA ratio: gain at 16:1 exceeds gain at 4:1,
+  since the redundancy removed is proportional to GQA.
+  *Falsified if* the 4:1 gain is within 20% of the 16:1 gain.
+- **B6d.** Numerics agree with two-pass < 2e-3, including extreme logits.
+
+**Pre-committed decision.** If B6a and B6b both hold, the GQA-batched kernel
+becomes the decode default and the latency caveat is removed. If B6a fails, the
+kernel line is closed for this project — three registered attempts is enough,
+and the conclusion stands that a 4-bit cache is a memory dial with a latency
+cost on this hardware, not a free one.
+
+### Outcome of B6 — confirmed
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| B6a gqa vs two-pass @32K 16:1 | 1.5–6.0× | **2.81×** | **CONFIRMED** |
+| B6b gqa vs fp16 SDPA @32K | ≤ 1.3× | **0.82×** | **CONFIRMED** |
+| B6c gain tracks GQA ratio | 16:1 > 1.2 × 4:1 | 2.81× vs 1.12× | **CONFIRMED** |
+| B6d numerics < 2e-3 | — | passes at ieee; 8/8 | **CONFIRMED** |
+
+T=32768, H_kv=4, D=128, A2000, median of 25 after warmup, block_t 128 for every
+arm:
+
+| H_q | GQA | two-pass | split | gqa-ieee | gqa-tf32 | fp16 SDPA |
+|---:|---|---:|---:|---:|---:|---:|
+| 16 | 4:1 | 5.943 ms | 5.572 | 5.317 | 2.030 | 1.158 |
+| 64 | 16:1 | 13.997 ms | 15.950 | **4.975** | 2.355 | 6.055 |
+
+**Pre-committed decision fires: the GQA-batched kernel becomes the decode
+default and the 2.5–3× latency caveat is removed** — replaced by the measured
+figure, which is regime-dependent (below).
+
+B6c matters more than B6a: it validates the *diagnosis*, not just the outcome.
+The gain is proportional to the redundancy removed, which is what
+"dequant ran per query head" predicts and what a lucky tuning change would not.
+
+**Scope, stated because the headline is easy to over-read.** The 0.82× holds at
+GQA **16:1** and 32K. At 4:1 the same kernel is 1.12× vs two-pass and **4.59×
+slower than fp16**, because there is little redundancy to remove and fp16 SDPA
+at 16 heads is simply fast (1.158 ms). So: "a 4-bit cache can be read at or
+below fp16 cost **in the high-GQA long-context regime**" — which is where
+current models live (Qwen3 16:1, gpt-oss 8:1) — not "4-bit attention is free
+everywhere". One device, one shape family.
+
+`input_precision="ieee"` is the default and costs **2.11×** against tf32
+(4.975 vs 2.355 ms). tf32 measured 2.7e-3 relative error at logits ~40×, which
+is small but is a second error source stacked on quantization error; ieee keeps
+the two separable. The knob is exposed and the cost is recorded rather than
+buried.
+
 ## Scoring
 
 Results land in `receipts-*/`, and each prediction above gets marked

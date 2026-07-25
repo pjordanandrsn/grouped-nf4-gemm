@@ -19,7 +19,7 @@ import torch
 
 from nf4_grouped import BLOCKSIZE
 from nf4_kv import (PERCHANNEL_GROUP, attend_nf4_kv, attend_nf4_kv_fused,
-                    attend_nf4_kv_split,
+                    attend_nf4_kv_split, attend_nf4_kv_gqa,
                     dequant_kv_ref,
                     kv_cache_bytes, kv_cache_bytes_perchannel, kv_scores_nf4,
                     kv_weighted_sum_nf4, quantize_kv, quantize_kv_perchannel)
@@ -469,3 +469,45 @@ def test_split_survives_extreme_logits():
     ref = attend_nf4_kv(q, kp, ka, vp, va, scale=1.0)
     assert torch.isfinite(got).all()
     assert ((got - ref).norm() / ref.norm()).item() < 2e-3
+
+
+@cuda
+@pytest.mark.parametrize("T,H_q,H_kv,D", SHAPES)
+def test_gqa_batched_matches_two_pass(T, H_q, H_kv, D):
+    """B6d. Covers GQA 1:1 (BLOCK_M padded to the tl.dot minimum of 16) as well
+    as 16:1, since the padding mask is where a batched kernel goes wrong."""
+    _, kp, ka = _cache(T, H_kv, D, seed=50)
+    _, vp, va = _cache(T, H_kv, D, seed=51)
+    q = torch.randn(H_q, D, device="cuda", dtype=torch.float32) * 0.5
+    ref = attend_nf4_kv(q, kp, ka, vp, va)
+    got = attend_nf4_kv_gqa(q, kp, ka, vp, va)
+    assert ((got - ref).norm() / ref.norm()).item() < 2e-3
+
+
+@cuda
+def test_gqa_batched_survives_extreme_logits():
+    T, H_q, H_kv, D = 4096, 32, 4, 128
+    _, kp, ka = _cache(T, H_kv, D, seed=52)
+    _, vp, va = _cache(T, H_kv, D, seed=53)
+    q = torch.randn(H_q, D, device="cuda", dtype=torch.float32) * 40.0
+    got = attend_nf4_kv_gqa(q, kp, ka, vp, va, scale=1.0)
+    ref = attend_nf4_kv(q, kp, ka, vp, va, scale=1.0)
+    assert torch.isfinite(got).all()
+    assert ((got - ref).norm() / ref.norm()).item() < 2e-3
+
+
+@cuda
+def test_gqa_tf32_is_measurably_worse_than_ieee():
+    """Records WHY ieee is the default: tf32's ~10-bit mantissa is a second
+    error source on top of quantization, and at extreme logits it exceeds the
+    tolerance the ieee path meets. Kept as a test so the default cannot be
+    flipped for speed without the number showing up."""
+    T, H_q, H_kv, D = 4096, 32, 4, 128
+    _, kp, ka = _cache(T, H_kv, D, seed=52)
+    _, vp, va = _cache(T, H_kv, D, seed=53)
+    q = torch.randn(H_q, D, device="cuda", dtype=torch.float32) * 40.0
+    ref = attend_nf4_kv(q, kp, ka, vp, va, scale=1.0)
+    e_ieee = _rel(attend_nf4_kv_gqa(q, kp, ka, vp, va, scale=1.0, precision="ieee"), ref)
+    e_tf32 = _rel(attend_nf4_kv_gqa(q, kp, ka, vp, va, scale=1.0, precision="tf32"), ref)
+    assert e_ieee < 2e-3, e_ieee
+    assert e_tf32 > e_ieee, (e_tf32, e_ieee)

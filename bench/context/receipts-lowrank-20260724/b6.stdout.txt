@@ -1,0 +1,13 @@
+  import pynvml  # type: ignore[import]
+free 8.58 GB of 11.62 GB   NVIDIA RTX A2000 12GB
+
+T=32768, H_kv=4, D=128
+ H_q   GQA  two-pass    split  gqa-ieee  gqa-tf32    fp16  gqa/two  gqa/fp16
+  16    4:1    5.943m   5.572m    5.317m    2.030m  1.158m    1.12x     4.59x
+  64   16:1   13.997m  15.950m    4.975m    2.355m  6.055m    2.81x     0.82x
+
+PREREG SCORING — B6 (registered + STAMPED before this run)
+  B6a gqa vs two-pass @32K 16:1  pred 1.5-6.0x  got 2.81x  CONFIRMED
+  B6b gqa vs fp16 @32K           pred <=1.3x    got 0.82x  CONFIRMED
+  B6c gain tracks GQA ratio      16:1 2.81x vs 4:1 1.12x  CONFIRMED
+  tf32 vs ieee speed: 2.11x (correctness cost of ieee)

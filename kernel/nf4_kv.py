@@ -35,7 +35,7 @@ import torch
 import triton
 import triton.language as tl
 
-from nf4_grouped import BLOCKSIZE, NF4_LUT, _lut
+from nf4_grouped import BLOCKSIZE, NF4_LUT, _device_shared_limit, _lut
 
 __all__ = [
     "quantize_kv",
@@ -47,6 +47,7 @@ __all__ = [
     "attend_nf4_kv",
     "attend_nf4_kv_fused",
     "attend_nf4_kv_split",
+    "attend_nf4_kv_gqa",
     "kv_cache_bytes",
     "kv_cache_bytes_perchannel",
 ]
@@ -612,3 +613,165 @@ def attend_nf4_kv_split(q: torch.Tensor, k_packed: torch.Tensor, k_absmax: torch
     _kv_combine[(H_q,)](m, l, acc, out, D, BLOCK_D=bd,
                         S_P2=triton.next_power_of_2(splits), S=splits)
     return out
+
+
+@triton.jit
+def _kv_scores_gqa(q_ptr, k_ptr, ka_ptr, out_ptr, lut_ptr,
+                   T, D, GQA, stride_kt, stride_kh, stride_at, stride_ah,
+                   BLOCK_T: tl.constexpr, BLOCK_D: tl.constexpr,
+                   BLOCK_M: tl.constexpr, QBLK: tl.constexpr, TGRP: tl.constexpr,
+                   PREC: tl.constexpr):
+    """scores for ALL query heads sharing one kv head, dequantizing K once.
+
+    The measured problem with ``grid=(H_q, ...)``: dequant work scaled with
+    QUERY heads while the bytes are indexed by KV heads, so GQA 16:1 paid 16x
+    redundant ALU on byte-identical input (5.59 ms at 1:1 vs 13.83 ms at 16:1,
+    same 4 kv heads). Here the grid is over kv heads, the block is dequantized
+    once, and the per-head dot products become one [GQA, D] x [D, BLOCK_T] dot.
+    """
+    hkv = tl.program_id(0)
+    pid_t = tl.program_id(1)
+    offs_t = pid_t * BLOCK_T + tl.arange(0, BLOCK_T)
+    t_mask = offs_t < T
+    offs_d = tl.arange(0, BLOCK_D)
+    d_mask = offs_d < D
+    offs_m = tl.arange(0, BLOCK_M)
+    m_mask = offs_m < GQA
+
+    kb = k_ptr + offs_t[:, None] * stride_kt + hkv * stride_kh
+    m2 = t_mask[:, None] & d_mask[None, :]
+    byts = tl.load(kb + (offs_d[None, :] // 2), mask=m2, other=0).to(tl.int32)
+    nib = tl.where((offs_d[None, :] % 2) == 0, (byts >> 4) & 0xF, byts & 0xF)
+    am = tl.load(ka_ptr + (offs_t[:, None] // TGRP) * stride_at + hkv * stride_ah
+                 + (offs_d[None, :] // QBLK), mask=m2, other=0.0)
+    kblk = tl.load(lut_ptr + nib) * am                       # [BLOCK_T, BLOCK_D]
+
+    # q rows for the GQA heads that map to this kv head
+    qrow = hkv * GQA + offs_m
+    q = tl.load(q_ptr + qrow[:, None] * D + offs_d[None, :],
+                mask=m_mask[:, None] & d_mask[None, :], other=0.0).to(tl.float32)
+    # input_precision matters here: tl.dot defaults to TF32 on Ampere (~10-bit
+    # mantissa), which measured 2.7e-3 relative error at logits ~40x -- small,
+    # but it is a SECOND error source stacked on the quantization error this
+    # module exists to characterize, and the two would be inseparable. "ieee"
+    # keeps them separable; the speed cost is measured, not assumed.
+    acc = tl.dot(q, tl.trans(kblk), input_precision=PREC)     # [BLOCK_M, BLOCK_T]
+    tl.store(out_ptr + qrow[:, None] * T + offs_t[None, :], acc,
+             mask=m_mask[:, None] & t_mask[None, :])
+
+
+@triton.jit
+def _kv_wsum_gqa(p_ptr, v_ptr, va_ptr, out_ptr, lut_ptr,
+                 T, D, GQA, SPLIT_T, stride_vt, stride_vh, stride_at, stride_ah,
+                 BLOCK_T: tl.constexpr, BLOCK_D: tl.constexpr,
+                 BLOCK_M: tl.constexpr, QBLK: tl.constexpr, TGRP: tl.constexpr,
+                 S: tl.constexpr, PREC: tl.constexpr):
+    """Weighted sum for all query heads of one kv head, V dequantized once.
+
+    Split over tokens for occupancy (only H_kv programs otherwise — 4 on the
+    shapes measured); partials are summed outside, which keeps the reduction
+    deterministic rather than relying on atomics.
+    """
+    hkv = tl.program_id(0)
+    sp = tl.program_id(1)
+    offs_d = tl.arange(0, BLOCK_D)
+    d_mask = offs_d < D
+    offs_m = tl.arange(0, BLOCK_M)
+    m_mask = offs_m < GQA
+    qrow = hkv * GQA + offs_m
+    acc = tl.zeros([BLOCK_M, BLOCK_D], dtype=tl.float32)
+
+    t_start = sp * SPLIT_T
+    t_end = tl.minimum(t_start + SPLIT_T, T)
+    for lo in range(t_start, t_end, BLOCK_T):
+        offs_t = lo + tl.arange(0, BLOCK_T)
+        t_mask = offs_t < t_end
+        m2 = t_mask[:, None] & d_mask[None, :]
+        vb = v_ptr + offs_t[:, None] * stride_vt + hkv * stride_vh
+        byts = tl.load(vb + (offs_d[None, :] // 2), mask=m2, other=0).to(tl.int32)
+        nib = tl.where((offs_d[None, :] % 2) == 0, (byts >> 4) & 0xF, byts & 0xF)
+        am = tl.load(va_ptr + (offs_t[:, None] // TGRP) * stride_at + hkv * stride_ah
+                     + (offs_d[None, :] // QBLK), mask=m2, other=0.0)
+        vblk = tl.load(lut_ptr + nib) * am                    # [BLOCK_T, BLOCK_D]
+        p = tl.load(p_ptr + qrow[:, None] * T + offs_t[None, :],
+                    mask=m_mask[:, None] & t_mask[None, :], other=0.0)
+        acc += tl.dot(p, vblk, input_precision=PREC)
+    tl.store(out_ptr + ((hkv * S + sp) * BLOCK_M + offs_m[:, None]) * D + offs_d[None, :],
+             acc, mask=m_mask[:, None] & d_mask[None, :])
+
+
+def attend_nf4_kv_gqa(q: torch.Tensor, k_packed: torch.Tensor, k_absmax: torch.Tensor,
+                      v_packed: torch.Tensor, v_absmax: torch.Tensor,
+                      scale: float | None = None, block_t: int = 128,
+                      token_group: int | None = None,
+                      splits: int | None = None,
+                      precision: str = "ieee") -> torch.Tensor:
+    """Decode attention over a 4-bit cache, batched over the GQA group.
+
+    Query heads are assumed contiguous per kv head (head h reads kv head
+    ``h // GQA``), which is the mapping the rest of this module already uses.
+    """
+    H_q, D = q.shape
+    T, H_kv, _ = k_packed.shape
+    _check(D)
+    _require_inner_contig(k_packed=k_packed, k_absmax=k_absmax,
+                          v_packed=v_packed, v_absmax=v_absmax)
+    _check_cache(k_packed, k_absmax, D, token_group, "k")
+    _check_cache(v_packed, v_absmax, D, token_group, "v")
+    if k_packed.shape[:2] != v_packed.shape[:2]:
+        raise ValueError("K and V must agree on token count and kv-head count")
+    gqa = _gqa(H_q, H_kv)
+    bd, bm = triton.next_power_of_2(D), max(16, triton.next_power_of_2(gqa))
+    qb, tg = (1 if token_group else BLOCKSIZE), (token_group or 1)
+    scale = D ** -0.5 if scale is None else scale
+
+    # This kernel stages a dequantized [BLOCK_T, BLOCK_D] fp32 tile: 64 KB at
+    # 128x128 before the dot operands, against a ~99 KB cap on this device. A
+    # static estimate is not enough -- triton's num_stages pipelining multiplies
+    # the staging by a factor the caller does not control, so the analytic
+    # figure (82 KB here) can pass while the launch still fails. The device cap
+    # prunes the obviously-too-large configs, and an OutOfResources retry
+    # handles the rest; num_stages is pinned low to keep the multiplier small.
+    cap = _device_shared_limit(q.device)
+    if cap:
+        while block_t > 16 and (block_t * bd + bm * bd + bm * block_t) * 4 > cap:
+            block_t //= 2
+
+    from triton.runtime.errors import OutOfResources
+    qc, lut = q.contiguous(), _lut(q.device)
+    while True:
+        scores = torch.zeros(H_q, T, dtype=torch.float32, device=q.device)
+        try:
+            _kv_scores_gqa[(H_kv, triton.cdiv(T, block_t))](
+                qc, k_packed, k_absmax, scores, lut,
+                T, D, gqa, k_packed.stride(0), k_packed.stride(1),
+                k_absmax.stride(0), k_absmax.stride(1),
+                BLOCK_T=block_t, BLOCK_D=bd, BLOCK_M=bm, QBLK=qb, TGRP=tg,
+                PREC=precision, num_stages=2)
+            break
+        except OutOfResources:
+            if block_t <= 16:
+                raise
+            block_t //= 2
+    probs = torch.softmax(scores * scale, dim=-1)
+
+    n_blocks = max(1, triton.cdiv(T, block_t))
+    if splits is None:
+        splits = max(1, min(n_blocks, -(-512 // max(H_kv, 1))))
+    split_t = max(block_t, -(-T // splits))
+    splits = max(1, -(-T // split_t))
+    while True:
+        part = torch.empty(H_kv, splits, bm, D, dtype=torch.float32, device=q.device)
+        try:
+            _kv_wsum_gqa[(H_kv, splits)](
+                probs, v_packed, v_absmax, part, lut,
+                T, D, gqa, split_t, v_packed.stride(0), v_packed.stride(1),
+                v_absmax.stride(0), v_absmax.stride(1),
+                BLOCK_T=block_t, BLOCK_D=bd, BLOCK_M=bm, QBLK=qb, TGRP=tg,
+                S=splits, PREC=precision, num_stages=2)
+            break
+        except OutOfResources:
+            if block_t <= 16:
+                raise
+            block_t //= 2
+    return part.sum(1)[:, :gqa, :].reshape(H_q, D)

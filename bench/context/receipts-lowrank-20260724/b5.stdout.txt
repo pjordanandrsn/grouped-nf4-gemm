@@ -1,0 +1,12 @@
+  import pynvml  # type: ignore[import]
+free 8.58 GB of 11.62 GB   NVIDIA RTX A2000 12GB
+
+    ctx  two-pass    fused    split     fp16  split/two  split/fp16
+   4096    2.902m   3.363m   3.017m   0.895m      0.96x       3.37x
+  32768   13.865m  17.321m  15.457m   5.874m      0.90x       2.63x
+
+PREREG SCORING — B5 (registered + STAMPED before this run)
+  B5a split vs two-pass @32K   pred 1.2-2.5x   got 0.90x  FALSIFIED
+  B5b split vs fp16 @32K       pred 1.0-2.2x   got 2.63x  OUTSIDE-INTERVAL
+  B5c 4K no regression vs fused 1.11x          split/two 0.96x  FALSIFIED
+  (un-split fused @32K was 0.80x vs two-pass, 2.95x vs fp16)

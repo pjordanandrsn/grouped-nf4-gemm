@@ -428,6 +428,49 @@ TRUE count or newly written keys get RoPE rotations inconsistent with retained
 ones — that would have looked like "sparsity degrades quality" instead of a
 bookkeeping error.
 
+### 12. The 4-bit cache reads at or below fp16 cost — once dequant stops running per query head
+
+Three registered attempts, the first two falsified (see the stamped
+`bench/context/PREREG-kv-context.md`):
+
+| attempt | hypothesis | result |
+|---|---|---|
+| B1/B2 | single-pass fusing removes the scores intermediate | **falsified** — 0.79×, *slower* than two-pass |
+| B5 | fusing lost parallelism; split the token axis | **falsified** — 0.90×, still slower |
+| B6 | dequant runs per QUERY head; batch the GQA group | **confirmed** — 2.81× vs two-pass, **0.82× vs fp16** |
+
+Both failures were models of *why* the kernel was slow, and both were wrong.
+What settled it was a measurement, not a model: holding H_kv=4 and varying H_q
+on **byte-identical** input, time scaled linearly with query heads above the
+occupancy knee (4.60 ms at 4:1 → 13.83 ms at 16:1). `grid=(H_q, ...)` made each
+query head re-dequantize the same kv bytes, so GQA 16:1 paid 16× redundant ALU.
+The path was never memory-bound — it moves ~19 MB against fp16's ~67 MB.
+
+The fix is a grid over **kv** heads: dequantize each block once, then serve all
+its query heads with one `[GQA, D] × [D, BLOCK_T]` dot. At T=32768, H_kv=4,
+D=128 (A2000, median of 25):
+
+| H_q | GQA | two-pass | gqa-batched | fp16 SDPA |
+|---:|---|---:|---:|---:|
+| 16 | 4:1 | 5.943 ms | 5.317 | 1.158 |
+| 64 | 16:1 | 13.997 ms | **4.975** | 6.055 |
+
+**Scope.** 0.82× holds at GQA 16:1; at 4:1 the kernel is 4.59× *slower* than
+fp16, since there is little redundancy to remove. The claim is "readable at or
+below fp16 cost in the high-GQA long-context regime" — where current models sit
+(Qwen3 16:1, gpt-oss 8:1) — not "4-bit attention is free". One device.
+
+**Two implementation notes worth carrying.** The shared-memory failure was fixed
+by reusing `_device_shared_limit` from the CDNA3 LDS work, but a static estimate
+was insufficient: 82 KB modelled against a 99 KB cap still failed, because
+`num_stages` pipelining multiplies staging by a factor the caller does not set.
+It now pins `num_stages=2` and steps `block_t` down on the actual
+`OutOfResources`. And `tl.dot` silently defaults to **TF32**, which measured
+2.7e-3 relative error at extreme logits — small, but a second error source
+stacked on the quantization error this module exists to characterize, so
+`input_precision="ieee"` is the default at a measured 2.11× cost, with a test
+pinning that tf32 is worse so the default cannot be flipped silently.
+
 ## What this changes downstream
 
 - **C1** — every published VRAM figure gains its context qualifier; serving docs
@@ -440,9 +483,11 @@ bookkeeping error.
   21/21 on the A2000. Corrections to the estimate this document originally carried:
   the saving is **3.56×, not 4×** — the fp32 blockwise absmax is a side channel
   (per token per head: 64 nibble-bytes + 2×4 B absmax = 72 vs 256 bf16) — so the
-  235B 32K case measures **5.88 GB → 1.65 GB**, not 2.94. And it is not free:
-  the decode attention step costs **2.5–3× fp16 SDPA** (15.4 vs 6.3 ms at 32K),
-  because v1 reads the cache twice (scores, then weighted sum). Fidelity on an
+  235B 32K case measures **5.88 GB → 1.65 GB**, not 2.94. Latency was 2.5–3×
+  fp16 SDPA in v1 and is now **0.82× fp16 in the high-GQA long-context regime**
+  (4.975 vs 6.055 ms at 32K, GQA 16:1) — see finding #12; the cost was redundant
+  dequant, not the 4-bit format. At GQA 4:1 it is still 4.59× slower, so the
+  saving is free where current models live and not free everywhere. Fidelity on an
   iid fixture: 9.3% relative error end-to-end, decomposing to **K-only 1.3% /
   V-only 9.2%** — the softmax *contracts* K error (9.2% logit → 1.4%) while V
   error passes through unattenuated. That inverts the usual "K is the sensitive
