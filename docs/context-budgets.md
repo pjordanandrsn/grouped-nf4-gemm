@@ -374,6 +374,60 @@ using an explicit additive mask (gpt-oss, via attention sinks), and the harness
 held two full fp32 logit tensors, which OOMs at Gemma's 262k vocab. Neither was
 a quantization bug; both were only findable on a second architecture.
 
+### 11. Token-axis sparsity: composes cleanly, but loses badly at matched bytes
+
+Sparsity was the recommended next lever precisely because it is the one axis
+that does NOT group across tokens (#6, #9) — eviction removes tokens rather
+than sharing structure between them, so it should compose with NF4 instead of
+competing. Implemented as sink+recent retention
+(`NF4KVCache(keep_sink=, keep_recent=)`) and measured with chunked teacher
+forcing so eviction happens between forwards, the reference arm chunked
+identically:
+
+| arm | ppl | delta | cache | ratio |
+|---|---:|---:|---:|---:|
+| full fp16 | 5.968 | — | 128.00 MB | 1.00x |
+| full nf4 | 6.086 | **+0.118** | 36.00 MB | 3.56x |
+| sink4+rec512 fp16 | 6.624 | +0.656 | 64.50 MB | 1.98x |
+| sink4+rec512 nf4 | 6.793 | +0.824 | 18.14 MB | 7.06x |
+| sink4+rec256 fp16 | 9.284 | **+3.316** | 32.50 MB | 3.94x |
+| sink4+rec256 nf4 | 9.469 | +3.501 | 9.14 MB | 14.00x |
+| sink4+rec128 fp16 | 10.504 | +4.536 | 16.50 MB | 7.76x |
+| sink4+rec128 nf4 | 10.679 | +4.711 | 4.64 MB | 27.58x |
+
+**Quantization dominates eviction at matched bytes.** NF4 buys 3.56x for
++0.118; eviction buys 3.94x for +3.316 — 28x the quality cost for the same
+memory, and NF4 wins at every matched point measured. The prediction that
+sparsity was "the biggest remaining lever" is wrong on this workload.
+
+**Composition is real, and is the usable result.** NF4's cost is near-constant
+regardless of how much has been evicted: +0.168 on top of rec512, +0.185 on
+rec256, +0.175 on rec128, against +0.118 alone. The two axes are genuinely
+independent — exactly what low-rank and per-channel scaling failed to be — so
+quantizing on top of an eviction policy you already run is close to free.
+
+**Scope, which matters more than usual here.** Wikitext perplexity is the least
+favourable possible task for eviction: next-token prediction over contiguous
+prose depends on the dense recent context the policy deletes. StreamingLLM's
+claim is not "equal quality at lower memory" but *stable* perplexity on streams
+longer than training length — a different objective this fixture cannot test at
+1024 tokens. And sink+recent is the weakest selection rule; H2O/SnapKV retain
+the heavily-attended tokens rather than merely the newest. Read this as "naive
+recency eviction is a bad trade for dense next-token prediction", not as
+"sparsity does not work".
+
+**Two cache bugs, both found by this measurement.** `get_query_offset` returned
+a hardcoded 0, which is correct only from an empty cache — chunked prefill
+scored ppl 330 against 5.97 single-shot, and every prior single-forward control
+arm on four architectures had matched its reference exactly while saying
+nothing about the accumulating path. And eviction initially ran inside
+`update()`, contradicting a mask already built for the pre-eviction length; it
+is now explicit and called between forwards. A third was avoided rather than
+measured: once tokens held != tokens seen, `cache_position` must follow the
+TRUE count or newly written keys get RoPE rotations inconsistent with retained
+ones — that would have looked like "sparsity degrades quality" instead of a
+bookkeeping error.
+
 ## What this changes downstream
 
 - **C1** — every published VRAM figure gains its context qualifier; serving docs

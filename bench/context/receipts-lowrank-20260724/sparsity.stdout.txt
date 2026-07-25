@@ -1,0 +1,19 @@
+/opt/conda/lib/python3.11/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[12:42:55]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[12:43:55]   quantized experts on 16/16 MoE layers (64 experts each)
+[12:43:55]   offloaded 16 layers' 4-bit experts to pinned CPU RAM (streamed to GPU one layer at a time during train/eval)
+[12:43:55]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+Using the latest cached version of the dataset since Salesforce/wikitext couldn't be found on the Hugging Face Hub (offline mode is enabled).
+Found the latest cached dataset configuration 'wikitext-2-raw-v1' at /root/.cache/huggingface/datasets/Salesforce___wikitext/wikitext-2-raw-v1/0.0.0/b08601e04326c79dfdd32d625aee71d232d685c3 (last modified on Sun Jul 19 21:10:42 2026).
+
+=== allenai/OLMoE-1B-7B-0924  1024 tokens, chunk 128 ===
+arm                       ppl    d-ppl  cache MB  vs fp16
+full        fp16        5.968   +0.000   128.00    1.00x
+full        nf4         6.086   +0.118    36.00    3.56x
+sink4+rec512  fp16      6.624   +0.656    64.50    1.98x
+sink4+rec512  nf4       6.793   +0.824    18.14    7.06x
+sink4+rec256  fp16      9.284   +3.316    32.50    3.94x
+sink4+rec256  nf4       9.469   +3.501     9.14   14.00x
+sink4+rec128  fp16     10.504   +4.536    16.50    7.76x
+sink4+rec128  nf4      10.679   +4.711     4.64   27.58x

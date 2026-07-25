@@ -1,0 +1,42 @@
+[
+  {
+    "arm": "full        fp16",
+    "ppl": 5.968212127685547,
+    "cache_bytes": 134217728
+  },
+  {
+    "arm": "full        nf4 ",
+    "ppl": 6.086461544036865,
+    "cache_bytes": 37748736
+  },
+  {
+    "arm": "sink4+rec512  fp16",
+    "ppl": 6.6241583824157715,
+    "cache_bytes": 67633152
+  },
+  {
+    "arm": "sink4+rec512  nf4 ",
+    "ppl": 6.792581558227539,
+    "cache_bytes": 19021824
+  },
+  {
+    "arm": "sink4+rec256  fp16",
+    "ppl": 9.283734321594238,
+    "cache_bytes": 34078720
+  },
+  {
+    "arm": "sink4+rec256  nf4 ",
+    "ppl": 9.469401359558105,
+    "cache_bytes": 9584640
+  },
+  {
+    "arm": "sink4+rec128  fp16",
+    "ppl": 10.504212379455566,
+    "cache_bytes": 17301504
+  },
+  {
+    "arm": "sink4+rec128  nf4 ",
+    "ppl": 10.679022789001465,
+    "cache_bytes": 4866048
+  }
+]
