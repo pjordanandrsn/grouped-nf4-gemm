@@ -55,9 +55,19 @@ def _unpack(ret):
 
 
 def _heldout_err(x: torch.Tensor, rank: int, half: int) -> float:
-    """Basis from the first `half` tokens, error measured on the rest."""
+    """Basis from the first `half` tokens, error measured on the rest.
+
+    An economy SVD of a ``[fit, D]`` matrix yields only ``min(fit, D)`` right
+    singular vectors, so a rank above that would silently under-fill the basis
+    buffer and report a meaningless error rather than failing.
+    """
     fit, held = x[:half], x[half:]
     H, D = x.shape[1], x.shape[2]
+    if rank > min(fit.shape[0], D):
+        raise ValueError(
+            f"rank {rank} exceeds the {min(fit.shape[0], D)} singular vectors "
+            f"available from a [{fit.shape[0]}, {D}] fit block; lower the rank "
+            "or raise LOWRANK_PROBE_TOKENS.")
     B = torch.empty(H, rank, D, device=x.device, dtype=torch.float32)
     for h in range(H):
         B[h] = torch.linalg.svd(fit[:, h, :].float(), full_matrices=False)[2][:rank]
@@ -154,8 +164,10 @@ def main() -> int:
         v_pre = grabbed[f"v{li}"][0].view(-1, H, D)
         rec["K_preRoPE_heldout_rel_err_r64"] = _heldout_err(k_pre, 64, half)
         rec["V_proj_control_heldout_rel_err_r64"] = _heldout_err(v_pre, 64, half)
-        rec["sweep"] = {f"K_r{r}": _heldout_err(k, r, half) for r in SWEEP}
-        rec["sweep"].update({f"V_r{r}": _heldout_err(v, r, half) for r in SWEEP})
+        usable = [r for r in SWEEP if r <= min(half, D)]
+        rec["sweep"] = {f"K_r{r}": _heldout_err(k, r, half) for r in usable}
+        rec["sweep"].update({f"V_r{r}": _heldout_err(v, r, half) for r in usable})
+        rec["sweep_ranks"] = usable
         layers[li] = rec
         # iid control at the identical shape
         g = torch.Generator(device="cpu").manual_seed(li)
@@ -203,9 +215,7 @@ def main() -> int:
 
     head_dim = layers[0]["head_dim"]          # not 128 on every architecture
     print(f"\n{'rank':>5} {'ratio':>6} {'K held':>8} {'V held':>8}  packable")
-    for rr in SWEEP:
-        if rr > head_dim:
-            continue
+    for rr in layers[0].get("sweep_ranks", SWEEP):
         print(f"{rr:>5} {head_dim/rr:>5.2f}x {_mean(f'K_r{rr}'):>8.3f} "
               f"{_mean(f'V_r{rr}'):>8.3f}  {'yes' if rr % 64 == 0 else 'no'}")
     print(f"receipt -> {dst}")

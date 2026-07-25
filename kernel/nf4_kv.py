@@ -162,6 +162,7 @@ def dequant_kv_ref(packed: torch.Tensor, absmax: torch.Tensor, D: int,
     # and a test comparing them on such an input would be comparing a number
     # against an exception.
     _require_inner_contig(packed=packed, absmax=absmax)
+    _check_cache(packed, absmax, D, token_group, "cache")
     lut = _lut(packed.device)
     b = packed.reshape(-1, D // 2).to(torch.int32)
     hi = (b >> 4) & 0xF
@@ -363,6 +364,14 @@ def attend_nf4_kv(q: torch.Tensor, k_packed: torch.Tensor, k_absmax: torch.Tenso
         raise ValueError(
             f"K and V hold different token counts ({k_packed.shape[0]} vs "
             f"{v_packed.shape[0]}); the softmax over K would not align with V.")
+    if k_packed.shape[1] != v_packed.shape[1]:
+        # Each kernel derives its own GQA factor from its own tensor, so a
+        # mismatch silently maps one query head onto DIFFERENT kv heads for
+        # scores and for the weighted sum -- wrong attention, no error.
+        raise ValueError(
+            f"K and V have different kv-head counts ({k_packed.shape[1]} vs "
+            f"{v_packed.shape[1]}); each kernel would derive a different GQA "
+            "map and query heads would read mismatched K/V rows.")
     scores = kv_scores_nf4(q, k_packed, k_absmax, block_t=block_t,
                            token_group=k_token_group) * scale
     probs = torch.softmax(scores, dim=-1)

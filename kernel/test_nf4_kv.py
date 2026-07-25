@@ -368,3 +368,25 @@ def test_k_and_v_token_counts_must_agree():
     q = torch.randn(H, D, device="cuda", dtype=torch.float32)
     with pytest.raises(ValueError, match="different token counts"):
         attend_nf4_kv(q, kp, ka, vp, va)
+
+
+@cuda
+def test_kv_head_count_mismatch_is_rejected():
+    """Each kernel derives GQA from its own tensor, so mismatched K/V kv-head
+    counts silently map one query head onto different K and V rows."""
+    T, D = 128, 128
+    kp, ka = quantize_kv(_outlier_cache(T, 4, D, 20))
+    vp, va = quantize_kv(_outlier_cache(T, 8, D, 21))
+    q = torch.randn(8, D, device="cuda", dtype=torch.float32)
+    with pytest.raises(ValueError, match="different kv-head counts"):
+        attend_nf4_kv(q, kp, ka, vp, va)
+
+
+@cuda
+def test_reference_rejects_mismatched_absmax_layout_like_the_kernels():
+    """Domain agreement again, now for SHAPE rather than stride: the oracle must
+    not dequantize per-channel scales as if they were per-token."""
+    x = _outlier_cache(256, 4, 128, seed=22)
+    p_ch, a_ch = quantize_kv_perchannel(x)
+    with pytest.raises(ValueError, match="does not match per-token blockwise"):
+        dequant_kv_ref(p_ch, a_ch, 128)
