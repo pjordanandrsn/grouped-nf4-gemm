@@ -261,6 +261,126 @@ A real decode does attention and an MLP on top, so there is *more* to hide
 behind, not less — but that is an argument, not a measurement, and the real-model
 number has not been taken.
 
+## Amendment 1 — B1 on a real model (E1), and C1 closed
+
+Written after B1's synthetic result, **before E1 ran**.
+
+### C1 — closed, not deferred
+
+C1 predicted an fp16 absmax cuts streamed bytes by exactly 5.56%. That is still
+true and now **worthless**: B1 hides 95.9% of the transfer, so 5.56% of the ~4%
+still exposed is **~0.2% of a step**, bought by changing a packed layout that
+every kernel in `kernel/` reads. The gate was "blast radius far larger than its
+5.6%"; prefetch shrank the 5.6% by a further 24×. Closed on arithmetic, and
+recorded rather than left dangling — a deferred item nobody intends to run is
+just an unmarked negative.
+
+### E1 — does the 95.9% survive a real model?
+
+B1's headline carries one stated confound: the harness's "compute" is
+**dequantization**, not attention. The argument that a real decode has *more* to
+hide behind is plausible and untested, and #13 is a standing reminder that
+plausible mechanisms get falsified here.
+
+**Fixture.** OLMoE-1B-7B (locally cached), weights **resident, not offloaded** —
+which is deliberate: streamed weights would contend for the same link and make
+the KV term unattributable, and "weights fit, context does not" is precisely the
+case #14 says the streamed tier serves. Prefetch is driven by a forward pre-hook
+on each decoder layer requesting layer *i+1*, the same shape `offload.py` uses,
+rather than by prefetching everything up front (which would put the whole cache
+on the device and defeat the point).
+
+- **E1a.** Prefetched-streamed decode / resident decode ∈ **[1.00, 1.20]**.
+  Wider than B1a's [1.00, 1.15] because a real step has more moving parts.
+  *Falsified above 1.35.*
+- **E1b.** The hidden fraction is at least as large as the synthetic
+  **95.9%** — i.e. **≥ 90%** hidden, since attention and the MLP add compute to
+  hide behind. *Falsified below 80%*, which would mean the synthetic result does
+  not transfer and #16's headline needs the qualifier moved into it.
+- **E1c.** Greedy decode is **identical** between resident and prefetched-
+  streamed caches — same token ids, not just similar perplexity. Residence and
+  scheduling must not change values. *Any mismatch voids E1a/E1b.*
+- **E1d — the number that decides D1.** Report dequantization as a fraction of
+  the resident-cache step. No interval is registered because I have no basis for
+  one; it is recorded as a measurement, and it is what says whether D1 removes a
+  dominant cost or a rounding error.
+
+**Pre-committed decision.** If E1a and E1c hold, `enable_kv_prefetch(model,
+cache)` ships as a supported helper rather than staying a benchmark trick. If
+E1b fails, #16's 95.9% gets restated as synthetic-only in the finding itself,
+not in a footnote.
+
+## Outcome of E1 — B1 does not transfer to a real model
+
+OLMoE-1B-7B, 4-bit weights **resident**, 4096-token prompt, 24 greedy tokens.
+Three runs, because two defects were found and fixed between them. **All three
+are reported**; the last is the scored one.
+
+| run | E1a (≤1.35) | E1b (≥90%) | E1c (identical) |
+|---|---:|---:|---|
+| 1 — as built | 1.165 | 41.7% | True |
+| 2 — async append | **1.049** | **68.4%** | **False** |
+| 3 — correct prefetch | **1.183 CONFIRMED** | **−22.5% FALSIFIED** | **True CONFIRMED** |
+
+**Run 2 was the fastest and it was wrong**, which is the entire argument for
+E1c being a gate rather than a nice-to-have. It also means **run 1's `True` was
+a false pass**: the same staleness was present, and the divergence is marginal
+enough that it first appeared at token 12 of 25. A correctness gate that passes
+by luck is why one configuration is not a test.
+
+### Two defects, both found only because E1 ran on a real model
+
+**1. The append synchronized the host, 32 times per step.** `copy_` into a CPU
+destination blocks until the DMA lands, and the arena append does one per layer
+per tensor. The streamed arm ran at **1.87 GB/s on a 6.20 GB/s link** — the
+byte model said 24.4 ms/step and the measurement said 80.84. Exactly the failure
+`host_gather.py` records for the expert path (B3, ~94 syncs/token), reappearing
+in the KV path. Fixed with `non_blocking=True`, which then required the prefetch
+stream to wait on the default stream, since the append is now asynchronous.
+
+**2. Prefetch staged history and used it as the whole layer.** Decode
+interleaves `prefetch(i) → update(i) appends → update loads`, so a pre-hook
+stages the arena *before* this step's token exists. Using it as-is silently
+drops the newest token from attention — no crash, just wrong output. **The unit
+suite was green at 25/25 throughout**, because its prefetch test completed every
+update before any prefetch and so could never produce the interleaving a decode
+actually uses. Fixed by treating a staged slot as history and concatenating
+whatever arrived after it; a decode-order regression test now exists.
+
+### Why B1's 95.9% did not survive
+
+**The synthetic harness timed loads only — it never called `update()`.** So it
+never paid the append, never paid the assembly, and never exercised the
+interleaving that made the design incorrect. Its 95.9% is a true statement about
+that harness and **not** a statement about decode.
+
+With prefetch correct, exposed transfer goes **46.38 → 56.83 ms/step**: worse.
+The safety wait (`stream.wait_stream`) makes the side stream queue behind
+everything already on the default stream, so there is little overlap left to
+win, and the history+tail concatenation adds a copy per layer.
+
+### Decisions
+
+- **The E1b decision fires: #16's 95.9% is restated as synthetic-only in the
+  finding itself**, not moved to a footnote.
+- **The E1a/E1c decision is NOT taken**, and the specification was wrong.
+  It said `enable_kv_prefetch` ships if E1a and E1c hold — both do — but
+  shipping a helper that measures **−3%** would be promoting a pessimization.
+  The condition should have included E1b, which is the prediction that says
+  whether the feature works at all. Recorded as a specification error (the third
+  this cycle: A1a's two-regime fit, A1d's inverted sign, and now this) rather
+  than quietly not doing it. `prefetch()` stays in the library — it is correct,
+  optional, and off unless called — but no helper encourages its use.
+- **E1a is a real result worth keeping**: with weights resident and the cache
+  fully streamed, a real decode costs **+18.3%** and holds **zero** KV bytes on
+  the device. That is the honest headline for the tier, and it is 4.8× less VRAM.
+
+**Next, and specified before trying it:** the safety wait is a whole-stream
+barrier where a per-layer event would do — the side stream only needs to wait on
+*that layer's* append, not on everything queued. That is the one change that
+could recover overlap, and it gets its own prediction rather than being folded
+into B1's.
+
 ## Scoring
 
 Results land in `receipts-faster-20260725/`. Every prediction is marked

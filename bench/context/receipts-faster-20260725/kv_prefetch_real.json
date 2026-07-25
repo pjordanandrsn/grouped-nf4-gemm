@@ -1,0 +1,131 @@
+{
+  "rows": [
+    {
+      "arm": "resident",
+      "prefetch": false,
+      "s_per_step": 0.2846959464562436,
+      "peak_bytes": 5635567104,
+      "device_bytes": 151879680,
+      "kv_packed_bytes": 150994944.0
+    },
+    {
+      "arm": "streamed",
+      "prefetch": false,
+      "s_per_step": 0.36553747300058603,
+      "peak_bytes": 5338297344,
+      "device_bytes": 0,
+      "kv_packed_bytes": 150994944.0
+    },
+    {
+      "arm": "streamed+pre",
+      "prefetch": true,
+      "s_per_step": 0.3317902202058273,
+      "peak_bytes": 5347679744,
+      "device_bytes": 0,
+      "kv_packed_bytes": 150994944.0
+    }
+  ],
+  "verdicts": {
+    "E1a": {
+      "measured": 1.1654195443798563,
+      "interval": [
+        1.0,
+        1.2
+      ],
+      "verdict": "CONFIRMED",
+      "inside_interval": true
+    },
+    "E1b": {
+      "measured_hidden": 0.417449474760326,
+      "threshold": 0.9,
+      "verdict": "FALSIFIED"
+    },
+    "E1c": {
+      "identical": true,
+      "verdict": "CONFIRMED"
+    }
+  },
+  "tokens": {
+    "resident": [
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209
+    ],
+    "streamed": [
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209
+    ],
+    "streamed+pre": [
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209,
+      139,
+      228,
+      209
+    ]
+  }
+}

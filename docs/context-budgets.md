@@ -726,16 +726,21 @@ on the default stream, which is exactly what makes an *additive* model the right
 one to test. A prefetched implementation would break additivity by design and
 must not be scored against this.
 
-### 16. Prefetch hides 96% of the streamed transfer — the tier now costs ~1%
+### 16. Prefetch hides 96% of the transfer in a synthetic harness — and none of it in a real decode
 
 #15 measured the streamed KV tier obeying `t = bytes/link` and left it there:
 +288 ms per step at 32K, additive. Registered in `PREREG-kv-stream-faster.md`
 (stamped before any of it was built) and now measured, **two changes take most
 of that back.**
 
-**Prefetch (B1) — all three predictions confirmed.** Issuing layer L+1's copy on
-a side stream while L's dequant runs converts `compute + transfer` into
-`max(compute, transfer)`:
+**Prefetch (B1) — all three predictions confirmed IN A SYNTHETIC HARNESS, and
+the result does not transfer.** The registered follow-up (E1) ran the same
+mechanism on a real OLMoE decode and measured **−22.5%**: prefetch made it
+slower. The harness timed *loads only* — it never called `update()`, so it never
+paid the append, never paid the assembly, and never exercised the interleaving
+that turned out to make the design incorrect. **Read the table below as a
+property of that harness, not of decode.** The real-model numbers, and the two
+defects E1 exposed, are in the block after it.
 
 | ctx | resident | streamed | streamed + prefetch | transfer hidden |
 |---:|---:|---:|---:|---:|
@@ -776,9 +781,32 @@ that dequant. The two are **substitutes, not complements**: if D1 lands, B1's
 95.9% falls, because there is less left to hide behind, and the two results must
 never be multiplied together.
 
-**Scope.** One device, one geometry, and the harness's "compute" is
-dequantization rather than attention. A real decode adds attention and an MLP,
-so there is *more* to hide behind — but that is an argument, not a measurement.
+**What a real decode actually costs (E1, OLMoE-1B-7B, 4-bit weights resident,
+4096-token prompt).** Registered before it ran, and it falsified the headline:
+
+| arm | ms/step | KV on device |
+|---|---:|---:|
+| resident cache | 311.1 | 151.9 MB |
+| streamed | 357.5 | **0** |
+| streamed + prefetch | 367.9 | **0** |
+
+**+18.3% for zero KV bytes on the device** is the honest number for the tier.
+Prefetch contributes nothing here and costs 3%.
+
+**Two defects, both invisible to a synthetic harness and to a green unit suite.**
+The arena append used `copy_` into a CPU destination without `non_blocking`,
+which **blocks the host** — 32 times per step, dragging a 6.20 GB/s link down to
+a measured **1.87 GB/s**. That is the same failure `kernel/host_gather.py`
+records for the expert path (B3, ~94 syncs/token), reappearing in the KV path.
+And prefetch staged the cache *before* the step's token was appended, then used
+it as the whole layer — silently dropping the newest token from attention. **The
+unit suite was 25/25 green throughout**, because its prefetch test completed all
+updates before any prefetch and so never produced the order a decode uses. A
+run that was *faster and wrong* is what caught it.
+
+**Scope.** One device, one geometry. The synthetic harness's "compute" was
+dequantization rather than attention, and the argument that a real decode has
+more to hide behind was made in advance, tested, and **wrong**.
 
 ## What this changes downstream
 

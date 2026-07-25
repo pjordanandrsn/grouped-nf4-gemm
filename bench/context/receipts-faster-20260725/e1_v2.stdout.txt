@@ -1,0 +1,13 @@
+allenai/OLMoE-1B-7B-0924: L=16 kv=16 prompt=4096 new=24
+packed KV at prompt: 151.0 MB -> 24.4 ms/step at 6.20 GB/s
+resident        311.07 ms/step  peak= 5374.5 MB  kv_on_device=  151.9 MB
+streamed        357.45 ms/step  peak= 5091.0 MB  kv_on_device=    0.0 MB
+streamed+pre    367.91 ms/step  peak= 5099.9 MB  kv_on_device=    0.0 MB
+
+=== scoring ===
+E1a prefetched/resident = 1.183  [1.00,1.20], falsify >1.35  CONFIRMED
+E1b transfer hidden     = -22.5%  >=90%  FALSIFIED
+E1c greedy ids identical= True   CONFIRMED
+E1d exposed transfer: 46.38 ms -> 56.83 ms/step
+
+wrote /root/g/bench/context/kv_prefetch_real_v2.json
