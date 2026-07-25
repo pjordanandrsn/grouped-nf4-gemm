@@ -74,3 +74,59 @@ Teardown is verified by querying the API for zero pods, not by assuming.
 - **R2a outside its interval** → #18's 1.13× is device-specific and gets that
   qualifier wherever it appears, exactly as #17's number did.
 - Phase 2 does **not** run if R1b fails or R1c falsifies.
+
+## Outcome — the characterization is device-independent; the kernel diagnosis is not resolved
+
+**Substitution disclosed:** no A100-80G-PCIe was available. Ran on an
+**A100-SXM4-80GB** (~2039 GB/s HBM vs the registered PCIe part's ~1935), taken
+first from an ordered candidate list. Faster memory makes R1a's ≥400 threshold
+*easier*, not harder, so the substitution cannot have caused its outcome.
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| R1b **gate** bit-identical on new silicon | exact | exact, 4 shapes × 2 dtypes | **CONFIRMED** |
+| R1a fused dequant bandwidth | ≥ 400 GB/s | **276.5** | **outside interval** (falsify was < 250) |
+| R1c link, pinned H2D | ≥ 20 GB/s | **18.89** | **outside interval** (falsify was < 15) |
+| R1d variance, MAD over 7 | < 4% | **0.28%** | **CONFIRMED** |
+| R2a NF4/bf16 @4096 | [1.05, 1.30] | **1.144** | **CONFIRMED** |
+| R2b prefetch still loses @4096 | > 1.00 | **1.047** | **CONFIRMED** |
+
+**R2a is the result worth having.** The A2000 measured **1.133**, this A100
+measures **1.144** — a 1% difference across a 7× gap in memory bandwidth, a
+different link generation and a different vendor SKU. And the decomposition
+travels too: wrapper **1.002 / 0.987**, dequant **1.142 / 1.148**. #18's headline
+is a property of the cache, not of the A2000, and needs no device qualifier.
+
+**R1d settles where today's noise came from.** MAD **0.28%** against the A2000's
+±12%. Every band stated across #13–#18 is a property of a shared,
+memory-constrained card, not of the measurements. Numbers taken here are worth
+three digits; numbers taken there are worth two.
+
+**R1a and R1c both landed between their thresholds, and neither pre-committed
+decision fires.** Recorded as such rather than resolved by picking the nearer
+edge after the fact. What the number *shows*: the kernel went 113 → 276.5 GB/s
+on a memory system 7.1× faster — it captured **~35% of the improvement**, so it
+is partly bandwidth-bound and mostly not. The headroom is still unexplained,
+but it is now bounded on both sides: neither "the A2000 was the limit" (it would
+have scaled) nor "the kernel is entirely the limit" (it would not have moved).
+The reference dequant, by contrast, scaled 6.7× — consistent with it being purely
+throughput-bound, which is what a seven-intermediate implementation should be.
+
+**And prefetch's "transfer share" framing is wrong as stated.** P1 bracketed the
+crossover between 17.8% and 46.7% share. This run breaks that:
+
+| device | ctx | transfer share | prefetch |
+|---|---:|---:|---|
+| A2000 | 4096 | 17.8% | **loses** (1.096) |
+| A100 | 16384 | **17.3%** | **wins** (0.889, 64.1% hidden) |
+
+Nearly the same share, opposite outcomes. Share alone does not predict it. The
+plausible reason is that prefetch's *cost* (an extra allocation and a full-size
+concatenation) scales with **HBM** while its *benefit* scales with **PCIe**, and
+the A100's PCIe:HBM ratio is 2.3× more favourable — but that is a mechanism
+argument, and this document set has falsified every mechanism argument it has
+tested today. It is offered as a hypothesis, not a finding, and P1's bracket is
+withdrawn rather than replaced.
+
+**Cost:** one pod, ~30 minutes, **$0.70**. Terminated; zero pods verified by API
+query, not assumed.

@@ -869,7 +869,20 @@ scheduling is recorded as tried and rejected across three registered attempts
 rather than left as a promising TODO. The levers that remain are the ones that
 move **bytes**: NF4 (3.56×) and split residency — both shipped, both exact.
 
-**Scope.** One device, one geometry. The synthetic harness's "compute" was
+**Confirmed off this card (2026-07-25, A100-SXM4-80GB, $0.70).** #18's headline
+reproduces at **1.144×** against the A2000's **1.133×** — 1% apart across a 7×
+gap in memory bandwidth and a different link generation — and the decomposition
+travels with it (wrapper 1.002/0.987, dequant 1.142/1.148). **So it carries no
+device qualifier.** Variance on a dedicated card is **MAD 0.28%** against this
+A2000's ±12%, which is where every error band in #13–#18 came from.
+
+Two things that run did *not* settle, recorded as unresolved: the fused dequant
+reached **276.5 GB/s** on a 7.1× faster memory system — capturing ~35% of the
+improvement, so neither purely bandwidth-bound nor purely kernel-bound — and
+prefetch's crossover is **not** the transfer-share law #16 implied, since the
+A100 *wins* at a 17.3% share where the A2000 *loses* at 17.8%.
+
+**Scope.** Two devices now. The synthetic harness's "compute" was
 dequantization rather than attention, and the argument that a real decode has
 more to hide behind was made in advance, tested, and **wrong**.
 

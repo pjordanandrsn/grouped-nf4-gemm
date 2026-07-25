@@ -1,0 +1,28 @@
+  warnings.warn(
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+allenai/OLMoE-1B-7B-0924  contexts=[4096, 16384]  new=32
+ctx=  4096 bf16         86.45 ms/step  peak= 5407.4 MB  cache=  541.1 MB (on device  541.1)
+ctx=  4096 nf4-raw      86.62 ms/step  peak= 5407.4 MB  cache=  541.1 MB (on device  541.1)
+ctx=  4096 nf4          98.93 ms/step  peak= 5039.6 MB  cache=  152.2 MB (on device  152.2)
+ctx=  4096 nf4-host    100.26 ms/step  peak= 4900.1 MB  cache=  152.2 MB (on device    0.0)
+ctx= 16384 bf16         87.00 ms/step  peak= 8169.5 MB  cache= 2151.7 MB (on device 2151.7)
+ctx= 16384 nf4-raw      87.44 ms/step  peak= 8169.5 MB  cache= 2151.7 MB (on device 2151.7)
+ctx= 16384 nf4         100.76 ms/step  peak= 6697.5 MB  cache=  605.2 MB (on device  605.2)
+ctx= 16384 nf4-host    121.32 ms/step  peak= 6121.5 MB  cache=  605.2 MB (on device    0.0)
+
+=== scoring ===
+F1a nf4/bf16 @4096      = 1.144   [1.2,2.0], falsify outside [1.0,3.0]  outside interval
+F1b ratio 4096->16384    = 1.144 -> 1.158   must not fall  CONFIRMED
+F1c bf16 peak - nf4 peak = +367.8 MB  [300,450]  CONFIRMED
+F1d nf4-host/bf16 @4096  = 1.160   [1.4,2.6]  outside interval
+
+=== G1 decomposition ===
+ctx=  4096  path_overhead=1.002  dequant=1.142  product=1.144  measured_total=1.144  closes=YES
+ctx= 16384  path_overhead=1.005  dequant=1.152  product=1.158  measured_total=1.158  closes=YES
+G1a path_overhead @4096 = 1.002  [1.0,1.3]  CONFIRMED
+G1b dequant       @4096 = 1.142  [1.4,1.9]  FALSIFIED
+G1  which is the target: DEQUANT
+
+reported: greedy ids diverge at position None of 33 (bf16 vs nf4; lossy by design, see finding #10)
+
+wrote /root/work/vsbf16_a100.json

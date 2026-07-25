@@ -1,0 +1,3 @@
+Warning: Permanently added '[154.54.102.44]:18962' (ED25519) to the list of known hosts.
+name, memory.total [MiB], pcie.link.gen.current, pcie.link.width.current
+NVIDIA A100-SXM4-80GB, 81920 MiB, 4, 16

@@ -1,0 +1,10 @@
+Warning: Permanently added '[154.54.102.44]:18962' (ED25519) to the list of known hosts.
+NVIDIA A100-SXM4-80GB | torch 2.8.0+cu128
+SMs 108  VRAM 79.2 GiB
+R1b GATE bit-identical: CONFIRMED
+
+reference           0.516 ms  (   41.6 GB/s)
+fused BEST          0.076 ms  (  284.2 GB/s) at rows=4 warps=1
+speedup          6.83x
+R1a >=400 GB/s : outside interval  (284.2)
+R1d MAD          0.50%   <4% confirms, >8% falsifies  CONFIRMED
