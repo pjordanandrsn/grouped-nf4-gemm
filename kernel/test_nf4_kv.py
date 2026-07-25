@@ -18,8 +18,13 @@ import pytest
 import torch
 
 from nf4_grouped import BLOCKSIZE
-from nf4_kv import (attend_nf4_kv, dequant_kv_ref, kv_cache_bytes,
-                    kv_scores_nf4, kv_weighted_sum_nf4, quantize_kv)
+from nf4_kv import (PERCHANNEL_GROUP, attend_nf4_kv, dequant_kv_ref,
+                    kv_cache_bytes, kv_cache_bytes_perchannel, kv_scores_nf4,
+                    kv_weighted_sum_nf4, quantize_kv, quantize_kv_perchannel)
+
+
+def _rel(got, want):
+    return ((got.float() - want.float()).norm() / want.float().norm()).item()
 from nf4_pack_ref import quantize_pack_nf4
 
 cuda = pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
@@ -242,3 +247,124 @@ def test_reference_and_kernel_share_a_validity_domain():
     bad = kp[:, :, ::2]
     with pytest.raises(ValueError, match="contiguous innermost dim"):
         dequant_kv_ref(bad, ka, 128)
+
+
+def _outlier_cache(T, H, D, seed=0, outlier_channels=(3, 17, 90), gain=12.0):
+    """A cache with loud CHANNELS whose magnitude is CONSTANT across tokens.
+
+    Read the caveat before trusting any result built on this. Real keys are not
+    like this: the gain here is token-invariant, which is the single regime
+    where per-channel scaling is guaranteed to win. On a real model it LOSES
+    (measured +0.275 ppl vs +0.083 for per-token, docs/context-budgets.md
+    finding #9), because real key magnitude also varies strongly across tokens,
+    so grouping a channel's scale over 64 tokens lets one loud token spoil the
+    other 63 — the same failure this fixture was built to show per-token
+    scaling having, just on the other axis.
+
+    Kept as a MECHANISM test only: it pins that per-channel scaling does what
+    it claims when its precondition holds. It is not evidence the precondition
+    holds anywhere real."""
+    g = torch.Generator(device="cpu").manual_seed(seed)
+    x = torch.randn(T, H, D, generator=g) * 0.5
+    for c in outlier_channels:
+        if c < D:                       # fixture must work at head_dim 64 too
+            x[:, :, c] *= gain
+    return x.cuda().bfloat16()
+
+
+@cuda
+@pytest.mark.parametrize("T,H,D", [(256, 4, 128), (192, 2, 64), (130, 8, 256)])
+def test_perchannel_packs_bytes_identically_to_per_token(T, H, D):
+    """Only the SCALES are grouped differently; the nibble stream layout is the
+    same, which is what lets one kernel read both. (Values differ, shapes must
+    not.) Also covers T not a multiple of the group (130)."""
+    x = _outlier_cache(T, H, D, seed=1)
+    p_tok, a_tok = quantize_kv(x)
+    p_ch, a_ch = quantize_kv_perchannel(x)
+    assert p_ch.shape == p_tok.shape and p_ch.dtype == p_tok.dtype
+    n_grp = (T + PERCHANNEL_GROUP - 1) // PERCHANNEL_GROUP
+    assert tuple(a_ch.shape) == (n_grp, H, D)
+
+
+@cuda
+def test_perchannel_absmax_is_free_at_any_head_dim():
+    """The 'free fidelity' claim, asserted rather than left as prose. Both
+    schemes store one fp32 scale per 64 quantized values (64 channels within a
+    token vs 64 tokens within a channel), so the cost is identical for EVERY
+    head_dim — not just the 128 case that motivated it."""
+    T, H = 4096, 8
+    for D in (64, 128, 256):
+        assert kv_cache_bytes_perchannel(T, H, D) == kv_cache_bytes(T, H, D) // 2, D
+    # the equality is a property of group == BLOCKSIZE, not a coincidence
+    assert kv_cache_bytes_perchannel(T, H, 128, group=32) > \
+        kv_cache_bytes_perchannel(T, H, 128, group=64)
+    assert kv_cache_bytes_perchannel(T, H, 128, group=128) < \
+        kv_cache_bytes_perchannel(T, H, 128, group=64)
+
+
+@cuda
+@pytest.mark.parametrize("T,H_q,H_kv,D", [(256, 32, 4, 128), (130, 8, 8, 128)])
+def test_perchannel_scores_match_dequant_oracle(T, H_q, H_kv, D):
+    x = _outlier_cache(T, H_kv, D, seed=2)
+    p, a = quantize_kv_perchannel(x)
+    q = torch.randn(H_q, D, device="cuda", dtype=torch.float32)
+    got = kv_scores_nf4(q, p, a, token_group=PERCHANNEL_GROUP)
+    k = dequant_kv_ref(p, a, D, token_group=PERCHANNEL_GROUP).float()
+    rep = H_q // H_kv
+    ref = torch.einsum("hd,thd->ht", q, k.repeat_interleave(rep, dim=1))
+    assert ((got - ref).norm() / ref.norm()).item() < 1e-5
+
+
+@cuda
+def test_perchannel_beats_per_token_when_its_precondition_holds():
+    """Mechanism check, NOT a recommendation. The fixture is token-invariant by
+    construction, which is exactly the precondition per-channel scaling needs;
+    real keys violate it and per-channel loses there. See _outlier_cache."""
+    x = _outlier_cache(1024, 4, 128, seed=3)
+    e_tok = _rel(dequant_kv_ref(*quantize_kv(x), 128), x)
+    e_ch = _rel(dequant_kv_ref(*quantize_kv_perchannel(x), 128,
+                               token_group=PERCHANNEL_GROUP), x)
+    # measured 0.092 vs 0.163 on this fixture; bound set from that, not guessed
+    assert e_ch < 0.75 * e_tok, f"per-channel {e_ch:.4f} vs per-token {e_tok:.4f}"
+
+
+@cuda
+def test_asymmetric_grouping_per_channel_K_per_token_V():
+    """The configuration finding #7 actually recommends: keys per-channel,
+    values per-token, in one attend call."""
+    T, H, D = 256, 4, 128
+    kx, vx = _outlier_cache(T, H, D, 4), _outlier_cache(T, H, D, 5)
+    kp, ka = quantize_kv_perchannel(kx)
+    vp, va = quantize_kv(vx)
+    q = torch.randn(H, D, device="cuda", dtype=torch.float32)
+    got = attend_nf4_kv(q, kp, ka, vp, va, k_token_group=PERCHANNEL_GROUP)
+    k = dequant_kv_ref(kp, ka, D, token_group=PERCHANNEL_GROUP).float()
+    v = dequant_kv_ref(vp, va, D).float()
+    probs = torch.softmax(torch.einsum("hd,thd->ht", q, k) * D ** -0.5, dim=-1)
+    ref = torch.einsum("ht,thd->hd", probs, v)
+    assert ((got - ref).norm() / ref.norm()).item() < 1e-4
+
+
+@cuda
+def test_mismatched_absmax_layout_is_rejected():
+    """Two legal absmax layouts now exist for identical packed bytes, so using
+    one while configured for the other must fail loudly — on the per-token path
+    a per-channel absmax is also short, i.e. an out-of-bounds read."""
+    x = _outlier_cache(256, 4, 128, seed=6)
+    p_ch, a_ch = quantize_kv_perchannel(x)
+    _, a_tok = quantize_kv(x)
+    q = torch.randn(4, 128, device="cuda", dtype=torch.float32)
+    with pytest.raises(ValueError, match="does not match per-token blockwise"):
+        kv_scores_nf4(q, p_ch, a_ch)                     # per-channel scales, no flag
+    with pytest.raises(ValueError, match="does not match per-channel"):
+        kv_scores_nf4(q, p_ch, a_tok, token_group=PERCHANNEL_GROUP)
+
+
+@cuda
+def test_k_and_v_token_counts_must_agree():
+    T, H, D = 256, 4, 128
+    kp, ka = quantize_kv(_outlier_cache(T, H, D, 7))
+    vp, va = quantize_kv(_outlier_cache(T - 8, H, D, 8))
+    q = torch.randn(H, D, device="cuda", dtype=torch.float32)
+    with pytest.raises(ValueError, match="different token counts"):
+        attend_nf4_kv(q, kp, ka, vp, va)

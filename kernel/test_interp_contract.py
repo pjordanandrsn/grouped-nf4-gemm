@@ -99,3 +99,92 @@ def test_adversarial_absmax():
     w = dequant_ref(B[0], A[0], 64, 128).float()
     ref = w @ acts[0].float()
     assert (out[0].float() - ref).abs().max() / ref.abs().max().clamp_min(1e-4) < 1e-2
+
+
+# --------------------------------------------------------------------------
+# KV cache kernels — device-free contract.
+#
+# These had NO CI coverage before: test_nf4_kv.py is CUDA-marked, CI has no
+# GPU, so the whole file skipped and reported green. Interpreter mode is the
+# only place CI can actually execute this code, which matters most for the
+# absmax indexing, where per-token and per-channel scaling share one kernel and
+# differ only by two constexpr divisors.
+# --------------------------------------------------------------------------
+from nf4_kv import (PERCHANNEL_GROUP, attend_nf4_kv, dequant_kv_ref,
+                    kv_scores_nf4, kv_weighted_sum_nf4, quantize_kv,
+                    quantize_kv_perchannel)
+
+
+def _kv_fixture(T, H, D, seed=0):
+    g = torch.Generator().manual_seed(seed)
+    return (torch.randn(T, H, D, generator=g) * 0.5).float()
+
+
+@pytest.mark.parametrize("group", [None, PERCHANNEL_GROUP])
+def test_interp_kv_scores_match_dequant_of_same_bytes(group):
+    """Self-consistency in both scalings: the kernel must decode exactly the
+    bytes the reference decodes, with the absmax grouping it was told about."""
+    T, H, D = 64, 2, 64
+    x = _kv_fixture(T, H, D, 1)
+    p, a = (quantize_kv(x) if group is None
+            else quantize_kv_perchannel(x, group))
+    q = torch.randn(H, D, generator=torch.Generator().manual_seed(2)).float()
+    got = kv_scores_nf4(q, p, a, block_t=32, token_group=group)
+    ref = torch.einsum("hd,thd->ht", q,
+                       dequant_kv_ref(p, a, D, token_group=group).float())
+    assert torch.allclose(got, ref, atol=1e-4, rtol=1e-4)
+
+
+def test_interp_kv_weighted_sum_matches_reference():
+    T, H, D = 64, 2, 64
+    x = _kv_fixture(T, H, D, 3)
+    p, a = quantize_kv(x)
+    probs = torch.softmax(torch.randn(H, T, generator=torch.Generator().manual_seed(4)), -1)
+    got = kv_weighted_sum_nf4(probs, p, a, D, block_t=32)
+    ref = torch.einsum("ht,thd->hd", probs, dequant_kv_ref(p, a, D).float())
+    assert torch.allclose(got, ref, atol=1e-4, rtol=1e-4)
+
+
+def test_interp_kv_nibble_order_matches_the_expert_packer():
+    """Same codebook and nibble order as the weight path, asserted on CPU so a
+    porter sees it break before touching silicon."""
+    from nf4_pack_ref import quantize_pack_nf4
+    D = 64
+    rows = torch.randn(4, D, generator=torch.Generator().manual_seed(5))
+    ref_p, ref_a = quantize_pack_nf4(rows)
+    kv_p, kv_a = quantize_kv(rows.reshape(4, 1, D))
+    assert torch.equal(kv_p.reshape(4, D // 2), ref_p)
+    assert torch.equal(kv_a.reshape(4, D // BLOCKSIZE), ref_a)
+
+
+def test_interp_kv_gqa_is_an_index_map():
+    """Query head h reads kv head h//(H_q//H_kv) — a wrong map still produces
+    plausible numbers, so it is pinned explicitly."""
+    T, H_q, H_kv, D = 32, 4, 2, 64
+    x = _kv_fixture(T, H_kv, D, 6)
+    p, a = quantize_kv(x)
+    q = torch.randn(H_q, D, generator=torch.Generator().manual_seed(7)).float()
+    got = kv_scores_nf4(q, p, a, block_t=32)
+    k = dequant_kv_ref(p, a, D).float()
+    for h in range(H_q):
+        expect = torch.einsum("d,td->t", q[h], k[:, h // (H_q // H_kv), :])
+        assert torch.allclose(got[h], expect, atol=1e-4, rtol=1e-4)
+
+
+def test_interp_kv_per_channel_absmax_is_the_same_size():
+    """One fp32 scale per 64 quantized values either way — the equality the
+    'free fidelity' framing rests on, checked without a GPU."""
+    T, H, D = 128, 2, 64
+    x = _kv_fixture(T, H, D, 8)
+    _, a_tok = quantize_kv(x)
+    _, a_ch = quantize_kv_perchannel(x, PERCHANNEL_GROUP)
+    assert a_ch.numel() == a_tok.numel()
+
+
+def test_interp_kv_mismatched_absmax_layout_raises():
+    T, H, D = 128, 2, 64
+    x = _kv_fixture(T, H, D, 9)
+    p_ch, a_ch = quantize_kv_perchannel(x, PERCHANNEL_GROUP)
+    q = torch.randn(H, D).float()
+    with pytest.raises(ValueError, match="does not match per-token blockwise"):
+        kv_scores_nf4(q, p_ch, a_ch, block_t=32)

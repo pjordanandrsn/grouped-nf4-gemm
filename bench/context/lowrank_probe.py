@@ -201,9 +201,12 @@ def main() -> int:
     print(f"K pre-RoPE @ rank 64: {kpre:.4f}  (post-RoPE {sum(kh)/len(kh):.4f}) "
           f"| V control {vctl:.4f} must equal V {sum(vh)/len(vh):.4f}")
 
+    head_dim = layers[0]["head_dim"]          # not 128 on every architecture
     print(f"\n{'rank':>5} {'ratio':>6} {'K held':>8} {'V held':>8}  packable")
     for rr in SWEEP:
-        print(f"{rr:>5} {128/rr:>5.2f}x {_mean(f'K_r{rr}'):>8.3f} "
+        if rr > head_dim:
+            continue
+        print(f"{rr:>5} {head_dim/rr:>5.2f}x {_mean(f'K_r{rr}'):>8.3f} "
               f"{_mean(f'V_r{rr}'):>8.3f}  {'yes' if rr % 64 == 0 else 'no'}")
     print(f"receipt -> {dst}")
     return 0

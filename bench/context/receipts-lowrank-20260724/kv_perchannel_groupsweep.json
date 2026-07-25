@@ -1,0 +1,38 @@
+[
+  {
+    "config": "fp16 cache (baseline)",
+    "ppl": 5.9779181480407715,
+    "argmax_agree": 1.0,
+    "cache_bytes": null
+  },
+  {
+    "config": "K4 V16  per-token blockwise",
+    "ppl": 6.060911178588867,
+    "argmax_agree": 0.9462890625,
+    "cache_bytes": 85983232
+  },
+  {
+    "config": "K4 V16  per-chan group   8",
+    "ppl": 6.01310920715332,
+    "argmax_agree": 0.9384765625,
+    "cache_bytes": 100663296
+  },
+  {
+    "config": "K4 V16  per-chan group  16",
+    "ppl": 6.187555313110352,
+    "argmax_agree": 0.927734375,
+    "cache_bytes": 92274688
+  },
+  {
+    "config": "K4 V16  per-chan group  32",
+    "ppl": 6.246700763702393,
+    "argmax_agree": 0.9462890625,
+    "cache_bytes": 88080384
+  },
+  {
+    "config": "K4 V16  per-chan group  64",
+    "ppl": 6.25300931930542,
+    "argmax_agree": 0.923828125,
+    "cache_bytes": 85983232
+  }
+]
