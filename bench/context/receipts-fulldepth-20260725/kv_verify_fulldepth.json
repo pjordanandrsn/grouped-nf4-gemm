@@ -1,0 +1,1390 @@
+[
+ {
+  "model": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+  "real_layers": 94,
+  "probe_layers": 94,
+  "full_depth": true,
+  "hidden_narrowed": true,
+  "contexts": [
+   512,
+   2048
+  ],
+  "measured_bytes": {
+   "512": 98566144,
+   "2048": 394264576
+  },
+  "marginal_b_per_token": 192512.0,
+  "expected_b_per_token": 192512,
+  "err_pct": 0.0,
+  "passed": true,
+  "layer0_shapes": [
+   {
+    "layer": 0,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 1,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 2,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 3,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 4,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 5,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 6,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 7,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 8,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 9,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 10,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 11,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 12,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 13,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 14,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 15,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 16,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 17,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 18,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 19,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 20,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 21,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 22,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 23,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 24,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 25,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 26,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 27,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 28,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 29,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 30,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 31,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 32,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 33,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 34,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 35,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 36,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 37,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 38,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 39,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 40,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 41,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 42,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 43,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 44,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 45,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 46,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 47,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 48,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 49,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 50,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 51,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 52,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 53,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 54,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 55,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 56,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 57,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 58,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 59,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 60,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 61,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 62,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 63,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 64,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 65,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 66,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 67,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 68,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 69,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 70,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 71,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 72,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 73,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 74,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 75,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 76,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 77,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 78,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 79,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 80,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 81,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 82,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 83,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 84,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 85,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 86,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 87,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 88,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 89,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 90,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 91,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 92,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   },
+   {
+    "layer": 93,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     4,
+     512,
+     128
+    ]
+   }
+  ],
+  "probe_derived": {
+   "kind": "uniform",
+   "slope_b": 192512,
+   "floor_b": 0,
+   "per_layer_full": 2048,
+   "per_layer_sliding": 0,
+   "window": null,
+   "detail": "2x4x128x2B x94L"
+  },
+  "full_model_derived": {
+   "kind": "uniform",
+   "slope_b": 192512,
+   "floor_b": 0,
+   "per_layer_full": 2048,
+   "per_layer_sliding": 0,
+   "window": null,
+   "detail": "2x4x128x2B x94L"
+  },
+  "full_model_slope_kb_per_token": 188.0,
+  "full_model_floor_mb": 0.0
+ },
+ {
+  "model": "openai/gpt-oss-120b",
+  "real_layers": 36,
+  "probe_layers": 36,
+  "full_depth": true,
+  "hidden_narrowed": true,
+  "contexts": [
+   512,
+   2048
+  ],
+  "measured_bytes": {
+   "512": 23556240,
+   "2048": 80179344
+  },
+  "marginal_b_per_token": 36864.0,
+  "expected_b_per_token": 36864,
+  "err_pct": 0.0,
+  "passed": true,
+  "layer0_shapes": [
+   {
+    "layer": 0,
+    "type": "sliding_attention",
+    "k_shape": [
+     1,
+     8,
+     127,
+     64
+    ]
+   },
+   {
+    "layer": 1,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     8,
+     512,
+     64
+    ]
+   },
+   {
+    "layer": 2,
+    "type": "sliding_attention",
+    "k_shape": [
+     1,
+     8,
+     127,
+     64
+    ]
+   },
+   {
+    "layer": 3,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     8,
+     512,
+     64
+    ]
+   },
+   {
+    "layer": 4,
+    "type": "sliding_attention",
+    "k_shape": [
+     1,
+     8,
+     127,
+     64
+    ]
+   },
+   {
+    "layer": 5,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     8,
+     512,
+     64
+    ]
+   },
+   {
+    "layer": 6,
+    "type": "sliding_attention",
+    "k_shape": [
+     1,
+     8,
+     127,
+     64
+    ]
+   },
+   {
+    "layer": 7,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     8,
+     512,
+     64
+    ]
+   },
+   {
+    "layer": 8,
+    "type": "sliding_attention",
+    "k_shape": [
+     1,
+     8,
+     127,
+     64
+    ]
+   },
+   {
+    "layer": 9,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     8,
+     512,
+     64
+    ]
+   },
+   {
+    "layer": 10,
+    "type": "sliding_attention",
+    "k_shape": [
+     1,
+     8,
+     127,
+     64
+    ]
+   },
+   {
+    "layer": 11,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     8,
+     512,
+     64
+    ]
+   },
+   {
+    "layer": 12,
+    "type": "sliding_attention",
+    "k_shape": [
+     1,
+     8,
+     127,
+     64
+    ]
+   },
+   {
+    "layer": 13,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     8,
+     512,
+     64
+    ]
+   },
+   {
+    "layer": 14,
+    "type": "sliding_attention",
+    "k_shape": [
+     1,
+     8,
+     127,
+     64
+    ]
+   },
+   {
+    "layer": 15,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     8,
+     512,
+     64
+    ]
+   },
+   {
+    "layer": 16,
+    "type": "sliding_attention",
+    "k_shape": [
+     1,
+     8,
+     127,
+     64
+    ]
+   },
+   {
+    "layer": 17,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     8,
+     512,
+     64
+    ]
+   },
+   {
+    "layer": 18,
+    "type": "sliding_attention",
+    "k_shape": [
+     1,
+     8,
+     127,
+     64
+    ]
+   },
+   {
+    "layer": 19,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     8,
+     512,
+     64
+    ]
+   },
+   {
+    "layer": 20,
+    "type": "sliding_attention",
+    "k_shape": [
+     1,
+     8,
+     127,
+     64
+    ]
+   },
+   {
+    "layer": 21,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     8,
+     512,
+     64
+    ]
+   },
+   {
+    "layer": 22,
+    "type": "sliding_attention",
+    "k_shape": [
+     1,
+     8,
+     127,
+     64
+    ]
+   },
+   {
+    "layer": 23,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     8,
+     512,
+     64
+    ]
+   },
+   {
+    "layer": 24,
+    "type": "sliding_attention",
+    "k_shape": [
+     1,
+     8,
+     127,
+     64
+    ]
+   },
+   {
+    "layer": 25,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     8,
+     512,
+     64
+    ]
+   },
+   {
+    "layer": 26,
+    "type": "sliding_attention",
+    "k_shape": [
+     1,
+     8,
+     127,
+     64
+    ]
+   },
+   {
+    "layer": 27,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     8,
+     512,
+     64
+    ]
+   },
+   {
+    "layer": 28,
+    "type": "sliding_attention",
+    "k_shape": [
+     1,
+     8,
+     127,
+     64
+    ]
+   },
+   {
+    "layer": 29,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     8,
+     512,
+     64
+    ]
+   },
+   {
+    "layer": 30,
+    "type": "sliding_attention",
+    "k_shape": [
+     1,
+     8,
+     127,
+     64
+    ]
+   },
+   {
+    "layer": 31,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     8,
+     512,
+     64
+    ]
+   },
+   {
+    "layer": 32,
+    "type": "sliding_attention",
+    "k_shape": [
+     1,
+     8,
+     127,
+     64
+    ]
+   },
+   {
+    "layer": 33,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     8,
+     512,
+     64
+    ]
+   },
+   {
+    "layer": 34,
+    "type": "sliding_attention",
+    "k_shape": [
+     1,
+     8,
+     127,
+     64
+    ]
+   },
+   {
+    "layer": 35,
+    "type": "full_attention",
+    "k_shape": [
+     1,
+     8,
+     512,
+     64
+    ]
+   }
+  ],
+  "probe_derived": {
+   "kind": "hybrid",
+   "slope_b": 36864,
+   "floor_b": 4681728,
+   "per_layer_full": 2048,
+   "per_layer_sliding": 2048,
+   "window": 128,
+   "n_full": 18,
+   "n_sliding": 18,
+   "kv_shared_layers": 0,
+   "detail": "full 2048B/tok/L x18; sliding 2048B x18 x127 bounded"
+  },
+  "full_model_derived": {
+   "kind": "hybrid",
+   "slope_b": 36864,
+   "floor_b": 4681728,
+   "per_layer_full": 2048,
+   "per_layer_sliding": 2048,
+   "window": 128,
+   "n_full": 18,
+   "n_sliding": 18,
+   "kv_shared_layers": 0,
+   "detail": "full 2048B/tok/L x18; sliding 2048B x18 x127 bounded"
+  },
+  "full_model_slope_kb_per_token": 36.0,
+  "full_model_floor_mb": 4.46484375
+ }
+]

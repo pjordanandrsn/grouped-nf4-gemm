@@ -7,8 +7,9 @@ a derived, measured, budgeted quantity.
 
 **Status: Phase C0.** Per-layer KV geometry and the bounded/unbounded split are
 **measured on the A2000** against each architecture's real `modeling_*.py` (see
-*Verification* below). Full-depth real-weight confirmation for the two models
-that don't fit the A2000 (gpt-oss-120b, Qwen3-235B) is **rung two — pending**;
+*Verification* below) — and since 2026-07-25 that includes **full depth for all
+seven models**, gpt-oss-120b and Qwen3-235B included, on the same 12 GB card.
+What is still not measured for those two is real *weights* and real *width*;
 rows are labelled accordingly. Kimi K2 is **derived-only** (no local weights).
 K3's config does not exist publicly yet — its row lands when it does.
 
@@ -21,7 +22,7 @@ VRAM_total = weights_resident + hot_set + KV(context) + activations + overhead
 | term | source |
 |---|---|
 | `weights_resident` | measured per model/mode (e.g. 235B NF4 offload: base ≈ 15.1 GB) — the stamped flagship receipts |
-| `hot_set` | `plan_placement()` output — K experts × bytes/expert (C2 will subtract KV *before* sizing this) |
+| `hot_set` | K experts × bytes/expert, chosen by the **caller** — see C2 below for why no planner ships |
 | **`KV(context)`** | **this document**: `slope_KB_per_token × context + bounded_floor` |
 | `activations` | transient; measured inside the stamped peak figures |
 | `overhead` | allocator + CUDA context; inside the measured peaks |
@@ -48,10 +49,10 @@ flat-floor formula would claim. Cache dtype fp16/bf16
 
 | model | KB/token | floor | 4K | 8K | 32K | 128K | tier |
 |---|---:|---:|---:|---:|---:|---:|---|
-| Qwen3-235B-A22B | **188.0** | — | 0.73 GB | 1.47 GB | 5.88 GB | 23.50 GB | measured (per-layer); rung-2 pending |
+| Qwen3-235B-A22B | **188.0** | — | 0.73 GB | 1.47 GB | 5.88 GB | 23.50 GB | measured (**full depth**, narrowed width) |
 | Qwen3-30B-A3B | **96.0** | — | 0.38 GB | 0.75 GB | 3.00 GB | 12.00 GB | measured (A2000) |
 | gpt-oss-20b | **24.0** | 3.0 MB | 0.10 GB | 0.19 GB | 0.75 GB | 3.00 GB | measured (A2000) |
-| gpt-oss-120b | **36.0** | 4.5 MB | 0.14 GB | 0.29 GB | 1.13 GB | 4.50 GB | measured (per-layer); rung-2 pending |
+| gpt-oss-120b | **36.0** | 4.5 MB | 0.14 GB | 0.29 GB | 1.13 GB | 4.50 GB | measured (**full depth**, narrowed width) |
 | Gemma-4-26B-A4B | **20.0** | 199.8 MB | 0.27 GB | 0.35 GB | 0.82 GB | 2.70 GB | measured (A2000) |
 | OLMoE-1B-7B | **128.0** | — | 0.50 GB | 1.00 GB | 4.00 GB | 16.00 GB | measured (A2000) |
 | Kimi-K2-Instruct | **68.6** | — | 0.27 GB | 0.54 GB | 2.14 GB | 8.58 GB | **derived only** |
@@ -102,13 +103,39 @@ gpt-oss cross-check: at ctx 512 the 2F+2S probe held 2.496 MB =
 `2×2048×512 (full) + 2×2048×127 (sliding, window−1)` — both regimes confirmed in
 one number.
 
-**Rung two (pending, cloud, standing GO):** full-depth, real-weight slope at
-512 / 8K / 32K for gpt-oss-120b and Qwen3-235B — the two models whose depth the
-A2000 cannot hold. What it buys over rung one: confirmation that nothing
-depth-dependent (e.g. a KV-sharing threshold like Gemma's `num_kv_shared_layers`)
-changes the slope at real depth. Until it is green, those two rows are labelled
-*rung-2 pending* and **must not** be promoted onto the READMEs or research pages
-(C1's gate).
+### Rung 1.5 — full depth on the small card (2026-07-25)
+
+Rung two was scoped as cloud work on the premise that gpt-oss-120b and
+Qwen3-235B cannot be held at real depth by a 12 GB card. **That premise was
+wrong, and it cost nothing to check.** Depth is the *only* thing the rung-one
+probe truncates — vocab, MLP and experts were already shrunk, on the stated
+grounds that they do not touch the geometry under test. Narrowing `hidden_size`
+the same way removes the last obstacle, because the cache is
+`[B, num_key_value_heads, T, head_dim]` and **both fields are read from the
+config**, so width is not part of what is being measured. That holds only where
+`head_dim` is explicit — otherwise transformers derives it from `hidden_size`
+and the shrink would move the number — so the probe refuses when it is absent,
+and additionally re-derives after shrinking and requires an exact match.
+
+Run at real depth with the real model classes:
+
+| model | real depth | measured B/token | derived | err |
+|---|---:|---:|---:|---:|
+| Qwen3-235B-A22B | **94 layers** | 192,512.0 | 192,512 | **0.00%** |
+| gpt-oss-120b | **36 layers** (18F+18S) | 36,864.0 | 36,864 | **0.00%** |
+
+So the mechanism rung two exists to catch — something depth-dependent altering
+the slope at real depth — **is not there**, and gpt-oss-120b's 18F+18S split is
+confirmed at full depth rather than inferred from a 4-layer window.
+
+**What is still not established**, and why the rows are not simply promoted:
+real weights and real width. Both are *argued* irrelevant — geometry is a
+function of config and code, which is rung one's founding premise and now holds
+across seven model×depth combinations, and the width shrink is self-checked to
+leave the derivation identical — but argued is not measured. Rung two as
+originally specified (full-depth **real-weight**) remains open, and whether
+rung 1.5 clears C1's publication gate is a judgement about how much that
+residual is worth, not a measurement.
 
 ## Exactness tiers
 
