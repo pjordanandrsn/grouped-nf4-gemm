@@ -381,6 +381,95 @@ barrier where a per-layer event would do — the side stream only needs to wait 
 could recover overlap, and it gets its own prediction rather than being folded
 into B1's.
 
+## Amendment 2 — E2: per-layer events instead of a whole-stream barrier
+
+Written after E1, **before E2 was built**.
+
+**The mechanism, stated so it can be wrong.** Making the append asynchronous
+forced the prefetch stream to wait on the default stream, and
+`wait_stream(current_stream())` is a **whole-stream barrier**: it waits on
+everything queued, including the compute of the layer we are trying to overlap
+with. That is why E1's correct prefetch lost 3% instead of winning.
+
+A per-layer event is the narrow version. `prefetch(i+1)` fires from layer *i*'s
+pre-hook, and the append it must not race is layer *i+1*'s — **from the previous
+step**, which completed long ago. So the wait should be free and the copy should
+start immediately, overlapping layer *i*'s compute. If that reasoning is right,
+the barrier was the whole problem.
+
+**Track record disclosure.** My prefetch predictions have now been wrong twice —
+B1 confirmed synthetically and then failed on a real model, and E1a/E1c were
+specified without the prediction that mattered. The intervals below are
+deliberately wide and the mechanism is the claim, not the magnitude.
+
+Baseline (E1 run 3): resident **311.07**, streamed **357.45** (exposed 46.38),
+streamed+barrier-prefetch **367.91** (exposed 56.83) ms/step. Transfer by bytes
+is 24.4 ms/step.
+
+- **E2a.** Exposed transfer with per-layer events ≤ **20 ms/step**.
+  *Falsified above 40 ms* — 40 is roughly "no better than no prefetch at all".
+- **E2b.** Hidden fraction ≥ **60%**. *Falsified below 40%.*
+- **E2c — gate.** Greedy token ids identical to the resident cache. Both defects
+  E1 found were correctness defects and one of them passed this check by luck,
+  so it runs over more tokens. *Any mismatch voids E2a/E2b.*
+- **E2d.** No regression: step time ≤ the no-prefetch streamed arm (357.45 ms).
+  *Falsified above it* — a prefetch that is still net-negative is not shipped
+  whatever its hidden fraction says.
+
+**Pre-committed decision** — specified to include the prediction that says
+whether it works, which is the error E1 made: if **E2a, E2c and E2d** all hold,
+prefetch becomes a supported, documented path. If E2d fails, prefetch is closed
+for this project and the streamed tier ships at its measured +18.3% with the
+mechanism recorded as tried and rejected.
+
+## Outcome of E2 — the barrier was not the problem
+
+Same fixture, 32 greedy tokens. `receipts-faster-20260725/kv_prefetch_real_e2.json`.
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| E2a exposed transfer | ≤ 20 ms/step | **91.42 ms** | **FALSIFIED** |
+| E2b hidden fraction | ≥ 60% | **−38.9%** | **FALSIFIED** |
+| E2c greedy ids identical | exact | True | **CONFIRMED** |
+| E2d no regression | ≤ 327.49 ms | **353.10 ms** | **FALSIFIED** |
+
+| arm | ms/step |
+|---|---:|
+| resident | 261.68 |
+| streamed | 327.49 |
+| streamed + per-layer-event prefetch | 353.10 |
+
+The reasoning in the amendment was sound and the conclusion drawn from it was
+wrong. Narrowing the barrier to a per-layer event did remove a real
+serialization — and prefetch still lost, by *more* than the whole-stream version
+did. **The barrier was not the problem.**
+
+**Why, and it generalizes.** The transfer is 24.4 ms of a ~262 ms step: **9%**.
+The machinery to hide it — an extra device allocation per layer per tensor, a
+staged-history-plus-tail concatenation the non-prefetch path never pays,
+cross-stream events and `record_stream` bookkeeping — costs more than the 9% it
+is chasing. **At 9% of a step, the transfer is not worth machinery.** Prefetch
+would pay where transfer is a large *fraction* of the step: long context with
+cheap compute. This model is the opposite, and so is most of what #14's window
+table covers.
+
+**Pre-committed decision fires. Prefetch is CLOSED for this project.** Three
+registered attempts — B1 (synthetic, confirmed), E1 (real, falsified), E2
+(narrowed, falsified) — is enough. The streamed tier ships at its measured
+**+18.3%** for zero KV bytes on the device, and the mechanism is recorded as
+tried and rejected rather than left as a promising-sounding TODO.
+
+`prefetch()` stays in the library: it is correct, tested in decode order, off
+unless called, and someone in the long-context/cheap-compute regime may want it.
+Nothing promotes it and no helper wraps it.
+
+**What this says about the whole line.** The streamed tier's cost is the
+transfer, and the transfer obeys `bytes / link` (#15, confirmed at 1.009 and
+1.001). Scheduling cannot argue with that, and three attempts to hide it behind
+compute did not. The levers that remain are the ones that move *bytes*: NF4
+(shipped, 3.56×) and split residency (shipped, exact). That is the honest end of
+this line.
+
 ## Scoring
 
 Results land in `receipts-faster-20260725/`. Every prediction is marked

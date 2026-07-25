@@ -804,6 +804,25 @@ unit suite was 25/25 green throughout**, because its prefetch test completed all
 updates before any prefetch and so never produced the order a decode uses. A
 run that was *faster and wrong* is what caught it.
 
+**Prefetch is closed after a third attempt (E2).** The obvious diagnosis for
+E1's loss was that the safety wait is a whole-stream barrier where a per-layer
+event would do. Registered, built, measured: the narrowed version lost by
+**more** (353.10 ms/step against 327.49 without it). The barrier was not the
+problem.
+
+**The reason generalizes.** The transfer is 24.4 ms of a ~262 ms step — **9%** —
+and the machinery to hide it (an extra allocation per layer per tensor, a
+staged-history concatenation the plain path never pays, cross-stream
+bookkeeping) costs more than the 9% it chases. **At 9% of a step, transfer is
+not worth machinery.** Prefetch would pay where transfer is a large fraction of
+the step: long context with cheap compute — the opposite of this model, and of
+most of what #14's table covers.
+
+So the streamed tier ships at **+18.3% for zero KV bytes on the device**, and
+scheduling is recorded as tried and rejected across three registered attempts
+rather than left as a promising TODO. The levers that remain are the ones that
+move **bytes**: NF4 (3.56×) and split residency — both shipped, both exact.
+
 **Scope.** One device, one geometry. The synthetic harness's "compute" was
 dequantization rather than attention, and the argument that a real decode has
 more to hide behind was made in advance, tested, and **wrong**.
