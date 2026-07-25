@@ -1,0 +1,76 @@
+{
+  "rows": [
+    {
+      "context": 8192,
+      "residence": "gpu",
+      "prefetch": false,
+      "load_s": 0.24544083404541017,
+      "peak_bytes": 552600064,
+      "streamed_bytes": 0
+    },
+    {
+      "context": 8192,
+      "residence": "host",
+      "prefetch": false,
+      "load_s": 0.31881947326660154,
+      "peak_bytes": 111411712,
+      "streamed_bytes": 443547648.0
+    },
+    {
+      "context": 8192,
+      "residence": "host",
+      "prefetch": true,
+      "load_s": 0.24854160308837892,
+      "peak_bytes": 116130304,
+      "streamed_bytes": 443547648.0
+    },
+    {
+      "context": 32768,
+      "residence": "gpu",
+      "prefetch": false,
+      "load_s": 0.9679308776855469,
+      "peak_bytes": 2210398720,
+      "streamed_bytes": 0
+    },
+    {
+      "context": 32768,
+      "residence": "host",
+      "prefetch": false,
+      "load_s": 1.2563240966796876,
+      "peak_bytes": 445645312,
+      "streamed_bytes": 1774190592.0
+    },
+    {
+      "context": 32768,
+      "residence": "host",
+      "prefetch": true,
+      "load_s": 0.9798497009277344,
+      "peak_bytes": 464519680,
+      "streamed_bytes": 1774190592.0
+    }
+  ],
+  "verdicts": {
+    "B1a": {
+      "measured": 1.0123137132175049,
+      "interval": [
+        1.0,
+        1.15
+      ],
+      "verdict": "CONFIRMED",
+      "inside_interval": true
+    },
+    "B1b": {
+      "measured": 1.2821600042232841,
+      "interval": [
+        1.2,
+        1.35
+      ],
+      "verdict": "CONFIRMED"
+    },
+    "B1c": {
+      "measured_mb": 18.0,
+      "threshold_mb": 100,
+      "verdict": "CONFIRMED"
+    }
+  }
+}

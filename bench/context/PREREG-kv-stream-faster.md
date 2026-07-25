@@ -198,6 +198,69 @@ that would take the overhead from 131.5 ms toward the 71.6 ms the byte count
 predicts — i.e. **the assembly currently costs almost as much as the transfer it
 saves.** Any re-run after that fix is a follow-up, not a rescoring.
 
+### A1 follow-up after the assembly fix — NOT a rescoring
+
+Dequantizing both halves and letting one `cat` write the contiguous result,
+instead of materializing each half first:
+
+| f | overhead before | after | byte floor |
+|---|---:|---:|---:|
+| 0.00 | 287.6 ms | 288.4 ms | 286.2 |
+| 0.25 | 272.6 | 257.7 | 214.7 |
+| 0.50 | 200.6 | 185.3 | 143.1 |
+| 0.75 | 131.5 | **105.6** | 71.6 |
+| fitted c | 88.0 ms | **54.0 ms** | — |
+| fitted B | 8.21 GB/s | **7.14 GB/s** (now inside A1a's interval) | — |
+
+f=0 is unchanged, as it must be — there is no concatenation to fix there. The
+registered verdicts stand; this is what the fixed code does. **A residual 54 ms
+remains and is structural**: the assembly still writes one full-size contiguous
+tensor per layer, and removing that needs attention to accept two tensors rather
+than one, which is an attention-path change and not a cache change.
+
+## Outcome of B1
+
+`receipts-faster-20260725/kv_prefetch_bench.json`, same geometry.
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| B1a prefetched / resident @32K | [1.00, 1.15] | **1.012** | **CONFIRMED** |
+| B1b plain / prefetched @32K | [1.20, 1.35] | **1.282** | **CONFIRMED** |
+| B1c peak delta | < 100 MB | **+18.0 MB** | **CONFIRMED** |
+
+| ctx | resident | streamed | streamed+prefetch | transfer hidden |
+|---:|---:|---:|---:|---:|
+| 8192 | 245.4 ms | 318.8 | **248.5** | **95.8%** |
+| 32768 | 967.9 ms | 1256.3 | **979.8** | **95.9%** |
+
+**Exposed transfer at 32K goes from 288.4 ms to 11.9 ms.** The streamed tier now
+costs **1.2%** over holding the whole cache resident, while keeping **zero**
+bytes of it on the device — 443 MB peak against 2108 MB, 4.76× less. The
+fraction hidden is the same at both contexts, which is what a hiding mechanism
+should look like rather than a lucky ratio.
+
+**This changes how #14's window table should be read, and the correction goes
+the favourable way.** That analysis treated transfer as strictly additive:
+`step = W + batch·KV(ctx)`, all of it exposed. With overlap the step is
+`max(compute, transfer)`, so **`link/KV(ctx)` is the transfer-bound, not the
+bound** — it only binds when `KV/link` exceeds the per-step compute. Here it does
+not, by 3.4×, so the link is invisible. The windows in #14 are therefore
+conservative. They are not re-derived: doing so needs a per-model compute
+estimate this project does not have, and inventing one to widen a table in my
+own favour is exactly the move this document exists to prevent.
+
+**The registered interaction now matters.** B1 hides the transfer behind the
+**dequantization** — work that exists *because* the data arrives packed. D1
+(fused attend) removes that dequant. So the two are **substitutes**: a future D1
+result must not be added to B1's, and if D1 lands, B1's 95.9% will fall because
+there is less left to hide behind. Stated in the prereg before either ran, and
+restated here because it is now load-bearing rather than hypothetical.
+
+**Confound, restated:** this harness's compute is dequantization, not attention.
+A real decode does attention and an MLP on top, so there is *more* to hide
+behind, not less — but that is an argument, not a measurement, and the real-model
+number has not been taken.
+
 ## Scoring
 
 Results land in `receipts-faster-20260725/`. Every prediction is marked

@@ -726,6 +726,60 @@ on the default stream, which is exactly what makes an *additive* model the right
 one to test. A prefetched implementation would break additivity by design and
 must not be scored against this.
 
+### 16. Prefetch hides 96% of the streamed transfer — the tier now costs ~1%
+
+#15 measured the streamed KV tier obeying `t = bytes/link` and left it there:
++288 ms per step at 32K, additive. Registered in `PREREG-kv-stream-faster.md`
+(stamped before any of it was built) and now measured, **two changes take most
+of that back.**
+
+**Prefetch (B1) — all three predictions confirmed.** Issuing layer L+1's copy on
+a side stream while L's dequant runs converts `compute + transfer` into
+`max(compute, transfer)`:
+
+| ctx | resident | streamed | streamed + prefetch | transfer hidden |
+|---:|---:|---:|---:|---:|
+| 8192 | 245.4 ms | 318.8 | **248.5** | **95.8%** |
+| 32768 | 967.9 ms | 1256.3 | **979.8** | **95.9%** |
+
+Exposed transfer at 32K falls from **288.4 ms to 11.9 ms**. The streamed tier
+costs **1.2%** over holding the whole cache resident while keeping **zero** bytes
+of it on the device (443 MB peak against 2108 MB — 4.76× less). The hidden
+fraction is identical at both contexts, which is what a mechanism looks like
+rather than a lucky ratio. Cost: one layer in flight, **+18 MB**.
+
+**Split residency (A1) — the dial works, its predictions did not.** Keeping the
+oldest f of the cache resident makes residence continuous, and the bytes track
+the dial exactly (0.4435 / 0.8871 / 1.3306 GB measured against the same
+expected). But all three numeric predictions were falsified, and only one of
+those was the code's fault: `_materialize` assembled with a `cat` over
+already-materialized halves, ~60 ms/step of avoidable copying. Fixing it moved
+the fitted constant 88.0 → 54.0 ms and the fitted bandwidth 8.21 → 7.14 GB/s.
+The other two failures were mine — an analysis plan that fitted one line through
+two regimes (f=0 does no concatenation at all), and an interval written with the
+sign inverted, since splitting trades VRAM *for* bandwidth and resident VRAM
+must therefore **rise** with f.
+
+**What this changes about #14, in the favourable direction — and why it is not
+re-derived.** #14 treated transfer as strictly additive and fully exposed. With
+overlap the step is `max(compute, transfer)`, so **`link/KV(ctx)` is the
+transfer-bound rather than the bound**: it binds only when `KV/link` exceeds the
+per-step compute, which here it does not, by 3.4×. #14's window counts are
+therefore conservative. Re-deriving them needs a per-model compute estimate this
+project does not have, and inventing one to widen a table in my own favour is
+the move the preregistration exists to prevent.
+
+**The substitution that will bite later, registered before either ran.** B1 hides
+the transfer behind **dequantization** — work that exists precisely *because* the
+data arrives packed. D1 (wiring in the fused `attend_nf4_kv_gqa`, #12) removes
+that dequant. The two are **substitutes, not complements**: if D1 lands, B1's
+95.9% falls, because there is less left to hide behind, and the two results must
+never be multiplied together.
+
+**Scope.** One device, one geometry, and the harness's "compute" is
+dequantization rather than attention. A real decode adds attention and an MLP,
+so there is *more* to hide behind — but that is an argument, not a measurement.
+
 ## What this changes downstream
 
 - **C1** — every published VRAM figure gains its context qualifier; serving docs

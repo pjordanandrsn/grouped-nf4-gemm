@@ -1,0 +1,16 @@
+94L x 4kv x 128d   reps 8
+ctx=  8192 gpu       load=   245.4 ms  peak=  527.0 MB
+ctx=  8192 host      load=   318.8 ms  peak=  106.3 MB
+ctx=  8192 host+pre  load=   248.5 ms  peak=  110.8 MB
+ctx= 32768 gpu       load=   967.9 ms  peak= 2108.0 MB
+ctx= 32768 host      load=  1256.3 ms  peak=  425.0 MB
+ctx= 32768 host+pre  load=   979.8 ms  peak=  443.0 MB
+
+=== scoring (ctx 32768) ===
+B1a prefetched/resident   = 1.012   [1.00,1.15], falsify >1.25  CONFIRMED
+B1b plain/prefetched      = 1.282   [1.20,1.35]  CONFIRMED
+B1c peak delta            = +18.0 MB  < 100 MB  CONFIRMED
+  ctx 8192: transfer exposed    73.4 ms ->     3.1 ms ( 95.8% hidden)
+  ctx 32768: transfer exposed   288.4 ms ->    11.9 ms ( 95.9% hidden)
+
+wrote /root/g/bench/context/kv_prefetch_bench.json
