@@ -122,3 +122,60 @@ conditioned on a number that this change invalidated. Prefetch is **not**
 reopened here, because doing so on the strength of an argument rather than a
 registration is the mistake this document set exists to prevent — it would need
 its own prereg, and it inherits three prior falsifications.
+
+## Amendment 1 — H2: tune it. Registered before the tuning.
+
+99.9 GB/s is ~35% of this card's ~288. Two things in the kernel are obviously
+wrong for a bandwidth-bound job, and naming them before measuring keeps the
+result from being a post-hoc story:
+
+1. **The stores are strided.** Elements land at `2i` and `2i+1` in two separate
+   `tl.store`s, so each touches every other address. Indexing the *output* by
+   element and gathering the byte (`j // 2`) instead reads each byte twice out
+   of L1 and stores one contiguous run.
+2. **The programs are tiny.** `ROWS=4` at D=128 loads 256 bytes and stores 1 KB,
+   over a 16,384-program grid — launch and index arithmetic against almost no
+   work.
+
+- **H2a.** Tuned fused dequant reaches **≥ 150 GB/s** (≥ ~52% of peak) at
+  `[4096,16,128]` → bf16. *Falsified below 120 GB/s.*
+- **H2b — gate.** Still bit-identical to `dequant_kv_ref`, same shapes as H1b.
+  *Any mismatch and the tuning is discarded.*
+
+The config search itself is a search, not a hypothesis: the sweep is reported in
+full, and the chosen config is pinned in source with its measurement beside it
+rather than left to `triton.autotune`, matching the choice #12 made for
+comparability.
+
+## Outcome of H2 — falsified, and the remaining bottleneck is identified not fixed
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| H2b **gate** bit-identical | exact | exact, 4 shapes × 2 dtypes | **CONFIRMED** |
+| H2a tuned bandwidth | ≥ 150 GB/s | **113.1 GB/s** | **FALSIFIED** |
+
+Both named defects were real and fixing them bought less than predicted.
+Contiguous stores plus a 28-point sweep over `rows_per_prog` × `num_warps` moved
+99.9 → **113.1 GB/s** (+13%), against the ≥150 registered. Winner **rows=8,
+warps=1**, pinned in source with the sweep in the receipts.
+
+Sweep shape, which is itself informative: performance peaks at 8 rows and falls
+off in *both* directions — 1 row starves the machine (72.5 GB/s), 32+ rows spill
+(97 and below). And `num_warps=1` wins at every row count, which says the kernel
+is not warp-parallel-limited.
+
+**The bottleneck is the codebook gather, diagnosed and NOT fixed.** Every output
+element does `tl.load(lut_ptr + code)` — 8.4M indexed loads per call against a
+16-entry table. That is a random access per element, and no amount of store
+coalescing or launch shaping removes it. The standard fix is to evaluate the
+16-entry codebook with a 4-level tree of `tl.where` selects and drop the gather
+entirely.
+
+Not attempted here, and the reason is scope rather than doubt: H1 had already
+cleared its thresholds, the end-to-end number is now 1.13×, and a further 2×
+on the dequant would move that to roughly 1.07×. Recorded as identified
+headroom with the mechanism named, so the next person does not have to
+rediscover it.
+
+The reference re-measured at **3.052 ms** here against 2.717 ms in H1 — the same
+±12% band. The honest speedup is therefore **~13–16×**, not a point estimate.

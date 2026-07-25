@@ -842,6 +842,14 @@ unit suite was 25/25 green throughout**, because its prefetch test completed all
 updates before any prefetch and so never produced the order a decode uses. A
 run that was *faster and wrong* is what caught it.
 
+> **REOPENED AND CONFIRMED 2026-07-25 (finding #18 changed the input).** The
+> closure below rests on "transfer is 9% of a step". #18's fused dequant removed
+> most of the step, taking that share to **46.7%** at 16K — and the *same
+> prefetch code*, unmodified, flipped from −38.9% to **+29.0% hidden**, making
+> the streamed arm **0.865×**. It still costs **9.6%** at 4K (17.8% share), so it
+> ships **opt-in and off by default**, with the regime stated. The reasoning
+> below was right about its ratio; the ratio moved.
+
 **Prefetch is closed after a third attempt (E2).** The obvious diagnosis for
 E1's loss was that the safety wait is a whole-stream barrier where a per-layer
 event would do. Registered, built, measured: the narrowed version lost by
