@@ -265,6 +265,45 @@ in-repo):
   greedy output 6/6) and validates SM-issued UVA reads at ≥ copy-engine
   throughput at 7.98 GB/token.
 
+## Context is a VRAM term: the KV bill, per model
+
+Every VRAM figure above is a **weights** figure. The KV cache is the second
+consumer and it grows linearly in context, which is what puts the "~5K" in the
+flagship heading. Derived from each model's own `config.json` and **measured
+against its real `modeling_*.py`** — full detail, method and findings in
+[`docs/context-budgets.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.2/docs/context-budgets.md).
+
+| model | KB/token | bounded floor | 4K | 32K | 128K | how measured |
+|---|---:|---:|---:|---:|---:|---|
+| Qwen3-235B-A22B | **188.0** | — | 0.73 GB | 5.88 GB | 23.50 GB | full depth, narrowed width¹ |
+| Qwen3-30B-A3B | **96.0** | — | 0.38 GB | 3.00 GB | 12.00 GB | full depth ≤ probe, A2000 |
+| gpt-oss-120b | **36.0** | 4.5 MB | 0.14 GB | 1.13 GB | 4.50 GB | full depth, narrowed width¹ |
+| gpt-oss-20b | **24.0** | 3.0 MB | 0.10 GB | 0.75 GB | 3.00 GB | truncated-depth probe, A2000 |
+| Gemma-4-26B-A4B | **20.0** | 199.8 MB | 0.27 GB | 0.82 GB | 2.70 GB | truncated-depth probe, A2000 |
+| OLMoE-1B-7B | **128.0** | — | 0.50 GB | 4.00 GB | 16.00 GB | truncated-depth probe, A2000 |
+| Kimi-K2-Instruct | **68.6** | — | 0.27 GB | 2.14 GB | 8.58 GB | **derived only** — no local weights |
+
+Only full-attention layers grow; sliding-window layers converge to the bounded
+floor, so a single blended KB/token would be wrong for the two hybrids. Cache
+dtype is bf16 (the transformers default).
+
+¹ **What "narrowed width" means, and what it does not.** These two models do not
+fit an A2000 at real depth, so they are instantiated from their real configs with
+their real KV fields and their real model classes at **full depth**, with
+`hidden_size` narrowed — the cache is `[B, num_key_value_heads, T, head_dim]` and
+both fields are read from the config, so width is not part of what is measured.
+The probe refuses when `head_dim` is implicit and re-derives after narrowing to
+require an exact match. **Both measure exact** (192,512 and 36,864 B/token). What
+this does *not* establish is real **weights** at real depth; that remains
+unmeasured, and geometry-is-independent-of-weight-values is this probe's founding
+premise rather than something it proves.
+
+**Quantizing the cache is a memory-for-latency trade, not a free one.** NF4 KV
+storage is **3.56×** smaller at **~2.1%** perplexity and **1.114× slower decode**
+at 4K, rising mildly to 1.156× at 32K — measured against transformers' own bf16
+`DynamicCache` on an A100. Greedy output diverges from bf16 at the first
+generated token; that is what "lossy" means. The dials are off by default.
+
 Every comparative "first/only/faster" claim above is backed by a verified,
 dated entry in [`docs/COMPETITIVE.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.2/docs/COMPETITIVE.md)
 (the credited prior-art table + the same-box ik_llama A/B) — no entry, no claim.
