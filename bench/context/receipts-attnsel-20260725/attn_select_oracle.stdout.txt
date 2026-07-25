@@ -1,0 +1,23 @@
+[14:10:49]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[14:11:58]   quantized experts on 16/16 MoE layers (64 experts each)
+[14:11:58]   offloaded 16 layers' 4-bit experts to pinned CPU RAM (streamed to GPU one layer at a time during train/eval)
+[14:11:58]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+induction-s0 oracle-132 fp16 2nd=  10578.387 held=132
+induction-s0 oracle-132 nf4  2nd=  11759.867 held=132
+induction-s0 h2o-132(tracked) fp16 2nd=   7123.794  <- must match the registered arm
+induction-s1 oracle-132 fp16 2nd=  11351.929 held=132
+induction-s1 oracle-132 nf4  2nd=  11823.055 held=132
+induction-s1 h2o-132(tracked) fp16 2nd=  10185.464  <- must match the registered arm
+induction-s2 oracle-132 fp16 2nd=   7927.743 held=132
+induction-s2 oracle-132 nf4  2nd=   8775.454 held=132
+induction-s2 h2o-132(tracked) fp16 2nd=   7192.448  <- must match the registered arm
+
+--- layer-0 keep-set after the final eviction ---
+seed 0 oracle : 132 slots,  68 from the first copy  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+seed 0 h2o    : 132 slots,  68 from the first copy  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+seed 1 oracle : 132 slots,  68 from the first copy  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+seed 1 h2o    : 132 slots,  68 from the first copy  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+seed 2 oracle : 132 slots,  68 from the first copy  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+seed 2 h2o    : 132 slots,  68 from the first copy  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+
+wrote /root/g/bench/context/attn_select_oracle.json

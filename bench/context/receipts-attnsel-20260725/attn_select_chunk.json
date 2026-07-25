@@ -1,0 +1,359 @@
+[
+  {
+    "ppl": {
+      "all": 5.967517852783203,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 134217728,
+    "peak_bytes": 134217728,
+    "held_tokens": 1024,
+    "chunk": 128,
+    "arm": "full",
+    "dtype": "fp16",
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 10.514680862426758,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "chunk": 128,
+    "arm": "sink4+rec128",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 9.358814239501953,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "chunk": 128,
+    "arm": "sink32+rec100",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 9.128935813903809,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "chunk": 128,
+    "arm": "sink68+rec64",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 9.030640602111816,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "chunk": 128,
+    "arm": "sink100+rec32",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 8.715200424194336,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "chunk": 128,
+    "arm": "sink128+rec4",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 5.952008247375488,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 134217728,
+    "peak_bytes": 134217728,
+    "held_tokens": 1024,
+    "chunk": 32,
+    "arm": "full",
+    "dtype": "fp16",
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 11.03474235534668,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 21495808,
+    "held_tokens": 132,
+    "chunk": 32,
+    "arm": "sink4+rec128",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 9.8427095413208,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 21495808,
+    "held_tokens": 132,
+    "chunk": 32,
+    "arm": "sink32+rec100",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 9.528517723083496,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 21495808,
+    "held_tokens": 132,
+    "chunk": 32,
+    "arm": "sink68+rec64",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 9.765607833862305,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 21495808,
+    "held_tokens": 132,
+    "chunk": 32,
+    "arm": "sink100+rec32",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 10.389339447021484,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 21495808,
+    "held_tokens": 132,
+    "chunk": 32,
+    "arm": "sink128+rec4",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 5.958710193634033,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 134217728,
+    "peak_bytes": 134217728,
+    "held_tokens": 1024,
+    "chunk": 8,
+    "arm": "full",
+    "dtype": "fp16",
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 11.292448997497559,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 18350080,
+    "held_tokens": 132,
+    "chunk": 8,
+    "arm": "sink4+rec128",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 10.033904075622559,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 18350080,
+    "held_tokens": 132,
+    "chunk": 8,
+    "arm": "sink32+rec100",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 9.77598762512207,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 18350080,
+    "held_tokens": 132,
+    "chunk": 8,
+    "arm": "sink68+rec64",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 10.391140937805176,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 18350080,
+    "held_tokens": 132,
+    "chunk": 8,
+    "arm": "sink100+rec32",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 12.812191009521484,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 18350080,
+    "held_tokens": 132,
+    "chunk": 8,
+    "arm": "sink128+rec4",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false
+  }
+]

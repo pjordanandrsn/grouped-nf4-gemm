@@ -1,0 +1,59 @@
+[
+  {
+    "ppl": {
+      "all": 8.772537231445312,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "chunk": 128,
+    "arm": "h2o-132",
+    "dtype": "fp16",
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 8.973532676696777,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 21495808,
+    "held_tokens": 132,
+    "chunk": 32,
+    "arm": "h2o-132",
+    "dtype": "fp16",
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 9.264225959777832,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 18350080,
+    "held_tokens": 132,
+    "chunk": 8,
+    "arm": "h2o-132",
+    "dtype": "fp16",
+    "registered": false
+  }
+]

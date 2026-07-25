@@ -1,0 +1,10 @@
+[14:57:40]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[14:58:47]   quantized experts on 16/16 MoE layers (64 experts each)
+[14:58:47]   offloaded 16 layers' 4-bit experts to pinned CPU RAM (streamed to GPU one layer at a time during train/eval)
+[14:58:47]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+Using the latest cached version of the dataset since Salesforce/wikitext couldn't be found on the Hugging Face Hub (offline mode is enabled).
+Found the latest cached dataset configuration 'wikitext-2-raw-v1' at /root/.cache/huggingface/datasets/Salesforce___wikitext/wikitext-2-raw-v1/0.0.0/b08601e04326c79dfdd32d625aee71d232d685c3 (last modified on Sun Jul 19 21:10:42 2026).
+chunk=128  h2o-132  ppl=   8.773  held=132
+chunk= 32  h2o-132  ppl=   8.974  held=132
+chunk=  8  h2o-132  ppl=   9.264  held=132
+wrote

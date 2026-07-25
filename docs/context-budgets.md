@@ -416,6 +416,10 @@ the heavily-attended tokens rather than merely the newest. Read this as "naive
 recency eviction is a bad trade for dense next-token prediction", not as
 "sparsity does not work".
 
+**Both confounds were tested in #13 and neither rescues eviction.** A better
+selection rule narrows the 28× gap to 8.8× and a sparse long-range fixture does
+not reverse it; the 28× above should be read as rule-specific.
+
 **Two cache bugs, both found by this measurement.** `get_query_offset` returned
 a hardcoded 0, which is correct only from an empty cache — chunked prefill
 scored ppl 330 against 5.97 single-shot, and every prior single-forward control
@@ -471,6 +475,103 @@ stacked on the quantization error this module exists to characterize, so
 `input_precision="ieee"` is the default at a measured 2.11× cost, with a test
 pinning that tf32 is worse so the default cannot be flipped silently.
 
+### 13. A better eviction rule narrows the gap 3× and still loses to quantization
+
+#11 closed with two named confounds: sink+recent is the weakest selection rule,
+and wikitext next-token prediction is the least favourable task. Experiment A
+(registered and stamped in `bench/context/PREREG-kv-context.md` before it ran)
+tested both — H2O-style selection by accumulated attention, and an `induction`
+fixture where the dependency is sparse and 256 tokens away, which a 128-token
+recency window cannot serve by construction.
+
+**The confounds were real and they do not rescue eviction.**
+
+| wikitext, fp16, chunk 128, matched bytes | held | resident | ppl | Δ |
+|---|---:|---:|---:|---:|
+| full cache | 1024 | 128.00 MB | 5.968 | — |
+| **full cache, NF4** | 1024 | **36.00 MB** | 6.091 | **+0.124** |
+| recency (sink4+rec256) | 260 | 32.50 MB | 9.294 | +3.326 |
+| H2O (sink4+rec64+top192) | 260 | 32.50 MB | 7.062 | **+1.094** |
+| static (sink256+rec4) | 260 | 32.50 MB | 6.936 | +0.968 |
+
+Selection is worth a factor of 3: #11's 28× quality gap at matched bytes narrows
+to **8.8×** under H2O. It does not close. Quantization still wins at every
+matched-byte point measured, which is the result that carries.
+
+**On the induction fixture, no policy at a 132-token budget comes close.**
+Second-copy perplexity, geometric mean over 3 seeds; the full-cache induction
+gain is 97,778× (first copy 147,627 → second copy 1.510), so the fixture is
+capable of testing this:
+
+| policy (132 tokens held, chunk 128) | 2nd-copy ppl | induction gain | log-gain retained |
+|---|---:|---:|---:|
+| recency (sink4+rec128) | 103,484 | 1.4× | **3.1%** |
+| H2O (sink4+rec64+top64) | 8,051 | 18.3× | 25.3% |
+| **oracle** — scored on the whole sequence | 9,832 | 15.0× | 23.6% |
+| static (sink128+rec4) | 456 | 323.7× | 50.3% |
+
+The oracle is the load-bearing row. It scores with attention accumulated over
+the **entire** sequence, including the second-copy queries that have not run
+when eviction fires — a policy nobody could deploy, and an upper bound on what
+this signal can buy. It is **no better than causal H2O**. The failure is not
+that importance is unobservable when it is needed.
+
+**It is that accumulated attention mass is confounded by opportunity.** Summing
+over query positions rewards a token for how many queries *could* attend to it,
+and that count falls linearly with position: token 5 is scored by ~500 queries,
+token 400 by ~100. Dumping the keep-sets shows it directly — H2O and the oracle
+both retain ~50 **contiguous** tokens from the start of the sequence, and agree
+with each other far more than either agrees with any notion of importance. At
+chunk 128 that makes H2O barely distinguishable from a static re-split of the
+same budget: sink128+rec4 scores 8.715 against H2O's 8.773.
+
+**But H2O is not only that, and the chunk size is what separates them.** Chunked
+teacher forcing hands every query its own chunk in full, so up to 127 tokens of
+local context arrive free of the budget. Shrinking the chunk removes that
+subsidy. The static optimum then moves violently — the *same* split goes from
+best to worst — while H2O, which re-selects at every boundary, barely moves:
+
+| wikitext, budget 132 | chunk 128 | chunk 32 | chunk 8 |
+|---|---:|---:|---:|
+| full cache (control) | 5.968 | 5.952 | 5.959 |
+| sink4+rec128 | 10.515 | 11.035 | 11.292 |
+| sink68+rec64 | 9.129 | 9.529 | 9.776 |
+| sink128+rec4 | **8.715** | 10.389 | 12.812 |
+| H2O (sink4+rec64+top64) | 8.773 | **8.974** | **9.264** |
+
+So the tidy version of this finding — "H2O is StreamingLLM with extra steps" —
+was available after three diagnostics and is **wrong**; the fourth killed it.
+H2O's *advantage over recency* is largely budget re-allocation toward early
+tokens, and a static split captures it at chunk 128. Its adaptivity is
+nonetheless real and shows up exactly where a static rule cannot follow: from
+chunk 128 to chunk 8 H2O gives up 0.49 ppl against the best static split's 1.06
+and a fixed sink128+rec4's 4.10.
+
+The control moves by ≤0.016 — the known bf16 chunk-size kernel effect, two
+orders of magnitude below the eviction arms' swings — so the protocol change is
+doing what it claims. **Every eviction arm degrades as the chunk shrinks toward
+true decode while the quantization arm does not**, so the 8.8× gap measured at
+chunk 128 is the *most* favourable reading eviction gets here, not the least.
+
+**Quantization's own cost is task-dependent, which the "~2%" headline hides.**
+NF4 costs 0.020 nats/token on wikitext and **0.120 on induction** — 6× more on a
+task that turns on matching an exact token 256 positions back. Finding #10's
+~2% generalizes across *architectures*; it does not generalize across *tasks*,
+and retrieval-shaped workloads should expect several times that.
+
+**Scope.** One model (OLMoE-1B-7B, MHA), one device, 1024 tokens. `induction` is
+a **mechanism fixture** and is labelled as such: `sink128+rec4` wins on it partly
+because the fixture's dependency sources *are* the first 128 tokens, so "keep the
+oldest" is degenerate with "keep the answer" — which is why the wikitext column,
+where no such degeneracy exists, is the one that ranks policies. Predictions A1
+and A3 (at its primary budget) were confirmed, A2 and A4 falsified; the scored table and both
+disagreements between a prediction's prose and its falsification test are in the
+prereg. Per its pre-committed decision, **token-axis sparsity is closed out for
+this project** and the remaining lever is quantization granularity. The
+arbitrary-keep-set primitive (`NF4KVCache.evict_index`) is in e4b and tested; the
+H2O policy stays in `bench/context/`, unpromoted, exactly as the rejected
+low-rank probe did.
+
 ## What this changes downstream
 
 - **C1** — every published VRAM figure gains its context qualifier; serving docs
@@ -502,3 +603,10 @@ pinning that tf32 is worse so the default cannot be flipped silently.
 `bench/context/kv_budget.py` (derivation, from config.json only) and
 `bench/context/kv_verify.py` (the A2000 rung-one probe). Receipts:
 `bench/context/receipts-c0-20260724/`.
+
+Finding #13: `bench/context/attn_select.py` is the registered harness (both
+fixtures, all policies) with `attn_select_smoke.py` as its pre-flight; the four
+post-hoc diagnostics are `_oracle.py` (future-knowing selection), `_sinks.py`
+(static sink/recent sweep), `_chunk.py` (protocol confound) and `_h2o_chunk.py`
+(the one that falsified the tidy conclusion). Receipts, including a copy of each
+script as it ran: `bench/context/receipts-attnsel-20260725/`.

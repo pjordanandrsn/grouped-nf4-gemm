@@ -1,0 +1,26 @@
+[14:24:34]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[14:25:44]   quantized experts on 16/16 MoE layers (64 experts each)
+[14:25:44]   offloaded 16 layers' 4-bit experts to pinned CPU RAM (streamed to GPU one layer at a time during train/eval)
+[14:25:44]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+Using the latest cached version of the dataset since Salesforce/wikitext couldn't be found on the Hugging Face Hub (offline mode is enabled).
+Found the latest cached dataset configuration 'wikitext-2-raw-v1' at /root/.cache/huggingface/datasets/Salesforce___wikitext/wikitext-2-raw-v1/0.0.0/b08601e04326c79dfdd32d625aee71d232d685c3 (last modified on Sun Jul 19 21:10:42 2026).
+chunk=128  full          ppl=   5.968   <- control, must not move
+chunk=128  sink4   +rec128  ppl=  10.515  held=132
+chunk=128  sink32  +rec100  ppl=   9.359  held=132
+chunk=128  sink68  +rec64   ppl=   9.129  held=132
+chunk=128  sink100 +rec32   ppl=   9.031  held=132
+chunk=128  sink128 +rec4    ppl=   8.715  held=132
+chunk= 32  full          ppl=   5.952   <- control, must not move
+chunk= 32  sink4   +rec128  ppl=  11.035  held=132
+chunk= 32  sink32  +rec100  ppl=   9.843  held=132
+chunk= 32  sink68  +rec64   ppl=   9.529  held=132
+chunk= 32  sink100 +rec32   ppl=   9.766  held=132
+chunk= 32  sink128 +rec4    ppl=  10.389  held=132
+chunk=  8  full          ppl=   5.959   <- control, must not move
+chunk=  8  sink4   +rec128  ppl=  11.292  held=132
+chunk=  8  sink32  +rec100  ppl=  10.034  held=132
+chunk=  8  sink68  +rec64   ppl=   9.776  held=132
+chunk=  8  sink100 +rec32   ppl=  10.391  held=132
+chunk=  8  sink128 +rec4    ppl=  12.812  held=132
+
+wrote /root/g/bench/context/attn_select_chunk.json

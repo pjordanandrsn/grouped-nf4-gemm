@@ -1,0 +1,600 @@
+[
+  {
+    "ppl": {
+      "all": 10.514680862426758,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "wikitext",
+    "arm": "sink4+rec128",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 10.137290954589844,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "wikitext",
+    "arm": "sink16+rec116",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 9.358814239501953,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "wikitext",
+    "arm": "sink32+rec100",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 9.128935813903809,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "wikitext",
+    "arm": "sink68+rec64",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 9.030640602111816,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "wikitext",
+    "arm": "sink100+rec32",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 8.715200424194336,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "wikitext",
+    "arm": "sink128+rec4",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 9.293578147888184,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 34078720,
+    "peak_bytes": 50855936,
+    "held_tokens": 260,
+    "fixture": "wikitext",
+    "arm": "sink4+rec256",
+    "dtype": "fp16",
+    "budget": 260,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 8.543084144592285,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 34078720,
+    "peak_bytes": 50855936,
+    "held_tokens": 260,
+    "fixture": "wikitext",
+    "arm": "sink68+rec192",
+    "dtype": "fp16",
+    "budget": 260,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 7.8979573249816895,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 34078720,
+    "peak_bytes": 50855936,
+    "held_tokens": 260,
+    "fixture": "wikitext",
+    "arm": "sink132+rec128",
+    "dtype": "fp16",
+    "budget": 260,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 7.113738536834717,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 34078720,
+    "peak_bytes": 50855936,
+    "held_tokens": 260,
+    "fixture": "wikitext",
+    "arm": "sink196+rec64",
+    "dtype": "fp16",
+    "budget": 260,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 6.93555212020874,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 34078720,
+    "peak_bytes": 50855936,
+    "held_tokens": 260,
+    "fixture": "wikitext",
+    "arm": "sink256+rec4",
+    "dtype": "fp16",
+    "budget": 260,
+    "registered": false
+  },
+  {
+    "ppl": {
+      "all": 121414.7109375,
+      "first": 143522.5625,
+      "second": 102779.3203125
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s0",
+    "arm": "sink4+rec128",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false,
+    "seed": 0
+  },
+  {
+    "ppl": {
+      "all": 134613.1875,
+      "first": 161932.53125,
+      "second": 111983.546875
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s1",
+    "arm": "sink4+rec128",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false,
+    "seed": 1
+  },
+  {
+    "ppl": {
+      "all": 115411.421875,
+      "first": 138433.75,
+      "second": 96286.3125
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s2",
+    "arm": "sink4+rec128",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false,
+    "seed": 2
+  },
+  {
+    "ppl": {
+      "all": 97364.2734375,
+      "first": 143522.5625,
+      "second": 66151.1171875
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s0",
+    "arm": "sink16+rec116",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false,
+    "seed": 0
+  },
+  {
+    "ppl": {
+      "all": 104561.8671875,
+      "first": 161932.53125,
+      "second": 67632.328125
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s1",
+    "arm": "sink16+rec116",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false,
+    "seed": 1
+  },
+  {
+    "ppl": {
+      "all": 90663.4296875,
+      "first": 138433.75,
+      "second": 59475.8828125
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s2",
+    "arm": "sink16+rec116",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false,
+    "seed": 2
+  },
+  {
+    "ppl": {
+      "all": 68335.5859375,
+      "first": 143522.5625,
+      "second": 32631.146484375
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s0",
+    "arm": "sink32+rec100",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false,
+    "seed": 0
+  },
+  {
+    "ppl": {
+      "all": 73636.125,
+      "first": 161932.53125,
+      "second": 33588.015625
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s1",
+    "arm": "sink32+rec100",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false,
+    "seed": 1
+  },
+  {
+    "ppl": {
+      "all": 63641.546875,
+      "first": 138433.75,
+      "second": 29346.65625
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s2",
+    "arm": "sink32+rec100",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false,
+    "seed": 2
+  },
+  {
+    "ppl": {
+      "all": 31436.181640625,
+      "first": 143522.5625,
+      "second": 6926.52783203125
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s0",
+    "arm": "sink68+rec64",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false,
+    "seed": 0
+  },
+  {
+    "ppl": {
+      "all": 32492.958984375,
+      "first": 161932.53125,
+      "second": 6560.98828125
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s1",
+    "arm": "sink68+rec64",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false,
+    "seed": 1
+  },
+  {
+    "ppl": {
+      "all": 29204.296875,
+      "first": 138433.75,
+      "second": 6198.5693359375
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s2",
+    "arm": "sink68+rec64",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false,
+    "seed": 2
+  },
+  {
+    "ppl": {
+      "all": 15573.87109375,
+      "first": 143522.5625,
+      "second": 1704.6700439453125
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s0",
+    "arm": "sink100+rec32",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false,
+    "seed": 0
+  },
+  {
+    "ppl": {
+      "all": 16318.3203125,
+      "first": 161932.53125,
+      "second": 1659.2431640625
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s1",
+    "arm": "sink100+rec32",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false,
+    "seed": 1
+  },
+  {
+    "ppl": {
+      "all": 14628.9306640625,
+      "first": 138433.75,
+      "second": 1559.5384521484375
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s2",
+    "arm": "sink100+rec32",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false,
+    "seed": 2
+  },
+  {
+    "ppl": {
+      "all": 8288.9326171875,
+      "first": 143522.5625,
+      "second": 484.0776062011719
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s0",
+    "arm": "sink128+rec4",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false,
+    "seed": 0
+  },
+  {
+    "ppl": {
+      "all": 8398.26953125,
+      "first": 161932.53125,
+      "second": 440.6217346191406
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s1",
+    "arm": "sink128+rec4",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false,
+    "seed": 1
+  },
+  {
+    "ppl": {
+      "all": 7801.984375,
+      "first": 138433.75,
+      "second": 444.6797790527344
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s2",
+    "arm": "sink128+rec4",
+    "dtype": "fp16",
+    "budget": 132,
+    "registered": false,
+    "seed": 2
+  }
+]

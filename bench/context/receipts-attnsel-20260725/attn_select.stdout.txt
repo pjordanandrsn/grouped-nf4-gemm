@@ -1,0 +1,49 @@
+[13:57:48]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[13:58:49]   quantized experts on 16/16 MoE layers (64 experts each)
+[13:58:49]   offloaded 16 layers' 4-bit experts to pinned CPU RAM (streamed to GPU one layer at a time during train/eval)
+[13:58:49]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+model=allenai/OLMoE-1B-7B-0924 layers=16 H_q=16 H_kv=16 attn=eager
+Using the latest cached version of the dataset since Salesforce/wikitext couldn't be found on the Hugging Face Hub (offline mode is enabled).
+Found the latest cached dataset configuration 'wikitext-2-raw-v1' at /root/.cache/huggingface/datasets/Salesforce___wikitext/wikitext-2-raw-v1/0.0.0/b08601e04326c79dfdd32d625aee71d232d685c3 (last modified on Sun Jul 19 21:10:42 2026).
+wikitext       full         fp16  ppl=   5.968  2nd=   n/a  held=1024  res= 128.00MB  peak= 128.00MB  18.7s
+wikitext       full         nf4  ppl=   6.091  2nd=   n/a  held=1024  res=  36.00MB  peak=  36.00MB  16.8s
+wikitext       recency-132  fp16  ppl=  10.515  2nd=   n/a  held= 132  res=  16.50MB  peak=  32.50MB  17.4s
+wikitext       recency-132  nf4  ppl=  10.607  2nd=   n/a  held= 132  res=   4.64MB  peak=   9.14MB  23.6s
+wikitext       h2o-132      fp16  ppl=   8.773  2nd=   n/a  held= 132  res=  16.50MB  peak=  32.50MB  21.2s
+wikitext       h2o-132      nf4  ppl=   8.870  2nd=   n/a  held= 132  res=   4.64MB  peak=   9.14MB  18.8s
+wikitext       recency-260  fp16  ppl=   9.294  2nd=   n/a  held= 260  res=  32.50MB  peak=  48.50MB  19.6s
+wikitext       recency-260  nf4  ppl=   9.488  2nd=   n/a  held= 260  res=   9.14MB  peak=  13.64MB  22.0s
+wikitext       h2o-260      fp16  ppl=   7.062  2nd=   n/a  held= 260  res=  32.50MB  peak=  48.50MB  20.4s
+wikitext       h2o-260      nf4  ppl=   7.164  2nd=   n/a  held= 260  res=   9.14MB  peak=  13.64MB  23.4s
+induction-s0   full         fp16  ppl= 459.257  2nd=   1.503  held= 512  res=  64.00MB  peak=  64.00MB  8.7s
+induction-s0   full         nf4  ppl= 486.093  2nd=   1.666  held= 512  res=  18.00MB  peak=  18.00MB  8.0s
+induction-s0   recency-132  fp16  ppl=121414.711  2nd=102779.320  held= 132  res=  16.50MB  peak=  32.50MB  8.7s
+induction-s0   recency-132  nf4  ppl=122780.320  2nd=104024.180  held= 132  res=   4.64MB  peak=   9.14MB  7.5s
+induction-s0   h2o-132      fp16  ppl=31881.570  2nd=7123.794  held= 132  res=  16.50MB  peak=  32.50MB  7.5s
+induction-s0   h2o-132      nf4  ppl=35352.605  2nd=8666.272  held= 132  res=   4.64MB  peak=   9.14MB  8.1s
+induction-s0   recency-260  fp16  ppl= 457.776  2nd=   1.493  held= 260  res=  32.50MB  peak=  48.50MB  7.9s
+induction-s0   recency-260  nf4  ppl= 474.096  2nd=   1.585  held= 260  res=   9.14MB  peak=  13.64MB  7.0s
+induction-s0   h2o-260      fp16  ppl=2160.357  2nd=  33.056  held= 260  res=  32.50MB  peak=  48.50MB  6.8s
+induction-s0   h2o-260      nf4  ppl=2432.523  2nd=  41.461  held= 260  res=   9.14MB  peak=  13.64MB  7.6s
+induction-s1   full         fp16  ppl= 493.828  2nd=   1.540  held= 512  res=  64.00MB  peak=  64.00MB  7.5s
+induction-s1   full         nf4  ppl= 537.330  2nd=   1.765  held= 512  res=  18.00MB  peak=  18.00MB  7.6s
+induction-s1   recency-132  fp16  ppl=134613.188  2nd=111983.547  held= 132  res=  16.50MB  peak=  32.50MB  6.8s
+induction-s1   recency-132  nf4  ppl=140446.781  2nd=118016.008  held= 132  res=   4.64MB  peak=   9.14MB  8.5s
+induction-s1   h2o-132      fp16  ppl=40502.520  2nd=10185.464  held= 132  res=  16.50MB  peak=  32.50MB  8.2s
+induction-s1   h2o-132      nf4  ppl=41182.969  2nd=10196.105  held= 132  res=   4.64MB  peak=   9.14MB  8.5s
+induction-s1   recency-260  fp16  ppl= 489.710  2nd=   1.515  held= 260  res=  32.50MB  peak=  48.50MB  7.4s
+induction-s1   recency-260  nf4  ppl= 520.157  2nd=   1.655  held= 260  res=   9.14MB  peak=  13.64MB  7.1s
+induction-s1   h2o-260      fp16  ppl=3002.874  2nd=  56.559  held= 260  res=  32.50MB  peak=  48.50MB  7.0s
+induction-s1   h2o-260      nf4  ppl=3227.398  2nd=  63.245  held= 260  res=   9.14MB  peak=  13.64MB  6.7s
+induction-s2   full         fp16  ppl= 448.592  2nd=   1.487  held= 512  res=  64.00MB  peak=  64.00MB  6.7s
+induction-s2   full         nf4  ppl= 474.939  2nd=   1.680  held= 512  res=  18.00MB  peak=  18.00MB  7.9s
+induction-s2   recency-132  fp16  ppl=115411.422  2nd=96286.312  held= 132  res=  16.50MB  peak=  32.50MB  6.9s
+induction-s2   recency-132  nf4  ppl=114903.602  2nd=96245.000  held= 132  res=   4.64MB  peak=   9.14MB  7.3s
+induction-s2   h2o-132      fp16  ppl=31463.176  2nd=7192.448  held= 132  res=  16.50MB  peak=  32.50MB  7.3s
+induction-s2   h2o-132      nf4  ppl=30422.043  2nd=6781.753  held= 132  res=   4.64MB  peak=   9.14MB  7.6s
+induction-s2   recency-260  fp16  ppl= 447.519  2nd=   1.479  held= 260  res=  32.50MB  peak=  48.50MB  7.7s
+induction-s2   recency-260  nf4  ppl= 464.723  2nd=   1.609  held= 260  res=   9.14MB  peak=  13.64MB  7.7s
+induction-s2   h2o-260      fp16  ppl=2508.038  2nd=  46.156  held= 260  res=  32.50MB  peak=  48.50MB  7.6s
+induction-s2   h2o-260      nf4  ppl=2443.777  2nd=  44.194  held= 260  res=   9.14MB  peak=  13.64MB  8.5s
+
+wrote /root/g/bench/context/attn_select.json

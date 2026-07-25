@@ -1,0 +1,922 @@
+[
+  {
+    "ppl": {
+      "all": 5.967517852783203,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 134217728,
+    "peak_bytes": 134217728,
+    "held_tokens": 1024,
+    "fixture": "wikitext",
+    "arm": "full",
+    "dtype": "fp16",
+    "registered": true,
+    "seed": null,
+    "secs": 18.7,
+    "budget": null,
+    "tokens": 1024
+  },
+  {
+    "ppl": {
+      "all": 6.091048717498779,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 37748736,
+    "peak_bytes": 37748736,
+    "held_tokens": 1024,
+    "fixture": "wikitext",
+    "arm": "full",
+    "dtype": "nf4",
+    "registered": true,
+    "seed": null,
+    "secs": 16.8,
+    "budget": null,
+    "tokens": 1024
+  },
+  {
+    "ppl": {
+      "all": 10.514680862426758,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "wikitext",
+    "arm": "recency-132",
+    "dtype": "fp16",
+    "registered": true,
+    "seed": null,
+    "secs": 17.4,
+    "budget": 132,
+    "tokens": 1024
+  },
+  {
+    "ppl": {
+      "all": 10.606657981872559,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 4866048,
+    "peak_bytes": 9584640,
+    "held_tokens": 132,
+    "fixture": "wikitext",
+    "arm": "recency-132",
+    "dtype": "nf4",
+    "registered": true,
+    "seed": null,
+    "secs": 23.6,
+    "budget": 132,
+    "tokens": 1024
+  },
+  {
+    "ppl": {
+      "all": 8.772537231445312,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "wikitext",
+    "arm": "h2o-132",
+    "dtype": "fp16",
+    "registered": true,
+    "seed": null,
+    "secs": 21.2,
+    "budget": 132,
+    "tokens": 1024
+  },
+  {
+    "ppl": {
+      "all": 8.870362281799316,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 4866048,
+    "peak_bytes": 9584640,
+    "held_tokens": 132,
+    "fixture": "wikitext",
+    "arm": "h2o-132",
+    "dtype": "nf4",
+    "registered": true,
+    "seed": null,
+    "secs": 18.8,
+    "budget": 132,
+    "tokens": 1024
+  },
+  {
+    "ppl": {
+      "all": 9.293578147888184,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 34078720,
+    "peak_bytes": 50855936,
+    "held_tokens": 260,
+    "fixture": "wikitext",
+    "arm": "recency-260",
+    "dtype": "fp16",
+    "registered": false,
+    "seed": null,
+    "secs": 19.6,
+    "budget": 260,
+    "tokens": 1024
+  },
+  {
+    "ppl": {
+      "all": 9.488152503967285,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 9584640,
+    "peak_bytes": 14303232,
+    "held_tokens": 260,
+    "fixture": "wikitext",
+    "arm": "recency-260",
+    "dtype": "nf4",
+    "registered": false,
+    "seed": null,
+    "secs": 22.0,
+    "budget": 260,
+    "tokens": 1024
+  },
+  {
+    "ppl": {
+      "all": 7.061699867248535,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 34078720,
+    "peak_bytes": 50855936,
+    "held_tokens": 260,
+    "fixture": "wikitext",
+    "arm": "h2o-260",
+    "dtype": "fp16",
+    "registered": false,
+    "seed": null,
+    "secs": 20.4,
+    "budget": 260,
+    "tokens": 1024
+  },
+  {
+    "ppl": {
+      "all": 7.164355754852295,
+      "first": null,
+      "second": null
+    },
+    "counts": {
+      "all": 1023,
+      "first": 0,
+      "second": 0
+    },
+    "resident_bytes": 9584640,
+    "peak_bytes": 14303232,
+    "held_tokens": 260,
+    "fixture": "wikitext",
+    "arm": "h2o-260",
+    "dtype": "nf4",
+    "registered": false,
+    "seed": null,
+    "secs": 23.4,
+    "budget": 260,
+    "tokens": 1024
+  },
+  {
+    "ppl": {
+      "all": 459.25726318359375,
+      "first": 143522.5625,
+      "second": 1.5029253959655762
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 67108864,
+    "peak_bytes": 67108864,
+    "held_tokens": 512,
+    "fixture": "induction-s0",
+    "arm": "full",
+    "dtype": "fp16",
+    "registered": true,
+    "seed": 0,
+    "secs": 8.7,
+    "budget": null,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 486.09320068359375,
+      "first": 145012.453125,
+      "second": 1.6660972833633423
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 18874368,
+    "peak_bytes": 18874368,
+    "held_tokens": 512,
+    "fixture": "induction-s0",
+    "arm": "full",
+    "dtype": "nf4",
+    "registered": true,
+    "seed": 0,
+    "secs": 8.0,
+    "budget": null,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 121414.7109375,
+      "first": 143522.5625,
+      "second": 102779.3203125
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s0",
+    "arm": "recency-132",
+    "dtype": "fp16",
+    "registered": true,
+    "seed": 0,
+    "secs": 8.7,
+    "budget": 132,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 122780.3203125,
+      "first": 145012.453125,
+      "second": 104024.1796875
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 4866048,
+    "peak_bytes": 9584640,
+    "held_tokens": 132,
+    "fixture": "induction-s0",
+    "arm": "recency-132",
+    "dtype": "nf4",
+    "registered": true,
+    "seed": 0,
+    "secs": 7.5,
+    "budget": 132,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 31881.5703125,
+      "first": 143522.5625,
+      "second": 7123.79443359375
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s0",
+    "arm": "h2o-132",
+    "dtype": "fp16",
+    "registered": true,
+    "seed": 0,
+    "secs": 7.5,
+    "budget": 132,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 35352.60546875,
+      "first": 145012.453125,
+      "second": 8666.2724609375
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 4866048,
+    "peak_bytes": 9584640,
+    "held_tokens": 132,
+    "fixture": "induction-s0",
+    "arm": "h2o-132",
+    "dtype": "nf4",
+    "registered": true,
+    "seed": 0,
+    "secs": 8.1,
+    "budget": 132,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 457.7762145996094,
+      "first": 143522.5625,
+      "second": 1.4932658672332764
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 34078720,
+    "peak_bytes": 50855936,
+    "held_tokens": 260,
+    "fixture": "induction-s0",
+    "arm": "recency-260",
+    "dtype": "fp16",
+    "registered": false,
+    "seed": 0,
+    "secs": 7.9,
+    "budget": 260,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 474.0964660644531,
+      "first": 145012.453125,
+      "second": 1.585029125213623
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 9584640,
+    "peak_bytes": 14303232,
+    "held_tokens": 260,
+    "fixture": "induction-s0",
+    "arm": "recency-260",
+    "dtype": "nf4",
+    "registered": false,
+    "seed": 0,
+    "secs": 7.0,
+    "budget": 260,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 2160.356689453125,
+      "first": 143522.5625,
+      "second": 33.05592727661133
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 34078720,
+    "peak_bytes": 50855936,
+    "held_tokens": 260,
+    "fixture": "induction-s0",
+    "arm": "h2o-260",
+    "dtype": "fp16",
+    "registered": false,
+    "seed": 0,
+    "secs": 6.8,
+    "budget": 260,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 2432.52294921875,
+      "first": 145012.453125,
+      "second": 41.461360931396484
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 9584640,
+    "peak_bytes": 14303232,
+    "held_tokens": 260,
+    "fixture": "induction-s0",
+    "arm": "h2o-260",
+    "dtype": "nf4",
+    "registered": false,
+    "seed": 0,
+    "secs": 7.6,
+    "budget": 260,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 493.828125,
+      "first": 161932.53125,
+      "second": 1.5404397249221802
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 67108864,
+    "peak_bytes": 67108864,
+    "held_tokens": 512,
+    "fixture": "induction-s1",
+    "arm": "full",
+    "dtype": "fp16",
+    "registered": true,
+    "seed": 1,
+    "secs": 7.5,
+    "budget": null,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 537.3300170898438,
+      "first": 167254.875,
+      "second": 1.765397310256958
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 18874368,
+    "peak_bytes": 18874368,
+    "held_tokens": 512,
+    "fixture": "induction-s1",
+    "arm": "full",
+    "dtype": "nf4",
+    "registered": true,
+    "seed": 1,
+    "secs": 7.6,
+    "budget": null,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 134613.1875,
+      "first": 161932.53125,
+      "second": 111983.546875
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s1",
+    "arm": "recency-132",
+    "dtype": "fp16",
+    "registered": true,
+    "seed": 1,
+    "secs": 6.8,
+    "budget": 132,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 140446.78125,
+      "first": 167254.875,
+      "second": 118016.0078125
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 4866048,
+    "peak_bytes": 9584640,
+    "held_tokens": 132,
+    "fixture": "induction-s1",
+    "arm": "recency-132",
+    "dtype": "nf4",
+    "registered": true,
+    "seed": 1,
+    "secs": 8.5,
+    "budget": 132,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 40502.51953125,
+      "first": 161932.53125,
+      "second": 10185.4638671875
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s1",
+    "arm": "h2o-132",
+    "dtype": "fp16",
+    "registered": true,
+    "seed": 1,
+    "secs": 8.2,
+    "budget": 132,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 41182.96875,
+      "first": 167254.875,
+      "second": 10196.10546875
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 4866048,
+    "peak_bytes": 9584640,
+    "held_tokens": 132,
+    "fixture": "induction-s1",
+    "arm": "h2o-132",
+    "dtype": "nf4",
+    "registered": true,
+    "seed": 1,
+    "secs": 8.5,
+    "budget": 132,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 489.710205078125,
+      "first": 161932.53125,
+      "second": 1.5149058103561401
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 34078720,
+    "peak_bytes": 50855936,
+    "held_tokens": 260,
+    "fixture": "induction-s1",
+    "arm": "recency-260",
+    "dtype": "fp16",
+    "registered": false,
+    "seed": 1,
+    "secs": 7.4,
+    "budget": 260,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 520.1565551757812,
+      "first": 167254.875,
+      "second": 1.6545636653900146
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 9584640,
+    "peak_bytes": 14303232,
+    "held_tokens": 260,
+    "fixture": "induction-s1",
+    "arm": "recency-260",
+    "dtype": "nf4",
+    "registered": false,
+    "seed": 1,
+    "secs": 7.1,
+    "budget": 260,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 3002.874267578125,
+      "first": 161932.53125,
+      "second": 56.55946731567383
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 34078720,
+    "peak_bytes": 50855936,
+    "held_tokens": 260,
+    "fixture": "induction-s1",
+    "arm": "h2o-260",
+    "dtype": "fp16",
+    "registered": false,
+    "seed": 1,
+    "secs": 7.0,
+    "budget": 260,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 3227.39794921875,
+      "first": 167254.875,
+      "second": 63.244667053222656
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 9584640,
+    "peak_bytes": 14303232,
+    "held_tokens": 260,
+    "fixture": "induction-s1",
+    "arm": "h2o-260",
+    "dtype": "nf4",
+    "registered": false,
+    "seed": 1,
+    "secs": 6.7,
+    "budget": 260,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 448.5918273925781,
+      "first": 138433.75,
+      "second": 1.4865686893463135
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 67108864,
+    "peak_bytes": 67108864,
+    "held_tokens": 512,
+    "fixture": "induction-s2",
+    "arm": "full",
+    "dtype": "fp16",
+    "registered": true,
+    "seed": 2,
+    "secs": 6.7,
+    "budget": null,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 474.9393005371094,
+      "first": 137274.734375,
+      "second": 1.6799594163894653
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 18874368,
+    "peak_bytes": 18874368,
+    "held_tokens": 512,
+    "fixture": "induction-s2",
+    "arm": "full",
+    "dtype": "nf4",
+    "registered": true,
+    "seed": 2,
+    "secs": 7.9,
+    "budget": null,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 115411.421875,
+      "first": 138433.75,
+      "second": 96286.3125
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s2",
+    "arm": "recency-132",
+    "dtype": "fp16",
+    "registered": true,
+    "seed": 2,
+    "secs": 6.9,
+    "budget": 132,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 114903.6015625,
+      "first": 137274.734375,
+      "second": 96245.0
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 4866048,
+    "peak_bytes": 9584640,
+    "held_tokens": 132,
+    "fixture": "induction-s2",
+    "arm": "recency-132",
+    "dtype": "nf4",
+    "registered": true,
+    "seed": 2,
+    "secs": 7.3,
+    "budget": 132,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 31463.17578125,
+      "first": 138433.75,
+      "second": 7192.4482421875
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 17301504,
+    "peak_bytes": 34078720,
+    "held_tokens": 132,
+    "fixture": "induction-s2",
+    "arm": "h2o-132",
+    "dtype": "fp16",
+    "registered": true,
+    "seed": 2,
+    "secs": 7.3,
+    "budget": 132,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 30422.04296875,
+      "first": 137274.734375,
+      "second": 6781.75341796875
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 4866048,
+    "peak_bytes": 9584640,
+    "held_tokens": 132,
+    "fixture": "induction-s2",
+    "arm": "h2o-132",
+    "dtype": "nf4",
+    "registered": true,
+    "seed": 2,
+    "secs": 7.6,
+    "budget": 132,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 447.5188903808594,
+      "first": 138433.75,
+      "second": 1.4794808626174927
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 34078720,
+    "peak_bytes": 50855936,
+    "held_tokens": 260,
+    "fixture": "induction-s2",
+    "arm": "recency-260",
+    "dtype": "fp16",
+    "registered": false,
+    "seed": 2,
+    "secs": 7.7,
+    "budget": 260,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 464.72314453125,
+      "first": 137274.734375,
+      "second": 1.6086002588272095
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 9584640,
+    "peak_bytes": 14303232,
+    "held_tokens": 260,
+    "fixture": "induction-s2",
+    "arm": "recency-260",
+    "dtype": "nf4",
+    "registered": false,
+    "seed": 2,
+    "secs": 7.7,
+    "budget": 260,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 2508.038330078125,
+      "first": 138433.75,
+      "second": 46.15628433227539
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 34078720,
+    "peak_bytes": 50855936,
+    "held_tokens": 260,
+    "fixture": "induction-s2",
+    "arm": "h2o-260",
+    "dtype": "fp16",
+    "registered": false,
+    "seed": 2,
+    "secs": 7.6,
+    "budget": 260,
+    "tokens": 512
+  },
+  {
+    "ppl": {
+      "all": 2443.77685546875,
+      "first": 137274.734375,
+      "second": 44.1943473815918
+    },
+    "counts": {
+      "all": 511,
+      "first": 255,
+      "second": 256
+    },
+    "resident_bytes": 9584640,
+    "peak_bytes": 14303232,
+    "held_tokens": 260,
+    "fixture": "induction-s2",
+    "arm": "h2o-260",
+    "dtype": "nf4",
+    "registered": false,
+    "seed": 2,
+    "secs": 8.5,
+    "budget": 260,
+    "tokens": 512
+  }
+]

@@ -1,0 +1,37 @@
+[14:15:22]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[14:16:23]   quantized experts on 16/16 MoE layers (64 experts each)
+[14:16:23]   offloaded 16 layers' 4-bit experts to pinned CPU RAM (streamed to GPU one layer at a time during train/eval)
+[14:16:23]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+Using the latest cached version of the dataset since Salesforce/wikitext couldn't be found on the Hugging Face Hub (offline mode is enabled).
+Found the latest cached dataset configuration 'wikitext-2-raw-v1' at /root/.cache/huggingface/datasets/Salesforce___wikitext/wikitext-2-raw-v1/0.0.0/b08601e04326c79dfdd32d625aee71d232d685c3 (last modified on Sun Jul 19 21:10:42 2026).
+wikitext  budget=132  sink4   +rec128  ppl=  10.515  held=132
+wikitext  budget=132  sink16  +rec116  ppl=  10.137  held=132
+wikitext  budget=132  sink32  +rec100  ppl=   9.359  held=132
+wikitext  budget=132  sink68  +rec64   ppl=   9.129  held=132
+wikitext  budget=132  sink100 +rec32   ppl=   9.031  held=132
+wikitext  budget=132  sink128 +rec4    ppl=   8.715  held=132
+wikitext  budget=260  sink4   +rec256  ppl=   9.294  held=260
+wikitext  budget=260  sink68  +rec192  ppl=   8.543  held=260
+wikitext  budget=260  sink132 +rec128  ppl=   7.898  held=260
+wikitext  budget=260  sink196 +rec64   ppl=   7.114  held=260
+wikitext  budget=260  sink256 +rec4    ppl=   6.936  held=260
+induction-s0  sink4   +rec128  2nd= 102779.320
+induction-s1  sink4   +rec128  2nd= 111983.547
+induction-s2  sink4   +rec128  2nd=  96286.312
+induction-s0  sink16  +rec116  2nd=  66151.117
+induction-s1  sink16  +rec116  2nd=  67632.328
+induction-s2  sink16  +rec116  2nd=  59475.883
+induction-s0  sink32  +rec100  2nd=  32631.146
+induction-s1  sink32  +rec100  2nd=  33588.016
+induction-s2  sink32  +rec100  2nd=  29346.656
+induction-s0  sink68  +rec64   2nd=   6926.528
+induction-s1  sink68  +rec64   2nd=   6560.988
+induction-s2  sink68  +rec64   2nd=   6198.569
+induction-s0  sink100 +rec32   2nd=   1704.670
+induction-s1  sink100 +rec32   2nd=   1659.243
+induction-s2  sink100 +rec32   2nd=   1559.538
+induction-s0  sink128 +rec4    2nd=    484.078
+induction-s1  sink128 +rec4    2nd=    440.622
+induction-s2  sink128 +rec4    2nd=    444.680
+
+wrote /root/g/bench/context/attn_select_sinks.json

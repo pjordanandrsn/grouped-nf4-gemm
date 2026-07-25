@@ -181,6 +181,68 @@ Two further disclosures, also pre-run:
   full-fp16 baseline need not reproduce #11's 5.968 exactly, and it is reported
   as its own absolute number per standing rule 3.
 
+### Outcome of A
+
+Results in `receipts-attnsel-20260725/`. OLMoE-1B-7B, eager attention on every
+arm, 1024 wikitext tokens / 3 induction seeds, chunk 128.
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| A1 recency destroys induction | retains ≤ ½ the log gain | **3.1%** of it (gain 1.43× vs 97,778×) | **CONFIRMED** |
+| A2 H2O recovers most of it | 2nd-copy ppl ≤ 2× full | **5,333×** full (8,051 vs 1.510) | **FALSIFIED** |
+| A3 H2O beats recency, loses to NF4 — *primary, 260 bytes* | Δppl ∈ [+0.4, +2.5] | **+1.094** | **CONFIRMED** |
+| A3 — *secondary, 132 bytes* | Δppl ∈ [+0.4, +2.5] | +2.805 | outside interval, inside the ≥+3.3 falsification bound |
+| A4 NF4 near-free on any rule | Δppl ∈ [+0.05, +0.40] everywhere | wikitext 0.092–0.195 ✓; induction up to **+2,234** | **FALSIFIED** |
+
+Two clauses need reporting separately from their verdicts, because in both cases
+the prose and the falsification test disagree and the test is what was scored:
+
+- **A1's descriptive clause is missed.** "Second-copy ppl within 25% of the first
+  copy's" lands at **29.9%** below. The falsification test (retained log gain)
+  passes comfortably; the adjective does not. A1 is confirmed on the test, not
+  on the sentence.
+- **A4 fails only where the interval was meaningless.** Every wikitext arm sits
+  inside [+0.05, +0.40]; the induction failures are arms whose absolute
+  perplexity is in the thousands, where a ±0.40 ppl band cannot mean anything.
+  This is the defect named in amendment 3 item 6, and it was scored strictly as
+  registered rather than rewritten into the relative form that would have
+  passed. In nats — the scale-free version the prediction should have used —
+  quantization costs **0.020 nats/token on wikitext and 0.120 on induction**, so
+  "NF4 is near-free" is itself task-dependent, which is a finding and not a
+  rescue.
+
+**Pre-committed decisions, both firing.** A2 failed, so **token-axis sparsity is
+closed out for this project and the remaining lever is quantization
+granularity.** A3 was not falsified downward, so #11's headline stands — with
+its magnitude rescoped: the 28× gap is a property of the weakest selection rule,
+and it narrows to **~9×** under a better one. Quantization still wins at every
+matched-byte point measured.
+
+**What the diagnostics changed about the reason** (post-hoc, unregistered,
+`attn_select_oracle.py` / `_sinks.py` / `_chunk.py`):
+
+1. An oracle scored on attention accumulated over the **whole** sequence —
+   including the second-copy queries that have not run when eviction fires — is
+   **no better than causal H2O** (9,832 vs 8,051; slightly worse). The failure
+   is not that the importance signal arrives too late.
+2. It is that the signal is confounded by opportunity. Summing attention over
+   query positions rewards a token for how many queries *could* attend to it,
+   which falls with position, so both H2O and the oracle keep ~50 contiguous
+   tokens from the start of the sequence.
+3. At chunk 128 a static sink/recent re-split at the same bytes matches it —
+   8.715 (sink128+rec4) vs 8.773 (H2O) — which made "H2O is a sink-allocation
+   rule in disguise" the obvious conclusion after three diagnostics. **A fourth
+   diagnostic falsified it.** The chunked protocol subsidises local context, and
+   removing the subsidy separates them: at chunk 8 the static split collapses to
+   12.812 while H2O holds 9.264. H2O's *gain over recency* is mostly budget
+   re-allocation; its adaptivity is real and only visible once selection
+   granularity gets fine. Recorded because the tidy version was written first
+   and would have been the fifth post-hoc explanation in this document.
+
+`evict_index` (the arbitrary keep-set primitive A needed) is in e4b and tested;
+the H2O policy stays in `bench/context/`, unpromoted, for the same reason the
+low-rank probe did.
+
 ---
 
 ## Experiment B — single-pass fused decode kernel
