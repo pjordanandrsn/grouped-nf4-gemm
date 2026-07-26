@@ -1704,6 +1704,39 @@ critical path, so part of what the cache saves was hidden anyway. Three modelled
 gains have now overshot — 10.7×, 2.1×, 1.6× — and each time the error was an
 **interaction between optimizations**, not the isolated physics.
 
+## Finding #35 — the expert cache works and is worth nothing once speculation is on
+
+#34's cache rung was measured on 2 reps at 1.120×. Re-measured at 6 reps with
+ranges, sweeping the partition size (235B, 25.94 GB/s):
+
+| slots/layer | median s/tok | range | hit rate | speedup [range] |
+|---|---:|---|---:|---|
+| none | 0.8308 | 0.8013–0.8640 | — | 1.000× |
+| 16 | 0.8776 | 0.7547–0.9199 | 0.3521 | 0.947× [0.903, 1.101] |
+| 24 | 0.7314 | 0.5816–0.8368 | 0.4452 | 1.136× [0.993, 1.428] |
+| 32 | 0.8187 | 0.7751–0.8539 | 0.5384 | 1.015× [0.973, 1.072] |
+
+**The mechanism is confirmed and the payoff is not there.** Enlarging the
+partition removes within-token eviction exactly as predicted — hit rate
+0.132 → 0.352 → 0.445 → 0.538, clean and monotonic, because hit rates are counts.
+**Every timing range overlaps the baseline**, and 16 slots is *worse* than no
+cache at its median.
+
+**Because speculation already moved those bytes off the critical path.** The
+cache and speculative prefetch target the same term, and speculation reaches it
+first, so eliding bytes that were already overlapped saves nothing. Both are
+"don't pay for this transfer now" — one by prefetching it, one by not needing it.
+
+**#34's 1.120× is retracted.** It was two reps against a spread that runs to 35%.
+The 235B end-to-end figure is **9.09× (through speculation)**, not 10.21×, and
+the recommendation is **not to enable the expert cache** alongside speculation:
+8–32 GB of VRAM for no measured return.
+
+**Method note.** The 2-rep curve looked orderly enough to believe — and was
+non-monotonic in a way that should have been the tell, since 24 slots beat 32
+while hitting less often. Hit rates and timings came from the same runs; only the
+timings were noise.
+
 ## Reproducing
 
 `bench/context/kv_budget.py` (derivation, from config.json only) and
@@ -1775,3 +1808,6 @@ receipts `bench/context/receipts-specstaging-20260726.json`.
 
 Finding #34: `bench/context/PREREG-full-stack-235b.md`; receipts
 `bench/context/receipts-fullstack-20260726.json`.
+
+Finding #35: `bench/context/PREREG-cache-slots.md`; receipts
+`bench/context/receipts-cacheslots-20260726.json`.
