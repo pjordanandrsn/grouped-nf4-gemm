@@ -1554,6 +1554,62 @@ unmeasured** — this is a logit-norm observation, not a fidelity measurement. B
 the depth caveat on #26 should be read as *unquantified*, not as *presumed
 larger*, and #25's compounding arithmetic is withdrawn as a prediction.
 
+## Finding #32 — expert routing is predictable 2–4 layers ahead, and the MoE output is why
+
+Can layer L+d's routing be guessed early enough to prefetch its experts? Measured
+on Qwen3-30B-A3B (44 MoE layers, 128 experts, top_k 8), coverage of the true
+top-8 by a predictor using layer L's *real* router on an earlier hidden state:
+
+| predictor | K=8 | K=16 | K=32 | prefetch window |
+|---|---:|---:|---:|---|
+| d=1 | 0.9089 | 0.9930 | 0.9987 | 0 MoE layers |
+| **d=2** | **0.8471** | 0.9754 | 0.9940 | **1 MoE layer** |
+| d=3 | 0.8072 | 0.9543 | 0.9884 | 2 layers |
+| d=4 | 0.7721 | 0.9357 | 0.9808 | 3 layers |
+| from the token embedding | 0.1815 | 0.2784 | 0.4335 | all layers |
+| from the previous token's final state | 0.0998 | 0.2081 | 0.4197 | unbounded |
+
+**What determines routing is the MoE output, not attention.** Predicting L+1
+while dropping only L+1's *attention* holds 0.9089; additionally dropping layer
+L's *MoE* collapses it to 0.2439. Routing is set by what the experts wrote to the
+residual stream.
+
+**Which kills the wide horizons.** Predicting from the token embedding or the
+previous token's final state gives an unbounded window and 0.42 coverage even at
+K=32 — everything that decides routing happens in the layers being skipped. A
+naive temporal baseline (reuse the previous token's *decision*) scores 0.4513,
+beating a recomputed router on a stale residual: the *decision* is temporally
+stable even where the router is highly input-sensitive.
+
+**Decay with distance is very slow** — 0.9987 → 0.9940 → 0.9884 → 0.9808 at
+K=32 across d=1..4, so lookahead is nearly free out to 3 layers of window.
+
+### The design conclusion is not the one coverage suggests
+
+Coverage says stage K=16 or K=32. The arithmetic says otherwise, because staging
+K experts costs `K/8 ×` synchronous routed staging's bytes and the step is
+transfer-bound:
+
+```
+                          @22.5 GB/s          @44.3 GB/s
+  synchronous routed        0.559 s             0.385 s
+  spec d=2, K=8             0.409 s  1.37x      0.232 s  1.66x
+  spec d=2, K=16            0.718 s  0.78x      0.365 s  1.05x
+  perfect-overlap ceiling   0.355 s  1.58x      0.204 s  1.88x
+```
+
+**K=16 is slower than not speculating** on a slow link. The design is **d=2,
+K=8, misses staged synchronously** — 1.37–1.66×, which is 87–88% of the
+perfect-overlap ceiling.
+
+**This also prices #29's residual.** Overlap is worth 1.88× at 44.3 GB/s and
+1.58× at 22.5 — phase3's advantage over routed staging was never purely
+scheduling; roughly half of it was link speed.
+
+**Unbuilt.** A coverage measurement plus an arithmetic model whose ancestors were
+wrong by 10.7× and 2.1×, and which omits the miss path's *latency*. No speedup is
+claimed until measured.
+
 ## Reproducing
 
 `bench/context/kv_budget.py` (derivation, from config.json only) and
@@ -1616,3 +1672,6 @@ width, cache bytes measured after one forward.
 
 Finding #31: `bench/context/PREREG-pair-deterministic.md` (resumed);
 receipts `bench/context/receipts-gate94-20260726.json`.
+
+Finding #32: `bench/context/PREREG-speculative-routing.md`; receipts
+`bench/context/receipts-speculative-20260726.json`.

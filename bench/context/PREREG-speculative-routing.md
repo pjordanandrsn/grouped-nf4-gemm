@@ -177,3 +177,72 @@ attention — real overlap, if the accuracy holds.
   ratio `K/128` must still beat **1/4** (i.e. K ≤ 32). Bulk is 1/1 and
   synchronous routed staging is 1/16; a speculative scheme must land between and
   earn the gap back in overlap. *Falsified if no d ≥ 2 satisfies both.*
+
+## Outcome (E3 + E2) — the accuracy is there; the arithmetic says stage K=8, not more
+
+| predictor | K=8 | K=16 | K=32 | window |
+|---|---:|---:|---:|---|
+| d=1 | 0.9089 | 0.9930 | 0.9987 | 0 MoE layers |
+| **d=2** | **0.8471** | 0.9754 | 0.9940 | **1 MoE layer** |
+| d=3 | 0.8072 | 0.9543 | 0.9884 | 2 layers |
+| d=4 | 0.7721 | 0.9357 | 0.9808 | 3 layers |
+| H3 token embedding | 0.1815 | 0.2784 | 0.4335 | all |
+| H4 prev-token final | 0.0998 | 0.2081 | 0.4197 | unbounded |
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| E3a d=2 top-32 ≥ 0.85 | ≥0.85 | **0.9940** | **CONFIRMED** |
+| E3b d=1>d=2>d=3 by ≥0.02 each | — | 0.9987/0.9940/0.9884 | **FALSIFIED** |
+| E3c some d≥2 with cov≥0.85, K≤32 | — | d=2,3,4 at K=16 **and** K=32 | **CONFIRMED** |
+| E2a H3, H4 < H2 | — | 0.1815, 0.0998 < 0.2439 | **CONFIRMED** |
+| E2d H4 top-32 ≥ 0.85 | ≥0.85 | **0.4197** | **FALSIFIED** |
+
+**E3b falsified in the favourable direction:** decay is *slower* than registered
+— 0.0047 and 0.0056 per step at K=32, not the ≥0.02 I predicted. Lookahead is
+nearly free out to d=4.
+
+**Whole-token speculation is dead** (E2d). H3/H4 sit at 0.42 coverage even at
+K=32 — an unbounded window buys nothing, because everything that determines
+routing happens in the layers you skipped over.
+
+### But coverage was never the binding term
+
+E3c "confirms" K=16 and K=32 at d≥2, and **the design gate was mis-specified**:
+it scored bytes against bulk (1/1) when the incumbent is synchronous *routed*
+staging (8/128). Staging K experts costs `K/8 ×` routed's bytes, and the step is
+**transfer-bound**, so buying overlap by doubling bytes is a losing trade:
+
+```
+94-layer 235B, steady state per layer      transfer   compute
+  link 22.5 GB/s                            3.77 ms    2.17 ms
+  link 44.3 GB/s                            1.92 ms    2.17 ms
+
+                          @22.5 GB/s          @44.3 GB/s
+  synchronous routed        0.559 s             0.385 s
+  spec d=2, K=8             0.409 s  1.37x      0.232 s  1.66x
+  spec d=2, K=16            0.718 s  0.78x      0.365 s  1.05x
+  perfect overlap ceiling   0.355 s  1.58x      0.204 s  1.88x
+```
+
+**K=16 is slower than doing nothing** on the slow link. **K=8 — prefetch exactly
+the predicted top-8 and stage the ~15% misses synchronously — is the design**,
+worth **1.37× / 1.66×** against a **1.58× / 1.88×** perfect-overlap ceiling. It
+captures 87–88% of what overlap can theoretically give.
+
+**And this finally prices phase3's ~2× (#29).** Overlap is worth more on a fast
+link, because the value of hiding compute depends on compute being comparable to
+transfer: 1.88× at 44.3 GB/s versus 1.58× at 22.5. phase3's advantage was never
+purely scheduling — roughly half of it was the link.
+
+## Pre-committed decision — fires for K=8, not for the gate as written
+
+E3c's gate is **withdrawn as mis-specified** rather than treated as passed: it
+compared against the wrong incumbent. On the corrected comparison the design is
+**d=2, K=8, with a synchronous miss path**, and it is worth building — 1.37–1.66×
+on top of routed staging's 5.95–6.97×.
+
+**Unbuilt and unmeasured.** Everything above is a coverage measurement plus an
+arithmetic model. The model has been wrong before by 10.7× (planner) and 2.1×
+(routed), and it omits the miss path's *latency* (a miss is discovered at the
+router and stalls that layer, which is not the same as adding its bytes). No
+speedup is claimed until it is measured.
