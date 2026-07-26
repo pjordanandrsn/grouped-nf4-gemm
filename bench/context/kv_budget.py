@@ -43,11 +43,16 @@ def _get(cfg, key, default=None):
 
 
 def derive(cfg, n_layers: int | None = None, bytes_per_elem: int = BYTES_PER_ELEM,
-           full_depth: int | None = None) -> dict:
+           full_depth: int | None = None, mla_cache: str = "decompressed") -> dict:
     """Derive KV cost from a config (dict or HF config object).
 
     Returns slope_b (unbounded bytes/token) and floor_b (the sliding asymptote);
     use kv_bytes() for the total at a context, which is piecewise.
+
+    `mla_cache` selects which MLA cache an implementation actually keeps —
+    "decompressed" (default; what `transformers` does) or "compressed" (what
+    vLLM/SGLang/DeepSeek's engine do). They differ by 35.56x on Kimi-K2, so this
+    is not a rounding choice. Both are always returned in the result dict.
 
     `n_layers` evaluates a truncated stack (the rung-one probe). `full_depth` is
     the model's REAL depth, which must be supplied when `n_layers` truncates a
@@ -62,12 +67,38 @@ def derive(cfg, n_layers: int | None = None, bytes_per_elem: int = BYTES_PER_ELE
     head_dim = _get(cfg, "head_dim") or (_get(cfg, "hidden_size") // heads)
 
     kv_lora = _get(cfg, "kv_lora_rank")
-    if kv_lora:  # MLA — joint latent, no 2x
-        per_layer = (kv_lora + _get(cfg, "qk_rope_head_dim")) * bytes_per_elem
+    if kv_lora:
+        # MLA reports TWO numbers because the architecture permits one cache and
+        # the common implementation uses another (finding #28):
+        #
+        #   compressed   — the joint latent MLA is designed around. What vLLM,
+        #                  SGLang and DeepSeek's own engine cache.
+        #   decompressed — full per-head K and V, which `transformers`' reference
+        #                  DeepSeek-V3 materializes instead, forfeiting the win.
+        #                  Measured EXACTLY on Kimi-K2: 40960 B/token/layer,
+        #                  35.56x the compressed figure.
+        #
+        # `slope_b` defaults to DECOMPRESSED. A planner that under-reports memory
+        # by 35x is worse than one that over-reports: the compressed value is a
+        # floor a stack must earn, not a number to size hardware against.
+        rope = _get(cfg, "qk_rope_head_dim")
+        compressed = (kv_lora + rope) * bytes_per_elem
+        nope = _get(cfg, "qk_nope_head_dim") or 0
+        v_hd = _get(cfg, "v_head_dim") or head_dim
+        decompressed = heads * ((nope + rope) + v_hd) * bytes_per_elem
+        per_layer = decompressed if mla_cache == "decompressed" else compressed
         return dict(kind="mla", slope_b=per_layer * layers, floor_b=0,
                     per_layer_full=per_layer, per_layer_sliding=0, window=None,
-                    detail=f"(r{kv_lora}+rope{_get(cfg,'qk_rope_head_dim')})"
-                           f"x{bytes_per_elem}B x{layers}L")
+                    mla_cache=mla_cache,
+                    per_layer_compressed=compressed,
+                    per_layer_decompressed=decompressed,
+                    slope_b_compressed=compressed * layers,
+                    slope_b_decompressed=decompressed * layers,
+                    detail=(f"{mla_cache}: "
+                            + (f"{heads}hx({nope}+{rope}+{v_hd})" if mla_cache == "decompressed"
+                               else f"(r{kv_lora}+rope{rope})")
+                            + f"x{bytes_per_elem}B x{layers}L"
+                              f" [compressed floor {compressed*layers/1024:.1f} KB/tok]"))
 
     per_sliding = 2 * kv_heads * head_dim * bytes_per_elem
     g_kv = _get(cfg, "num_global_key_value_heads")
