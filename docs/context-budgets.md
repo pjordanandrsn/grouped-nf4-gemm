@@ -1477,6 +1477,50 @@ not a correctness-preserving inference path. Routed staging is bit-identical
 "still 4× short of the stamped 4.3" caveats in #22 and #23. The flagship figure
 stands as measured, on its own mechanism and its own link.
 
+## Finding #30 — bit-identity holds at 48 layers, and the four "lost" 235B runs had one cause
+
+Qwen3-30B-A3B (**48 layers**, 128 experts, top_k 8) — triple OLMoE's depth, and
+the only depth-dependent risk the 94-layer run was meant to close:
+
+| gate | max\|Δlogit\| | |
+|---|---:|---|
+| bulk+grouped vs routed+grouped | 0.000e+00 | **PASS** |
+| routed+grouped vs itself | 0.000e+00 | **PASS** |
+| bulk+ref vs routed+ref | 0.000e+00 | **PASS** |
+| bulk+grouped vs itself | 0.000e+00 | **PASS** |
+
+| cell | s/token | tok/s |
+|---|---:|---:|
+| bulk+ref | 1.555 | 0.643 |
+| bulk+grouped | 1.219–1.256 | 0.80–0.82 |
+| routed+ref | 0.810 | 1.234 |
+| **routed+grouped** | **0.515–0.687** | **1.46–1.94** |
+
+**2.3–3.0× end to end here, against 7.88× on the 235B** — the 16× byte saving
+pays in proportion to how much the bytes dominate, and a 30B expert stack is far
+smaller relative to its compute. The speedup is model-dependent; the
+*correctness* is not.
+
+### The four swept 235B runs: `gen1-sweeper.sh`
+
+Four 235B attempts died at ~45–60 min and were attributed in turn to provider
+flakiness, a "RunPod curse", and cross-session interference. **All three readings
+were wrong.** `~/gen1-sweeper.sh` on the Mac mini — an account-wide **45-minute
+age cap** written for the gen1 hunt, whose pods were 10–15 minute probes — had
+been running as a **bare bash loop for 13 days**. It was never a launchd label,
+so the 2026-07-23 cleanup that removed every `gnf4.*` label never touched it, and
+neither `launchctl list` nor `crontab -l` showed anything.
+
+Its own log names every casualty at `age≈2700s`, including another Claude
+session's pod. Disabled 2026-07-26. Two traps recorded for anyone who re-arms it:
+`~/gen1-hunt-stop` is **not** a safe off switch (it sets `KILL_ALL=1` and
+terminates every pod on the account), and `~/gen1-keep-<podid>` is what extends a
+long run to 3 h.
+
+**The methodological point is the same one #29 made:** the evidence fit three
+plausible mechanism stories, and the answer came from `ps` on the right machine.
+~$15 and four experiments went to not looking there first.
+
 ## Reproducing
 
 `bench/context/kv_budget.py` (derivation, from config.json only) and
