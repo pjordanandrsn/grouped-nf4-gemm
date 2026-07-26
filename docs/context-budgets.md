@@ -1339,6 +1339,37 @@ to price the NF4 KV cache at ~2.1% — measured with `enable_fast` on and off at
 depth. Until that exists, `enable_fast` should be described as a speedup with an
 **unquantified** accuracy cost at model scale, not a free one.
 
+## Finding #26 — the grouped kernel was nondeterministic; fixed, and priced at +0.023%
+
+Applying perplexity — the instrument #10 used to price the KV cache — to
+`enable_fast` on OLMoE-1B-7B, 24 independent 2048-token chunks, 3 repeats/arm.
+
+The gate caught a bug in the kernel path rather than in the measurement:
+
+| arm | ppl | spread over 3 repeats |
+|---|---:|---:|
+| reference (per-expert loop) | 7.45474 | **0.00e+00** |
+| grouped, atomic `index_add_` | 7.45928 | **9.01e-04** |
+| **grouped, deterministic scatter** | **7.45645** | **0.00e+00** |
+
+**The reference path is bit-deterministic; the grouped path was not.** The
+weighted combine used `index_add_`, which accumulates with CUDA atomics in
+run-varying order. A stable sort alone did not fix it. Since `order` is a
+permutation, scattering by **assignment** and reducing with a fixed-axis `sum`
+is deterministic — and measured **0.038 pp more accurate** as a side effect.
+
+**Priced: `enable_fast` costs +0.0229% perplexity for its 1.32×.** The NF4 KV
+cache costs ~2.1% (#10) — **92× larger**. #25's "unquantified accuracy cost"
+was right to demand the number and wrong about its size.
+
+**A claim that did not survive composition.** `fast.py` states the fused path
+"measured *more* accurate than the reference" — true on the kernel's per-op
+property suite, false through 16 layers, where it is consistently slightly worse.
+A per-op accuracy claim is not a model-level one, and the two were conflated.
+
+**Bounded:** OLMoE is 16 layers against the flagship's 94, so +0.023% is a lower
+bound on the 235B's compounded cost.
+
 ## Reproducing
 
 `bench/context/kv_budget.py` (derivation, from config.json only) and
@@ -1387,3 +1418,6 @@ Finding #25: `logit_gates.py` (staged, not committed) — OLMoE-1B-7B, natural
 prompt, 2x2 over staging x kernel, comparing first-forward logits. Unit-level
 gate is `tests/test_routed_staging.py::test_composes_with_the_grouped_kernel`,
 now asserting bit-identity between bulk+grouped and routed+grouped.
+
+Finding #26: `bench/context/PREREG-fast-perplexity.md`. The deterministic combine
+is `_scatter_combine` in `experts4bit_qlora/fast.py`, shared by both fused paths.

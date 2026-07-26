@@ -67,3 +67,58 @@ Arms: `reference` (per-expert loop) · `grouped` (`enable_fast`) ·
 2. Both arms are NF4-quantized, so this prices the **kernel against the reference
    path**, not against bf16. That is the decision a user actually faces.
 3. One model, one corpus, one chunking scheme.
+
+## Outcome — Q1c caught a real bug in my own kernel path
+
+OLMoE-1B-7B, NF4 experts offloaded, 24 independent 2048-token chunks
+(gutenberg-1342; `datasets` was unavailable on the pod so wikitext-2 fell back to
+the registered alternative). 3 repeats per arm.
+
+**v1 falsified the gate**: `ppl(routed+grouped)` ≠ `ppl(bulk+grouped)`, though at
+2048-token chunks all 64 experts route, routed staging falls back to bulk, and
+both arms execute the *same code*. Per the pre-commitment Q1a/Q1b are **VOID**.
+
+**v2 found out why**, by measuring the noise floor instead of assuming it:
+
+| arm | ppl | spread over 3 repeats |
+|---|---:|---:|
+| reference (per-expert loop) | 7.45474 | **0.00e+00** |
+| grouped, atomic `index_add_` | 7.45928 | **9.01e-04** |
+| reference #2 | 7.45474 | **0.00e+00** |
+
+**The reference path is bit-deterministic and the grouped path was not.** Not the
+harness — the kernel path. `index_add_` accumulates with CUDA atomics, so the
+summation order varied run to run. A stable sort alone did not fix it; the atomics
+did it on their own.
+
+### Fixed, and the fix improves accuracy
+
+`order` is a permutation, so every destination index is written exactly once.
+Scattering by **assignment** into a `[tokens*k, hidden]` buffer and reducing with
+a fixed-axis `sum` is deterministic, and replaces an atomic accumulation with an
+ordered one:
+
+| arm | ppl | spread | vs reference |
+|---|---:|---:|---:|
+| reference | 7.45474 | 0.00e+00 | — |
+| grouped, atomic (before) | 7.45928 | 9.01e-04 | **+0.0609%** |
+| **grouped, deterministic scatter (now)** | **7.45645** | **0.00e+00** | **+0.0229%** |
+
+**Bit-deterministic and 0.038 pp more accurate.** 216 tests pass.
+
+### The fidelity number the speed claim was missing
+
+**`enable_fast` costs +0.0229% perplexity for its 1.32×** on 16 layers. For scale,
+the NF4 KV cache costs ~2.1% (#10) — **92× larger**. The pre-committed decision
+for a falsified Q1b fires: the cost is real, quantified, and travels with the
+speed. But at 0.023% it is a very different sentence from #25's "unquantified
+accuracy cost", which overstated it.
+
+**Q1b's premise was wrong in a way worth recording.** `fast.py` claims the fused
+path "measured *more* accurate than the reference" — that held on the kernel's
+per-op property suite and does **not** survive composition through 16 layers,
+where the fused path is consistently *worse* by a small margin. A per-op accuracy
+claim is not a model-level one.
+
+**Confound #1 stands and bounds this:** OLMoE is 16 layers, the flagship is 94, so
++0.023% is a **lower bound** on the 235B's compounded cost.
