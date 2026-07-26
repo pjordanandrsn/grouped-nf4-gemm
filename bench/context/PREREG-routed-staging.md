@@ -78,3 +78,58 @@ predicted 5.849 s against 5.144 measured (ratio 1.14). Routed bytes are
    would be the fairer headline and is computed too, but R1a is scored on the
    same-process same-config pair.
 3. One model, one box, one link speed.
+
+## Outcome — 5.95×, correctness gate held, and the model still does not describe it
+
+Qwen3-235B-A22B, 2×A100-SXM-80GB, link **22.21 GB/s**, `prefetch=False` both
+arms, one process, 94 offload handles, greedy, 12 new tokens, median of 2.
+
+| arm | ctx | s/token | tok/s | peak |
+|---|---:|---:|---:|---:|
+| `bulk` | 512 | 5.570 | 0.180 | 18.62 GiB |
+| **`routed`** | 512 | **0.936** | **1.068** | 18.62 GiB |
+| `routed` | 32768 | 0.986 | 1.015 | 26.81 GiB |
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| R1b **GATE** greedy ids identical | identical | **identical** | **CONFIRMED** |
+| R1a routed/bulk | [0.08, 0.30] | **0.1681** (**5.95×**) | **CONFIRMED** |
+| R1c peak ratio | ≤ 1.10 | **1.000** | **CONFIRMED** |
+| R1d measured / byte model | ±40% | **2.106** | **FALSIFIED** |
+
+**The gate is the important one.** Greedy ids are identical to bulk across 94
+layers × 128 experts, where an uncopied row is genuinely reachable — the unit
+suite only ever proved that on a 16-expert toy. 16× fewer bytes, same answer.
+
+**And memory was not the trade:** peak is *identical* (1.000), because the
+destination keeps the full `[E, …]` shape and only the copied rows differ.
+
+### R1d falsified, exactly where confound #1 said to look
+
+The byte model predicts 0.445 s; the measurement is 0.936. The residual is
+**0.491 s = 5.2 ms per layer** — the per-layer host sync (`torch.unique(...)
+.tolist()`) plus ~32 small copies where bulk issued 4 large ones. Both were named
+in advance as unmeasured and as pushing this way. They are now the dominant term:
+**more of the routed step is overhead than is bytes.**
+
+**So the pre-committed un-suppression does NOT fire.** `plan.py` keeps throughput
+suppressed. The model was wrong by 10.7× on the bulk path and is wrong by 2.1× on
+the routed one; 2.1× is a large improvement and still not something to quote.
+
+### What fires
+
+- **R1a + R1b → routed staging is the documented default for streamed
+  inference**, and #21's "the fastest configuration is unreachable by
+  construction" is **retired**. It is reachable, and it needed neither the grouped
+  kernel nor hot residency to get there.
+- Still **4× short of the stamped 4.3–4.4 tok/s.** Routed staging closes 5.95× of
+  the 27×; the remainder is now visibly the 5.2 ms/layer overhead, which is a
+  concrete, attackable target rather than an open question.
+
+### A trade that only became visible now
+
+At 512 the routed step is 0.936 s; at 32768 it is 0.986 — **context costs 5%**,
+where #19 measured it at 0.4%. Nothing about the KV tier changed. The weight term
+shrank 6×, so the same context cost is now a visible share of a smaller step.
+#19's "context is free" was true *of a step dominated by 16× surplus weight
+traffic*, and that qualifier belongs on it.

@@ -1179,6 +1179,43 @@ central open problem, not a footnote.
 Routing-only bytes imply 0.37 s/token at this link, which would be ~2.7 tok/s
 here, but that is arithmetic on an unbuilt path and belongs in its own prereg.
 
+## Finding #22 — routed-only staging: 5.95×, bit-identical, same memory
+
+#21 found the offload pre-hook staging all 128 of a layer's experts while the step
+routed to 8. `enable_routed_staging` makes the copy follow the router.
+
+Qwen3-235B-A22B, 2×A100-SXM-80GB, link 22.21 GB/s, `prefetch=False` both arms:
+
+| arm | ctx | s/token | tok/s | peak |
+|---|---:|---:|---:|---:|
+| bulk (today's default) | 512 | 5.570 | 0.180 | 18.62 GiB |
+| **routed** | 512 | **0.936** | **1.068** | 18.62 GiB |
+| routed | 32768 | 0.986 | 1.015 | 26.81 GiB |
+
+**5.95× faster, greedy token ids identical, peak memory identical (1.000).** The
+destination keeps the full `[E, …]` shape with only routed rows filled, so every
+consumer still indexes by original expert id and nothing downstream changes.
+
+It is **mutually exclusive with prefetch**, structurally: layer L+1's routing is
+decided by a router reading layer L's output, so there is nothing to prefetch. It
+gives up that 1.11× to move 16× less. Prefill and training fall back to bulk
+automatically.
+
+**#21's "the fastest configuration is unreachable by construction" is retired.**
+It is reachable, and it required neither the grouped kernel nor hot residency.
+
+**The byte model still does not describe it (2.1× off).** Predicted 0.445 s,
+measured 0.936 — a residual of **5.2 ms per layer** from the per-layer host sync
+and ~32 small copies replacing 4 large ones. More of the routed step is now
+overhead than is bytes, which makes that the next target and keeps any throughput
+prediction unquotable for the moment.
+
+**A qualifier #19 now needs.** At 512 the routed step is 0.936 s and at 32768 it
+is 0.986 — context costs **5%**, where #19 measured 0.4%. Nothing about the KV
+tier changed; the weight term shrank 6× and the same context cost became a
+visible share of a smaller step. "Context is free when weights stream" was true
+*of a step carrying 16× surplus weight traffic*.
+
 ## Reproducing
 
 `bench/context/kv_budget.py` (derivation, from config.json only) and
@@ -1210,3 +1247,7 @@ this run; the harness is `tuned.py` (staged, not committed — it is 60 lines of
 arm-runner around the public loader). The `off` arm was measured on a prior pod
 that vanished mid-run and reproduced #19 to the decimal (0.173 tok/s, 18.62 GiB),
 which is why it is carried rather than re-paid for.
+
+Finding #22: `bench/context/PREREG-routed-staging.md`; implementation is
+`enable_routed_staging` in `experts4bit_qlora/offload.py`, unit-verified by
+`tests/test_routed_staging.py` (5/5, full suite 34 passed on an RTX 4090).
