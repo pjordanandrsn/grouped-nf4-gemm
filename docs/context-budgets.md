@@ -1663,6 +1663,47 @@ The last figure composes a 1.330× measured on a 48-layer model with a 6.97×
 measured on the 235B, on different boxes. **It is not a measured end-to-end
 number** and is written here only to show where the pieces sit.
 
+## Finding #34 — the full stack on the 235B: 10.21×, every rung bit-identical
+
+All four optimizations composed in one process, one box, one link
+(Qwen3-235B-A22B, 2×A100-80GB, 21.53 GB/s):
+
+| rung | s/token | tok/s | vs bulk | step |
+|---|---:|---:|---:|---:|
+| bulk (shipped default) | 5.6918 | 0.176 | 1.00× | — |
+| + routed staging | 1.0804 | 0.926 | 5.27× | 5.27× |
+| + grouped kernel | 0.9818 | 1.018 | 5.80× | 1.10× |
+| + speculative d=2 k=8 | 0.6263 | 1.597 | 9.09× | 1.57× |
+| **+ expert cache** | **0.5573** | **1.794** | **10.21×** | 1.12× |
+
+**Every rung is bit-identical to the one before** — `max|Δlogit| = 0.000e+00` at
+94 layers for both new mechanisms. The only fidelity cost in the stack remains
+the grouped kernel's +0.023% perplexity (#26).
+
+Peak VRAM 18.58 → 27.26 GiB; the cache is 7.98 GB of that and is the only rung
+that trades memory for speed.
+
+**Speculation delivered 1.568× at 94 layers against 1.330× at 48** (#33) — more
+compute to hide per layer at the same link.
+
+### The cache thrashed until its partitioning was fixed
+
+Its first measurement was a **loss**: 0.904×, hit rate **0.0002 (6/34,719)**. One
+752-slot pool is *exactly* one token's working set (94 layers × 8 experts), and a
+decode step touches every row in layer order, so global LRU evicted layer 0's
+rows for layer 93's — one token before layer 0 needed them. Cache size equal to
+working set is the classic thrash, and it is easy to build by accident when the
+natural sizing rule is "one token's worth".
+
+Per-layer partitioning: hit rate **0.1322**, step **1.120×**. Still far under the
+0.4513 reuse #32 measured, so partition size is an unexplored knob.
+
+**And the model overshot again.** I predicted 1.78× for the cache from #32's
+reuse figure; it delivered 1.12×, because speculation already moves bytes off the
+critical path, so part of what the cache saves was hidden anyway. Three modelled
+gains have now overshot — 10.7×, 2.1×, 1.6× — and each time the error was an
+**interaction between optimizations**, not the isolated physics.
+
 ## Reproducing
 
 `bench/context/kv_budget.py` (derivation, from config.json only) and
@@ -1731,3 +1772,6 @@ Finding #32: `bench/context/PREREG-speculative-routing.md`; receipts
 
 Finding #33: `enable_speculative_staging` in `experts4bit_qlora/offload.py`;
 receipts `bench/context/receipts-specstaging-20260726.json`.
+
+Finding #34: `bench/context/PREREG-full-stack-235b.md`; receipts
+`bench/context/receipts-fullstack-20260726.json`.

@@ -64,3 +64,54 @@ end-of-script scoring was fixed in #31).
 2. #33's 1.330× was measured where transfer/compute was **1.78:1**; the 235B at
    this link is nearer **1.78:1** as well, but the layer count differs 2×. The
    per-layer arithmetic should transfer; the miss *latency* is what may not.
+
+## Outcome — 9.09× as registered, 10.21× with the cache added mid-run
+
+Qwen3-235B-A22B, 2×A100-80GB, 21.53 GB/s, load 661 s, natural prompt, greedy,
+median of 2. One process, one box.
+
+| rung | s/token | tok/s | vs bulk | step | peak |
+|---|---:|---:|---:|---:|---:|
+| `bulk+ref` *(shipped default)* | 5.6918 | 0.176 | 1.00× | — | 18.58 GiB |
+| `routed+ref` | 1.0804 | 0.926 | 5.27× | 5.27× | 18.58 GiB |
+| `routed+grouped` | 0.9818 | 1.018 | 5.80× | 1.10× | 18.59 GiB |
+| **`+speculative`** | **0.6263** | **1.597** | **9.09×** | **1.57×** | 19.82 GiB |
+| `+expert cache` *(per-layer)* | **0.5573** | **1.794** | **10.21×** | 1.12× | 27.26 GiB |
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| F1b **GATE** bit-identical | max\|Δ\|=0 | **0.000e+00** | **CONFIRMED** |
+| F1a spec / routed+grouped | [0.70, 0.85] | **0.638** (1.57×) | **outside interval** |
+| F1c end-to-end | ≥ 8.0× | **9.09×** | **CONFIRMED** |
+| F1d in-situ hit rate | [0.75, 0.92] | **0.8958** | **CONFIRMED** |
+
+**F1a came in better than registered.** I predicted 1.18–1.43× for speculation at
+94 layers from #33's 1.330× at 48; it delivered **1.568×**. The transfer/compute
+ratio is what sets the ceiling, and at this link the 235B has more compute to
+hide per layer than the 30B did.
+
+**The gate held for both new rungs** — speculation and the cache are each
+bit-identical to `routed+grouped` at 94 layers.
+
+### The cache was a loss until its eviction policy was fixed
+
+First measurement: **0.904× — slower** — at 27.26 GiB, with a hit rate of
+**0.0002 (6 of 34,719)**. A single 752-slot pool is *exactly* one token's working
+set (94 layers × 8 experts), and a decode step touches every row in layer order,
+so global LRU evicted layer 0's rows to make room for layer 93's — one token
+before layer 0 needed them again. Textbook thrash at cache-size == working-set.
+
+**Per-layer partitioning** removes the interference: layer L's rows only compete
+with layer L's. Hit rate **0.0002 → 0.1322**, step **0.904× → 1.120×**.
+
+**Still well under the 0.4513 reuse #32 measured**, so the partition size is a
+live knob — 8 slots/layer holds one token's set for that layer, and the
+speculative prefetch writes ~9 rows into it per token, so it evicts within the
+token. A 16-slot partition is the obvious next thing to try and was not measured.
+
+**The 1.78× I modelled for the cache is not what it delivered (1.12×).** That
+model assumed reuse converts directly into skipped link bytes; it ignored that
+speculation already prefetches off the critical path, so the bytes the cache
+saves were partly hidden already. Modelled gains keep overshooting here — 10.7×,
+2.1×, and now 1.6× — and the pattern is that they omit interactions between
+optimizations, not that they get the isolated physics wrong.

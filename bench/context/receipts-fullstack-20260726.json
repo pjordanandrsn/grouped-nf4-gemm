@@ -1,0 +1,38 @@
+{
+  "link": 21.526390347110425,
+  "rows": [
+    {
+      "cell": "bulk+ref",
+      "s_per_token": 5.691773121152073,
+      "tok_s": 0.17569217512970542,
+      "peak_bytes": 19951239168
+    },
+    {
+      "cell": "routed+ref",
+      "s_per_token": 1.0803786167874931,
+      "tok_s": 0.9256014368124954,
+      "peak_bytes": 19951846912
+    },
+    {
+      "cell": "routed+grouped",
+      "s_per_token": 0.9818484146147967,
+      "tok_s": 1.018487156586513,
+      "peak_bytes": 19956400640
+    },
+    {
+      "cell": "routed+grouped+spec",
+      "s_per_token": 0.626268547680229,
+      "tok_s": 1.5967590959247682,
+      "peak_bytes": 21283647488
+    },
+    {
+      "cell": "routed+grouped+spec+cache",
+      "s_per_token": 0.692431481089443,
+      "tok_s": 1.444186215257922,
+      "peak_bytes": 29268112896
+    }
+  ],
+  "e2e": 8.219980281943382,
+  "spec_rate": 0.8957880434782609,
+  "cache_rate": 0.00017281603732826408
+}
