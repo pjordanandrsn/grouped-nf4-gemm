@@ -138,5 +138,8 @@ The transferable result — *when weights stream, 64× the context is free becau
 the step is fixed-cost bound* — is a finding about **streaming**, not a headline
 about 235B, and it is filed that way.
 
-**Open, and named rather than buried:** why 0.160 tok/s against a stamped 4.3.
-Until that closes, the 235B row is the least trustworthy number in the project.
+**CLOSED by finding #29** (no new measurement needed). The flagship stages
+*one layer's active experts*, double-buffered, on a 44.3 GB/s link; this harness
+staged the whole stack synchronously on a 22.5 GB/s link. Both figures match the
+additive law on their own mechanism to within 6%. The 27x was 16x of surplus
+bytes times ~2x of link, not an error in either number.

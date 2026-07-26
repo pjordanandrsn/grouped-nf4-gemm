@@ -1436,6 +1436,47 @@ implement the compressed cache (vLLM, SGLang, DeepSeek's own) do get 68.6.
 was the only place the gap could hide — and "derived only" was the right label
 for exactly this reason.
 
+## Finding #29 — the flagship never disagreed with these measurements; they measured different mechanisms
+
+#19 opened a 27× gap between the stamped flagship (**4.3–4.4 tok/s, 15.2 GB**)
+and every attempt to reproduce it (**0.18 tok/s, 18.6 GiB**, five independent
+pods), and called the 235B row "the least trustworthy number in the project".
+**That was wrong, and the resolution needed no measurement — only reading the
+flagship's own code and link speed.**
+
+`bench/phase3/offload_decode_235b.py:188` stages **"one layer's active experts"**,
+double-buffered across a dedicated `copy_stream`. The e4b offload hook stages the
+**whole layer's expert stack, synchronously** (#21). Two different mechanisms.
+And the flagship ran on a **44.3 GB/s** link where these pods measure 21.7–23.3.
+
+Against the additive law `t = c_box + bytes/L`, with the flagship's own receipted
+`c_box = 53.5 ms`:
+
+| | bytes | link | predicted | measured |
+|---|---:|---:|---:|---:|
+| flagship, **routed** bytes | 7.98 GB | 44.3 GB/s | **4.28 tok/s** | **4.3–4.4** ✓ |
+| flagship if it were bulk | 127.74 GB | 44.3 GB/s | 0.34 tok/s | — |
+| these pods, **bulk** bytes | 127.74 GB | 22.5 GB/s | **0.17 tok/s** | **0.18** ✓ |
+| these pods if routed | 7.98 GB | 22.5 GB/s | 2.45 tok/s | 1.20–1.39 |
+
+**Both numbers were right. Comparing them was the error.** The flagship always
+streamed only the routed experts; the e4b offload path never did until routed
+staging. The "27×" was 16× of surplus bytes (#21) times ~2× of link.
+
+**The remaining gap in row 4 is overlap.** phase3 double-buffers its staging so
+transfer hides compute; routed staging is synchronous and cannot prefetch — the
+next layer's routing does not exist yet (#22). That ~2× is the honest distance
+left, and it is a scheduling difference, not a defect.
+
+**Caveat, because phase3 is not a drop-in:** its own source notes MoE compute on
+"stale staged bytes" — it is a pipeline benchmark measuring an achievable rate,
+not a correctness-preserving inference path. Routed staging is bit-identical
+(#22, #27); that is a property phase3 does not claim.
+
+**Retracted:** #19's "the least trustworthy number in the project", and the
+"still 4× short of the stamped 4.3" caveats in #22 and #23. The flagship figure
+stands as measured, on its own mechanism and its own link.
+
 ## Reproducing
 
 `bench/context/kv_budget.py` (derivation, from config.json only) and
