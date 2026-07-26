@@ -1370,6 +1370,37 @@ A per-op accuracy claim is not a model-level one, and the two were conflated.
 **Bounded:** OLMoE is 16 layers against the flagship's 94, so +0.023% is a lower
 bound on the 235B's compounded cost.
 
+## Finding #27 — #23's divergence is closed: instrument plus a real kernel bug
+
+The last open correctness question. OLMoE-1B-7B, natural prompt, logit-level
+comparison, with the deterministic scatter of #26 in place:
+
+| comparison | max\|Δlogit\| | rel | ids |
+|---|---:|---:|---:|
+| **bulk+grouped vs routed+grouped** | **0.000e+00** | **0.000e+00** | 0/9 |
+| routed+grouped vs itself | **0.000e+00** | 0.000e+00 | 0/9 |
+| bulk+grouped vs itself | **0.000e+00** | 0.000e+00 | 0/9 |
+| bulk+ref vs routed+ref | **0.000e+00** | 0.000e+00 | 0/9 |
+| bulk+ref vs bulk+grouped *(documented inexact)* | 1.488 | 1.293e-01 | 0/9 |
+
+**Routed staging is bit-identical under both kernels, and the grouped kernel is
+now deterministic under both staging policies.** #23's `bulk+grouped !=
+routed+grouped` had two causes stacked, which is why four probes chased it:
+
+1. **the instrument** — greedy ids on a random-token prompt, where near-uniform
+   logits let any perturbation flip the first token and re-condition the rest
+   (#24), and
+2. **a real bug** — the kernel's atomic `index_add_`, which made it genuinely
+   nondeterministic run to run (#26).
+
+Either alone would have produced the symptom; together they made it look like a
+staging bug, which it never was. **Not one artifact — an artifact hiding a defect.**
+
+**Scope, stated plainly:** 16 layers. The 235B re-run that would confirm this at
+94 was swept by a concurrent session before its gates computed, and its timing
+arms (6.69–7.76× end to end) show only that the determinism fix costs no
+throughput.
+
 ## Reproducing
 
 `bench/context/kv_budget.py` (derivation, from config.json only) and
@@ -1421,3 +1452,6 @@ now asserting bit-identity between bulk+grouped and routed+grouped.
 
 Finding #26: `bench/context/PREREG-fast-perplexity.md`. The deterministic combine
 is `_scatter_combine` in `experts4bit_qlora/fast.py`, shared by both fused paths.
+
+Finding #27: `gate.py` (staged, not committed) — OLMoE, natural prompt, 6 cells
+(bulk/routed x ref/grouped, plus self-repeats), comparing first-forward logits.
