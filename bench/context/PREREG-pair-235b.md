@@ -77,3 +77,85 @@ tokens, median of 2, **one process** so all cells share a load and a link.
 2. #23's loop cost was measured on a 4090 with resident experts; the A100 figure
    is genuinely unknown, which is why S1a is a band and not a point.
 3. One model, one box, 12 new tokens, median of 2.
+
+## Outcome — the pair is 7.88×, the masking is confirmed, and my gate was misspecified
+
+Qwen3-235B-A22B, 2×A100-SXM-80GB, link **22.51 GB/s**, load 2101 s, 94 handles,
+`prefetch=False`, greedy, 12 new tokens, median of 2, one process. Receipts:
+`receipts-pair-20260726.json`.
+
+### The matrix (s/token, ctx 512)
+
+| staging | reference | grouped | kernel gain |
+|---|---:|---:|---:|
+| bulk | **5.566** | 5.306 | **1.05×** |
+| routed | 0.933 | **0.706** | **1.32×** |
+
+| cell | ctx | s/token | tok/s | peak |
+|---|---:|---:|---:|---:|
+| `bulk+ref` *(shipped default)* | 512 | 5.566 | 0.180 | 18.62 GiB |
+| `bulk+grouped` | 512 | 5.306 | 0.188 | 18.80 GiB |
+| `routed+ref` | 512 | 0.933 | 1.072 | 18.62 GiB |
+| **`routed+grouped`** | 512 | **0.706** | **1.416** | 18.80 GiB |
+| `routed+grouped` | 32768 | 0.761 | 1.314 | 34.34 GiB |
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| S1c **GATE** all ids identical | identical | **not identical** | **FALSIFIED** |
+| S1a pair / routed+ref | [0.72, 0.92] | **0.757** | *(VOID per gate)* |
+| S1b masking interaction | ≥ 0.10 | **+0.272** | *(VOID per gate)* |
+| S1d end-to-end | ≥ 6.0× | **7.88×** | *(VOID per gate)* |
+| S1e ctx 32768/512 | ≤ 1.25 | **1.078** | *(VOID per gate)* |
+
+### The gate failed because I specified it wrong, and it is not rescored
+
+S1c demanded bit-identity across **all four cells** — including the
+reference↔grouped boundary, which `fast.py` documents as numerically different
+(the fused path accumulates in fp32 where the reference materializes bf16, and
+its own unit test uses `rel < 2e-2`, not equality). Demanding equality across a
+boundary the code documents as inexact is a **specification error**, the fifth of
+this session. Per the pre-commitment the gate voids S1a/S1b/S1d/S1e, and they
+stay VOID rather than being quietly rescored against a gate rewritten after
+seeing the numbers.
+
+**What the pairwise comparison does establish, decisively:**
+
+```
+staging held constant (the comparison that tests routed staging):
+  bulk+ref      vs routed+ref       IDENTICAL      <- #22's claim, at flagship scale
+  bulk+grouped  vs routed+grouped   DIVERGES       <- unexplained, see below
+kernel held constant:
+  bulk+ref      vs bulk+grouped     diverges at 0  <- expected, documented inexact
+  routed+ref    vs routed+grouped   diverges at 0  <- expected
+```
+
+**Routed staging is bit-identical at flagship scale.** That is the correctness
+claim that matters for #22 and it holds on 94 layers × 128 experts.
+
+### One unexplained divergence, and it blocks recommending the pair
+
+`bulk+grouped` vs `routed+grouped` holds the kernel constant and should therefore
+agree, since routed staging is bit-identical. It does not. Two candidates were
+probed directly on an A5000:
+
+- **kernel nondeterminism** — RULED OUT: identical across 4 runs.
+- **the kernel reading unrouted rows** — RULED OUT: unrouted rows poisoned
+  `0x00` vs `0xFF` give bit-identical output (rel **0.000e+00**).
+
+Both probes used **toy shapes** (E=32, hidden 256), so neither transfers to 94
+layers × 128 experts with certainty — a split-K path that only engages at
+flagship sizes would evade both. **The cause is unknown.**
+
+**Therefore: routed staging alone is recommended and bit-identical. The pair is
+NOT recommended until this divergence is explained**, notwithstanding its 7.88×.
+A 7.88× that changes the token stream for an unknown reason is not a result to
+ship.
+
+### Timing stands as timing
+
+The gate governs the *correctness* claims; the wall-clock numbers were measured
+and are reported above. The masking effect is visible directly in the matrix —
+the grouped kernel is worth **1.05× under bulk and 1.32× under routed** — which
+is #23's claim reproduced on the real model and reconciles #21's 1.6%.
+
+`plan.py` throughput stays suppressed, as pre-committed.
