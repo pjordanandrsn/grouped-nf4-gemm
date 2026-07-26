@@ -1301,6 +1301,44 @@ real 235B, and `rel 0.00e+00` at flagship shape in isolation. **What is open.**
 Whether `routed+grouped` differs from `bulk+grouped` in the *logits* on the 235B,
 which no measurement so far has actually asked.
 
+## Finding #25 — logit gates: routed staging is clean, and the kernel's error compounds
+
+Re-ran the gates on **logits** rather than sampled ids, on a **natural prompt**
+(OLMoE-1B-7B, 47 tokens, top-1 probability **0.911** — where the random-token
+prompts of #24 sat near uniform).
+
+| comparison | max\|Δlogit\| | rel | greedy ids |
+|---|---:|---:|---:|
+| **bulk+ref vs routed+ref** | **0.000e+00** | **0.000e+00** | 0/9 differ |
+| **bulk+grouped vs routed+grouped** | **0.000e+00** | **0.000e+00** | 0/9 differ |
+| bulk+ref vs bulk+grouped | 1.488 | **1.293e-01** | 0/9 differ |
+| routed+ref vs routed+grouped | 1.488 | **1.293e-01** | 0/9 differ |
+
+**Routed staging is bit-identical at model scale under BOTH kernels.** That
+closes #24's open question: the 235B `bulk+grouped != routed+grouped` was the
+instrument, not the code. The unit suite's composition gate has been tightened
+from `rel < 2e-2` to **bit-identity** on exactly this pair and passes (216 tests
+green).
+
+**And the gate the ids could never have shown**: the grouped kernel moves the
+model's logits by **12.9%** while leaving greedy ids **identical**. Both facts
+come from the prompt being peaked — a 0.911 top-1 absorbs a large logit shift
+without changing argmax. On #24's random prompts the same kernel changed 11 of 13
+ids. **Neither id measurement was informative about fidelity in either
+direction.**
+
+**This is compounding, not a defect.** The kernel's documented `rel < 2e-2` is a
+*per-layer* bound; 16 layers of it compounds to 0.373, and the measured 0.129 sits
+comfortably inside that. The gap is that **nothing ever measured the composed
+error**, and depth is exactly where it grows — a 94-layer 235B has ~6× OLMoE's
+compounding budget.
+
+**Consequence for the pair's 7.88×.** The speed number stands; a *fidelity* claim
+does not yet exist. The right instrument is **perplexity** — the same one #10 used
+to price the NF4 KV cache at ~2.1% — measured with `enable_fast` on and off at
+depth. Until that exists, `enable_fast` should be described as a speedup with an
+**unquantified** accuracy cost at model scale, not a free one.
+
 ## Reproducing
 
 `bench/context/kv_budget.py` (derivation, from config.json only) and
@@ -1344,3 +1382,8 @@ Qwen3-235B-shaped `ExpertsLoRA` layer timed with and without `enable_fast`.
 Finding #24: shape sweep and full-model determinism probes were run ad hoc on an
 A5000 (staged, not committed). Receipts for the pair run they interrogate:
 `bench/context/receipts-pair-20260726.json`.
+
+Finding #25: `logit_gates.py` (staged, not committed) — OLMoE-1B-7B, natural
+prompt, 2x2 over staging x kernel, comparing first-forward logits. Unit-level
+gate is `tests/test_routed_staging.py::test_composes_with_the_grouped_kernel`,
+now asserting bit-identity between bulk+grouped and routed+grouped.
