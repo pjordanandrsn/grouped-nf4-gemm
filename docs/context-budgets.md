@@ -1216,6 +1216,50 @@ tier changed; the weight term shrank 6× and the same context cost became a
 visible share of a smaller step. "Context is free when weights stream" was true
 *of a step carrying 16× surplus weight traffic*.
 
+## Finding #23 — the routed-staging residual is the per-expert loop, and the grouped kernel was never useless
+
+#22 left routed staging at 0.936 s/token where the routed bytes imply 0.359 s at
+the probed 22.21 GB/s — a **0.577 s residual**, provisionally blamed on a
+per-layer host sync and on 32 small copies replacing 4 large ones. Both were
+named as confounds. **Both are wrong**, and so was a third guess.
+
+Decomposed on an RTX 4090 with real Qwen3-235B per-layer shapes (E=128, top_k=8,
+10.62 MB/expert), CUDA-event timed:
+
+| candidate | measured | verdict |
+|---|---:|---|
+| sync: `torch.unique(...).tolist()` | **0.053 ms/layer** | 0.8% of the step — not it |
+| 32 small copies vs 8 large, identical bytes | **1.01×** | no penalty — not it |
+| `torch.empty` full destination per layer | **−0.001 ms** | free (caching allocator) — not it |
+| **per-expert Python loop in `ExpertsLoRA.forward`** | **4.403 ms/layer** | **0.414 s/token** |
+
+Every copy variant achieved the same 13.2–13.3 GB/s, which is what made the first
+three explanations collapse: there is no small-copy penalty and no allocation
+cost. *(A first version of this microbench timed the **enqueue** of async copies
+and reported 1.359 GB moving in 0.021 ms — 65 TB/s. Caught before it was used;
+CUDA-event bracketing gives the numbers above.)*
+
+**The grouped kernel takes that loop from 4.403 to 2.174 ms/layer — 2.03×,
+worth 0.210 s/token.**
+
+### What this corrects about #21
+
+#21 measured the grouped kernel at **1.6%** and concluded it was "a correctness
+fix, not a speedup". That was true *of a step in which transfer outweighed
+compute 15:1*. Once routed staging removes the 16× surplus bytes, the compute
+half is no longer hidden and the same kernel is worth **2.03×** on it. The kernel
+was never useless — it was **masked**, and the byte fix is what unmasks it.
+
+The two are complementary rather than competing, and they compose: routed staging
+fixes the bytes, the grouped kernel fixes the launches. Verified together
+(`tests/test_routed_staging.py`, 6/6) — the kernel reads exactly the rows it was
+given `expert_ids` for, out of a destination where only those rows were written.
+
+**Not yet measured end to end.** 0.936 − 0.210 ≈ 0.73 s/token projected, and that
+projection carries a 4090's loop cost onto an A100. It needs the pair run
+together on the real model before any number is claimed. ~0.16 s of the residual
+is still unattributed (attention, router, norms, KV).
+
 ## Reproducing
 
 `bench/context/kv_budget.py` (derivation, from config.json only) and
@@ -1251,3 +1295,7 @@ which is why it is carried rather than re-paid for.
 Finding #22: `bench/context/PREREG-routed-staging.md`; implementation is
 `enable_routed_staging` in `experts4bit_qlora/offload.py`, unit-verified by
 `tests/test_routed_staging.py` (5/5, full suite 34 passed on an RTX 4090).
+
+Finding #23: decomposition harnesses were run ad hoc on a 4090 (staged, not
+committed): copy/sync/allocation variants at real per-layer shapes, then one
+Qwen3-235B-shaped `ExpertsLoRA` layer timed with and without `enable_fast`.
