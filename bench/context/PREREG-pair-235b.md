@@ -159,3 +159,22 @@ the grouped kernel is worth **1.05× under bulk and 1.32× under routed** — wh
 is #23's claim reproduced on the real model and reconciles #21's 1.6%.
 
 `plan.py` throughput stays suppressed, as pre-committed.
+
+
+## Addendum — the divergence did not reproduce, and S1c was doubly misspecified
+
+Three probes (finding #24) failed to reproduce `bulk+grouped != routed+grouped`:
+the kernel is deterministic, it provably never reads unrouted rows, routed==bulk
+is `rel 0.00e+00` at flagship shape, and a real 16-layer MoE with attention,
+router and KV is identical and self-consistent across repeats.
+
+The receipts explain why. `bulk+ref` and `bulk+grouped` differ at **11 of 13**
+token positions across a boundary documented at `rel < 2e-2`, because the prompt
+is **random tokens**: the logits are near-uniform, argmax sits on ties, and one
+flip re-conditions everything after it.
+
+So S1c was wrong twice over — it demanded equality across a documented-inexact
+boundary, **and** it measured that equality with an instrument that amplifies any
+perturbation to total disagreement. The verdicts stay as recorded. What follows
+is a change of method, not a rescoring: **future correctness gates compare logits
+on a natural prompt**, not greedy ids on random tokens.

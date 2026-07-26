@@ -1260,6 +1260,47 @@ projection carries a 4090's loop cost onto an A100. It needs the pair run
 together on the real model before any number is claimed. ~0.16 s of the residual
 is still unattributed (attention, router, norms, KV).
 
+## Finding #24 — the divergence did not reproduce, and the instrument was wrong
+
+#23's pair run left `bulk+grouped` != `routed+grouped` with the kernel held
+constant — which should be impossible, since routed staging is bit-identical.
+Three targeted probes, all negative:
+
+| probe | shape | result |
+|---|---|---|
+| kernel determinism, 4 repeats | E=32, h=256 | **deterministic** |
+| unrouted rows poisoned `0x00` vs `0xFF` | E=32, h=256 | **rel 0.000e+00** — never read |
+| routed vs bulk, shape sweep | **E=128, h=4096, i=1536** | **rel 0.00e+00** at every shape |
+| routed vs bulk, real full model | OLMoE, 16 layers, attn+router+KV | **identical**, self-consistent ×3 |
+
+So it reproduces neither at flagship per-layer shape nor on a real end-to-end
+model. What the receipts actually show is that **the instrument was wrong**:
+
+```
+bulk+ref        [388, 13, 220, 16, 15, 15, 15, 15, ...]
+routed+ref      [388, 13, 220, 16, 15, 15, 15, 15, ...]   <- IDENTICAL
+bulk+grouped    [ 68, 197, 197, 322, 220, 17, 15, 16, ...]
+routed+grouped  [ 13, 220,  17,  15,  16, 22, 13, 15, ...]
+```
+
+`bulk+ref` vs `bulk+grouped` differ at **11 of 13 positions** across a boundary
+whose documented error is `rel < 2e-2`. The prompt is **random tokens**, so the
+logits are near-uniform, greedy argmax sits on ties, and the first flip
+re-conditions every token after it. Greedy ids under those conditions measure
+chaos amplification, not agreement.
+
+**Correct instrument: compare LOGITS (max abs / relative error on the first
+forward), not sampled ids** — and on a natural prompt, where the distribution is
+peaked, rather than random tokens. Every "greedy ids identical" gate in this
+document set inherits this flaw; the ones that PASSED are still informative
+(identical ids imply identical logits at that length), but a FAIL says much less
+than it appears to.
+
+**What stands.** Routed staging is bit-identical: `bulk+ref == routed+ref` on the
+real 235B, and `rel 0.00e+00` at flagship shape in isolation. **What is open.**
+Whether `routed+grouped` differs from `bulk+grouped` in the *logits* on the 235B,
+which no measurement so far has actually asked.
+
 ## Reproducing
 
 `bench/context/kv_budget.py` (derivation, from config.json only) and
@@ -1299,3 +1340,7 @@ Finding #22: `bench/context/PREREG-routed-staging.md`; implementation is
 Finding #23: decomposition harnesses were run ad hoc on a 4090 (staged, not
 committed): copy/sync/allocation variants at real per-layer shapes, then one
 Qwen3-235B-shaped `ExpertsLoRA` layer timed with and without `enable_fast`.
+
+Finding #24: shape sweep and full-model determinism probes were run ad hoc on an
+A5000 (staged, not committed). Receipts for the pair run they interrogate:
+`bench/context/receipts-pair-20260726.json`.
