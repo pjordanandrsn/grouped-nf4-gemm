@@ -1401,6 +1401,41 @@ staging bug, which it never was. **Not one artifact — an artifact hiding a def
 arms (6.69–7.76× end to end) show only that the determinism fix costs no
 throughput.
 
+## Finding #28 — the Kimi-K2 KV row was 35.56x optimistic
+
+`Kimi-K2-Instruct` was the last **derived only** row in the published KV table:
+68.6 KB/token, computed from `config.json` with no probe behind it, and the only
+MLA geometry in the table. A rung-1.5 probe (real model class, full MLA widths,
+truncated depth, dense layers so the MoE is out of frame) against `transformers`'
+native DeepSeek-V3 classes:
+
+```
+measured : 40960 B/token/layer   = (64x192 + 64x128) x 2B, decompressed K and V per head
+derived  :  1152 B/token/layer   = (kv_lora_rank 512 + qk_rope 64) x 2B, the compressed latent
+ratio    : 35.56x
+```
+
+**The derivation encoded MLA as designed; the reference implementation does not
+implement it that way.** MLA's entire premise is caching a joint compressed
+latent, and `transformers` materializes full per-head K/V instead — forfeiting
+it. The measured value matches the decompressed arithmetic *exactly*, so this is
+not an approximation gap.
+
+| Kimi-K2 at 61 layers | KB/token | @4K | @32K | @128K |
+|---|---:|---:|---:|---:|
+| published (compressed / MLA-as-designed) | 68.6 | 0.29 GB | 2.30 GB | 9.21 GB |
+| **measured (`transformers`)** | **2440.0** | **10.23 GB** | **81.87 GB** | **327.49 GB** |
+
+At 32K this is the difference between "fits on one card" and "fits on no single
+card". README corrected, with the two-stack caveat stated inline — engines that
+implement the compressed cache (vLLM, SGLang, DeepSeek's own) do get 68.6.
+
+**The general lesson, and it applies beyond MLA:** a KV figure derived from
+`config.json` describes an architecture's *permission*, not a runtime's
+*behaviour*. Every other row in that table was probe-verified, which is why this
+was the only place the gap could hide — and "derived only" was the right label
+for exactly this reason.
+
 ## Reproducing
 
 `bench/context/kv_budget.py` (derivation, from config.json only) and
@@ -1455,3 +1490,8 @@ is `_scatter_combine` in `experts4bit_qlora/fast.py`, shared by both fused paths
 
 Finding #27: `gate.py` (staged, not committed) — OLMoE, natural prompt, 6 cells
 (bulk/routed x ref/grouped, plus self-repeats), comparing first-forward logits.
+
+Finding #28: `k2probe2.py` (staged, not committed) — K2's config into
+`transformers`' native `DeepseekV3ForCausalLM` (K2's own remote code imports
+`is_torch_fx_available`, removed in transformers 5.x), 2 dense layers at full MLA
+width, cache bytes measured after one forward.

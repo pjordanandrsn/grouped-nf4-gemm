@@ -281,7 +281,21 @@ against its real `modeling_*.py`** — full detail, method and findings in
 | gpt-oss-20b | **24.0** | 3.0 MB | 0.10 GB | 0.75 GB | 3.00 GB | truncated-depth probe, A2000 |
 | Gemma-4-26B-A4B | **20.0** | 199.8 MB | 0.27 GB | 0.82 GB | 2.70 GB | truncated-depth probe, A2000 |
 | OLMoE-1B-7B | **128.0** | — | 0.50 GB | 4.00 GB | 16.00 GB | truncated-depth probe, A2000 |
-| Kimi-K2-Instruct | **68.6** | — | 0.27 GB | 2.14 GB | 8.58 GB | **derived only** — no local weights |
+| Kimi-K2-Instruct | **2440.0** | — | 9.53 GB | 76.25 GB | 305.0 GB | probe vs `transformers` DeepSeek-V3 — **see MLA note** |
+
+**MLA is an implementation number, not an architecture number.** Kimi-K2's row
+was published as **68.6 KB/token**, derived from `config.json` as MLA is
+*designed*: cache only the compressed latent, `kv_lora_rank + qk_rope_head_dim`
+= 576 elements/token/layer. `transformers`' reference DeepSeek-V3 implementation
+**does not do that** — it materializes and caches full per-head K and V,
+`(64x192 + 64x128) x 2B = 40960 B`/token/layer, which a truncated-depth probe
+measured exactly. That is **35.56x** the design figure, and it is what anyone
+running this stack actually pays: at 32K, **76 GB rather than 2.14 GB**.
+
+Both numbers are real for different stacks — inference engines that implement
+the compressed cache (vLLM, SGLang, DeepSeek's own) get the 68.6 figure. The
+table reports what `transformers` does, because that is what this project runs.
+The compressed value remains the floor MLA permits.
 
 Only full-attention layers grow; sliding-window layers converge to the bounded
 floor, so a single blended KB/token would be wrong for the two hybrids. Cache
