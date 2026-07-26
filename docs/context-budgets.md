@@ -1133,6 +1133,52 @@ Caveat that bounds the claim: the offload arm used `save_on_cpu`, which moves
 naive translation loses badly and the streamed path forbids it, not that no
 offload scheme could win.
 
+## Finding #21 — the 27× is the offload path staging EVERY expert, not the routed ones
+
+#19 left a 27× gap between an untuned 235B decode and its stamped configuration,
+and named it the least trustworthy figure in the project. It is now located, and
+it is neither of the two candidates that looked obvious.
+
+Qwen3-235B-A22B, 2×A100-SXM-80GB, link **21.84 GB/s measured**, greedy:
+
+| arm | ctx | s/token | tok/s | peak |
+|---|---:|---:|---:|---:|
+| no prefetch | 512 | 5.782 | 0.173 | 18.62 GiB |
+| prefetch | 512 | 5.228 | 0.191 | 19.88 GiB |
+| prefetch + grouped kernel | 512 | 5.144 | 0.194 | 20.07 GiB |
+| prefetch + grouped kernel | 32768 | 5.165 | 0.194 | 35.60 GiB |
+
+```
+routed experts only (top_k=8):   7.98 GB/token -> 0.366 s at this link
+FULL expert stack (all 128):   127.74 GB/token -> 5.849 s
+measured:                                         5.144 s   (ratio 1.14)
+```
+
+**The offload pre-hook stages a layer's entire expert tensor — all 128 — when
+routing needs 8.** That is 16× the necessary bytes on every token, and it is the
+gap. The residual 14% is prefetch overlap, which is independently measured at
+**1.11×** in the table above, so the two figures corroborate.
+
+**Two attractive explanations died here.** Prefetch is worth 11%, not 27× — the
+loader defaulting `prefetch=False` while `infer.py` defaults it on is a real
+footgun but a small one. And the **grouped kernel is worth 1.6%** on this path:
+`enable_fast` now patches 94 modules where it structurally patched zero before
+(it only ever looked for `ExpertsNbit`, while the streaming loader builds
+`ExpertsLoRA`, which never calls `base.forward()`). That fix is correct and
+verified 10/10, but it is a **correctness fix, not a speedup**, because no
+expert-compute dial can matter while the step moves 16× the bytes it needs.
+
+**Consequence for the exclusion lattice.** The optimization that would actually
+close this — staging only the routed experts — is what hot residency does, and
+hot residency is mutually exclusive with the grouped kernel *and* refuses the
+`ExpertsLoRA` base the streaming loader builds. So the one configuration that
+should be fastest is currently unreachable by construction. That exclusion is the
+central open problem, not a footnote.
+
+**Not yet claimed:** that fixing the staging recovers the stamped 4.3–4.4 tok/s.
+Routing-only bytes imply 0.37 s/token at this link, which would be ~2.7 tok/s
+here, but that is arithmetic on an unbuilt path and belongs in its own prereg.
+
 ## Reproducing
 
 `bench/context/kv_budget.py` (derivation, from config.json only) and
@@ -1158,3 +1204,9 @@ Finding #20: `bench/context/train_context_bench.py` under
 `PREREG-training-context.md`. The streamed-weight half of that harness did not
 run — it caught only `OutOfMemoryError`, and the guard that fired was a
 `RuntimeError` — so T1c and T1d are recorded VOID rather than back-filled.
+
+Finding #21: `PREREG-planner-validation.md` in the private planner repo drove
+this run; the harness is `tuned.py` (staged, not committed — it is 60 lines of
+arm-runner around the public loader). The `off` arm was measured on a prior pod
+that vanished mid-run and reproduced #19 to the decimal (0.173 tok/s, 18.62 GiB),
+which is why it is carried rather than re-paid for.
