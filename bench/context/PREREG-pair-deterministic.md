@@ -69,3 +69,36 @@ plus `routed+grouped` repeated for determinism and at ctx 32768.
    comparison is like-for-like.
 2. Perplexity is NOT measured here (it needs a corpus pass on a 128 GB model);
    R2d's logit rel is a proxy for the depth story, not a substitute.
+
+## Outcome — INCOMPLETE. The pod was swept by a concurrent session before scoring.
+
+| cell | s/token | tok/s | peak |
+|---|---:|---:|---:|
+| `bulk+ref` | 5.601 | 0.179 | 18.58 GiB |
+| `bulk+grouped` | 5.415 | 0.185 | 18.59 GiB |
+| `routed+ref` | 1.026 | 0.975 | 18.58 GiB |
+| **`routed+grouped`** | **0.837** | **1.195** | 18.59 GiB |
+| `routed+grouped` (repeat) | 0.722 | 1.385 | 18.59 GiB |
+
+End-to-end **6.69×** (first) / **7.76×** (repeat) — consistent with #23's 7.88×,
+so **the determinism fix did not cost throughput**. R2a is ambiguous by its own
+interval (1.186× on the first grouped run, 1.023× on the repeat): the first run
+of a newly-patched path pays warm-up the repeat does not, and the prereg did not
+anticipate that. Reported as a spread, not scored.
+
+**R2b, R2c and R2d were never computed.** They are calculated after all arms, and
+the pod was deleted before the 32768 arm. **The gate — the definitive answer to
+#23's open question — is still unmeasured.**
+
+**Cause, and it is not the provider.** Two other Claude Code sessions were running
+on the same Mac (`k3-day0`, `moe-sec-train`), sharing one RunPod account and the
+same `backstop.sh`. Every pod this session lost died with **no backstop-log entry
+at its death time** — the signature of an external delete. And this session did the
+same thing in the other direction earlier, deleting a pod named
+`e4b-composite-repro` that it had not created because it was "still billing".
+That was another session's live run.
+
+So three lost 235B runs (~$10) and one interrupted foreign run are all one cause:
+**cross-session pod sweeping on a shared account.** Recorded as
+`feedback_concurrent_session_pod_sweeping`. Not a 45-minute reaper, not provider
+flakiness — both of which the evidence superficially fit.
