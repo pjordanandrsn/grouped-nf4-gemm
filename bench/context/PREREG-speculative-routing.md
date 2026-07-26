@@ -118,3 +118,62 @@ whole-token speculative staging rather than per-layer; if both confirm, per-laye
 wins on bytes and the choice is made on measured overlap, not on this. If neither
 confirms, prediction is not accurate enough at any horizon and the
 prefetch/routed exclusion stands.
+
+## Outcome (E1) — the MoE output determines routing; attention barely does
+
+Qwen3-30B-A3B, 44 MoE layers, 128 experts, top_k 8, 24 greedy decode steps.
+Chance = 0.0625.
+
+| predictor | drops | hit rate | top-16-of-128 coverage |
+|---|---|---:|---:|
+| **H1** — from `x_{L+1}` | L+1's attention | **0.9089** | **0.9930** |
+| **H2** — from `h_L` | L's MoE **and** L+1's attention | 0.2439 | 0.3824 |
+| **T** — previous token's set | everything | 0.4513 | — |
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| E1a H2 ≥ 0.50 | ≥0.50 | 0.2439 | **outside interval** |
+| E1b H1 ≥ H2 − 0.05 | — | 0.9089 vs 0.2439 | **CONFIRMED** |
+| E1c H2 > T | — | 0.2439 vs 0.4513 | **FALSIFIED** |
+| E1d top-16 under **H2** ≥ 0.90 | ≥0.90 | 0.3824 | **FALSIFIED** |
+
+**The single term between H1 and H2 is layer L's MoE output, and it carries
+almost all of the routing signal.** Dropping L+1's *attention* costs 9 points of
+hit rate; additionally dropping L's *MoE* costs 66 more. Routing is set by what
+the experts wrote to the residual, not by what attention did.
+
+**E1c is the one I got backwards.** I predicted same-token structure would beat
+"what did this layer use last token", and the temporal baseline (0.4513) beats H2
+(0.2439) nearly 2:1. Routing decisions are temporally stable even where the
+router is highly sensitive to the residual — reusing the *decision* beats
+recomputing it on a stale input.
+
+**H2 is dead as a design.** Its window was the attractive one — layer L's whole
+expert compute — and at 0.38 coverage its miss path would run on most tokens.
+The pre-committed decision fires: record and stop; do not build it.
+
+**H1 is alive and was not what this prereg was built to test.** 99.3% coverage at
+top-16 is comfortably usable, but its window is only L+1's attention, which at
+decode is far smaller than the 85 MB it would need to hide. Whether that is worth
+anything is a *different* question — one of lookahead distance, not of accuracy —
+and it is registered separately below rather than claimed here.
+
+**Depth:** H2 by quartile 0.305 / 0.195 / 0.191 / 0.268 — weakest in the middle,
+not monotonic. Recorded; not explained.
+
+## Amendment 2 — lookahead distance (registered before measuring)
+
+H1 predicts one layer ahead and buys only L+1's attention. The question its
+result raises: **how far ahead does that accuracy survive?** Predicting layer
+`L+d` from `x_{L+1}` for d ≥ 2 buys a window of `(d−1)` full MoE layers plus
+attention — real overlap, if the accuracy holds.
+
+- **E3a — decay is real but gradual.** top-32-of-128 coverage at **d=2** ≥ **0.85**.
+  *Falsified below 0.65.*
+- **E3b — d=1 dominates d=2 dominates d=3**, strictly, by ≥0.02 each step.
+  *Falsified if the ordering breaks* — that would indicate the predictor is not
+  actually using distance-sensitive information.
+- **E3c — THE DESIGN GATE.** At the largest d whose coverage ≥0.85, the byte
+  ratio `K/128` must still beat **1/4** (i.e. K ≤ 32). Bulk is 1/1 and
+  synchronous routed staging is 1/16; a speculative scheme must land between and
+  earn the gap back in overlap. *Falsified if no d ≥ 2 satisfies both.*
