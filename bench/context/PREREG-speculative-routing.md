@@ -81,3 +81,40 @@ stack is worth knowing about before it is built.
    unwarranted either way.
 3. Greedy decode on one natural prompt. Routing locality may differ under
    sampling or across domains.
+
+## Amendment 1 — two wider horizons (registered before measuring them)
+
+Written after the H1/H2/T harness launched, **before any result was read.**
+
+H2's window is layer L's expert compute. Two signals give a far larger one:
+
+| horizon | predict layer i from | window |
+|---|---|---|
+| **H3** | the **current token's embedding** (layer-0 input) | every layer before i |
+| **H4** | the **previous token's final hidden state** | unbounded — starts before the token does |
+
+H4 is the interesting one operationally: the entire token's expert working set
+could be staged before the token begins, overlapping everything rather than one
+layer. Both are strictly weaker signals than H1/H2 — more of the network sits
+between the predictor input and the router — so this trades accuracy for window
+in the opposite direction from H1 vs H2.
+
+- **E2a — the trade is real.** H3 < H2 and H4 < H2. *Falsified if either equals
+  or beats H2*, which would mean the intervening layers carry no routing
+  information and the whole H1/H2 framing is wrong.
+- **E2b — but still far above chance.** H3 ≥ **0.25** (chance is 0.0625).
+  *Falsified below 0.12.*
+- **E2c — H3 decays with depth.** Mean hit rate over the last quartile of layers
+  is below the first quartile by ≥ **0.05**. The embedding is further from a deep
+  layer's router input than a shallow one's. *Falsified if it does not decline.*
+- **E2d — the whole-token design gate.** Under **H4**, staging the top-**32** of
+  128 predicted experts per layer covers ≥ **0.85** of the true top-8. That is
+  4× fewer bytes than bulk with an unbounded window — a worse byte ratio than
+  routed staging's 16×, bought back by full overlap. *Falsified below 0.70*, in
+  which case the whole-token scheme is not worth its miss path.
+
+**Pre-committed:** if **E2d** confirms and **E1d** does not, the right design is
+whole-token speculative staging rather than per-layer; if both confirm, per-layer
+wins on bytes and the choice is made on measured overlap, not on this. If neither
+confirms, prediction is not accurate enough at any horizon and the
+prefetch/routed exclusion stands.
