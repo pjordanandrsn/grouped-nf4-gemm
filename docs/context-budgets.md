@@ -1610,6 +1610,59 @@ scheduling; roughly half of it was link speed.
 wrong by 10.7× and 2.1×, and which omits the miss path's *latency*. No speedup is
 claimed until measured.
 
+## Finding #33 — speculative routed staging: built, bit-identical, 1.330×
+
+#32 predicted routing is guessable 2 layers ahead (0.847 coverage at top-8) and
+modelled **1.37×** from hiding compute behind the prefetch. Built as
+`enable_speculative_staging` and measured on Qwen3-30B-A3B, 48 layers,
+21.74 GB/s:
+
+| policy | s/token | tok/s | peak |
+|---|---:|---:|---:|
+| routed (synchronous) | 0.3218 | 3.107 | 3.84 GiB |
+| **routed + speculative d=2, k=8** | **0.2420** | **4.132** | 4.14 GiB |
+
+- **Bit-identical** to synchronous routed staging: `max|Δlogit| = 0.000e+00`.
+  Correctness cannot depend on the guess — the destination keeps its full
+  `[E, …]` shape and every truly-routed row the guess missed is staged before
+  the forward runs. A wrong guess costs bandwidth, never an answer.
+- **1.330×** against #32's modelled 1.37× — the first time a model in this
+  document set predicted a speedup and the measurement agreed (its predecessors
+  were wrong by 10.7× and 2.1×).
+- **In-situ hit rate 0.8536** against the offline 0.8471 — the prediction
+  behaves in production as it did in measurement.
+- **Memory +8%**, not the doubling a second resident buffer would suggest.
+
+### The first measurement said 0.920× and it was a leak, not a verdict
+
+The initial build measured a **slowdown** at 2.4× the memory, with an entirely
+plausible story available: extra copies cost more than the overlap saves, exactly
+as #32 warned for K=16. It was two defects instead.
+
+**Prefill routes nearly every expert**, so routed staging takes its bulk fallback
+there — but the speculative hook fired anyway and allocated a full-shape buffer
+that `stage_routed` never consumed, and the evict guard then refused to drop it
+(correctly, by its own rule). Every prefill leaked one buffer per layer. Second,
+any staging path that does not go through the speculative branch has to release
+an unconsumed speculation or the guard pins it for the whole run.
+
+Both fixed; the number moved 0.920 → 1.330. **The lesson is the shape of the
+failure**: a real bug produced a result that agreed with a plausible pessimistic
+theory, which is the easiest kind of wrong answer to accept.
+
+### Where this leaves the stack
+
+```
+bulk (default)                              1.00x
+  + routed staging          #22             5.95x   bit-identical
+  + grouped kernel          #23/#31         6.97x   +0.023% ppl
+  + speculative d=2 k=8     #33            ~9.3x    bit-identical
+```
+
+The last figure composes a 1.330× measured on a 48-layer model with a 6.97×
+measured on the 235B, on different boxes. **It is not a measured end-to-end
+number** and is written here only to show where the pieces sit.
+
 ## Reproducing
 
 `bench/context/kv_budget.py` (derivation, from config.json only) and
@@ -1675,3 +1728,6 @@ receipts `bench/context/receipts-gate94-20260726.json`.
 
 Finding #32: `bench/context/PREREG-speculative-routing.md`; receipts
 `bench/context/receipts-speculative-20260726.json`.
+
+Finding #33: `enable_speculative_staging` in `experts4bit_qlora/offload.py`;
+receipts `bench/context/receipts-specstaging-20260726.json`.
