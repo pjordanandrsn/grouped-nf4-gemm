@@ -1,0 +1,69 @@
+{
+  "link_gbs": 23.47327879406513,
+  "rows": [
+    {
+      "cell": "routed+grouped",
+      "s_per_token": 1.0329895955510437,
+      "tok_s": 0.9680639614444078,
+      "peak_bytes": 19954577408
+    },
+    {
+      "cell": "routed+grouped#2",
+      "s_per_token": 0.8518540118820965,
+      "tok_s": 1.1739100668089688,
+      "peak_bytes": 19955185152
+    },
+    {
+      "cell": "routed+ref",
+      "s_per_token": 1.1857092757709324,
+      "tok_s": 0.8433770574577089,
+      "peak_bytes": 19951846912
+    },
+    {
+      "cell": "bulk+grouped",
+      "s_per_token": 5.63208066939842,
+      "tok_s": 0.17755427500061238,
+      "peak_bytes": 19956400640
+    },
+    {
+      "cell": "bulk+ref",
+      "s_per_token": 5.938022866728716,
+      "tok_s": 0.16840622248241774,
+      "peak_bytes": 19953062400
+    }
+  ],
+  "gates": [
+    {
+      "label": "G1  bulk+grouped vs routed+grouped",
+      "a": "bulk+grouped",
+      "b": "routed+grouped",
+      "max_abs": 0.0,
+      "rel": 0.0,
+      "verdict": "PASS"
+    },
+    {
+      "label": "G2  routed+grouped vs itself",
+      "a": "routed+grouped",
+      "b": "routed+grouped#2",
+      "max_abs": 0.0,
+      "rel": 0.0,
+      "verdict": "PASS"
+    },
+    {
+      "label": "G3  bulk+ref vs routed+ref",
+      "a": "bulk+ref",
+      "b": "routed+ref",
+      "max_abs": 0.0,
+      "rel": 0.0,
+      "verdict": "PASS"
+    },
+    {
+      "label": "    bulk+ref vs bulk+grouped",
+      "a": "bulk+ref",
+      "b": "bulk+grouped",
+      "max_abs": 1.28125,
+      "rel": 0.11887341737747192,
+      "verdict": "reported"
+    }
+  ]
+}

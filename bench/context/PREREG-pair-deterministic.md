@@ -102,3 +102,43 @@ So three lost 235B runs (~$10) and one interrupted foreign run are all one cause
 **cross-session pod sweeping on a shared account.** Recorded as
 `feedback_concurrent_session_pod_sweeping`. Not a 45-minute reaper, not provider
 flakiness — both of which the evidence superficially fit.
+
+## Outcome (resumed run) — R2b and R2c CONFIRMED at 94 layers
+
+The first attempt was terminated mid-load by `gen1-sweeper.sh` (finding #30), as
+were three others. With the sweeper disabled the run completed. Harness rewritten
+to score and dump after **every** arm, so a future interruption costs only the
+arms not yet run — the first attempt lost everything to end-of-script scoring.
+
+Qwen3-235B-A22B, 2×A100-SXM-80GB, natural prompt, load 932 s, 94 handles.
+
+| gate | max\|Δlogit\| | rel | verdict |
+|---|---:|---:|---|
+| **R2b** `bulk+grouped` vs `routed+grouped` | **0.000e+00** | 0.000e+00 | **CONFIRMED** |
+| **R2c** `routed+grouped` vs itself | **0.000e+00** | 0.000e+00 | **CONFIRMED** |
+| **G3** `bulk+ref` vs `routed+ref` | **0.000e+00** | 0.000e+00 | **CONFIRMED** |
+| R2d `bulk+ref` vs `bulk+grouped` | 1.281 | **1.189e-01** | reported |
+
+| cell | s/token | tok/s | peak |
+|---|---:|---:|---:|
+| `bulk+ref` | 5.938 | 0.168 | 18.58 GiB |
+| `bulk+grouped` | 5.632 | 0.178 | 18.59 GiB |
+| `routed+ref` | 1.186 | 0.843 | 18.58 GiB |
+| **`routed+grouped`** | **0.852–1.033** | **0.97–1.17** | 18.58 GiB |
+
+**Routed staging is bit-identical at flagship depth under both kernels, and the
+grouped kernel is deterministic at 94 layers.** That closes the last correctness
+question, at the scale it was asked about — 16 layers (#27) and 48 layers (#30)
+were the fallbacks taken while the sweeper made this unreachable.
+
+**R2d — compounding, reported as registered.** The reference↔grouped logit `rel`
+is **0.1189 at 94 layers** against **0.1293 at 16** (OLMoE, #25). It did **not**
+grow with depth, which the prereg declined to predict and which contradicts the
+naive per-layer-compounding intuition that motivated the caveat on #26's
++0.023% perplexity. That caveat is weaker than it looked: whatever bounds the
+divergence is not accumulating linearly in layers. **Not explained here**, and
+perplexity at 94 layers is still unmeasured — but the direction of the unknown
+is now known.
+
+**End-to-end 6.97×**, kernel gain **1.05× under bulk → 1.39× under routed** —
+reproducing #23's masking interaction on an independent run.

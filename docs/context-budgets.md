@@ -1521,6 +1521,39 @@ long run to 3 h.
 plausible mechanism stories, and the answer came from `ps` on the right machine.
 ~$15 and four experiments went to not looking there first.
 
+## Finding #31 — the 94-layer gate: closed, and compounding did NOT grow with depth
+
+With `gen1-sweeper.sh` disabled (#30), the run that four attempts could not
+finish completed. Qwen3-235B-A22B, natural prompt, logit gates:
+
+| gate | max\|Δlogit\| | verdict |
+|---|---:|---|
+| `bulk+grouped` vs `routed+grouped` | **0.000e+00** | **PASS** |
+| `routed+grouped` vs itself | **0.000e+00** | **PASS** |
+| `bulk+ref` vs `routed+ref` | **0.000e+00** | **PASS** |
+
+**Routed staging is bit-identical at 94 layers under both kernels, and the
+grouped kernel is deterministic there.** The last open correctness question in
+this document set, closed at the scale it was actually asked about. End-to-end
+**6.97×** (5.938 → 0.852 s/token), kernel gain **1.05× under bulk → 1.39× under
+routed**, independently reproducing #23's masking interaction.
+
+### The surprise: divergence did not compound
+
+The reference↔grouped logit `rel` is **0.1189 at 94 layers** against **0.1293 at
+16** (#25). It did not grow — it shrank slightly. #26 attached a caveat to its
++0.023% perplexity figure reasoning that "deeper models compound further", and
+#25 computed that 2% per layer over 16 layers gives 0.373 while 94 gives 5.4.
+**That reasoning is not supported.** Whatever bounds the reference↔grouped
+divergence is not accumulating linearly in depth.
+
+Two candidate explanations, neither tested: the per-layer perturbation may be
+mean-reverting rather than additive, or the final-logit norm may grow with depth
+fast enough to hold the *relative* error flat. **Perplexity at 94 layers remains
+unmeasured** — this is a logit-norm observation, not a fidelity measurement. But
+the depth caveat on #26 should be read as *unquantified*, not as *presumed
+larger*, and #25's compounding arithmetic is withdrawn as a prediction.
+
 ## Reproducing
 
 `bench/context/kv_budget.py` (derivation, from config.json only) and
@@ -1580,3 +1613,6 @@ Finding #28: `k2probe2.py` (staged, not committed) — K2's config into
 `transformers`' native `DeepseekV3ForCausalLM` (K2's own remote code imports
 `is_torch_fx_available`, removed in transformers 5.x), 2 dense layers at full MLA
 width, cache bytes measured after one forward.
+
+Finding #31: `bench/context/PREREG-pair-deterministic.md` (resumed);
+receipts `bench/context/receipts-gate94-20260726.json`.
