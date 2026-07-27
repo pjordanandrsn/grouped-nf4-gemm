@@ -291,3 +291,28 @@ def test_a_plausible_fraction_still_adjudicates_normally():
 def test_exactly_at_the_ceiling_is_allowed():
     v = evaluate(_clean(gbps=22.0), ceiling_gbps=22.0)
     assert v["registered"]["R4_decomposition"]["pass"] is False   # 1.0 <= 1.0, adjudicates
+
+
+# --- prefill separation -----------------------------------------------------
+def test_missing_prefill_block_is_flagged_as_unconfirmable():
+    """Old receipts cannot prove prefill was reset away, so R4 may be contaminated."""
+    v = evaluate(_clean(), ceiling_gbps=26.0)
+    assert v["prefill_separated"]["pass"] is None
+    assert "contaminated" in v["prefill_separated"]["detail"]
+
+
+def test_prefill_block_present_on_every_record_passes():
+    r = _clean()
+    for x in r:
+        x["prefill"] = {"by_policy": {"routed": {"gbps": 24.0, "stages": 94}}}
+    v = evaluate(r, ceiling_gbps=26.0)
+    assert v["prefill_separated"]["pass"] is True
+    assert v["gates_passed"]
+
+
+def test_partial_prefill_coverage_fails_the_run():
+    r = _clean()
+    r[0]["prefill"] = {"by_policy": {}}
+    v = evaluate(r, ceiling_gbps=26.0)
+    assert v["prefill_separated"]["pass"] is False
+    assert not v["gates_passed"]

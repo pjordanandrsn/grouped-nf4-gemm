@@ -224,12 +224,39 @@ def evaluate(records: list, ceiling_gbps: float) -> dict:
         )
         out["registered"]["R6_t1_magnitude"]["pass"] = None
 
+    # Prefill separation. R4 is a claim about the DECODE path; prefill is a
+    # different regime hiding in the same statistic (2026-07-27: ~52 unique experts
+    # per layer vs decode's 8, so ~32% of expert-stages in copies 6.5x larger,
+    # which sit far closer to peak PCIe and inflate routed_gbps).
+    #
+    # A record carrying a populated `prefill` block PROVES the snapshot-and-reset
+    # happened before the decode loop. Its absence means decode stats may include
+    # prefill and R4 is not measuring what it claims to.
+    have_prefill = [r for r in records if r.get("prefill")]
+    if not have_prefill:
+        out["prefill_separated"] = {
+            "pass": None,
+            "detail": "no prefill block in the records — cannot confirm prefill was reset away "
+                      "before the decode loop, so routed_gbps may be prefill-contaminated and R4 "
+                      "is not decode-only. Re-run with a harness that snapshots prefill separately.",
+        }
+    else:
+        out["prefill_separated"] = {
+            "pass": len(have_prefill) == len(records),
+            "detail": f"{len(have_prefill)}/{len(records)} records carry a separated prefill block",
+        }
+
     out["position_balance"] = position_balance(records)
     if out["position_balance"]["balanced"] is False:
         out["registered"]["R6_t1_magnitude"]["verdict"] += \
             "  [CAVEAT: arm positions unbalanced — drift may be loading onto this ratio]"
 
     gates = [out["registered"]["R1_bit_identity"]["pass"], out["registered"]["R2_engagement"]["pass"]]
+    # Partial prefill coverage is a hard fail: some arms decode-only, some not, so
+    # the arms are not comparable. `None` (an old receipt that cannot prove either
+    # way) is a caveat, not a failure -- do not collapse the two.
+    if out["prefill_separated"]["pass"] is False:
+        gates.append(False)
     if out["arm_fidelity"]["pass"] is False:
         gates.append(False)
     out["gates_passed"] = all(gates)

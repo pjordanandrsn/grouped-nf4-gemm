@@ -137,7 +137,7 @@ def run(args) -> dict:
     for rep_i, arm in enumerate(order):
         _set_arm(arm)
         reset_offload_stats()                                     # also zeroes the branch counters
-        s_per_token, first_logits, greedy = _timed_decode(model, ids, args.tokens, args.warmup)
+        s_per_token, first_logits, greedy, prefill = _timed_decode(model, ids, args.tokens, args.warmup)
         rep = offload_stats_report() or {}
         routed = (rep.get("by_policy") or {}).get("routed") or {}
         records.append({
@@ -150,6 +150,18 @@ def run(args) -> dict:
             "row_plan": row_plan_counts(),
             "routed_gbps": routed.get("gbps"),
             "routed_copies": routed.get("copies"),
+            # Whole by_policy block, decode-only. Keeping just gbps+copies once cost
+            # a detour through the branch counters to answer "how many stages was
+            # that?" -- the stages/ms/bytes fields were dropped on the floor and the
+            # receipt could not answer a question the raw stats already knew.
+            "by_policy": rep.get("by_policy"),
+            "stall_ms": rep.get("stall_ms"), "slack_ms": rep.get("slack_ms"),
+            "cold_misses": rep.get("cold_misses"),
+            # Prefill, captured and reset away BEFORE the decode loop so it cannot
+            # contaminate the decode statistic (see _timed_decode). Recorded rather
+            # than discarded: it is the same data R4 needs, just about a different
+            # regime, and throwing it away would mean re-running to get it back.
+            "prefill": prefill,
         })
         print(f"  {arm:<4} rep{rep_i // len(args.arms)}  {s_per_token:.4f} s/tok  "
               f"routed {routed.get('gbps', 0):.2f} GB/s  counts {records[-1]['counts']}")
@@ -184,11 +196,28 @@ def _timed_decode(model, ids, n_tokens, warmup):
 
     Both gates come out of here: `greedy` for the stamped R1, and `logits` for the
     stronger logit check the harness adds on top -- see `logit_identity` in main().
+
+    PREFILL IS SNAPSHOTTED AND RESET AWAY BEFORE THE DECODE LOOP. R4 is a claim
+    about the DECODE path's transfer efficiency, and prefill is a different regime
+    in the same statistic: on the 2026-07-27 235B run prefill routed ~52 unique
+    experts per layer against decode's 8, so ~32% of all expert-stages arrived in
+    copies 6.5x larger -- and larger copies sit far closer to peak PCIe. Blending
+    them inflates `routed_gbps` and biases R4 toward "already efficient".
+
+    (Prefill took the routed path at all because _routed_max is 128*0.5 = 64 and
+    ~52 < 64. A uniform-routing null predicts ~117 unique for this prompt; the
+    access-pattern finding -- real routing far more concentrated, 0.5-crossing at
+    57.5 tokens -- predicts ~52. The measurement and that law agree.)
+
+    Returns the prefill report rather than discarding it: same data, different
+    regime, and dropping it would mean paying another load to get it back.
     """
     out = model(ids, use_cache=True)
     past = out.past_key_values
     first_logits = out.logits[:, -1, :].float().clone()
     nxt = out.logits[:, -1:, :].argmax(-1)
+    prefill = offload_stats_report() or {}
+    reset_offload_stats()          # decode-only from here; also rezeroes the branch counters
     greedy, times = [int(nxt)], []
     for step in range(n_tokens + warmup):
         torch.cuda.synchronize()
@@ -201,7 +230,7 @@ def _timed_decode(model, ids, n_tokens, warmup):
         greedy.append(int(nxt))
         if step >= warmup:
             times.append(dt)
-    return statistics.median(times), first_logits, greedy
+    return statistics.median(times), first_logits, greedy, prefill
 
 
 def main():
