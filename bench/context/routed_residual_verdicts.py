@@ -13,6 +13,48 @@ import statistics
 REGISTERED = ("C", "T1")
 
 
+def interleave(arms, reps):
+    """Position-balanced arm order (ABBA), not plain repetition.
+
+    Plain repetition — ``arms * reps`` — puts every arm at the same position in
+    every rep, so any monotone drift over the run (thermal ramp, allocator
+    warming, a neighbour's job ending) is absorbed entirely into the arm→position
+    mapping and comes back out as a treatment effect.
+
+    That is not hypothetical here. The OLMoE smoke ran plain repetition with C
+    always first, and *all three* other arms read above C (1.018–1.037) against a
+    self-pair spread of 0.030 — one direction, no scatter, which is the signature
+    of position rather than treatment.
+
+    Reversing on alternate reps equalises the position sum for every arm, exactly
+    cancelling linear drift. With the prereg's ``reps=2`` and four arms the sums
+    are 7/7/7/7. Balance is exact for even ``reps``; odd ``reps`` cannot balance
+    and :func:`position_balance` reports it so the caveat reaches the receipt.
+    """
+    order = []
+    for r in range(reps):
+        order.extend(list(arms) if r % 2 == 0 else list(reversed(arms)))
+    return order
+
+
+def position_balance(records):
+    """Per-arm sum of run positions, and whether they are all equal.
+
+    Auditable in the receipt: a reader can confirm the design was balanced
+    rather than taking the harness's word for it.
+    """
+    sums: dict = {}
+    for r in records:
+        if r.get("position") is None:
+            return {"balanced": None, "sums": {}, "detail": "records carry no position"}
+        sums[r["arm"]] = sums.get(r["arm"], 0) + r["position"]
+    ok = len(set(sums.values())) <= 1
+    return {"balanced": ok, "sums": sums,
+            "detail": "every arm carries the same position sum; linear drift cancels" if ok
+                      else "UNBALANCED — arms sat at systematically different positions, so drift "
+                           "loads onto the ratio. Use an even `reps` with interleave()."}
+
+
 def evaluate(records: list, ceiling_gbps: float) -> dict:
     """Reduce arm records to the prereg's verdicts. PURE — no torch, no model.
 
@@ -131,6 +173,26 @@ def evaluate(records: list, ceiling_gbps: float) -> dict:
         }
     else:
         out["arm_fidelity"] = {"pass": None, "detail": "no row_plan counts in records"}
+
+    # Power: R6's band is 0.05 wide. If the self-pair spread is comparable, the
+    # run cannot resolve the band and any verdict it prints is a coin flip dressed
+    # as a result. The balanced OLMoE smoke measured spread 0.071 on a shared box
+    # -- wider than the band -- while still printing "REGRESSION" from drift alone.
+    # Say so on the verdict rather than letting noise read as a registered finding.
+    band_w = 1.00 - 0.95
+    if spread == spread and spread >= band_w:
+        out["registered"]["R6_t1_magnitude"]["underpowered"] = True
+        out["registered"]["R6_t1_magnitude"]["verdict"] = (
+            f"UNDERPOWERED (self-pair spread {spread:.3f} >= band width {band_w:.2f}) — "
+            f"the run cannot resolve [0.95, 1.00]; nominal ratio {ratio:.4f} is not a verdict. "
+            "Raise reps or move to a quieter box."
+        )
+        out["registered"]["R6_t1_magnitude"]["pass"] = None
+
+    out["position_balance"] = position_balance(records)
+    if out["position_balance"]["balanced"] is False:
+        out["registered"]["R6_t1_magnitude"]["verdict"] += \
+            "  [CAVEAT: arm positions unbalanced — drift may be loading onto this ratio]"
 
     gates = [out["registered"]["R1_bit_identity"]["pass"], out["registered"]["R2_engagement"]["pass"]]
     if out["arm_fidelity"]["pass"] is False:
