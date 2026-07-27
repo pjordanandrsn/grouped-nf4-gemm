@@ -100,6 +100,57 @@ def _assert_confounds_off(handles) -> None:
             raise SystemExit(f"ABORT: speculative/prefetch staging active on handle {i}; prereg requires it off")
 
 
+def _probe_ceiling(dev, repeats: int = 5):
+    """The pinned H2D ceiling, probed on a SETTLED host and taken as max-of-N.
+
+    `report_offload_environment` computes `iters * n / total_elapsed` — a MEAN over
+    20 copies. A mean is maximally sensitive to contention: one stalled iteration
+    drags the whole figure down. Called immediately after the loader pins ~123 GB
+    of host RAM, it returned **14.68 GB/s** on a link a standalone benchmark
+    measured at **26.0** — and it reported PAGEABLE (18.70) faster than PINNED,
+    which is impossible and was the available tell.
+
+    That 14.68 became R4's denominator and produced a fraction of 1.555, from
+    which the un-gated verdict logic emitted a confident "do not build the
+    coalescer". The instrument, not the prediction, was wrong.
+
+    Two changes, both to HOW the registered instrument is called, not to what it
+    measures:
+
+    * settle first — synchronize, drop the caching allocator's blocks, pause, so
+      the probe is not racing the loader's pinning;
+    * repeat and take the MAX. Contention can only ever make a transfer look
+      SLOWER, never faster, so among repeated readings of the same link the
+      largest is the least corrupted. A mean averages in the corruption.
+
+    Every individual reading is returned so a reader can apply their own
+    statistic rather than trusting this choice. **Disclose this in any results
+    write-up** — it is a methodology change affecting a registered prediction's
+    input, even though it is the same instrument on the same link.
+    """
+    torch.cuda.synchronize()
+    torch.cuda.empty_cache()
+    time.sleep(5)                                  # let pinning and the allocator settle
+    readings = []
+    for i in range(repeats):
+        env = report_offload_environment(dev, log=lambda *_: None) or {}
+        pin = env.get("ceiling_pinned_gbps")
+        page = env.get("ceiling_pageable_gbps")
+        readings.append({"i": i, "pinned": pin, "pageable": page,
+                         # pinned should always beat pageable; the reverse means the
+                         # probe was contended and the reading is not trustworthy
+                         "suspect": bool(pin and page and page > pin)})
+        print(f"  ceiling probe {i}: pinned {pin:.2f} pageable {page:.2f}"
+              f"{'  <-- SUSPECT (pageable > pinned)' if readings[-1]['suspect'] else ''}")
+        time.sleep(1)
+    pinned = [r["pinned"] for r in readings if r["pinned"]]
+    ceiling = max(pinned) if pinned else 0.0
+    clean = [r for r in readings if not r["suspect"]]
+    print(f"  ceiling = max-of-{len(pinned)} = {ceiling:.2f} GB/s "
+          f"({len(readings)-len(clean)} suspect reading(s))")
+    return ceiling, readings[-1], readings
+
+
 @torch.no_grad()
 def run(args) -> dict:
     # A STRING, not torch.device: the loader hands this straight to
@@ -119,8 +170,7 @@ def run(args) -> dict:
     enable_routed_staging(handles)
     _assert_confounds_off(handles)
 
-    env = report_offload_environment(dev, log=print) or {}
-    ceiling = env.get("ceiling_pinned_gbps") or env.get("ceiling_pageable_gbps") or 0.0
+    ceiling, env, probes = _probe_ceiling(dev)
 
     from transformers import AutoTokenizer
     # args.model, not model.config._name_or_path: after a meta-init streaming load the
@@ -183,7 +233,8 @@ def run(args) -> dict:
     }
     if worst != 0.0:
         verdicts["gates_passed"] = False
-    return {"ceiling_gbps": ceiling, "records": records, "verdicts": verdicts}
+    return {"ceiling_gbps": ceiling, "ceiling_probes": probes, "ceiling_env": env,
+            "records": records, "verdicts": verdicts}
 
 
 @torch.no_grad()
