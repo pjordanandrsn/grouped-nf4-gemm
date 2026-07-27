@@ -2152,9 +2152,10 @@ direction is sound, but no ratio is claimed from them.
   decomposing the *e4b* step, where experts are 71.3% of wall. Everything above
   is `bench/phase3`, a different mechanism (#29) that double-buffers. The
   prereg recorded this exclusion before the run, and it stands.
-- `_gemm_nf4_grouped` (prefill, `nf4_grouped.py:145`) has the **same duplicated
-  byte load** and is deliberately untouched: it feeds `tl.dot`, so splitting
-  even/odd k restructures a tensor-core contraction and its A-operand layout.
+- `_gemm_nf4_grouped` (prefill, `nf4_grouped.py:145`) keeps the **same
+  duplicated byte load**. This was attempted and **closed as a measured
+  negative** — see **#44**: both transforms are bit-identical and ~2× faster on
+  sm_86/triton-3.4 and produce **~100% relative error** on sm_80/triton-3.0.
 - `_gemv_nf4_grouped_splitk` got H4 only, for the same reason it is the only
   part shipped anywhere: its span arithmetic counts 64-element absmax blocks, so
   `BLOCK_K` there is load-bearing rather than a knob.
@@ -2174,3 +2175,81 @@ carries a confound: holding bytes constant forces N to vary inversely with K, so
 grid size moves 8× alongside trip count.
 
 Receipts: `bench/context/receipts-gemv-steplevel-20260727/`.
+
+## Finding #44 — the prefill path stays broken-by-design, and a bit-identical result on one card meant nothing
+
+#43 left `_gemm_nf4_grouped` (prefill) carrying the same duplicated-byte load it
+fixed in the decode GEMV. Closing it was preregistered with a **pessimistic**
+expectation — prefill is compute-bound (#39), each weight element is reused
+`BLOCK_M` = 64 times, so halving *load instructions* should not matter.
+
+Two transforms were built. Both load `BLOCK_K/2` bytes once and split the
+nibbles; they differ in how they get back to a contraction:
+
+- **P-A** — `tl.join(w_hi, w_lo)` → `[BN, BK/2, 2]` → reshape `[BN, BK]`,
+  reproducing the original K layout. A operand and the single `tl.dot` untouched.
+- **P-B** — two dots of `K = BK/2`, no join, stride-2 A loads.
+
+### On the A2000 this was the most convincing result of the whole arc
+
+| shape | P-A speedup | P-A agreement vs shipped |
+|---|---:|---:|
+| olmoe_gu | 1.847× | **0.000e+00** |
+| qwen_gu | 1.753× | **0.000e+00** |
+| qwen_dn | 2.237× | **0.000e+00** |
+| gemma_gu | 2.246× | **0.000e+00** |
+| gptoss_dn | 1.915× | **0.000e+00** |
+
+**Geomean 1.989×, and bit-identical on every shape.** My registered prediction
+was 1.00–1.20×, so this was a large miss in the flattering direction — the
+`BLOCK_M`-reuse argument was simply wrong, the byte load is first-order even at
+AI ≈ 64. A faster kernel with *zero* numerical difference is about as strong as
+single-card evidence gets.
+
+### On the A100 both transforms compute garbage
+
+Same code, sm_80 / triton 3.0.0, relative error against the shipped kernel:
+
+| shape | P-A | P-B |
+|---|---:|---:|
+| olmoe_gu | **9.294e-01** | 9.466e-01 |
+| qwen_gu | 8.472e-01 | 7.966e-01 |
+| qwen_dn | 9.591e-01 | 8.966e-01 |
+| gemma_gu | 8.837e-01 | 9.523e-01 |
+| gptoss_dn | **9.966e-01** | 9.417e-01 |
+
+A relative error near **1.0** means the output is unrelated to the answer. This
+is not "less accurate" and not "slower" — it is **wrong**. The timings collected
+alongside are meaningless and are not quoted: you cannot time an incorrect
+kernel. `tl.join`+`tl.reshape` evidently does not carry the same semantics from
+Triton 3.4 back to 3.0, and P-B fails there too despite using no join at all.
+
+### Verdict, per the pre-committed rule
+
+The registered stopping rule was "**< 1.00× on either card → falsified, leave
+the prefill path alone permanently**". It fires. **Neither transform ships.**
+`_gemm_nf4_grouped` keeps its duplicated-byte load, and that is now a
+**recorded, measured decision** rather than the deferral #43 left open.
+
+### Why this is the most important result in the arc
+
+#43 shipped a composed kernel on one card's evidence and it was a **2.2×
+regression** on the other. The rule adopted afterwards — *nothing ships on one
+card* — was written for a **performance** failure. Here it caught a
+**correctness** failure, and one that no gate in the repo would have flagged:
+
+- P-A was **bit-identical** on the development card. Not "within tolerance" —
+  exactly equal.
+- `kernel/test_nf4_grouped.py` runs on whatever card is present, so on the
+  A2000 it would have passed 44/44.
+- The defect is invisible until the code is *compiled by a different Triton*.
+
+> **A bit-identical result on one toolchain is not evidence of correctness on
+> another.** Portability of *numerics* has to be measured, exactly like
+> portability of *speed*.
+
+Cost of learning this: **$0.31** of A100 time, because the prereg said to test
+the free card first and rent only if it cleared the bar.
+
+Receipts: `bench/context/receipts-prefill-20260727/`.
+
