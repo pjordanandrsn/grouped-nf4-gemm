@@ -1771,6 +1771,39 @@ category. It reported 259.9% GPU-busy and a *negative* gap, which is how it was
 caught — an impossible number is a better failure than a plausible one. The five
 disjoint leaves were unaffected.
 
+## Finding #37 — the KV cost is quantization, not residence; and #36's attribution was wrong
+
+Swept cache kind x context on the 235B at routed+grouped+speculative:
+
+| ctx | bf16 | nf4_resident | nf4_host |
+|---:|---:|---:|---:|
+| 48 | **0.6209** | 0.7877 | 0.8134 |
+| 4096 | **0.5715** | 0.8139 | 0.6743 |
+| 32768 | **0.7421** | 0.8230 | 0.8982 |
+| peak @32K | 43.71 GiB | 39.49 GiB | 37.84 GiB |
+
+**Host residence is nearly free and unrankable** — 1.03× at 48 tokens, 1.09× at
+32K, and the ordering *inverts* at 4096. Against this session's observed 10–35%
+run-to-run spreads that is noise, not a result.
+
+**bf16 beats NF4 at every context, 3 for 3** (1.27× / 1.42× / 1.11×). The KV
+dial's cost is the **dequantization**, not where the bytes live — #17's 1.7–1.9×
+reappearing smaller against a faster step.
+
+**#36 is corrected.** It attributed attention's 44.5% share to the host-KV
+setting and estimated "roughly half the step" was paying for it. The best KV
+setting buys **1.31×**, not ~1.8×. Most of attention's cost is intrinsic, so the
+next target is attention itself.
+
+**The trade, stated:** at 32K, NF4 KV saves 4.2 GB for 1.11× time; host residence
+saves a further 1.65 GB for another 1.09×. On an 80 GB card at 32K **bf16 is the
+right answer**, and every benchmark in this session ran `nf4_host` — the wrong
+one for the contexts measured.
+
+**Cross-pod caution:** `nf4_host` at 48 tokens measured 0.8134 here against
+0.6263 in #34 on a different host. Absolute step times do not transfer between
+pods; only within-pod ratios do.
+
 ## Reproducing
 
 `bench/context/kv_budget.py` (derivation, from config.json only) and
@@ -1848,3 +1881,6 @@ Finding #35: `bench/context/PREREG-cache-slots.md`; receipts
 
 Finding #36: `bench/context/PREREG-step-decomposition.md`; receipts
 `bench/context/receipts-decomp-20260727.json`.
+
+Finding #37: `bench/context/PREREG-kv-dial-sweep.md`; receipts
+`bench/context/receipts-kvdial-20260727.json`.
