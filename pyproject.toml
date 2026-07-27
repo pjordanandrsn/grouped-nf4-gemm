@@ -11,7 +11,18 @@ license = { text = "MIT" }
 requires-python = ">=3.9"
 authors = [{ name = "Jordan Anderson" }]
 dependencies = [
-    "torch>=2.8",
+    # The floor accepts PRE-RELEASES on purpose. Under PEP 440 a dev build
+    # sorts BELOW its own release -- "2.8.0.dev20250319" does NOT satisfy
+    # ">=2.8" -- so a plain ">=2.8" makes pip treat every nightly/dev CUDA
+    # image as unsatisfied and install a fresh stable torch OVER it. That
+    # silently swaps the torch a working image was built around and orphans
+    # the torchvision/torchaudio pinned to it, which then fail at import
+    # ("operator torchvision::nms does not exist"). Observed on the RunPod
+    # pytorch:2.8.0-cu128 image: installing this package moved torch
+    # 2.8.0.dev+cu128 -> 2.13.0+cu130 and broke the environment's transformers
+    # stack. ">=2.8.0.dev0" is satisfied by those builds, so pip leaves a
+    # working torch alone.
+    "torch>=2.8.0.dev0",
     "triton>=3.4",
 ]
 classifiers = [
