@@ -2569,3 +2569,76 @@ two scales, same result.
 Cost **$2.98** (~64 min, most of it the ~470 GB checkpoint stream at ~139 MB/s).
 Receipts: `bench/context/receipts-ladder-20260727/ladder_235b.json`.
 
+## Finding #50 — the "headroom" was never kernel overhead; it is the access pattern
+
+Every headroom figure in this project — #39's **4.9×**, #46's **~2.1× remaining**
+— measured distance to a floor of **487 GB/s**. That floor is a **coalesced**
+read. The GEMV's access is **strided by N**. The comparison was apples to
+oranges from the start.
+
+Measured directly, same bytes, two access patterns, one process:
+
+| | A6000 sm_86 / 84 SM | RTX 4090 sm_89 / 128 SM |
+|---|---:|---:|
+| strided (the GEMV's pattern) | 150.0 GB/s | 402.9 GB/s |
+| coalesced (identical bytes) | **487.7 GB/s** | **1404.3 GB/s** |
+| **access-pattern penalty** | **3.25×** | **3.49×** |
+
+The A6000's coalesced figure — **487.7 GB/s** — reproduces #39's 487 almost
+exactly. #39 measured a coalesced stream and the project has been treating it as
+a target for a strided kernel ever since.
+
+### There is no removable kernel overhead
+
+A stripped GEMV doing exactly the required work and nothing else (`R5`: unpack,
+LUT, scale, multiply, K-reduce, store) against the shipped kernel:
+
+| | A6000 | 4090 |
+|---|---:|---:|
+| shipped / R5 | **1.058×** | **1.009×** |
+
+Both under the pre-committed **1.3×** line. **The structural-kernel line CLOSES**
+as a measured negative: there is nothing left to remove from this kernel's
+tiling or dispatch, and the hand-written CUDA GEMV should **not** be written —
+it would be re-deriving a kernel that is already at its structure's limit.
+
+### The preregistered design partly failed, and the decisive result was a follow-up
+
+Recording this because the write-up would otherwise imply a cleaner experiment
+than actually happened.
+
+**The term-by-term ladder did not work.** R4 measured *faster* than R3 (0.889×)
+and R5 faster than R4 (0.935×) — adding work cannot speed a kernel up. The cause
+is the sink: R1–R3 hold a `[BLOCK_N, 32]` accumulator live across the whole K
+loop, and that register pressure costs more than the reduction it was meant to
+isolate. **Rungs R2–R4 are confounded and are not usable as bounds.**
+
+**R5 is not independent of what it measures.** It is structurally the shipped
+kernel, so `shipped/R5 ≈ 1.0` is close to tautological *by construction*. It
+does establish "no removable overhead in this structure" — a real but narrower
+claim than "no faster kernel exists".
+
+**The load-bearing number came from a follow-up**, not the registered design: the
+coalesced-vs-strided comparison. It was not preregistered, so it is reported as
+what it is — a strong measurement made after the planned one under-delivered,
+confirmed on two architectures, not a confirmation of a prior hypothesis.
+
+### What is actually left
+
+The ~3.3–3.5× is reachable **only by changing the packed layout** so a warp's
+k-range is contiguous by construction — `[E, N, K/2]` puts consecutive `k` in one
+row while a warp spans `N`. That is a **format** change, not a kernel change: it
+touches the on-disk layout that the PyPI packages, four registered result-sets
+and every existing checkpoint depend on. It is a different project with a
+migration story, and it should not be started casually.
+
+**Retire the 4.9× and ~2.1× figures.** They describe a distance to a bound the
+kernel's access pattern forbids.
+
+Receipts: `bench/context/receipts-roofline-20260727/`, harnesses
+`bench/context/reachable_target.py` and `bench/context/access_pattern_penalty.py`.
+
+> Caveat: the 4090 self-pair read **0.969×** rather than ~1.000×, a ~3% harness
+> wobble. The conclusions here rest on 3.25–3.49× and ~1.0×, both far outside
+> that, but a future run wanting tighter numbers should tighten the pairing first.
+
