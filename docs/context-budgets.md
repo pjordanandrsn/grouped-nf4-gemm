@@ -1882,6 +1882,55 @@ common is a `tl.dot` on a shape tensor cores cannot use well. The lesson from #3
 survives, but its follow-on guess — that the decode was the culprit — is now
 falsified by direct measurement rather than inherited.
 
+## Finding #40 — on the right KV setting, experts are 71.3% of the step
+
+#36 decomposed the 235B step while running `nf4_host` KV, the setting #37 then
+showed is wrong for these contexts. Repeated on bf16:
+
+| category | s/token | % of wall | was (#36) |
+|---|---:|---:|---:|
+| **experts** | 0.6613 | **71.3%** | 46.4% |
+| attention | 0.1473 | **15.9%** | 44.5% |
+| norms | 0.0828 | 8.9% | 4.8% |
+| router | 0.0322 | 3.5% | 0.9% |
+| lm_head | 0.0008 | 0.1% | 0.1% |
+| **GPU busy** | 0.9245 | **99.7%** | 96.7% |
+
+**Attention was never the target** — its 44.5% was a config artifact, and it is
+**15.9%** once the KV dial is set the way #37 recommends. The GPU is **99.7%**
+busy, so #36's CUDA-graphs verdict holds *more* strongly: the whole scheduling
+gap is **0.3%**.
+
+Composed with #39: experts are 71.3% of the step and 79.6% of the GEMM is neither
+reading nor decoding, so **56.8% of the entire step is grouped-GEMM tiling and
+dispatch**. If the GEMM reached its own decode floor the step goes
+**0.9691 → 0.4428 s/token = 2.19×**.
+
+## Finding #41 — three hypotheses for that gap, all falsified
+
+The 2.19× above has survived three attempts to explain it, each registered and
+each wrong:
+
+1. **`tl.dot` M-padding.** I claimed the expert GEMM was an M=1 GEMV padded to
+   `tl.dot`'s M≥16 minimum. **Wrong** — `gemm_4bit_grouped` already dispatches
+   `_gemv_nf4_grouped` when `max(sizes) == 1` and skips the M-tile entirely. The
+   99.2 GB/s in #39 *was* the GEMV path. I nearly rebuilt what already exists.
+2. **The decode primitive** (#39). Measured: the decode runs at **85.3%** of
+   achievable bandwidth, costs 1.4× a raw byte read, and is 20.4% of the GEMM.
+3. **Occupancy.** Swept BLOCK_N × warps × split_k — 64 configs, 0 failures, max
+   rel err 4.57e-05. Default `(64, 2, 1)` at **9.1 warps/SM** gives 95.5 GB/s;
+   best `(128, 4, split_k=8)` at **73.1 warps/SM** gives 110.9. **8× the
+   occupancy bought 16%**, falsifying G1a at 1.162× against a 1.2× abandon line.
+
+**Config tuning is abandoned per the stopping rule.** The GEMV moves 56.62 MB at
+110.9 GB/s where a flat decode of the same bytes reaches 487, and it is not
+memory-bound, not compute-bound (0.95% of peak), not decode-bound, and not
+occupancy-bound.
+
+**I do not understand this kernel.** Three registered mechanisms, three
+falsifications. The next step is a real profiler — Nsight Compute on
+`_gemv_nf4_grouped` — not a fourth guess.
+
 ## Reproducing
 
 `bench/context/kv_budget.py` (derivation, from config.json only) and
@@ -1968,3 +2017,7 @@ Finding #38: `bench/context/PREREG-nf4-flash.md`; kernel `flash_nf4_kv_gqa` in
 
 Finding #39 (part A): `bench/context/PREREG-decode-bound.md`; receipts
 `bench/context/receipts-decodeiso-20260727.json`.
+
+Findings #40 and #41: `bench/context/PREREG-decode-bound.md` and
+`bench/context/PREREG-gemv-occupancy.md`; receipts
+`bench/context/receipts-redecomp-20260727.json`.
