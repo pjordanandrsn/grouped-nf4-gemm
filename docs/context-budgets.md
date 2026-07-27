@@ -1737,6 +1737,40 @@ non-monotonic in a way that should have been the tell, since 24 slots beat 32
 while hitting less often. Hit rates and timings came from the same runs; only the
 timings were noise.
 
+## Finding #36 — the step is GPU-saturated; CUDA graphs is dead and attention is the target
+
+After speculation, 67% of the 235B step was unmeasured (#35). Decomposed with
+CUDA-event ranges on disjoint categories, 94 layers, 48-token context:
+
+| category | s/token | % of wall |
+|---|---:|---:|
+| **experts** | 0.2921 | **46.4%** |
+| **attention** | 0.2803 | **44.5%** |
+| norms | 0.0305 | 4.8% |
+| router | 0.0056 | 0.9% |
+| lm_head | 0.0008 | 0.1% |
+| **GPU busy** | 0.6093 | **96.7%** |
+| gap (launch + Python) | 0.0207 | **3.3%** |
+
+**Not launch-bound — 96.7% GPU-busy.** The prediction was <60%, reasoning from
+~1,880 kernel launches per token at bs=1 and from per-layer cost scaling only
+1.32× between the 30B and the 235B. The fixed term is real; it is **GPU work**,
+not scheduling. **CUDA graphs is dropped without being built** — its ceiling is
+3.3%.
+
+**Attention nearly equals expert compute** (44.5% vs 46.4%) at a context where
+the KV is ~9 MB. It is not intrinsic: the benchmark ran KV `residence="host"`, so
+every attention call pulls the cache across the link and dequantizes NF4. **This
+session has been optimizing expert streaming inside a configuration whose KV dial
+was set wrong for the context being measured** — the project's own planner would
+put KV resident at 48 tokens. Roughly half the step was paying for that.
+
+**Instrumentation bug, recorded:** `wrap(model.model)` was written where
+`model.model.norm` was meant, making a non-leaf range that contained every other
+category. It reported 259.9% GPU-busy and a *negative* gap, which is how it was
+caught — an impossible number is a better failure than a plausible one. The five
+disjoint leaves were unaffected.
+
 ## Reproducing
 
 `bench/context/kv_budget.py` (derivation, from config.json only) and
@@ -1811,3 +1845,6 @@ Finding #34: `bench/context/PREREG-full-stack-235b.md`; receipts
 
 Finding #35: `bench/context/PREREG-cache-slots.md`; receipts
 `bench/context/receipts-cacheslots-20260726.json`.
+
+Finding #36: `bench/context/PREREG-step-decomposition.md`; receipts
+`bench/context/receipts-decomp-20260727.json`.

@@ -57,3 +57,50 @@ would remove.
    uninstrumented wall time is recorded alongside for comparison.
 2. 48-token context. Attention and KV grow with context, so D1d is scoped to
    short prompts and says nothing about 32K.
+
+## Outcome — the GPU is saturated, CUDA graphs is dead, and attention is the target
+
+**Instrumentation bug, named first.** I wrote `wrap(model.model)` intending
+`model.model.norm`. `model.model` is the whole transformer body, so that range
+*contains* every other category — it is not a leaf. It recorded 1.028 s and drove
+the reported total to 259.9% of wall with a negative gap, which is how it was
+caught. The five genuinely disjoint leaves are unaffected.
+
+Qwen3-235B-A22B, 94 layers, routed+grouped+speculative, 48-token context:
+
+| category | s/token | % of wall | calls/token |
+|---|---:|---:|---:|
+| **experts** | **0.2921** | **46.4%** | 102 |
+| **attention** | **0.2803** | **44.5%** | 102 |
+| norms | 0.0305 | 4.8% | 296 |
+| router | 0.0056 | 0.9% | 102 |
+| lm_head | 0.0008 | 0.1% | 1 |
+| **GPU busy** | **0.6093** | **96.7%** | |
+| **gap** | 0.0207 | **3.3%** | |
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| D1a GPU-busy < 60% of wall | <60% | **96.7%** | **FALSIFIED** |
+| D1b experts 25–50% of busy | — | **47.9%** | **CONFIRMED** |
+| D1c lm_head < 10% | <10% | **0.1%** | **CONFIRMED** |
+| D1d attention < 20% | <20% | **44.5%** | **FALSIFIED** |
+
+**The step is not launch-bound. It is GPU-saturated at 96.7%.** My reasoning was
+that 1,880 launches/token at bs=1 across 94 layers must leave gaps, and that the
+1.32×-per-layer scaling from 30B to 235B implied a fixed term. Both were wrong:
+the fixed term is real but it is *GPU work*, not scheduling. **The pre-committed
+decision fires and CUDA graphs is dropped without being built** — its entire
+ceiling is 3.3%.
+
+**Attention is 44.5% of the step and nearly equals expert compute**, at a
+48-token context where the KV is only ~9 MB. That is not intrinsic attention
+cost — the benchmark ran KV `residence="host"`, so every attention call
+materializes the cache across the link and dequantizes NF4. **The configuration
+this session has been measuring is one the project's own planner would not
+recommend at 48 tokens**, and roughly half the step has been paying for it.
+
+**Next move, per the pre-committed branch (D1d falsified high):** attention is the
+target, and the first experiment is nearly free — sweep the KV dial
+(`nf4_host` / `nf4_resident` / `bf16`) at short and long context and find where
+host-residence starts earning its keep. Findings #17 and #19 priced that dial in
+isolation; nothing has priced it against a step this fast.
