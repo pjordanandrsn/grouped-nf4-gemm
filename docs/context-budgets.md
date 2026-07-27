@@ -2778,3 +2778,60 @@ project's own additive law forbids.
 
 Receipts: `bench/context/receipts-routed-residual-20260727/`.
 
+## Finding #53 — re-profiling the unchanged GEMV: the H4 fix moved the bottleneck, it did not only shrink it
+
+The decode GEMV is **byte-identical to what #45 profiled** — `741308f` (reduce to
+H4 alone) was its last change and #45 came after it. So this run asks what #45
+did not: *what* is the Long-Scoreboard stall waiting on, now that #46 has
+falsified occupancy/ILP and #51 has falsified the layout.
+
+### The memory hierarchy reconciles end to end
+
+| | |
+|---|---:|
+| unique bytes needed (packed 50.33 + absmax 6.29) | **56.62 MB** |
+| L1 sector requests | 12.57 M = **402 MB — 7.1× the unique data** |
+| L1 sector hit rate | **75.07 %** |
+| → miss to L2 (predicted 3.13 M / measured) | **3.15 M sectors** |
+| L2 sector hit rate | **9.00 %** |
+| → miss to DRAM (predicted 91.70 MB / measured) | **91.82 MB** |
+| DRAM amplification | **1.62× unique** |
+
+Predicted-vs-measured agrees at both levels, so the model is sound. Two things it
+says plainly: **L1 is doing the real work** (absorbing 7.1× request amplification
+at 75 %), and **L2 is inert** (9 % — this is a pure stream with no reuse, exactly
+as expected, and it means L2-oriented tuning has nothing to bite on).
+
+### The stall split is the new result
+
+| stall | cycles / issue-active | share |
+|---|---:|---:|
+| **long scoreboard** (waiting on data) | 9.23 | **65.6 %** |
+| **lg throttle** (LSU pipe saturated) | **3.98** | **28.3 %** |
+| mio throttle | 0.86 | 6.1 % |
+
+#45 reported only the Long-Scoreboard figure. **`lg_throttle` at 28 % is new, and
+it is a different kind of limit**: not waiting for data to arrive, but the
+load/store pipe unable to retire requests as fast as they are issued.
+
+That connects directly to #43, which measured the H4 fix **increasing** request
+count (4.82 M → 6.44 M) while cutting sectors 4.63×. **The fix traded sector
+efficiency for request count, and the request count is now costing about a
+quarter of the stall.** So H4 did not merely shrink the bottleneck — it *moved*
+part of it, from sector throughput into LSU issue pressure.
+
+### Deliberately not proposing a fix
+
+The obvious next thought — fewer, wider loads to relieve the LSU — is exactly the
+shape of idea this kernel has already refuted four times: occupancy (falsified
+twice, #41/#46), the prefill single-load transform (#44), and the coalescing
+repack (#51). It also runs into #50's finding that the kernel is already within
+**1.01–1.06×** of a stripped version doing the same required work, which bounds
+how much *any* remaining change can return.
+
+**This finding is diagnostic only.** Anything acted on here gets its own prereg,
+with a landing bar and a two-card rule, like the four before it.
+
+Profiled free on the QNAP A2000 (`gnf4-ncu:1`, `--cap-add=SYS_ADMIN`); counter
+ratios, not wall times, so the shared box is a valid testbed for it.
+
