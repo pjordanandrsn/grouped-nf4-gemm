@@ -1,0 +1,974 @@
+{
+  "ceiling_gbps": 14.681474985604929,
+  "records": [
+    {
+      "arm": "C",
+      "rep": 0,
+      "position": 0,
+      "s_per_token": 0.9061427544802427,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 0,
+        "device": 1410
+      },
+      "row_plan": {
+        "flat": 0,
+        "dict": 1406
+      },
+      "routed_gbps": 22.835156954692234,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    },
+    {
+      "arm": "T1",
+      "rep": 0,
+      "position": 1,
+      "s_per_token": 0.9076195191591978,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 1410,
+        "device": 0
+      },
+      "row_plan": {
+        "flat": 1406,
+        "dict": 0
+      },
+      "routed_gbps": 22.821993347284327,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    },
+    {
+      "arm": "T1s",
+      "rep": 0,
+      "position": 2,
+      "s_per_token": 0.9040462132543325,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 1410,
+        "device": 0
+      },
+      "row_plan": {
+        "flat": 0,
+        "dict": 1406
+      },
+      "routed_gbps": 22.860770534576588,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    },
+    {
+      "arm": "T1c",
+      "rep": 0,
+      "position": 3,
+      "s_per_token": 0.913476137444377,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 0,
+        "device": 1410
+      },
+      "row_plan": {
+        "flat": 1406,
+        "dict": 0
+      },
+      "routed_gbps": 22.823213237395507,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    },
+    {
+      "arm": "T1c",
+      "rep": 1,
+      "position": 4,
+      "s_per_token": 0.9086071513593197,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 0,
+        "device": 1410
+      },
+      "row_plan": {
+        "flat": 1406,
+        "dict": 0
+      },
+      "routed_gbps": 22.854439623892116,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    },
+    {
+      "arm": "T1s",
+      "rep": 1,
+      "position": 5,
+      "s_per_token": 0.9038337767124176,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 1410,
+        "device": 0
+      },
+      "row_plan": {
+        "flat": 0,
+        "dict": 1406
+      },
+      "routed_gbps": 22.84920308522539,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    },
+    {
+      "arm": "T1",
+      "rep": 1,
+      "position": 6,
+      "s_per_token": 0.9023242704570293,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 1410,
+        "device": 0
+      },
+      "row_plan": {
+        "flat": 1406,
+        "dict": 0
+      },
+      "routed_gbps": 22.852745492913197,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    },
+    {
+      "arm": "C",
+      "rep": 1,
+      "position": 7,
+      "s_per_token": 0.9082307275384665,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 0,
+        "device": 1410
+      },
+      "row_plan": {
+        "flat": 0,
+        "dict": 1406
+      },
+      "routed_gbps": 22.832750446932824,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    },
+    {
+      "arm": "C",
+      "rep": 2,
+      "position": 8,
+      "s_per_token": 0.9091086369007826,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 0,
+        "device": 1410
+      },
+      "row_plan": {
+        "flat": 0,
+        "dict": 1406
+      },
+      "routed_gbps": 22.834906073336466,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    },
+    {
+      "arm": "T1",
+      "rep": 2,
+      "position": 9,
+      "s_per_token": 0.9040506109595299,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 1410,
+        "device": 0
+      },
+      "row_plan": {
+        "flat": 1406,
+        "dict": 0
+      },
+      "routed_gbps": 22.82651935050336,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    },
+    {
+      "arm": "T1s",
+      "rep": 2,
+      "position": 10,
+      "s_per_token": 0.9041381515562534,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 1410,
+        "device": 0
+      },
+      "row_plan": {
+        "flat": 0,
+        "dict": 1406
+      },
+      "routed_gbps": 22.84497606162137,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    },
+    {
+      "arm": "T1c",
+      "rep": 2,
+      "position": 11,
+      "s_per_token": 0.9068800825625658,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 0,
+        "device": 1410
+      },
+      "row_plan": {
+        "flat": 1406,
+        "dict": 0
+      },
+      "routed_gbps": 22.201275895809516,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    },
+    {
+      "arm": "T1c",
+      "rep": 3,
+      "position": 12,
+      "s_per_token": 0.9142527207732201,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 0,
+        "device": 1410
+      },
+      "row_plan": {
+        "flat": 1406,
+        "dict": 0
+      },
+      "routed_gbps": 22.81628508821453,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    },
+    {
+      "arm": "T1s",
+      "rep": 3,
+      "position": 13,
+      "s_per_token": 0.9135522451251745,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 1410,
+        "device": 0
+      },
+      "row_plan": {
+        "flat": 0,
+        "dict": 1406
+      },
+      "routed_gbps": 22.821858301581646,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    },
+    {
+      "arm": "T1",
+      "rep": 3,
+      "position": 14,
+      "s_per_token": 0.9172758460044861,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 1410,
+        "device": 0
+      },
+      "row_plan": {
+        "flat": 1406,
+        "dict": 0
+      },
+      "routed_gbps": 22.794793213111397,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    },
+    {
+      "arm": "C",
+      "rep": 3,
+      "position": 15,
+      "s_per_token": 0.9097023922950029,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 0,
+        "device": 1410
+      },
+      "row_plan": {
+        "flat": 0,
+        "dict": 1406
+      },
+      "routed_gbps": 22.842086423070764,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    },
+    {
+      "arm": "C",
+      "rep": 4,
+      "position": 16,
+      "s_per_token": 0.9064921718090773,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 0,
+        "device": 1410
+      },
+      "row_plan": {
+        "flat": 0,
+        "dict": 1406
+      },
+      "routed_gbps": 22.83378412253826,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    },
+    {
+      "arm": "T1",
+      "rep": 4,
+      "position": 17,
+      "s_per_token": 0.9177772328257561,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 1410,
+        "device": 0
+      },
+      "row_plan": {
+        "flat": 1406,
+        "dict": 0
+      },
+      "routed_gbps": 22.81485082856962,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    },
+    {
+      "arm": "T1s",
+      "rep": 4,
+      "position": 18,
+      "s_per_token": 0.9127683341503143,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 1410,
+        "device": 0
+      },
+      "row_plan": {
+        "flat": 0,
+        "dict": 1406
+      },
+      "routed_gbps": 22.82525636420468,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    },
+    {
+      "arm": "T1c",
+      "rep": 4,
+      "position": 19,
+      "s_per_token": 0.9137090090662241,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 0,
+        "device": 1410
+      },
+      "row_plan": {
+        "flat": 1406,
+        "dict": 0
+      },
+      "routed_gbps": 22.824807913377924,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    },
+    {
+      "arm": "T1c",
+      "rep": 5,
+      "position": 20,
+      "s_per_token": 0.9173836354166269,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 0,
+        "device": 1410
+      },
+      "row_plan": {
+        "flat": 1406,
+        "dict": 0
+      },
+      "routed_gbps": 22.86710126945102,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    },
+    {
+      "arm": "T1s",
+      "rep": 5,
+      "position": 21,
+      "s_per_token": 0.9154811948537827,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 1410,
+        "device": 0
+      },
+      "row_plan": {
+        "flat": 0,
+        "dict": 1406
+      },
+      "routed_gbps": 22.835762892020494,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    },
+    {
+      "arm": "T1",
+      "rep": 5,
+      "position": 22,
+      "s_per_token": 0.9157580994069576,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 1410,
+        "device": 0
+      },
+      "row_plan": {
+        "flat": 1406,
+        "dict": 0
+      },
+      "routed_gbps": 22.829994120668037,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    },
+    {
+      "arm": "C",
+      "rep": 5,
+      "position": 23,
+      "s_per_token": 0.9208130352199078,
+      "greedy_ids": [
+        1181,
+        26210,
+        1030,
+        1012,
+        17113,
+        448,
+        2453,
+        323,
+        29301,
+        13,
+        576,
+        3800,
+        11,
+        5798,
+        6157
+      ],
+      "max_abs_logit": 24.125,
+      "counts": {
+        "host": 0,
+        "device": 1410
+      },
+      "row_plan": {
+        "flat": 0,
+        "dict": 1406
+      },
+      "routed_gbps": 22.814812076497386,
+      "routed_copies": 61540,
+      "max_delta_logit": 0.0
+    }
+  ],
+  "verdicts": {
+    "registered": {
+      "R1_bit_identity": {
+        "pass": true,
+        "detail": "greedy ids identical across C and T1"
+      },
+      "R2_engagement": {
+        "pass": true,
+        "T1": {
+          "host": 8460,
+          "device": 0
+        },
+        "C": {
+          "host": 0,
+          "device": 8460
+        },
+        "detail": "T1 host>0 & device==0; C is the mirror image, which also proves the switch flipped"
+      },
+      "R3_no_regression": {
+        "pass": true,
+        "ratio": 1.0033225792854432,
+        "self_pair_spread": 0.01611974181434863
+      },
+      "R6_t1_magnitude": {
+        "ratio": 1.0033225792854432,
+        "band": [
+          0.95,
+          1.0
+        ],
+        "verdict": "REGRESSION",
+        "pass": false
+      },
+      "R4_decomposition": {
+        "routed_gbps": 22.834345097937362,
+        "ceiling_gbps": 14.681474985604929,
+        "fraction_of_ceiling": 1.5553168275208218,
+        "bar": 0.7,
+        "pass": false
+      },
+      "R5_decision": {
+        "build_expert_major_coalescer": false,
+        "detail": "R4 FALSIFIED: transfers are already near-efficient, so the copy count is not costing what #22's phrasing implied. DO NOT build the coalescer. Record the negative and move the lane to host-side stall."
+      }
+    },
+    "exploratory": {
+      "T1s": {
+        "ratio_vs_C": 0.9997618063300935,
+        "note": "NOT REGISTERED \u2014 needs its own prereg before it can be quoted"
+      },
+      "T1c": {
+        "ratio_vs_C": 1.005417690423709,
+        "note": "NOT REGISTERED \u2014 needs its own prereg before it can be quoted"
+      }
+    },
+    "gates_passed": true,
+    "arm_fidelity": {
+      "pass": true,
+      "C": [
+        {
+          "flat": 0,
+          "dict": 1406
+        },
+        {
+          "flat": 0,
+          "dict": 1406
+        },
+        {
+          "flat": 0,
+          "dict": 1406
+        },
+        {
+          "flat": 0,
+          "dict": 1406
+        },
+        {
+          "flat": 0,
+          "dict": 1406
+        },
+        {
+          "flat": 0,
+          "dict": 1406
+        }
+      ],
+      "T1": [
+        {
+          "flat": 1406,
+          "dict": 0
+        },
+        {
+          "flat": 1406,
+          "dict": 0
+        },
+        {
+          "flat": 1406,
+          "dict": 0
+        },
+        {
+          "flat": 1406,
+          "dict": 0
+        },
+        {
+          "flat": 1406,
+          "dict": 0
+        },
+        {
+          "flat": 1406,
+          "dict": 0
+        }
+      ],
+      "detail": "C on the dict plan, T1 on the flat plan"
+    },
+    "position_balance": {
+      "balanced": true,
+      "sums": {
+        "C": 69,
+        "T1": 69,
+        "T1s": 69,
+        "T1c": 69
+      },
+      "detail": "every arm carries the same position sum; linear drift cancels"
+    },
+    "logit_identity": {
+      "pass": true,
+      "max_delta_logit": 0.0,
+      "detail": "exact logit agreement across all arms (stronger than R1's greedy-id gate; #24's standard). NOT a registered prediction -- R1 as stamped is the registered gate and is evaluated separately."
+    }
+  },
+  "wall_s": 3742.878338098526,
+  "prereg": "bench/context/PREREG-routed-residual.md ba7a29ce + amendment-1 2397612e"
+}
