@@ -263,3 +263,31 @@ def test_underpowered_does_not_mask_a_real_regression_signal():
              rec("T1", 1.30, host=94), rec("T1", 1.30, host=94)]
     r6 = evaluate(noisy, ceiling_gbps=22.21)["registered"]["R6_t1_magnitude"]
     assert r6["ratio"] > 1.2 and r6["pass"] is None
+
+
+# --- R4 plausibility gate --------------------------------------------------
+def test_achieving_more_than_the_link_ceiling_is_invalid_not_a_failure():
+    """The 2026-07-27 235B run: 22.83 GB/s against a probed 14.68 ceiling.
+
+    Un-gated, this emitted R4=fail and R5='DO NOT build the coalescer' -- a
+    confident registered negative produced by a contended ceiling probe.
+    """
+    v = evaluate(_clean(gbps=22.83), ceiling_gbps=14.68)
+    r4, r5 = v["registered"]["R4_decomposition"], v["registered"]["R5_decision"]
+    assert r4["pass"] is None, "must be None (cannot tell), never False (prediction failed)"
+    assert "MEASUREMENT INVALID" in r4["detail"]
+    assert r5["build_expert_major_coalescer"] is None
+    assert not v["gates_passed"]
+
+
+def test_a_plausible_fraction_still_adjudicates_normally():
+    """With the real ~26 GB/s ceiling the same numerator is fine and R4 decides."""
+    v = evaluate(_clean(gbps=22.83), ceiling_gbps=26.0)
+    r4 = v["registered"]["R4_decomposition"]
+    assert r4["pass"] is False and 0.87 < r4["fraction_of_ceiling"] < 0.89
+    assert v["registered"]["R5_decision"]["build_expert_major_coalescer"] is False
+
+
+def test_exactly_at_the_ceiling_is_allowed():
+    v = evaluate(_clean(gbps=22.0), ceiling_gbps=22.0)
+    assert v["registered"]["R4_decomposition"]["pass"] is False   # 1.0 <= 1.0, adjudicates
