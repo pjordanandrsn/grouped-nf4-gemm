@@ -21,6 +21,24 @@ WHY THE ARMS ARE ENV SWITCHES AND NOT TWO CHECKOUTS
     switched control. If it does not, the switch is not a faithful control and
     every number here is void. Run it BEFORE trusting the ladder.
 
+REPS — A DISCLOSED DEVIATION FROM THE STAMPED FIXTURE
+    The prereg fixture says "median of 2". This harness defaults to **6**, and any
+    results MUST disclose that.
+
+    Why: the OLMoE smoke ran three times. At reps=2 the median of 2 is just the
+    mean of 2, so one bad draw carries the whole ratio — run 3 had `T1` at 0.1963
+    in one position and 0.1792 in the other, and the two halves of T1 (T1s, T1c)
+    both measured FASTER than control while combined T1 measured slower. That is
+    incoherent, since T1 is exactly T1s+T1c, and it is what too few reps looks
+    like. A +/-5% band cannot be resolved by two samples.
+
+    This only adds statistical power. It changes no prediction, no bar, no
+    decision rule — R1-R6 and their falsification criteria are untouched. That is
+    the reason it is a disclosable deviation rather than a re-registration. If you
+    would rather re-register, do it BEFORE the pod exists, not after.
+
+    Must be EVEN, or `interleave` cannot balance positions.
+
 REGISTERED vs EXPLORATORY
     Registered (R1–R6): arms `C` and `T1` only. `T1s` and `T1c` split T1 into
     its sync half and its copy-plan half — free once the switches exist, but
@@ -52,7 +70,7 @@ from experts4bit_qlora import offload as offload_mod
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from e4b_ladder import PROMPT, _collect_handles, decode  # noqa: E402
-from routed_residual_verdicts import REGISTERED, evaluate  # noqa: E402,F401
+from routed_residual_verdicts import REGISTERED, evaluate, interleave  # noqa: E402,F401
 
 #: (routed_ids, row_plan) per arm. `device`/`dict` are the pre-94e4004 paths.
 ARMS = {
@@ -113,7 +131,12 @@ def run(args) -> dict:
     # config's path field is not reliably the hub id.
     ids = AutoTokenizer.from_pretrained(args.model)(PROMPT, return_tensors="pt").input_ids.to(dev)
 
-    order = [a for _ in range(args.reps) for a in args.arms]      # interleaved, NOT blocked
+    # Position-balanced (ABBA), not plain repetition: plain repetition pins each
+    # arm to one position and turns run drift into a treatment effect. See
+    # interleave()'s docstring for the smoke that demonstrated it.
+    order = interleave(args.arms, args.reps)
+    if args.reps % 2:
+        print(f"# WARNING: reps={args.reps} is odd — positions cannot balance; prefer an even reps")
     records = []
     for rep_i, arm in enumerate(order):
         _set_arm(arm)
@@ -122,7 +145,7 @@ def run(args) -> dict:
         rep = offload_stats_report() or {}
         routed = (rep.get("by_policy") or {}).get("routed") or {}
         records.append({
-            "arm": arm, "rep": rep_i // len(args.arms),
+            "arm": arm, "rep": rep_i // len(args.arms), "position": rep_i,
             "s_per_token": s_per_token,
             "greedy_ids": greedy,
             "max_abs_logit": float(first_logits.abs().max()),
@@ -190,7 +213,9 @@ def main():
     ap.add_argument("--model", default="Qwen/Qwen3-235B-A22B")
     ap.add_argument("--tokens", type=int, default=12)
     ap.add_argument("--warmup", type=int, default=2)
-    ap.add_argument("--reps", type=int, default=2, help="median of N per arm (prereg: 2)")
+    ap.add_argument("--reps", type=int, default=6,
+                    help="median of N per arm. DEVIATES from the stamped prereg's 2 -- see the "
+                         "REPS note in the module docstring. Must be even (ABBA balance).")
     ap.add_argument("--arms", default="C,T1,T1s,T1c",
                     help="comma list; C and T1 are registered, the rest exploratory")
     ap.add_argument("--out", default="")

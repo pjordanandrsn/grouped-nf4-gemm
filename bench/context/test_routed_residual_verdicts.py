@@ -176,3 +176,90 @@ def test_absent_row_plan_counts_do_not_fail_the_run():
     v = evaluate(_clean(), ceiling_gbps=22.21)
     assert v["arm_fidelity"]["pass"] is None
     assert v["gates_passed"]
+
+
+# --- interleave / position balance ------------------------------------------
+from routed_residual_verdicts import interleave, position_balance  # noqa: E402
+
+
+def _sums(order):
+    s = {}
+    for i, a in enumerate(order):
+        s[a] = s.get(a, 0) + i
+    return s
+
+
+@pytest.mark.parametrize("n_arms", [2, 3, 4, 5])
+@pytest.mark.parametrize("reps", [2, 4, 6])
+def test_even_reps_balance_positions_exactly(n_arms, reps):
+    arms = [f"a{i}" for i in range(n_arms)]
+    assert len(set(_sums(interleave(arms, reps)).values())) == 1
+
+
+def test_abba_is_the_actual_order():
+    assert interleave(["C", "T1", "T1s", "T1c"], 2) == \
+        ["C", "T1", "T1s", "T1c", "T1c", "T1s", "T1", "C"]
+
+
+def test_plain_repetition_would_not_balance():
+    """The bug this replaces: every arm pinned to one position every rep."""
+    plain = ["C", "T1", "T1s", "T1c"] * 2
+    assert len(set(_sums(plain).values())) > 1
+    assert _sums(plain)["C"] < _sums(plain)["T1c"]      # C systematically earliest
+
+
+def test_every_arm_still_runs_the_requested_number_of_times():
+    order = interleave(["C", "T1", "T1s"], 4)
+    assert all(order.count(a) == 4 for a in ("C", "T1", "T1s"))
+    assert len(order) == 12
+
+
+def test_odd_reps_are_reported_unbalanced_not_silently_accepted():
+    order = interleave(["C", "T1"], 3)
+    recs = [{"arm": a, "position": i} for i, a in enumerate(order)]
+    pb = position_balance(recs)
+    assert pb["balanced"] is False and "UNBALANCED" in pb["detail"]
+
+
+def test_balance_flows_into_the_receipt_and_caveats_r6():
+    unbal = _clean()
+    for i, r in enumerate(unbal):
+        r["position"] = i                     # C at 0,1 and T1 at 2,3 -> unbalanced
+    v = evaluate(unbal, ceiling_gbps=22.21)
+    assert v["position_balance"]["balanced"] is False
+    assert "CAVEAT" in v["registered"]["R6_t1_magnitude"]["verdict"]
+
+
+def test_balanced_positions_add_no_caveat():
+    bal = _clean()
+    for r, p in zip(bal, [0, 3, 1, 2]):       # C at 0,3 / T1 at 1,2 -> both sum 3
+        r["position"] = p
+    v = evaluate(bal, ceiling_gbps=22.21)
+    assert v["position_balance"]["balanced"] is True
+    assert "CAVEAT" not in v["registered"]["R6_t1_magnitude"]["verdict"]
+
+
+# --- power: a noisy run must not print a verdict it cannot support ----------
+def test_r6_reports_underpowered_when_noise_exceeds_the_band():
+    noisy = [rec("C", 1.00, gbps=10.0), rec("C", 1.08, gbps=10.0),
+             rec("T1", 1.04, host=94), rec("T1", 1.04, host=94)]
+    v = evaluate(noisy, ceiling_gbps=22.21)
+    r6 = v["registered"]["R6_t1_magnitude"]
+    assert r6.get("underpowered") is True
+    assert r6["pass"] is None, "an unresolvable band must not report pass OR fail"
+    assert "UNDERPOWERED" in r6["verdict"]
+
+
+def test_a_quiet_run_still_gets_a_real_verdict():
+    v = evaluate(_clean(ratio=0.97), ceiling_gbps=22.21)      # spread 0.0
+    r6 = v["registered"]["R6_t1_magnitude"]
+    assert not r6.get("underpowered")
+    assert r6["pass"] is True and "IN BAND" in r6["verdict"]
+
+
+def test_underpowered_does_not_mask_a_real_regression_signal():
+    """Nominal ratio is still reported so it can be inspected, just not as a verdict."""
+    noisy = [rec("C", 1.00, gbps=10.0), rec("C", 1.09, gbps=10.0),
+             rec("T1", 1.30, host=94), rec("T1", 1.30, host=94)]
+    r6 = evaluate(noisy, ceiling_gbps=22.21)["registered"]["R6_t1_magnitude"]
+    assert r6["ratio"] > 1.2 and r6["pass"] is None
