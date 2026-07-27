@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import statistics
 import sys
 import time
 
@@ -87,30 +88,45 @@ def _assert_confounds_off(handles) -> None:
 
 @torch.no_grad()
 def run(args) -> dict:
-    model, _cfg = load_moe_4bit_streaming(args.model)
+    # A STRING, not torch.device: the loader hands this straight to
+    # safetensors.safe_open, which rejects a torch.device
+    # ("device device(type='cuda', index=0) is invalid"). e4b_ladder uses "cuda".
+    dev = "cuda"
+    # offload=True is not optional decoration: without it no _offload handles are
+    # built, _collect_handles returns [], enable_routed_staging is a no-op, and the
+    # run silently measures a resident model. r/alpha are the ladder's values --
+    # LoRA is untouched by this prereg but the loader requires them.
+    model, _cfg = load_moe_4bit_streaming(args.model, dev, torch.bfloat16, r=8, alpha=16,
+                                          offload=True, pin=True)
+    model.eval()
     handles = _collect_handles(model)
+    if not handles:
+        raise SystemExit("ABORT: no offload handles found -- offload did not engage, nothing to measure")
     enable_routed_staging(handles)
     _assert_confounds_off(handles)
 
-    env = report_offload_environment(torch.device("cuda:0"), log=print) or {}
+    env = report_offload_environment(dev, log=print) or {}
     ceiling = env.get("ceiling_pinned_gbps") or env.get("ceiling_pageable_gbps") or 0.0
 
-    tok = model.config._name_or_path if hasattr(model.config, "_name_or_path") else args.model
     from transformers import AutoTokenizer
-    ids = AutoTokenizer.from_pretrained(tok).encode(PROMPT, return_tensors="pt").cuda()
+    # args.model, not model.config._name_or_path: after a meta-init streaming load the
+    # config's path field is not reliably the hub id.
+    ids = AutoTokenizer.from_pretrained(args.model)(PROMPT, return_tensors="pt").input_ids.to(dev)
 
     order = [a for _ in range(args.reps) for a in args.arms]      # interleaved, NOT blocked
     records = []
     for rep_i, arm in enumerate(order):
         _set_arm(arm)
         reset_offload_stats()                                     # also zeroes the branch counters
-        s_per_token, _logits = decode(model, ids, args.tokens, args.warmup)
+        s_per_token, first_logits, greedy = _timed_decode(model, ids, args.tokens, args.warmup)
         rep = offload_stats_report() or {}
         routed = (rep.get("by_policy") or {}).get("routed") or {}
         records.append({
             "arm": arm, "rep": rep_i // len(args.arms),
             "s_per_token": s_per_token,
-            "greedy_ids": _greedy_ids(model, ids, args.tokens),
+            "greedy_ids": greedy,
+            "max_abs_logit": float(first_logits.abs().max()),
+            "_logits": first_logits,
             "counts": routed_ids_counts(),
             "row_plan": row_plan_counts(),
             "routed_gbps": routed.get("gbps"),
@@ -119,22 +135,54 @@ def run(args) -> dict:
         print(f"  {arm:<4} rep{rep_i // len(args.arms)}  {s_per_token:.4f} s/tok  "
               f"routed {routed.get('gbps', 0):.2f} GB/s  counts {records[-1]['counts']}")
 
-    return {"ceiling_gbps": ceiling, "records": records,
-            "verdicts": evaluate(records, ceiling)}
+    # Finding #24 established that gates run on LOGITS on a natural prompt, because
+    # greedy ids can agree while logits differ. The stamped prereg's R1 says greedy
+    # ids, and the stamp cannot be edited -- so satisfy R1 as written and report the
+    # stronger check next to it rather than silently substituting one for the other.
+    base = next(r["_logits"] for r in records if r["arm"] == "C")
+    for r in records:
+        r["max_delta_logit"] = float((r.pop("_logits") - base).abs().max())
+    worst = max(r["max_delta_logit"] for r in records)
+    verdicts = evaluate(records, ceiling)
+    verdicts["logit_identity"] = {
+        "pass": worst == 0.0, "max_delta_logit": worst,
+        "detail": "exact logit agreement across all arms (stronger than R1's greedy-id gate; "
+                  "#24's standard). NOT a registered prediction -- R1 as stamped is the "
+                  "registered gate and is evaluated separately.",
+    }
+    if worst != 0.0:
+        verdicts["gates_passed"] = False
+    return {"ceiling_gbps": ceiling, "records": records, "verdicts": verdicts}
 
 
 @torch.no_grad()
-def _greedy_ids(model, ids, n_tokens) -> list:
-    """R1's gate: the actual token ids, generated separately from the timed loop
-    so timing jitter can never be mistaken for a correctness difference."""
+def _timed_decode(model, ids, n_tokens, warmup):
+    """Timing, greedy ids, and first-token logits from ONE pass.
+
+    An earlier draft generated a second time just to collect ids, doubling the
+    decode work per arm. It also risked the two passes disagreeing, which would
+    have read as a correctness failure.
+
+    Both gates come out of here: `greedy` for the stamped R1, and `logits` for the
+    stronger logit check the harness adds on top -- see `logit_identity` in main().
+    """
     out = model(ids, use_cache=True)
-    past, nxt = out.past_key_values, out.logits[:, -1:, :].argmax(-1)
-    got = [int(nxt)]
-    for _ in range(n_tokens - 1):
+    past = out.past_key_values
+    first_logits = out.logits[:, -1, :].float().clone()
+    nxt = out.logits[:, -1:, :].argmax(-1)
+    greedy, times = [int(nxt)], []
+    for step in range(n_tokens + warmup):
+        torch.cuda.synchronize()
+        t0 = time.perf_counter()
         o = model(nxt, past_key_values=past, use_cache=True)
-        past, nxt = o.past_key_values, o.logits[:, -1:, :].argmax(-1)
-        got.append(int(nxt))
-    return got
+        torch.cuda.synchronize()
+        dt = time.perf_counter() - t0
+        past = o.past_key_values
+        nxt = o.logits[:, -1:, :].argmax(-1)
+        greedy.append(int(nxt))
+        if step >= warmup:
+            times.append(dt)
+    return statistics.median(times), first_logits, greedy
 
 
 def main():
