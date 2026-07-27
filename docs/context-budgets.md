@@ -2627,10 +2627,20 @@ confirmed on two architectures, not a confirmation of a prior hypothesis.
 
 The ~3.3–3.5× is reachable **only by changing the packed layout** so a warp's
 k-range is contiguous by construction — `[E, N, K/2]` puts consecutive `k` in one
-row while a warp spans `N`. That is a **format** change, not a kernel change: it
-touches the on-disk layout that the PyPI packages, four registered result-sets
-and every existing checkpoint depend on. It is a different project with a
-migration story, and it should not be started casually.
+row while a warp spans `N`.
+
+> **CORRECTION (same day).** This finding first called that "a format change …
+> touching the on-disk layout that the PyPI packages, four registered
+> result-sets and every existing checkpoint depend on … a different project with
+> a migration story". **That is wrong.** The packed layout is **never
+> persisted**: `repack_from_bnb` builds it in memory from bnb's quantize output,
+> and the loader `safe_open`s a **bf16** checkpoint and quantizes on the way. The
+> only `torch.save` in either repo writes LoRA adapters. So a repack is
+> `repack_from_bnb`'s output layout + the kernel's indexing + four call sites
+> (`bench/phase3/offload_decode_235b.py`, `bench/phase1/harness.py`) — an
+> ordinary code change with no compatibility story. **It is substantially more
+> attractive than this finding originally claimed**, and the "don't start it
+> casually" framing was based on a blocker that does not exist.
 
 **Retire the 4.9× and ~2.1× figures.** They describe a distance to a bound the
 kernel's access pattern forbids.
