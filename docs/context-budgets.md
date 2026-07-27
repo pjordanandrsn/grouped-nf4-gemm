@@ -2519,3 +2519,53 @@ a ~470 GB checkpoint stream — materially more than any run today.
 
 Receipt: `bench/context/receipts-ladder-20260727/ladder_olmoe.json`.
 
+## Finding #49 — the 235B ladder reproduces independently, and the bit-identity correction holds at flagship scale
+
+The rebuilt harness (#48) run on the real Qwen3-235B-A22B, 2×A100-SXM4-80GB,
+2015 GB host RAM, torch 2.13 / triton 3.7 / transformers 5.14. Load (stream,
+quantize 94×128 experts to NF4, pin 122 GB) took **3445 s**; the measurement
+itself is seconds.
+
+| rung | s/token | tok/s | vs bulk | Δlogit vs rung below |
+|---|---:|---:|---:|---:|
+| bulk | 5.7974 | 0.172 | 1.00× | — |
+| `enable_routed_staging` | 0.9223 | 1.084 | **6.29×** | **0.000e+00** |
+| `+ enable_fast` | 0.6800 | 1.471 | **8.53×** | **3.750e-01** |
+| `+ enable_speculative_staging` | **0.5764** | **1.735** | **10.06×** | **0.000e+00** |
+
+Speculation hit rate **0.9046** (5326 / 562 / 5888), against 0.8973 recorded in
+#42. 94 offload handles recovered, `enable_fast` patched 94 modules,
+speculative hooks on 92 layers.
+
+### The headline corroborates
+
+This is an **independent** reproduction: the original harness was lost (#47) and
+this one was rebuilt from the API, on a different pod, a different toolchain,
+and a different transformers major. It lands at **10.06×** against the
+**9.19×** recorded in #42 (bf16 KV) and **10.21×** in #34.
+
+The rungs bracket well: bulk **5.7974** here vs 5.9041 in #42 — within 2%. The
+spread is at the top: 0.5764 vs 0.6423 s/token, i.e. the speculative rung ran
+faster here, which is consistent with its higher hit rate (0.9046 vs 0.8973).
+Per the project's own law only **within-run ratios** transfer, and 9.19 / 10.06 /
+10.21 across three pods is agreement, not disagreement — but the honest headline
+remains a **band, not a point**: the ladder is ~9–10× and the exact figure is
+pod- and hit-rate-dependent.
+
+### The correction from #48 holds at 235B
+
+OLMoE showed `routed = 0`, `fast ≠ 0`, `spec = 0`. The 235B reproduces **exactly
+that shape** (0.000e+00 / 3.750e-01 / 0.000e+00), so #48's finding was not a
+small-model artifact:
+
+- **routed staging — bit-identical.** Changes which bytes move.
+- **the grouped kernel — NOT bit-identical**, by design, priced at +0.023% ppl.
+- **speculative staging — bit-identical.** Changes when the copy starts.
+
+**The README's "every rung is bit-identical" is wrong and must be narrowed to
+"the staging rungs are bit-identical; the kernel rung is priced".** Two models,
+two scales, same result.
+
+Cost **$2.98** (~64 min, most of it the ~470 GB checkpoint stream at ~139 MB/s).
+Receipts: `bench/context/receipts-ladder-20260727/ladder_235b.json`.
+

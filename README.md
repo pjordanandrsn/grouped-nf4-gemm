@@ -281,9 +281,17 @@ one process, median of 3:
 | `+ enable_fast` | 0.8384 | 1.193 | **7.04×** | the grouped kernel never reached this path |
 | `+ enable_speculative_staging` | **0.6423** | **1.557** | **9.19×** | staging was synchronous |
 
-**Every rung is bit-identical** to the one below it (`max|Δlogit| = 0` at 94
-layers). The only fidelity cost in the stack is the grouped kernel's **+0.023%
-perplexity**, measured against the reference path.
+**The two staging rungs are bit-identical** to the one below them
+(`max|Δlogit| = 0`): routed staging changes *which* bytes are copied and
+speculative staging changes *when* the copy starts — neither changes what is
+computed. **The kernel rung is not, by design**: `enable_fast` is a different
+computation, priced at **+0.023% perplexity** against the reference path, and
+measured here at `max|Δlogit| = 3.75e-01` on Qwen3-235B (3.13e-01 on OLMoE).
+
+> An earlier version of this table claimed *every* rung was bit-identical. That
+> could never have been true alongside the +0.023% perplexity figure directly
+> below it, and no harness existed to catch the contradiction until the ladder
+> driver was rebuilt — see findings #48/#49.
 
 Two of these were plumbing, not cleverness. The offload pre-hook staged a
 layer's **entire** expert stack — `E/top_k` = **16×** the bytes routing needs —
