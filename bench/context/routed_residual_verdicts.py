@@ -128,6 +128,41 @@ def evaluate(records: list, ceiling_gbps: float) -> dict:
     if gbps and ceiling_gbps:
         achieved = statistics.median(gbps)
         frac = achieved / ceiling_gbps
+
+        # PLAUSIBILITY GATE. A routed policy cannot move bytes faster than the
+        # link's own pinned ceiling, so frac > 1 does not mean "R4 falsified very
+        # hard" -- it means an input is wrong and NEITHER verdict is available.
+        #
+        # This is not hypothetical. The 2026-07-27 235B run reported 22.83 GB/s
+        # against a probed ceiling of 14.68 (frac 1.555) and the un-gated code
+        # dutifully emitted R4=fail and R5="DO NOT build the coalescer" -- a
+        # confident registered negative from a broken instrument. A standalone
+        # probe on the same box measured 26.0 GB/s best-case; the in-run ceiling
+        # had been taken while the loader was still pinning ~123 GB of host RAM,
+        # and it read PAGEABLE faster than PINNED, which is itself impossible and
+        # was the tell.
+        #
+        # Deliberately returns None, not False: "we cannot tell" and "the
+        # prediction failed" are different states and collapsing them is how a
+        # measurement bug becomes a finding.
+        if frac > 1.0:
+            out["registered"]["R4_decomposition"] = {
+                "pass": None, "routed_gbps": achieved, "ceiling_gbps": ceiling_gbps,
+                "fraction_of_ceiling": frac, "bar": 0.70,
+                "detail": (f"MEASUREMENT INVALID — achieved {achieved:.2f} GB/s exceeds the probed "
+                           f"ceiling {ceiling_gbps:.2f} GB/s (frac {frac:.3f}). A transfer cannot beat "
+                           "its own link. Re-probe the ceiling on a QUIET host (a probe taken while "
+                           "the loader pins host RAM reads low, and reports pageable > pinned) and "
+                           "re-run. Do not adjudicate R4 or R5 from this."),
+            }
+            out["registered"]["R5_decision"] = {
+                "build_expert_major_coalescer": None,
+                "detail": "R4 unadjudicable (see plausibility gate) — no decision is registered.",
+            }
+            out["position_balance"] = position_balance(records)
+            out["gates_passed"] = False
+            return out
+
         holds = frac <= 0.70
         out["registered"]["R4_decomposition"] = {
             "routed_gbps": achieved, "ceiling_gbps": ceiling_gbps,
