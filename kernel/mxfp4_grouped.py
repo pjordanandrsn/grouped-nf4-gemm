@@ -155,7 +155,17 @@ def gemm_mxfp4_grouped(a_cat, blocks, scales, sizes, expert_ids,
     if block_m is None:
         block_m = _prefill_block_m(max(sizes))
     if prefill_variant is None:
-        prefill_variant = 1 if hasattr(tl, "gather") else 0
+        prefill_variant = 1
+    if not hasattr(tl, "gather"):
+        raise RuntimeError(
+            "the prefill / M-tile path requires a triton providing tl.gather "
+            f"(triton>=3.4); this build is triton {triton.__version__}. "
+            "prefill_variant=0 does NOT work around this: the kernel SOURCE "
+            "contains tl.gather and triton resolves module attributes while "
+            "walking the AST, even inside a dead `if VARIANT == 1:` branch, so "
+            "the launch fails with a bare AttributeError. The DECODE path "
+            "(every entry of `sizes` == 1) has no such dependency and works."
+        )
     block_n = 128
     t_row0, t_rows, t_group = build_group_tiles(sizes, block_m, dev)
     grid = (t_row0.numel(), triton.cdiv(N, block_n))

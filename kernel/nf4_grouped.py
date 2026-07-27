@@ -451,8 +451,9 @@ def gemm_4bit_grouped(
     decode path's (BLOCK_N, num_warps); ``split_k`` overrides the decode
     split-K factor (None = plan, 1 = off); ``prefill_config`` overrides the
     M-tile path's (BLOCK_N, num_warps, num_stages) — benchmark/ablation
-    support only. ``prefill_variant``: None = auto (register-LUT mainloop
-    when triton has ``tl.gather``, else the v5 loop), 0 = force v5 loop,
+    support only. ``prefill_variant``: None = the v6 register-LUT
+    mainloop (requires ``tl.gather``; there is no working fallback for a
+    triton without it — see the guard below), 0 = force v5 loop,
     1 = register-LUT tl.gather (the v6 default: fidelity-identical, kills
     the per-element L1 codebook gather), 3 = OPT-IN bf16 MMA (P-fid parity
     with the dequant baseline, not the fp32/TF32 edge — measured slower
@@ -546,7 +547,7 @@ def gemm_4bit_grouped(
     if block_m is None:
         block_m = _prefill_block_m(max(sizes))
     if prefill_variant is None:
-        prefill_variant = 1 if hasattr(tl, "gather") else 0
+        prefill_variant = 1
     if prefill_config is not None:
         block_n, warps, stages = prefill_config
     elif prefill_variant == 1:
@@ -567,8 +568,16 @@ def gemm_4bit_grouped(
         block_n = 128
         warps = 8 if block_m >= 128 else 4
         stages = 3 if block_m >= 128 else 2
-    if prefill_variant == 1 and not hasattr(tl, "gather"):
-        raise RuntimeError("prefill_variant=1 needs triton with tl.gather")
+    if not hasattr(tl, "gather"):
+        raise RuntimeError(
+            "the prefill / M-tile path requires a triton providing tl.gather "
+            f"(triton>=3.4); this build is triton {triton.__version__}. "
+            "prefill_variant=0 does NOT work around this: the kernel SOURCE "
+            "contains tl.gather and triton resolves module attributes while "
+            "walking the AST, even inside a dead `if VARIANT == 1:` branch, so "
+            "the launch fails with a bare AttributeError. The DECODE path "
+            "(every entry of `sizes` == 1) has no such dependency and works."
+        )
     block_k = BLOCKSIZE * prefill_groups
     if prefill_groups != 1:
         assert prefill_groups == 2 and K % block_k == 0, (prefill_groups, K)
