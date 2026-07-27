@@ -124,6 +124,7 @@ def evaluate(records: list, ceiling_gbps: float) -> dict:
     }
 
     # --- R4 + R5: the decomposition, and the decision it forces. ---------------
+    r4_invalid = False
     gbps = [x["routed_gbps"] for x in by_arm["C"] if x.get("routed_gbps")]
     if gbps and ceiling_gbps:
         achieved = statistics.median(gbps)
@@ -159,16 +160,24 @@ def evaluate(records: list, ceiling_gbps: float) -> dict:
                 "build_expert_major_coalescer": None,
                 "detail": "R4 unadjudicable (see plausibility gate) — no decision is registered.",
             }
-            out["position_balance"] = position_balance(records)
-            out["gates_passed"] = False
-            return out
+            # Deliberately does NOT return early. The first version did, which hid
+            # every later diagnostic behind whichever defect happened to be checked
+            # first -- and the 2026-07-27 run has TWO independent ones (contended
+            # ceiling AND prefill contamination). A run broken in two places should
+            # say so in both places; you fix what you can see.
+            r4_invalid = True
+        else:
+            r4_invalid = False
 
-        holds = frac <= 0.70
-        out["registered"]["R4_decomposition"] = {
-            "routed_gbps": achieved, "ceiling_gbps": ceiling_gbps,
-            "fraction_of_ceiling": frac, "bar": 0.70, "pass": holds,
-        }
-        out["registered"]["R5_decision"] = {
+        holds = (not r4_invalid) and frac <= 0.70
+        if r4_invalid:
+            pass                      # verdicts already written by the plausibility gate
+        else:
+            out["registered"]["R4_decomposition"] = {
+                "routed_gbps": achieved, "ceiling_gbps": ceiling_gbps,
+                "fraction_of_ceiling": frac, "bar": 0.70, "pass": holds,
+            }
+            out["registered"]["R5_decision"] = {
             "build_expert_major_coalescer": holds,
             "detail": (
                 "R4 holds: residual is transfer inefficiency. BUILD the coalescer; its ceiling "
@@ -256,6 +265,11 @@ def evaluate(records: list, ceiling_gbps: float) -> dict:
     # the arms are not comparable. `None` (an old receipt that cannot prove either
     # way) is a caveat, not a failure -- do not collapse the two.
     if out["prefill_separated"]["pass"] is False:
+        gates.append(False)
+    # An unadjudicable R4 must fail the run's gates. R4 is the load-bearing
+    # prediction; a receipt that says "all gates passed" while R4 could not be
+    # measured is the exact false reassurance this gate exists to prevent.
+    if r4_invalid:
         gates.append(False)
     if out["arm_fidelity"]["pass"] is False:
         gates.append(False)
