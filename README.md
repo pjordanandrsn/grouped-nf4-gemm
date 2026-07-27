@@ -265,6 +265,54 @@ in-repo):
   greedy output 6/6) and validates SM-issued UVA reads at ≥ copy-engine
   throughput at 7.98 GB/token.
 
+## The offload ladder: 9.19× on the `experts4bit-qlora` streaming path
+
+Everything above is `bench/phase3`, a purpose-built pipeline. This is the
+**general offload path** a user gets from `load_moe_4bit_streaming(offload=True)`
+— a different mechanism, and it was leaving an order of magnitude on the floor.
+
+Qwen3-235B-A22B, 2×A100-80GB, 24.48 GB/s pinned link, bf16 KV, 48-token context,
+one process, median of 3:
+
+| rung | s/token | tok/s | vs default | what it fixes |
+|---|---:|---:|---:|---|
+| default (bulk staging) | 5.9041 | 0.169 | 1.00× | — |
+| `enable_routed_staging` | 1.0917 | 0.916 | **5.41×** | stages all `E` experts when `top_k` route |
+| `+ enable_fast` | 0.8384 | 1.193 | **7.04×** | the grouped kernel never reached this path |
+| `+ enable_speculative_staging` | **0.6423** | **1.557** | **9.19×** | staging was synchronous |
+
+**Every rung is bit-identical** to the one below it (`max|Δlogit| = 0` at 94
+layers). The only fidelity cost in the stack is the grouped kernel's **+0.023%
+perplexity**, measured against the reference path.
+
+Two of these were plumbing, not cleverness. The offload pre-hook staged a
+layer's **entire** expert stack — `E/top_k` = **16×** the bytes routing needs —
+and `enable_fast` only ever patched `ExpertsNbit`, while the streaming loader
+builds `ExpertsLoRA`, which never calls `base.forward()`. The grouped kernel was
+**dead code on every offloaded model**.
+
+### Reconciling with the "expert prefetch is CLOSED, negative" result above
+
+That result stands, and this one does not contradict it. Phase B5's law —
+speculation moves **(2−H)×** the bytes — is correct, and at the measured
+**H = 0.897** it predicts **1.30×** here against **1.31×** observed. The
+difference is the **baseline**:
+
+- **phase3** already streams routed experts with double-buffered overlap, so
+  transfer is hidden and extra bytes buy nothing. Break-even at **H ≳ 0.95** is
+  right there.
+- **routed staging is synchronous by construction** — layer `L+1`'s routing is
+  produced by a router reading layer `L`'s output, so it *cannot* prefetch. The
+  same 1.103× of bytes buys overlap that did not previously exist.
+
+The B2/B3 probes reproduce independently here: token-to-token expert stickiness
+**0.4513** (B2: 0.44), and a one-layer-early router predicting the true top-8 at
+**0.9089** (B3: 0.93).
+
+Full derivation, 24 stamped preregs and every falsified arm:
+[`docs/context-budgets.md`](docs/context-budgets.md) findings #19–#42.
+
+
 ## Context is a VRAM term: the KV bill, per model
 
 Every VRAM figure above is a **weights** figure. The KV cache is the second
