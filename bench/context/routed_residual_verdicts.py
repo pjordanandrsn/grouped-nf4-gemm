@@ -130,6 +130,35 @@ def evaluate(records: list, ceiling_gbps: float) -> dict:
         achieved = statistics.median(gbps)
         frac = achieved / ceiling_gbps
 
+        # ---------------------------------------------------------------------
+        # RESOLVED 2026-07-27 -- AND THE DIAGNOSIS JUST BELOW THIS IS WRONG.
+        #
+        # The comment below blames the CEILING probe ("taken while the loader
+        # pins ~123 GB"). A size-swept re-probe on the same pod after the run
+        # gave 12.65-18.46 GB/s, so the in-run 14.68 was about right: the ceiling
+        # was never the defect.
+        #
+        # The DIVISOR was. `routed_gbps` came from `offload_stats_report`, which
+        # divided link bytes by the summed per-stage COPY WINDOW rather than by
+        # wall time, and that window does not bound the transfer. The bytes were
+        # always correct -- an independent model gives 7.984 GB/token, matching
+        # the harness's own 7.98. Fixed in e4b `fix/routed-gbps-wall`: `gbps` is
+        # now bytes/wall, the old value survives as `gbps_copy_window`.
+        #
+        # Recomputed soundly (7.984 GB / 0.9061 s = 8.81 GB/s), R4 HOLDS under
+        # EVERY ceiling estimate available:
+        #     14.68 -> 0.60    18.46 -> 0.48    26.0 -> 0.34    12.65 -> 0.70
+        # all at or under the 0.70 bar. The ceiling argument only ever mattered
+        # BECAUSE the numerator was broken: with the broken one the verdict flips
+        # between INVALID (frac 1.56) and FAIL (0.88) depending on which probe you
+        # believe; with the sound one it does not matter at all.
+        #
+        # FOR ANYONE RE-RUNNING THIS: the same code against the same box now
+        # yields a DIFFERENT R4 verdict than it did on 2026-07-27, because `gbps`
+        # changed meaning underneath it. That is a fix, not a regression -- but it
+        # is invisible in a diff of this file, which is why it is written in it.
+        # See finding #52.
+        # ---------------------------------------------------------------------
         # PLAUSIBILITY GATE. A routed policy cannot move bytes faster than the
         # link's own pinned ceiling, so frac > 1 does not mean "R4 falsified very
         # hard" -- it means an input is wrong and NEITHER verdict is available.
