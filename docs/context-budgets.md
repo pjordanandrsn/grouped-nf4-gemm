@@ -2455,3 +2455,67 @@ must also reduce along K and write an output; neither is in the bound.
 second**, because the flagship claim currently rests on a lost script. **(c) is
 not ready to start** until it has a target worth aiming at.
 
+## Finding #48 — the ladder harness is rebuilt and working, and it corrects the README on bit-identity
+
+#47 found the driver behind the README's headline 9.19× had been lost with the
+pod it was written on. Rebuilt as `bench/context/e4b_ladder.py` and validated
+end-to-end on **OLMoE-1B-7B** (RTX 3090, torch 2.13 / triton 3.7 / transformers
+5.14, **$0.09**):
+
+| rung | s/token | vs bulk | Δlogit vs rung below |
+|---|---:|---:|---:|
+| bulk | 0.2017 | 1.00× | — |
+| `enable_routed_staging` | 0.0807 | 2.50× | **0.000e+00** |
+| `+ enable_fast` | 0.0562 | 3.59× | **3.125e-01** |
+| `+ enable_speculative_staging` | 0.0516 | **3.91×** | **0.000e+00** |
+
+Speculation hit rate **0.824** (738 hits / 158 misses / 896).
+
+### The correction
+
+The README says **"every rung is bit-identical"**. That is wrong, and the same
+README contains the contradiction: it also prices the grouped kernel at
+**+0.023% perplexity**. A kernel that moves perplexity cannot be bit-identical.
+Nobody had a harness to notice.
+
+Measured per-rung, exactly **one of three transitions** changes the numbers, and
+it is the priced one:
+
+- **routed staging — bit-identical.** It moves *which bytes* are copied, not
+  what is computed.
+- **the grouped kernel — NOT bit-identical**, by design, at the documented
+  +0.023% ppl.
+- **speculative staging — bit-identical.** It moves *when* the copy starts.
+
+A cumulative-only comparison hides this: measured against rung 1, `spec` also
+shows 3.125e-01 and looks non-identical, when it introduced nothing of its own.
+The harness now reports **both** deltas for that reason. The accurate claim is
+*"the staging rungs are bit-identical; the kernel rung is priced"*, not
+*"every rung is bit-identical"*.
+
+### Two defects caught while building it
+
+**The first draft measured the wrong kernel.** It re-ran a full forward over the
+whole prompt each step — a prefill-shaped call (M>1) dispatching the M-tile
+GEMM, not `_gemv_nf4_grouped`. It would have produced a plausible ladder for a
+path the ladder is not about. `decode()` now uses a real KV cache and feeds one
+token per step.
+
+**The loader does not return the offload handles.**
+`load_moe_4bit_streaming` returns `(model, config)`, but
+`enable_routed_staging` *requires* handles. They live at `layer.mlp._offload`,
+reachable only by the private walk `enable_speculative_staging` does internally,
+which `_collect_handles` now mirrors. **That API gap is the most likely reason
+the original harness was ad hoc and never committed** — reproducing the headline
+requires reaching into a private attribute. Worth fixing in e4b by returning
+handles or exposing an accessor.
+
+### Not yet done
+
+This validates the **mechanism and the harness**, not the flagship number. The
+9.19× is a 235B claim; OLMoE is a different model at a different scale, and its
+3.91× is not a substitute. Confirming the headline needs a 2 TB-host-RAM box and
+a ~470 GB checkpoint stream — materially more than any run today.
+
+Receipt: `bench/context/receipts-ladder-20260727/ladder_olmoe.json`.
+

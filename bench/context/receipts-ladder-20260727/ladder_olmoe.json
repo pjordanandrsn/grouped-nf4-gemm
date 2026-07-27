@@ -1,0 +1,45 @@
+{
+  "model": "allenai/OLMoE-1B-7B-0924",
+  "device": "NVIDIA GeForce RTX 3090",
+  "gpus": 1,
+  "rows": [
+    {
+      "rung": "bulk",
+      "s_per_token": 0.20173895050538704,
+      "tok_per_s": 4.956900972741488,
+      "vs_bulk": 1.0,
+      "max_abs_dlogit_vs_base": 0.0,
+      "max_abs_dlogit_vs_prev": 0.0
+    },
+    {
+      "rung": "routed",
+      "s_per_token": 0.08065478749631438,
+      "tok_per_s": 12.398520051220718,
+      "vs_bulk": 2.5012644229532652,
+      "max_abs_dlogit_vs_base": 0.0,
+      "max_abs_dlogit_vs_prev": 0.0
+    },
+    {
+      "rung": "fast",
+      "s_per_token": 0.056158603489166126,
+      "tok_per_s": 17.806710599434968,
+      "vs_bulk": 3.5923071082831615,
+      "max_abs_dlogit_vs_base": 0.3125,
+      "max_abs_dlogit_vs_prev": 0.3125
+    },
+    {
+      "rung": "spec",
+      "s_per_token": 0.05164330900879577,
+      "tok_per_s": 19.363592674312994,
+      "vs_bulk": 3.9063908641297043,
+      "max_abs_dlogit_vs_base": 0.3125,
+      "max_abs_dlogit_vs_prev": 0.0
+    }
+  ],
+  "spec": [
+    738,
+    158,
+    896,
+    0.8236607142857143
+  ]
+}
