@@ -1,0 +1,43 @@
+{
+  "link": 24.481532155423352,
+  "rows": [
+    {
+      "cell": "bulk+ref",
+      "kv": "bf16",
+      "s_per_token": 5.90408769948408,
+      "tok_s": 0.16937417784078368,
+      "peak_bytes": 19959920640
+    },
+    {
+      "cell": "routed+ref",
+      "kv": "bf16",
+      "s_per_token": 1.0917313866317273,
+      "tok_s": 0.9159762302751574,
+      "peak_bytes": 19960528384
+    },
+    {
+      "cell": "routed+grouped",
+      "kv": "bf16",
+      "s_per_token": 0.8384316434152425,
+      "tok_s": 1.1927030758603407,
+      "peak_bytes": 19965641216
+    },
+    {
+      "cell": "routed+grouped+spec",
+      "kv": "bf16",
+      "s_per_token": 0.6422956624999643,
+      "tok_s": 1.5569153870785413,
+      "peak_bytes": 21294811136
+    },
+    {
+      "cell": "routed+grouped+spec [nf4_host]",
+      "kv": "nf4_host",
+      "s_per_token": 0.6657721291296184,
+      "tok_s": 1.502015413753241,
+      "peak_bytes": 21284255232
+    }
+  ],
+  "e2e": 9.19216498598791,
+  "kv_ratio": 1.0365508721299443,
+  "hit_rate": 0.8972826086956521
+}

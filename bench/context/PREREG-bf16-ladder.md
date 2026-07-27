@@ -59,3 +59,37 @@ distinction this session has already been burned by.
    NF4 claim does not have to cross pods.
 2. Rungs share a load; ordering effects land on later rungs, and the order runs
    worst-case for the rung under test.
+
+## Outcome — 9.19×, the ladder did not widen, and the KV dial is smaller than believed
+
+| rung (bf16 KV) | s/token | vs bulk | step |
+|---|---:|---:|---:|
+| bulk+ref | 5.9041 | 1.00× | |
+| routed+ref | 1.0917 | 5.41× | 5.41× |
+| routed+grouped | 0.8384 | 7.04× | 1.30× |
+| **routed+grouped+spec** | **0.6423** | **9.19×** | 1.31× |
+| same rung, `nf4_host` | 0.6658 | | 1.037× |
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| L1a end-to-end | ≥10.0× | **9.19×** | **outside interval** |
+| L1b nf4_host/bf16 at fast rung | ≥1.15× | **1.037×** | **outside interval** |
+| L1c GATE bit-identical | max\|Δ\|=0 | **0.000e+00** | **CONFIRMED** |
+| L1d per-rung steps | 4.0 / [1.0,1.3] / [1.3,1.9] | 5.41 / 1.30 / 1.31 | all in range |
+
+**L1a's reasoning was wrong, not just its number.** I argued that cheaper
+attention would help the fast rung disproportionately and widen the ladder.
+9.19× vs 9.09× — it does not. The KV setting is close to irrelevant here.
+
+**L1b is the more consequential miss.** The within-pod KV gap is **1.037×**;
+#37 measured **1.31×** for the same comparison at the same context on a different
+box. Two within-pod measurements disagreeing by 4× means neither is separable
+from noise at 3 reps, and the honest reading is that the KV dial is worth
+**≲1.3×, possibly ~1.0×** — not a lever worth planning around.
+
+**Pre-committed decision, applied to the substance rather than the letter.** L1a
+is technically "outside interval" (9.19 > the 8.5 falsification line), but its
+*claim* — that the ladder widens — is refuted. So the falsification branch is the
+one that fits: the KV setting is documented as **not materially affecting the
+ladder**. The headline becomes **9.19× on bf16**, the recommended configuration,
+with #34's 9.09× retained as the `nf4_host` measurement rather than replaced.

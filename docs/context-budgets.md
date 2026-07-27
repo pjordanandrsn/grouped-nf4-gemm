@@ -1931,6 +1931,42 @@ occupancy-bound.
 falsifications. The next step is a real profiler — Nsight Compute on
 `_gemv_nf4_grouped` — not a fourth guess.
 
+## Finding #42 — the ladder is 9.19× on bf16 KV, and the KV dial barely matters
+
+#34's 9.09× ladder ran `nf4_host` KV throughout — the setting #37 called wrong.
+Re-run on bf16, one process, one load, median of 3:
+
+| rung (bf16 KV) | s/token | vs bulk | step |
+|---|---:|---:|---:|
+| bulk+ref | 5.9041 | 1.00× | |
+| routed+ref | 1.0917 | 5.41× | 5.41× |
+| routed+grouped | 0.8384 | 7.04× | 1.30× |
+| **routed+grouped+spec** | **0.6423** | **9.19×** | 1.31× |
+| same rung, `nf4_host` | 0.6658 | | **1.037×** |
+
+Every rung bit-identical (`max|Δlogit| = 0`); speculation hit rate 0.8973.
+
+**The ladder did not widen: 9.19× against 9.09×.** L1a predicted ≥10.0× on the
+reasoning that cheaper attention helps the fast rung disproportionately. It does
+not — the KV setting is close to irrelevant to the ladder.
+
+**And the within-pod KV gap is 1.037×, not the 1.27–1.42× of #37.** Both are
+within-pod measurements of the same comparison at the same context, on different
+boxes, and they disagree by 4×. With 3 reps against this session's observed
+10–35% spreads, **#37's KV gap is not reliably separable from noise** and should
+be read as ≲1.3× rather than as a measured 1.31×.
+
+**Which weakens #40's framing.** #40 contrasted attention at 44.5% (#36,
+`nf4_host`) against 15.9% (bf16) — but those were **different pods with different
+absolute step times** (0.63 s vs 0.93 s). If the KV dial is worth 1.04× here, a
+44.5%→15.9% shift cannot be attributed to it. The bf16 decomposition stands as a
+measurement; the *contrast* with #36 does not.
+
+**What survives all of it:** experts dominate the step, the ladder is ~9.2×
+regardless of KV setting, and every rung is bit-identical. **The headline is
+9.19× on bf16 KV** — the configuration the project recommends — with #34's 9.09×
+kept as the `nf4_host` measurement.
+
 ## Reproducing
 
 `bench/context/kv_budget.py` (derivation, from config.json only) and
@@ -2021,3 +2057,6 @@ Finding #39 (part A): `bench/context/PREREG-decode-bound.md`; receipts
 Findings #40 and #41: `bench/context/PREREG-decode-bound.md` and
 `bench/context/PREREG-gemv-occupancy.md`; receipts
 `bench/context/receipts-redecomp-20260727.json`.
+
+Finding #42: `bench/context/PREREG-bf16-ladder.md`; receipts
+`bench/context/receipts-bf16ladder-20260727.json`.
