@@ -80,6 +80,9 @@ TRAIN = {"epochs": 30, "batch": 512, "lr": 3.0e-3, "cosine": True, "weight_decay
          "device": "cuda:0" if torch.cuda.is_available() else "cpu"}
 
 
+# --model override (same-architecture only); set by main(), read at resolve time.
+model_override = None
+
 FAMILIES = {
     "olmoe": "allenai/OLMoE-1B-7B-0924",
     "qwen3_moe": "Qwen/Qwen3-30B-A3B",
@@ -104,7 +107,7 @@ def capture(out_dir, n_tokens, n_prompts, family="olmoe", offload=False,
     plist = PROMPT_SETS[prompt_set]
     from transformers import AutoTokenizer
     from experts4bit_qlora.loader import load_moe_4bit_streaming
-    name = FAMILIES[family]
+    name = model_override or FAMILIES[family]
     tok = AutoTokenizer.from_pretrained(name, trust_remote_code=True)
     # Experts4bit (bitsandbytes#1849/#1965): stock load_in_4bit's walker only swaps
     # nn.Linear modules, so OLMoE's FUSED expert stacks (OlmoeExperts.gate_up_proj/
@@ -218,6 +221,10 @@ def audit(out_dir, E, k, family):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--family", default="olmoe", choices=list(FAMILIES))
+    ap.add_argument("--model", default=None,
+                    help="HF id override; default = FAMILIES[family]. Same-architecture "
+                         "only (hooks are family-keyed): e.g. Qwen/Qwen3-235B-A22B "
+                         "under --family qwen3_moe.")
     ap.add_argument("--out", default=None)
     ap.add_argument("--device-label", default="cloud A5000")
     ap.add_argument("--tokens", type=int, default=512)
@@ -249,6 +256,8 @@ def main():
                     help="resume an incremental capture from this prompt "
                          "index (earlier slices already banked elsewhere)")
     args = ap.parse_args()
+    global model_override
+    model_override = args.model
     if args.incremental and not args.skip_audit:
         ap.error("--incremental is a pod capture mode; use --skip-audit and "
                  "audit the locally combined dir")
@@ -289,6 +298,17 @@ def main():
         subprocess.run([sys.executable, str(RP / "reduce" / "reduce_ceiling.py"),
                         "ceiling", str(one)], check=True)
         one.unlink()
+
+    # arena middle-anchor telemetry (unregistered; rides the capture's own load
+    # so the 20.91B <-> 2.8T scaling line gets its middle point for $0 extra):
+    try:
+        import resource
+        import torch as _t
+        rss_gb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6
+        vram_gb = (_t.cuda.max_memory_allocated() / 1e9) if _t.cuda.is_available() else 0.0
+        print(f"MEM_ANCHOR rss_gb={rss_gb:.2f} vram_gb={vram_gb:.2f}", flush=True)
+    except Exception as _e:
+        print(f"MEM_ANCHOR unavailable: {_e}", flush=True)
 
 
 if __name__ == "__main__":
