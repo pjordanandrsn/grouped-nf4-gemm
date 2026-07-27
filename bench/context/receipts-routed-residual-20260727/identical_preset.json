@@ -1,0 +1,37 @@
+{
+  "model": "Qwen/Qwen3-235B-A22B",
+  "device": "NVIDIA A100-SXM4-80GB",
+  "gpus": 2,
+  "rows": [
+    {
+      "rung": "bulk",
+      "s_per_token": 6.037041112780571,
+      "tok_per_s": 0.16564405994899958,
+      "vs_bulk": 1.0,
+      "max_abs_dlogit_vs_base": 0.0,
+      "max_abs_dlogit_vs_prev": 0.0
+    },
+    {
+      "rung": "routed",
+      "s_per_token": 0.9317934568971395,
+      "tok_per_s": 1.0731992080412192,
+      "vs_bulk": 6.478947741148389,
+      "max_abs_dlogit_vs_base": 0.0,
+      "max_abs_dlogit_vs_prev": 0.0
+    },
+    {
+      "rung": "spec",
+      "s_per_token": 0.8336096983402967,
+      "tok_per_s": 1.1996021663267398,
+      "vs_bulk": 7.242047597095165,
+      "max_abs_dlogit_vs_base": 0.0,
+      "max_abs_dlogit_vs_prev": 0.0
+    }
+  ],
+  "spec": [
+    9283,
+    1021,
+    10304,
+    0.9009122670807453
+  ]
+}

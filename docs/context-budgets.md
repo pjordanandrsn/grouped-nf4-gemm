@@ -2709,3 +2709,72 @@ layout migration that #50 had (wrongly) framed as the remaining opportunity.
 Receipts: `bench/context/receipts-layout-20260727/`, harness
 `bench/context/layout_ab.py`.
 
+## Finding #52 — the routed-residual arms, and a metric that reported faster-than-light
+
+`PREREG-routed-residual` ran on Qwen3-235B-A22B, 2×A100-SXM, 4 arms × 6 reps,
+interleaved in one process, spec + cache off.
+
+### Gates
+
+**R1 (bit-identity) — PASSES.** Identical greedy ids and `max_delta_logit = 0.0`
+in all 24 records. The gate that matters: a mismatch means a routed row was never
+staged and the kernel read uninitialized memory.
+
+**R2 (engagement) — PASSES.** The ablation switches genuinely flip:
+
+| arm | ids path | row plan | s/token (median of 6) |
+|---|---|---|---:|
+| C | device 1410 / host 0 | dict 1406 | 0.9087 |
+| T1 | **host 1410 / device 0** | **flat 1406** | 0.9117 |
+| T1s | host 1410 | dict 1406 | 0.9085 |
+| T1c | device 1410 | flat 1406 | 0.9136 |
+
+Registered because equality testing is structurally blind here — both branches
+return identical ids, so a fast path that never fires passes every correctness
+check and reports "no measurable change". That is exactly how `enable_fast`
+stayed dead on every offloaded model until #22.
+
+**R6 — `T1/C = 0.9967`**, inside the registered 0.95–1.00 band, arms within a
+1.2–1.7 % spread. The sync + dict-churn fix is real and worth ~0.3 %, as the
+prereg predicted when it said removing an 8-element device sort "saves
+kernel-launch time, not milliseconds".
+
+### R4: the metric was broken, and fixing it CONFIRMS the prediction
+
+`routed_gbps` reported **22.83 GB/s**. The probed ceiling was **14.68**, and an
+independent size-swept re-probe on the same pod gave **12.65–18.46 GB/s** — so
+the ceiling was right and the *implied rate exceeded the physical link*. That is
+not a result; it is a broken gauge.
+
+**The bytes are correct.** An independent model — 94 layers × top_k 8 ×
+(gate_up + down + absmax), NF4-packed — gives **7.984 GB/token**, matching the
+harness's own `7.98 GB/token`.
+
+**The denominator is the problem.** `routed_gbps` divides by the summed
+*copy-window* time (`start_ev`→`end_ev` bracketing each stage), not by step wall
+time. Those answer different questions, and the window figure does not bound the
+transfer it names.
+
+Recomputed soundly: **7.984 GB ÷ 0.9061 s = 8.81 GB/s = 0.60× ceiling.**
+R4 registered **≤ 0.70×**. **R4 HOLDS.**
+
+> **Limitation, stated because R5 hangs off this.** The sound number divides by
+> *step* wall time, whose denominator also contains attention, norms and the
+> expert GEMM. It therefore cannot cleanly separate "transfer inefficiency" from
+> "host stall" — which is what R4's *rationale* claimed to distinguish, even
+> though its *criterion* was only a ratio. The criterion is met; the
+> interpretation is weaker than the prereg's wording implies. R5 says R4 holding
+> licenses building the expert-major coalescer, and it does — but its ceiling is
+> the measured gap, and that gap is now known to be under 0.70× on a metric that
+> conflates two costs.
+
+### Corrections this finding makes to itself
+
+I first said the **ceiling probe** was anomalous and the routed number
+trustworthy, reasoning that #22 measured 22.21 GB/s so 22.83 looked plausible.
+The re-probe exonerated the ceiling and indicted the routed metric. **#22's
+22.21 was a different pod**; carrying it across boxes is the exact error the
+project's own additive law forbids.
+
+Receipts: `bench/context/receipts-routed-residual-20260727/`.
+
