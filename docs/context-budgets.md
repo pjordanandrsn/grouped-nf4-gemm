@@ -2320,3 +2320,61 @@ fixes are more loads in flight (ILP) or more warps to hide the latency.
 
 Receipts: `bench/context/receipts-ncu-20260727/`.
 
+## Finding #46 — occupancy falsified a second time, and ncu's 50.95% is not reachable by config
+
+#41 falsified occupancy on the *sector-bound* GEMV. #45 showed the post-#43
+kernel is **latency**-bound (Long Scoreboard = 51.0% of the issue gap), which
+legitimately reopened the question — and added the lever #41 never swept,
+`num_stages`. Re-registered before measuring, then swept 72 configs
+(`BLOCK_N × warps × stages`) on two architectures.
+
+**Paired measurement was mandatory and the first attempt was void.** A sweep
+with one up-front baseline reported the **default config as 1.283× faster than
+itself** — the shared A2000 drifts that much between runs. Re-run with the
+default re-timed immediately before every candidate, ratio taken per pair. The
+self-pair then reads **0.996×** (A2000) and **1.009×** (4090), which is the
+validation that makes the rest of the table meaningful.
+
+| lever | predicted | A2000 sm_86, 26 SM, triton 3.4 | RTX 4090 sm_89, 128 SM, triton 3.0 |
+|---|---|---:|---:|
+| `num_warps` alone | 1.10–1.35× | 1.106× | **1.009×** |
+| `num_stages` alone | 1.10–1.40× | 1.187× | **1.009×** |
+| best combined | ≥1.25× to land | 1.358× | **1.155×** |
+
+### Both isolated levers are falsified
+
+On the 4090 neither moves the kernel at all. `num_stages` at the *winning* tile
+runs 1→6 as **1.155 / 1.145 / 1.125 / 1.136 / 1.146 / 1.146** — flat inside
+noise. The entire residual win is **`BLOCK_N=32, warps=1`**: a **tile-shape**
+effect, not occupancy and not instruction-level parallelism. My prediction that
+`num_stages` would be the *stronger* lever was wrong on both cards.
+
+### The landing rule fires as a refusal
+
+Best combined is **1.155×** on the 4090, inside the pre-committed
+1.10–1.25× "do not land" band. **`_decode_plan` is not touched.** Four
+registered result-sets depend on it and a card-dependent 1.15× does not justify
+the risk — especially when the same config gives 1.358× on one card and 1.155×
+on another, which is itself evidence the win does not generalise.
+
+### What this says about profiler estimates
+
+ncu reported **"Est. Local Speedup: 50.95%"** for removing the Long-Scoreboard
+stalls. Neither occupancy nor ILP captures any stable part of it.
+
+> **A profiler's "estimated speedup" is an upper bound on what removing a stall
+> would be worth, not a claim that the stall is removable — least of all by
+> configuration.** ncu names the resource; it does not promise a knob exists.
+
+**Occupancy is now falsified twice, on two different bottlenecks, across three
+architectures.** Config tuning is closed for this kernel. The remaining ~2.1×
+against #39's decode floor is **structural** — shared-memory staging or a
+packed-byte layout change — not something a launch parameter reaches.
+
+Cost: **$0.12** on a 4090, chosen over an A100 because a config sweep needs
+*architectural* diversity (sm_89, 128 SM) more than it needs the flagship's
+exact card, and because the free A2000 had already screened the question.
+
+Receipts: `bench/context/receipts-occ-20260727/`, harness
+`bench/context/occ_sweep.py`.
+
