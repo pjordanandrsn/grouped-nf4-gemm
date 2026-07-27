@@ -2071,10 +2071,13 @@ guessing at a resource, and it was right:
 bytes_ = tl.load(b_base + (kk[None, :] // 2), ...)   # kk spans BLOCK_K consecutive k
 ```
 
-`kk` runs over **consecutive** k, so lanes 0,1 address byte 0 and lanes 2,3
-address byte 1: a 32-lane warp covers **16 distinct bytes**, halving sector
-efficiency and issuing **2× the loads**. Loading `BLOCK_K/2` bytes once and
-extracting both nibbles is the whole fix.
+`kk` runs over **consecutive** k, so the packed-byte tile is addressed by
+`kk//2`. Loading `BLOCK_K/2` bytes once and extracting both nibbles is the whole
+fix. **The mechanism stated here originally — "halves sector efficiency, issues
+2× the loads" — was falsified by Nsight Compute in #45:** sectors fall **4.63×**
+(12.08 → 1.95 per request, i.e. the old access was *scattered*, not merely
+redundant) and requests actually **rise 1.34×**. The speedups below all stand;
+the causal story did not.
 
 ### The trap: a falsified component rode along on a confirmed one
 
@@ -2252,4 +2255,68 @@ Cost of learning this: **$0.31** of A100 time, because the prereg said to test
 the free card first and rent only if it cleared the bar.
 
 Receipts: `bench/context/receipts-prefill-20260727/`.
+
+## Finding #45 — Nsight Compute: #43's speedup is real, its stated mechanism was wrong
+
+#41 pre-committed the next step to "a real profiler — not a fourth guess". Run
+at last, on the A2000 (`RmProfilingAdminOnly: 1`, so a root container with
+`--cap-add=SYS_ADMIN` — **no rental needed**, counters collect fine).
+
+Old vs new GEMV, same shape, one profiled launch each:
+
+| metric | `v0_shipped` | `v1_h4` (shipped now) |
+|---|---:|---:|
+| sectors per request | **12.08** | **1.95** |
+| global-load sectors | 58,212,003 | **12,568,942** |
+| global-load **requests** | 4,817,664 | **6,439,680** |
+| SM throughput | 15.80 % | **66.17 %** |
+| DRAM throughput | 6.28 % | 29.15 % |
+
+### Two claims in #43 are now falsified by direct measurement
+
+1. **"halving sector efficiency."** Sectors fall **4.63×**, and sectors/request
+   improves **6.2×** (12.08 → 1.95). 12 sectors for one warp-wide request means
+   the old access was scattered across cache lines, not merely 2× redundant. A
+   `[BLOCK_N, BLOCK_K]` byte tile indexed by `kk//2` puts lanes on rows that are
+   `stride_bn` apart; halving the K-extent makes each row exactly one 32 B
+   sector. **1.95 is near-ideal.**
+2. **"issuing 2× the loads."** Requests **rose 1.34×** (4.82 M → 6.44 M). The
+   fix issues *more* instructions and is still 2.3× faster.
+
+**The mechanism is coalescing/sector efficiency, not instruction count.** The
+speedup and every timing number in #43 stand; the causal story did not.
+
+### It also explains #41's dead end
+
+#41 concluded "not memory-bound" from DRAM throughput — **6.28 %**, plainly not
+DRAM-bound. But the kernel was bound by **L1TEX sector throughput**, a different
+resource entirely. Four falsified hypotheses came from checking DRAM bandwidth,
+FLOP/s, decode cost and occupancy while the limiter was transaction efficiency
+one level up. *"Not memory-bound" needs to name which memory resource.*
+
+### The current limiter, now that the old one is gone
+
+| | |
+|---|---|
+| top stall | **Long Scoreboard — waiting on L1TEX** |
+| cost | **9.8 cycles/warp = 51.0 %** of the 19.2-cycle issue gap |
+| achieved occupancy | **51.44 %** vs 66.67 % theoretical |
+| theoretical cap | 8 warps/scheduler vs hardware 12; limited by blocks/SM + shared mem |
+
+ncu's own estimates: **50.95 %** from removing the L1TEX stalls, **22.84 %**
+from closing the achieved-vs-theoretical occupancy gap, **33.33 %** from raising
+theoretical occupancy.
+
+The kernel is now **latency-bound on global-load dependencies** — the textbook
+fixes are more loads in flight (ILP) or more warps to hide the latency.
+
+> **This legitimately reopens occupancy, which #41 falsified** (8× occupancy
+> bought 16 %). That falsification was against the *sector-bound* kernel, where
+> more warps could not help because the transactions themselves were the wall.
+> With sectors at 1.95/request the bottleneck has moved, and latency hiding is
+> exactly what occupancy buys. **Re-testing a falsified hypothesis is correct
+> when the measured bottleneck has changed** — but it must be re-registered, not
+> assumed.
+
+Receipts: `bench/context/receipts-ncu-20260727/`.
 
