@@ -1,0 +1,53 @@
+{
+ "root": "m1/rp_235b",
+ "capture_dirs": 4,
+ "E": 128,
+ "k": 8,
+ "windows": {
+  "1": {
+   "n_windows": 96256,
+   "union_mean": 8.0,
+   "union_p50": 8.0,
+   "union_p90": 8.0,
+   "naive_wk": 8,
+   "uniform_null": 8.0,
+   "bytes_ratio_vs_serial": 1.0
+  },
+  "2": {
+   "n_windows": 95880,
+   "union_mean": 12.63,
+   "union_p50": 13.0,
+   "union_p90": 15.0,
+   "naive_wk": 16,
+   "uniform_null": 15.5,
+   "bytes_ratio_vs_serial": 0.7892
+  },
+  "4": {
+   "n_windows": 95128,
+   "union_mean": 19.6,
+   "union_p50": 19.0,
+   "union_p90": 24.0,
+   "naive_wk": 32,
+   "uniform_null": 29.12,
+   "bytes_ratio_vs_serial": 0.6125
+  },
+  "8": {
+   "n_windows": 93624,
+   "union_mean": 29.21,
+   "union_p50": 29.0,
+   "union_p90": 36.0,
+   "naive_wk": 64,
+   "uniform_null": 51.62,
+   "bytes_ratio_vs_serial": 0.4564
+  },
+  "16": {
+   "n_windows": 90616,
+   "union_mean": 40.41,
+   "union_p50": 40.0,
+   "union_p90": 50.0,
+   "naive_wk": 128,
+   "uniform_null": 82.42,
+   "bytes_ratio_vs_serial": 0.3157
+  }
+ }
+}
