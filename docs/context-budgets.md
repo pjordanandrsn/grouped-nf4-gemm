@@ -2378,3 +2378,80 @@ exact card, and because the free A2000 had already screened the question.
 Receipts: `bench/context/receipts-occ-20260727/`, harness
 `bench/context/occ_sweep.py`.
 
+## Finding #47 — scoping the three open items, and the "remaining 2.1×" is measured against an unreachable bound
+
+Exploration only; no kernel changed. Each item was scoped far enough to price it
+or to kill it.
+
+### (a) The e4b ladder harness is unrecoverable and must be rewritten
+
+The receipts behind #34/#40/#42 (`receipts-fullstack-*.json`,
+`receipts-bf16ladder-*.json`) contain **results only** — `link`, `rows`, `e2e`,
+`spec_rate`, `cache_rate` — and no `cmd`, `script`, or `argv`. No committed
+script in **either** repo calls `enable_routed_staging`; the only hits in e4b are
+its unit tests. The script was written on a pod and lost with it.
+
+So the project's **headline 9.19× ladder has no reproducible harness.** Rewriting
+it is straightforward — the four rungs are documented API calls — but validating
+it needs a **real 235B checkpoint on the e4b path**, not `bench/phase3`'s
+synthetic weights, which is a materially bigger rental than anything run today.
+
+### (b) Triton portability: no live bug, but the fallback is a lie
+
+`tl.join` appears **only** in `bench/context/prefill_singleload.py` — the
+transform #44 rejected. **No shipped kernel uses it**, so #44's
+wrong-answer-on-3.0 defect never reached the package.
+
+`tl.gather` is real though: 11 uses, guarded by `hasattr(tl, "gather")` in three
+files. Measured on a Triton 3.0 container against the shipped code:
+
+```
+triton 3.4:  PREFILL OK
+triton 3.0:  PREFILL FAILED — AttributeError: module 'triton.language' has no attribute 'gather'
+```
+
+The guard selects `prefill_variant=0`, but the **kernel source still contains
+`tl.gather`**, and Triton 3.0 resolves it during the AST walk even in a dead
+`constexpr` branch (the same mechanism that broke #44's bench). So the
+gather-less fallback **cannot run on precisely the Tritons it exists to
+rescue** — in `nf4_grouped.py` *and* `mxfp4_grouped.py`.
+
+**Severity is low, and stating it accurately matters:** `pyproject.toml`
+declares `torch>=2.8, triton>=3.4`, so a gather-less Triton is *out of declared
+support*. Nobody on a correct install is broken. The defect is that three files
+advertise a fallback that is **misleading rather than protective** — dead code
+that looks like a safety net. Fix is either to delete the guards (and say
+plainly that ≥3.4 is required) or to split the kernel so the fallback actually
+compiles. **This is correctness work and needs no rented hardware.**
+
+### (c) The structural GEMV work is weakly motivated — and the target is wrong
+
+Two candidate structural changes, both undercut by evidence already in hand:
+
+1. **Shared-memory staging is partly pre-falsified.** Triton's `num_stages`
+   *is* software pipelining through shared memory. #46 swept it 1→6 on two
+   architectures and found it **flat** (1.009× on the 4090). Hand-rolling the
+   same idea should not be expected to beat the compiler's version of it.
+2. **A layout change has little coalescing left to win.** #45 measured
+   **1.95 sectors per request** post-#43, which is near the 1.0 ideal. The
+   scattered-access problem is already solved.
+
+**And the headline number is measured against a bound the project itself calls
+unreachable.** `PREREG-gemv-occupancy.md`, confound 2:
+
+> "The 487 GB/s ceiling is a flat streaming read with no reduction and no
+> output — **genuinely unreachable, useful only as a bound**."
+
+Every "4.9× headroom" and "~2.1× remaining" figure is distance to *that*. A GEMV
+must also reduce along K and write an output; neither is in the bound.
+
+> **Before any structural work, establish a *reachable* target.** The honest
+> next step is not shared memory — it is a reference point that includes the
+> reduction and the store: a hand-written CUDA GEMV on the same packed bytes, or
+> a roofline that prices the reduction. Optimising toward an acknowledged-
+> unreachable number is how a project talks itself into work with no payoff.
+
+**Recommendation: (b) first** — cheap, correctness-only, free testbed. **(a)
+second**, because the flagship claim currently rests on a lost script. **(c) is
+not ready to start** until it has a target worth aiming at.
+
