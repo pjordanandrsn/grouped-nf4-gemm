@@ -136,7 +136,7 @@ def main():
     if not handles:
         raise SystemExit("no offload handles found — was offload=True honoured?")
 
-    rows, base_logits, base_ms = [], None, None
+    rows, base_logits, base_ms, prev_logits = [], None, None, None
 
     for rung in want:
         if rung == "bulk":
@@ -153,23 +153,36 @@ def main():
             raise SystemExit(f"unknown rung {rung!r}")
 
         s_tok, logits = decode(model, ids, args.tokens, args.warmup)
+        # Report the delta against BOTH the base rung and the PREVIOUS rung.
+        # Only the per-rung delta says which mechanism changed the numbers: a
+        # cumulative-only view makes every rung after `fast` look non-identical
+        # even when it introduced nothing of its own.
         if base_logits is None:
             base_logits, base_ms = logits, s_tok
-            dlog = 0.0
+            d_base = d_prev = 0.0
         else:
-            dlog = (logits - base_logits).abs().max().item()
+            d_base = (logits - base_logits).abs().max().item()
+            d_prev = (logits - prev_logits).abs().max().item()
+        prev_logits = logits
         rows.append({"rung": rung, "s_per_token": s_tok, "tok_per_s": 1.0 / s_tok,
-                     "vs_bulk": base_ms / s_tok, "max_abs_dlogit": dlog})
+                     "vs_bulk": base_ms / s_tok,
+                     "max_abs_dlogit_vs_base": d_base,
+                     "max_abs_dlogit_vs_prev": d_prev})
         print(f"  {rung:8s} {s_tok:8.4f} s/tok  {1.0/s_tok:6.3f} tok/s  "
-              f"{base_ms/s_tok:6.2f}x  max|dlogit|={dlog:.3e}")
+              f"{base_ms/s_tok:6.2f}x   d_vs_base={d_base:.3e}  d_vs_prev={d_prev:.3e}")
 
     if "spec" in want:
         st = speculative_stats(handles)
         print(f"# speculation: {st}")
 
-    bad = [r for r in rows if r["max_abs_dlogit"] != 0.0]
-    print(f"\n# ladder {rows[-1]['vs_bulk']:.2f}x over bulk"
-          f"   bit-identical: {'YES' if not bad else 'NO -> ' + str([r['rung'] for r in bad])}")
+    changed = [r["rung"] for r in rows if r["max_abs_dlogit_vs_prev"] != 0.0]
+    print(f"\n# ladder {rows[-1]['vs_bulk']:.2f}x over bulk")
+    print(f"# rungs that changed the numbers vs the rung below: "
+          f"{changed if changed else 'NONE — every step bit-identical'}")
+    if changed:
+        print("#   (the grouped kernel is a DIFFERENT computation, priced at "
+              "+0.023% perplexity in the README — it is not expected to be "
+              "bit-identical. Staging rungs are.)")
 
     if args.out:
         json.dump({"model": args.model, "device": torch.cuda.get_device_name(0),
