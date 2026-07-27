@@ -265,7 +265,7 @@ in-repo):
   greedy output 6/6) and validates SM-issued UVA reads at ≥ copy-engine
   throughput at 7.98 GB/token.
 
-## The offload ladder: 9.19× on the `experts4bit-qlora` streaming path
+## The offload ladder: ~9–10× on the `experts4bit-qlora` streaming path
 
 Everything above is `bench/phase3`, a purpose-built pipeline. This is the
 **general offload path** a user gets from `load_moe_4bit_streaming(offload=True)`
@@ -280,6 +280,20 @@ one process, median of 3:
 | `enable_routed_staging` | 1.0917 | 0.916 | **5.41×** | stages all `E` experts when `top_k` route |
 | `+ enable_fast` | 0.8384 | 1.193 | **7.04×** | the grouped kernel never reached this path |
 | `+ enable_speculative_staging` | **0.6423** | **1.557** | **9.19×** | staging was synchronous |
+
+**Quote this as a band, not a point.** The same ladder has been measured three
+times on three machines: **9.19×** (this table, bf16 KV), **10.21×** (`nf4_host`
+KV), and **10.06×** on an independent rebuild of the harness — different pod,
+different toolchain, different `transformers` major. The bulk rung brackets
+within 2% (5.9041 vs 5.7974 s/token); the spread sits at the top rung and tracks
+the speculation hit rate (0.8973 vs 0.9046). Only **within-run ratios** transfer
+between machines — absolute step times do not — so the defensible claim is
+**~9–10×**, with the exact figure pod- and hit-rate-dependent.
+
+The driver is `bench/context/e4b_ladder.py`. The original was written on a pod
+and lost with it, which is why the headline went unreproduced for a while; the
+rebuild is what produced the 10.06× replication and caught the fidelity error
+corrected below.
 
 **The two staging rungs are bit-identical** to the one below them
 (`max|Δlogit| = 0`): routed staging changes *which* bytes are copied and
