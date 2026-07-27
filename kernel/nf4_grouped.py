@@ -224,33 +224,27 @@ def _gemv_nf4_grouped(
     # 0 and lanes 2,3 hit byte 1 -- a 32-lane warp covered 16 distinct bytes,
     # halving sector efficiency and issuing 2x the loads. Measured 2.4x on its
     # own (finding #43).
-    offs_b = tl.arange(0, 32)
-    NSUB: tl.constexpr = BLOCK_K // 64
+    HALF: tl.constexpr = BLOCK_K // 2
+    offs_b = tl.arange(0, HALF)
     b_base = b_ptr + eid * stride_be + offs_n[:, None] * stride_bn
     a_base = a_ptr + g * K
     am_base = amax_ptr + eid * stride_ae + offs_n * stride_an
 
-    # 2-D accumulator reduced ONCE after the loop, rather than a cross-lane
-    # tl.sum every iteration. Worth nothing alone (measured 0.97x) but composes
-    # with the single-load form for a further 1.2x.
-    acc2 = tl.zeros((BLOCK_N, 32), dtype=tl.float32)
+    acc = tl.zeros((BLOCK_N,), dtype=tl.float32)
     for k0 in range(0, K, BLOCK_K):
-        for s in tl.static_range(NSUB):
-            base_k = k0 + s * 64
-            bytes_ = tl.load(
-                b_base + ((base_k // 2) + offs_b)[None, :],
-                mask=n_mask[:, None],
-                other=0,
-            ).to(tl.int32)
-            # bnb packs element 2j into the HIGH nibble, 2j+1 into the LOW one
-            w_hi = tl.load(lut_ptr + ((bytes_ >> 4) & 0xF))
-            w_lo = tl.load(lut_ptr + (bytes_ & 0xF))
-            a_hi = tl.load(a_base + base_k + 2 * offs_b).to(tl.float32)
-            a_lo = tl.load(a_base + base_k + 2 * offs_b + 1).to(tl.float32)
-            am = tl.load(am_base + (base_k // 64), mask=n_mask, other=0.0)
-            acc2 += (w_hi * a_hi[None, :] + w_lo * a_lo[None, :]) * am[:, None]
+        bytes_ = tl.load(
+            b_base + ((k0 // 2) + offs_b)[None, :], mask=n_mask[:, None], other=0
+        ).to(tl.int32)
+        # bnb packs element 2j into the HIGH nibble, 2j+1 into the LOW nibble
+        w_hi = tl.load(lut_ptr + ((bytes_ >> 4) & 0xF))
+        w_lo = tl.load(lut_ptr + (bytes_ & 0xF))
+        a_hi = tl.load(a_base + k0 + 2 * offs_b).to(tl.float32)
+        a_lo = tl.load(a_base + k0 + 2 * offs_b + 1).to(tl.float32)
+        am = tl.load(am_base + (k0 // BLOCK_K), mask=n_mask, other=0.0)
+        acc += (
+            tl.sum(w_hi * a_hi[None, :], axis=1) + tl.sum(w_lo * a_lo[None, :], axis=1)
+        ) * am
 
-    acc = tl.sum(acc2, axis=1)
     tl.store(out_ptr + g * N + offs_n, acc.to(tl.bfloat16), mask=n_mask)
 
 
@@ -504,10 +498,6 @@ def gemm_4bit_grouped(
             # trip-count part of #43 but keeps the single-load part, which is
             # where the speedup actually lives.
             gemv_bk = BLOCKSIZE
-            for _cand in (256, 128):
-                if K % _cand == 0:
-                    gemv_bk = _cand
-                    break
             _gemv_nf4_grouped[grid](
                 a_cat,
                 B,
