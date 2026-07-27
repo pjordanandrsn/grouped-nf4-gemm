@@ -1804,6 +1804,38 @@ one for the contexts measured.
 0.6263 in #34 on a different host. Absolute step times do not transfer between
 pods; only within-pod ratios do.
 
+## Finding #38 — NF4 attention abandoned: the kernel was never bandwidth-bound
+
+Wrote the single-pass online-softmax NF4 attention that #37's profile called for,
+against a pre-committed stopping rule. A40, T=32768, GQA 16:1:
+
+| path | ms | KV GB/s | rel err |
+|---|---:|---:|---:|
+| bf16 SDPA (`enable_gqa`) | **0.1399** | 134.9 | — |
+| old `attend_nf4_kv_gqa` | 1.1613 | 16.3 | 2.899e-03 |
+| new `flash_nf4_kv_gqa` | 1.7309 | 10.9 | **5.613e-07** |
+| achievable bandwidth | — | 491.9 | |
+
+**The profile was wrong.** It said 69% of the old kernel's traffic was a
+materialized `[H_q, T]` score matrix and that removing it would close the 12.7×
+gap to SDPA. The new kernel removes it entirely — moving 3.2× fewer bytes — and
+is **1.5× slower**. At 2.2% of achievable bandwidth neither kernel was ever
+memory-bound; the binding term is the inner loop's nibble unpack, LUT gather and
+`ieee` `tl.dot`, none of which a byte-count profile can see.
+
+**A byte-count profile diagnosed a kernel that bytes did not limit.** That is the
+lesson worth carrying: traffic analysis identifies what a kernel *should* be
+bound by, not what it *is*.
+
+**Stopping rule honored, path abandoned.** N1a fell far below its 25% line after
+one diagnosed fix (split-T parallelization, worth 19.6× — the first version put
+4 programs on an 84-SM card). NF4 KV is a **memory** play, not a speed one, and
+#37's "bf16 unless VRAM binds" stands.
+
+**The one thing produced:** the new kernel is correct to **5.613e-07**, ~5,000×
+more accurate than the old one, and is kept as the correctness oracle for any
+future attempt.
+
 ## Reproducing
 
 `bench/context/kv_budget.py` (derivation, from config.json only) and
@@ -1884,3 +1916,6 @@ Finding #36: `bench/context/PREREG-step-decomposition.md`; receipts
 
 Finding #37: `bench/context/PREREG-kv-dial-sweep.md`; receipts
 `bench/context/receipts-kvdial-20260727.json`.
+
+Finding #38: `bench/context/PREREG-nf4-flash.md`; kernel `flash_nf4_kv_gqa` in
+`kernel/nf4_kv.py`; receipts `bench/context/receipts-nf4flash-20260727.json`.

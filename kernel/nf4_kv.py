@@ -849,3 +849,154 @@ def attend_nf4_kv_gqa(q: torch.Tensor, k_packed: torch.Tensor, k_absmax: torch.T
                 raise
             block_t //= 2
     return part.sum(1)[:, :gqa, :].reshape(H_q, D)
+
+
+# ---------------------------------------------------------------------------
+# Single-pass NF4 FlashAttention (PREREG-nf4-flash.md)
+#
+# `attend_nf4_kv_gqa` materializes a [H_q, T] fp32 score matrix, which is 69% of
+# its memory traffic and the whole reason it loses 12.7x to bf16 SDPA: the
+# baseline is FlashAttention and never writes that matrix. This is the online-
+# softmax form -- one pass, no score matrix -- with the NF4 decode inlined so the
+# only global traffic is the packed KV itself.
+#
+# The decode is copied verbatim from `_kv_scores_nf4` / `_kv_wsum_nf4` (nibble
+# order, LUT gather, and the one absmax index expression that covers both
+# per-token-blockwise and per-channel groupings) so this path cannot disagree
+# with them about what the bytes mean.
+# ---------------------------------------------------------------------------
+
+@triton.jit
+def _nf4_flash_gqa(
+    q_ptr, k_ptr, ka_ptr, v_ptr, va_ptr, pacc_ptr, pm_ptr, pl_ptr, lut_ptr,
+    T, D, GQA, scale, SPLIT_T,
+    stride_kt, stride_kh, stride_kat, stride_kah,
+    stride_vt, stride_vh, stride_vat, stride_vah,
+    BLOCK_T: tl.constexpr, BLOCK_D: tl.constexpr, BLOCK_M: tl.constexpr,
+    QBLK: tl.constexpr, TGRP: tl.constexpr, SPLITS: tl.constexpr,
+):
+    """out[h, :] = softmax(q[h,:] . dequant(K)^T * scale) . dequant(V)
+
+    One program per kv head; the whole GQA group of query rows rides together as
+    the M dimension, so each K/V byte is read once and reused GQA times.
+    """
+    hkv = tl.program_id(0)
+    sid = tl.program_id(1)
+    offs_m = tl.arange(0, BLOCK_M)
+    offs_d = tl.arange(0, BLOCK_D)
+    m_mask = offs_m < GQA
+    d_mask = offs_d < D
+
+    q = tl.load(q_ptr + (hkv * GQA + offs_m)[:, None] * D + offs_d[None, :],
+                mask=m_mask[:, None] & d_mask[None, :], other=0.0).to(tl.float32)
+
+    m_i = tl.full((BLOCK_M,), float("-inf"), tl.float32)
+    l_i = tl.zeros((BLOCK_M,), tl.float32)
+    acc = tl.zeros((BLOCK_M, BLOCK_D), tl.float32)
+
+    t_lo = sid * SPLIT_T
+    t_hi = tl.minimum(t_lo + SPLIT_T, T)
+    for t0 in range(t_lo, t_hi, BLOCK_T):
+        offs_t = t0 + tl.arange(0, BLOCK_T)
+        t_mask = offs_t < t_hi
+        kv_mask = t_mask[:, None] & d_mask[None, :]
+
+        kb = k_ptr + offs_t[:, None] * stride_kt + hkv * stride_kh
+        kbyt = tl.load(kb + (offs_d[None, :] // 2), mask=kv_mask, other=0).to(tl.int32)
+        knib = tl.where((offs_d[None, :] % 2) == 0, (kbyt >> 4) & 0xF, kbyt & 0xF)
+        kam = tl.load(ka_ptr + (offs_t[:, None] // TGRP) * stride_kat
+                      + hkv * stride_kah + (offs_d[None, :] // QBLK),
+                      mask=kv_mask, other=0.0)
+        kt = tl.load(lut_ptr + knib) * kam                      # [BLOCK_T, BLOCK_D]
+
+        s = tl.dot(q, tl.trans(kt), input_precision="ieee") * scale
+        s = tl.where(t_mask[None, :], s, float("-inf"))
+
+        m_new = tl.maximum(m_i, tl.max(s, 1))
+        alpha = tl.exp(m_i - m_new)
+        p = tl.exp(s - m_new[:, None])
+
+        vb = v_ptr + offs_t[:, None] * stride_vt + hkv * stride_vh
+        vbyt = tl.load(vb + (offs_d[None, :] // 2), mask=kv_mask, other=0).to(tl.int32)
+        vnib = tl.where((offs_d[None, :] % 2) == 0, (vbyt >> 4) & 0xF, vbyt & 0xF)
+        vam = tl.load(va_ptr + (offs_t[:, None] // TGRP) * stride_vat
+                      + hkv * stride_vah + (offs_d[None, :] // QBLK),
+                      mask=kv_mask, other=0.0)
+        vt = tl.load(lut_ptr + vnib) * vam                      # [BLOCK_T, BLOCK_D]
+
+        acc = acc * alpha[:, None] + tl.dot(p, vt, input_precision="ieee")
+        l_i = l_i * alpha + tl.sum(p, 1)
+        m_i = m_new
+
+    # Emit the PARTIAL state; the combine kernel merges splits.
+    base = (hkv * SPLITS + sid) * BLOCK_M
+    tl.store(pacc_ptr + base * BLOCK_D + offs_m[:, None] * BLOCK_D + offs_d[None, :],
+             acc, mask=m_mask[:, None] & d_mask[None, :])
+    tl.store(pm_ptr + base + offs_m, m_i, mask=m_mask)
+    tl.store(pl_ptr + base + offs_m, l_i, mask=m_mask)
+
+
+def flash_nf4_kv_gqa(q, k_packed, k_absmax, v_packed, v_absmax,
+                     scale=None, block_t=64, token_group=None):
+    """Single-pass NF4 attention. Same signature and semantics as
+    :func:`attend_nf4_kv_gqa`, without the materialized score matrix."""
+    H_q, D = q.shape
+    T, H_kv, _ = k_packed.shape
+    _check(D)
+    _require_inner_contig(k_packed=k_packed, k_absmax=k_absmax,
+                          v_packed=v_packed, v_absmax=v_absmax)
+    _check_cache(k_packed, k_absmax, D, token_group, "k")
+    _check_cache(v_packed, v_absmax, D, token_group, "v")
+    if k_packed.shape[:2] != v_packed.shape[:2]:
+        raise ValueError("K and V must agree on token count and kv-head count")
+
+    gqa = _gqa(H_q, H_kv)
+    bd = triton.next_power_of_2(D)
+    bm = max(16, triton.next_power_of_2(gqa))           # tl.dot needs M >= 16
+    qb, tg = (1 if token_group else BLOCKSIZE), (token_group or 1)
+    scale = D ** -0.5 if scale is None else scale
+
+    # Two [BLOCK_T, BLOCK_D] fp32 tiles live at once (K then V), plus the
+    # [BLOCK_M, BLOCK_D] accumulator and the [BLOCK_M, BLOCK_T] probabilities.
+    cap = _device_shared_limit(q.device)
+    if cap:
+        while block_t > 16 and (2 * block_t * bd + bm * bd + bm * block_t) * 4 > cap:
+            block_t //= 2
+
+    # Enough splits to fill the device: 4 kv heads on an 84-SM card is 5%
+    # occupancy, which is what made the single-grid version 29x slower than the
+    # kernel it replaced.
+    sms = torch.cuda.get_device_properties(q.device).multi_processor_count
+    splits = max(1, min(triton.cdiv(T, block_t), -(-(sms * 2) // max(H_kv, 1))))
+    split_t = max(block_t, triton.cdiv(T, splits))
+    splits = max(1, triton.cdiv(T, split_t))
+
+    from triton.runtime.errors import OutOfResources
+    qc, lut = q.contiguous(), _lut(q.device)
+    while True:
+        pacc = torch.empty(H_kv, splits, bm, bd, dtype=torch.float32, device=q.device)
+        pm = torch.empty(H_kv, splits, bm, dtype=torch.float32, device=q.device)
+        pl = torch.empty(H_kv, splits, bm, dtype=torch.float32, device=q.device)
+        try:
+            _nf4_flash_gqa[(H_kv, splits)](
+                qc, k_packed, k_absmax, v_packed, v_absmax, pacc, pm, pl, lut,
+                T, D, gqa, scale, split_t,
+                k_packed.stride(0), k_packed.stride(1),
+                k_absmax.stride(0), k_absmax.stride(1),
+                v_packed.stride(0), v_packed.stride(1),
+                v_absmax.stride(0), v_absmax.stride(1),
+                BLOCK_T=block_t, BLOCK_D=bd, BLOCK_M=bm, QBLK=qb, TGRP=tg,
+                SPLITS=splits, num_stages=2)
+            break
+        except OutOfResources:
+            if block_t <= 16:
+                raise
+            block_t //= 2
+
+    # Merge the splits with the standard online-softmax rescale.
+    m_g = pm.max(dim=1, keepdim=True).values
+    w = torch.exp(pm - m_g)
+    acc = (pacc * w.unsqueeze(-1)).sum(1)
+    l = (pl * w).sum(1)
+    out = acc / l.unsqueeze(-1)
+    return out[:, :gqa, :bd].reshape(H_kv * gqa, bd)[:, :D].contiguous()

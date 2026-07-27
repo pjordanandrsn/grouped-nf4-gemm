@@ -65,3 +65,57 @@ project, so:
 2. bf16 SDPA dispatches to FlashAttention via `enable_gqa=True`; that is the
    correct baseline (#12's original comparison used `repeat_interleave` and was
    10.7× flattering — the error this prereg is explicitly avoiding).
+
+## Outcome — ABANDONED per the stopping rule, and the profile that motivated it was wrong
+
+A40, T=32768, GQA 16:1, D=128.
+
+| path | ms | KV GB/s |
+|---|---:|---:|
+| bf16 SDPA (`enable_gqa`) | **0.1399** | 134.9 |
+| old `attend_nf4_kv_gqa` | 1.1613 | 16.3 |
+| **new `flash_nf4_kv_gqa`** | **1.7309** | 10.9 |
+| achievable (pure 18.9 MB read) | — | **491.9** |
+
+| prediction | predicted | measured | verdict |
+|---|---|---|---|
+| N1c **GATE** rel err | < 2e-3 | **5.613e-07** | **PASS** |
+| N1a % of achievable bandwidth | ≥40%, abandon <25% | **2.2%** | **FALSIFIED — ABANDON** |
+| N1b new / bf16 SDPA | ≤ 1.0 | **12.373×** | **FALSIFIED** |
+
+**The kernel is correct** — 5.613e-07 relative error, **~5,000× more accurate**
+than the old kernel's 2.899e-3, because the online softmax accumulates in fp32
+instead of round-tripping through a materialized fp32 score matrix and a separate
+`torch.softmax`.
+
+**And it is slower than the kernel it was written to replace** (1.73 ms vs
+1.16 ms, 0.67×).
+
+### The diagnosis that motivated this prereg was wrong
+
+The profile said 69% of `attend_nf4_kv_gqa`'s traffic was the materialized score
+matrix, and concluded that removing it would close the gap to SDPA. **Removing it
+made the kernel slower.** The new kernel moves only the 18.87 MB of KV — 3.2×
+less than the old one — and takes 1.5× longer.
+
+So the old kernel was **never bandwidth-bound**, and neither is this one at 2.2%
+of achievable. The binding term is inside the inner loop — the NF4 nibble
+unpack, the LUT gather, and the `ieee`-precision `tl.dot` on fp32 tiles — none of
+which the traffic analysis could see. **A byte-count profile diagnosed a kernel
+that was never limited by bytes.**
+
+The first launch was worse still (33.86 ms) because grid `(H_kv,)` put 4 programs
+on an 84-SM card. Split-T parallelization recovered **19.6×** and still landed at
+2.2%.
+
+### The stopping rule is honored
+
+N1a is falsified far below its 25% abandon line, after one diagnosed fix and one
+re-measure. **The packed-KV attention path is abandoned.** NF4 KV is documented as
+a **memory** play, not a speed one, and #37's recommendation — bf16 unless VRAM
+binds — stands unchanged.
+
+**Kept, not deleted:** `flash_nf4_kv_gqa` stays in the tree as a correctness
+oracle. At 5.6e-07 it is the most accurate NF4 attention path available and is
+the right reference for testing any future one — which is worth more than the
+disk it occupies, and is the only thing this attempt produced.
