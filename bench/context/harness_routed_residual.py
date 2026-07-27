@@ -157,6 +157,10 @@ def run(args) -> dict:
     # safetensors.safe_open, which rejects a torch.device
     # ("device device(type='cuda', index=0) is invalid"). e4b_ladder uses "cuda".
     dev = "cuda"
+    # Registered ceiling: probed BEFORE the model loads, on a pristine link
+    # (PREREG-2 amendment-1). The post-load re-probe below is P4's exploratory
+    # comparison, never the denominator.
+    ceiling, env, probes = _probe_ceiling(dev)
     # offload=True is not optional decoration: without it no _offload handles are
     # built, _collect_handles returns [], enable_routed_staging is a no-op, and the
     # run silently measures a resident model. r/alpha are the ladder's values --
@@ -169,8 +173,9 @@ def run(args) -> dict:
         raise SystemExit("ABORT: no offload handles found -- offload did not engage, nothing to measure")
     enable_routed_staging(handles)
     _assert_confounds_off(handles)
+    _, _, probes_post = _probe_ceiling(dev, repeats=3)
 
-    ceiling, env, probes = _probe_ceiling(dev)
+
 
     from transformers import AutoTokenizer
     # args.model, not model.config._name_or_path: after a meta-init streaming load the
@@ -187,7 +192,7 @@ def run(args) -> dict:
     for rep_i, arm in enumerate(order):
         _set_arm(arm)
         reset_offload_stats()                                     # also zeroes the branch counters
-        s_per_token, first_logits, greedy, prefill = _timed_decode(model, ids, args.tokens, args.warmup)
+        s_per_token, first_logits, greedy, prefill, decode_wall = _timed_decode(model, ids, args.tokens, args.warmup)
         rep = offload_stats_report() or {}
         routed = (rep.get("by_policy") or {}).get("routed") or {}
         records.append({
@@ -212,6 +217,7 @@ def run(args) -> dict:
             # than discarded: it is the same data R4 needs, just about a different
             # regime, and throwing it away would mean re-running to get it back.
             "prefill": prefill,
+            "decode_wall_s": decode_wall,
         })
         print(f"  {arm:<4} rep{rep_i // len(args.arms)}  {s_per_token:.4f} s/tok  "
               f"routed {routed.get('gbps', 0):.2f} GB/s  counts {records[-1]['counts']}")
@@ -224,7 +230,9 @@ def run(args) -> dict:
     for r in records:
         r["max_delta_logit"] = float((r.pop("_logits") - base).abs().max())
     worst = max(r["max_delta_logit"] for r in records)
-    verdicts = evaluate(records, ceiling)
+    pinned_pre = [p["pinned"] for p in probes if p.get("pinned")]
+    rng = (min(pinned_pre), max(pinned_pre)) if pinned_pre else None
+    verdicts = evaluate(records, ceiling, ceiling_range=rng)
     verdicts["logit_identity"] = {
         "pass": worst == 0.0, "max_delta_logit": worst,
         "detail": "exact logit agreement across all arms (stronger than R1's greedy-id gate; "
@@ -233,8 +241,8 @@ def run(args) -> dict:
     }
     if worst != 0.0:
         verdicts["gates_passed"] = False
-    return {"ceiling_gbps": ceiling, "ceiling_probes": probes, "ceiling_env": env,
-            "records": records, "verdicts": verdicts}
+    return {"ceiling_gbps": ceiling, "ceiling_probes": probes, "ceiling_probes_post_load": probes_post,
+            "ceiling_range": rng, "ceiling_env": env, "records": records, "verdicts": verdicts}
 
 
 @torch.no_grad()
@@ -269,7 +277,7 @@ def _timed_decode(model, ids, n_tokens, warmup):
     nxt = out.logits[:, -1:, :].argmax(-1)
     prefill = offload_stats_report() or {}
     reset_offload_stats()          # decode-only from here; also rezeroes the branch counters
-    greedy, times = [int(nxt)], []
+    greedy, times, all_dt = [int(nxt)], [], []
     for step in range(n_tokens + warmup):
         torch.cuda.synchronize()
         t0 = time.perf_counter()
@@ -279,9 +287,13 @@ def _timed_decode(model, ids, n_tokens, warmup):
         past = o.past_key_values
         nxt = o.logits[:, -1:, :].argmax(-1)
         greedy.append(int(nxt))
+        all_dt.append(dt)
         if step >= warmup:
             times.append(dt)
-    return statistics.median(times), first_logits, greedy, prefill
+    # decode_wall_s spans ALL decode forwards (warmup included) — the same
+    # region the stats accumulate over after the prefill reset, so the sound
+    # numerator bytes/decode_wall_s divides aligned quantities exactly.
+    return statistics.median(times), first_logits, greedy, prefill, sum(all_dt)
 
 
 def main():

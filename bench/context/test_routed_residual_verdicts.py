@@ -23,8 +23,14 @@ IDS = [10, 20, 30]
 def rec(arm, s, *, ids=None, host=94, device=0, gbps=None):
     if arm == "C" and host == 94 and device == 0:      # control runs the device path
         host, device = 0, 94
-    return {"arm": arm, "rep": 0, "s_per_token": s, "greedy_ids": ids or list(IDS),
-            "counts": {"host": host, "device": device}, "routed_gbps": gbps}
+    r = {"arm": arm, "rep": 0, "s_per_token": s, "greedy_ids": ids or list(IDS),
+         "counts": {"host": host, "device": device}, "routed_gbps": gbps}
+    if gbps is not None:
+        # sound-numerator fields: bytes over a 1.0 s decode wall == gbps GB/s.
+        # routed_gbps stays as the stats-reported diagnostic.
+        r["by_policy"] = {"routed": {"bytes": gbps * 1e9, "stages": 94}}
+        r["decode_wall_s"] = 1.0
+    return r
 
 
 def _clean(ratio=0.97, gbps=10.0):
@@ -316,3 +322,62 @@ def test_partial_prefill_coverage_fails_the_run():
     v = evaluate(r, ceiling_gbps=26.0)
     assert v["prefill_separated"]["pass"] is False
     assert not v["gates_passed"]
+
+
+
+# --- sound numerator (PREREG-2 amendment-1) ---------------------------------
+def test_r4_uses_the_sound_numerator_not_the_stats_field():
+    """The stats-reported gbps must never adjudicate: build-dependent divisor."""
+    r = _clean(gbps=10.0)
+    for x in r:
+        if x["arm"] == "C":
+            x["routed_gbps"] = 99.0            # poisoned stats field
+    v = evaluate(r, ceiling_gbps=22.21)
+    r4 = v["registered"]["R4_decomposition"]
+    assert abs(r4["routed_gbps_sound"] - 10.0) < 1e-9
+    assert r4["pass"] is True                  # 10/22.21 = 0.45 <= 0.70
+    assert r4["stats_reported_gbps"] == 99.0   # carried, as diagnostic only
+
+
+def test_campaign_1_shaped_receipt_refuses_to_adjudicate():
+    """routed_gbps present, sound fields absent — exactly the 2026-07-27 receipt."""
+    r = _clean(gbps=8.8)
+    for x in r:
+        x.pop("by_policy", None); x.pop("decode_wall_s", None)
+    v = evaluate(r, ceiling_gbps=14.68)
+    r4 = v["registered"]["R4_decomposition"]
+    assert r4["pass"] is None
+    assert "build-dependent" in r4["detail"]
+    assert v["registered"]["R5_decision"]["build_expert_major_coalescer"] is None
+
+
+def test_sound_wall_divisor_is_the_wall_not_the_step_median():
+    """bytes/decode_wall, exactly — a wrong divisor shifts the value measurably."""
+    r = _clean(gbps=10.0)
+    for x in r:
+        if x["arm"] == "C":
+            x["decode_wall_s"] = 2.0           # same bytes, doubled wall
+    v = evaluate(r, ceiling_gbps=22.21)
+    assert abs(v["registered"]["R4_decomposition"]["routed_gbps_sound"] - 5.0) < 1e-9
+
+
+# --- ceiling-range robustness ------------------------------------------------
+def test_verdict_robust_across_range_adjudicates():
+    v = evaluate(_clean(gbps=8.8), ceiling_gbps=18.46, ceiling_range=(12.65, 18.46))
+    r4 = v["registered"]["R4_decomposition"]
+    assert r4["pass"] is True                  # 8.8/12.65=0.696 and 8.8/18.46=0.48 both hold
+    assert r4["robust_across_ceiling_range"] is True
+
+
+def test_verdict_flipping_across_range_yields_no_verdict():
+    v = evaluate(_clean(gbps=8.8), ceiling_gbps=18.0, ceiling_range=(11.0, 18.0))
+    r4 = v["registered"]["R4_decomposition"]   # 8.8/11=0.80 fails, 8.8/18=0.49 holds
+    assert r4["pass"] is None
+    assert "NOT ROBUST" in r4["detail"]
+    assert not v["gates_passed"]
+    assert v["registered"]["R5_decision"]["build_expert_major_coalescer"] is None
+
+
+def test_no_range_given_still_adjudicates():
+    v = evaluate(_clean(gbps=8.8), ceiling_gbps=14.68)
+    assert v["registered"]["R4_decomposition"]["pass"] is True   # 0.60
