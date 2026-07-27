@@ -21,23 +21,19 @@ WHY THE ARMS ARE ENV SWITCHES AND NOT TWO CHECKOUTS
     switched control. If it does not, the switch is not a faithful control and
     every number here is void. Run it BEFORE trusting the ladder.
 
-REPS — A DISCLOSED DEVIATION FROM THE STAMPED FIXTURE
-    The prereg fixture says "median of 2". This harness defaults to **6**, and any
-    results MUST disclose that.
+REPS = 6, REGISTERED (not a deviation)
+    Amendment 1 (`PREREG-routed-residual-amendment-1.md`, OTS-stamped
+    `2397612e…`, written PRE-DATA) moves the fixture from the original's "median
+    of 2" to **median of 6**. The original prereg is NOT edited — its stamp
+    `ba7a29ce…` still binds its original bytes, so the two can be diffed by
+    anyone.
 
-    Why: the OLMoE smoke ran three times. At reps=2 the median of 2 is just the
-    mean of 2, so one bad draw carries the whole ratio — run 3 had `T1` at 0.1963
-    in one position and 0.1792 in the other, and the two halves of T1 (T1s, T1c)
-    both measured FASTER than control while combined T1 measured slower. That is
-    incoherent, since T1 is exactly T1s+T1c, and it is what too few reps looks
-    like. A +/-5% band cannot be resolved by two samples.
+    Amendment 1 also registers, ahead of data: ABBA ordering (A2); the rule that
+    R6 yields NO verdict when the self-pair spread meets or exceeds its band
+    width (A3); and the status of `logit_identity` / `arm_fidelity` /
+    `position_balance` as gates rather than predictions (A4).
 
-    This only adds statistical power. It changes no prediction, no bar, no
-    decision rule — R1-R6 and their falsification criteria are untouched. That is
-    the reason it is a disclosable deviation rather than a re-registration. If you
-    would rather re-register, do it BEFORE the pod exists, not after.
-
-    Must be EVEN, or `interleave` cannot balance positions.
+    `reps` must be EVEN, or `interleave` cannot balance positions.
 
 REGISTERED vs EXPLORATORY
     Registered (R1–R6): arms `C` and `T1` only. `T1s` and `T1c` split T1 into
@@ -214,8 +210,8 @@ def main():
     ap.add_argument("--tokens", type=int, default=12)
     ap.add_argument("--warmup", type=int, default=2)
     ap.add_argument("--reps", type=int, default=6,
-                    help="median of N per arm. DEVIATES from the stamped prereg's 2 -- see the "
-                         "REPS note in the module docstring. Must be even (ABBA balance).")
+                    help="median of N per arm. Registered by amendment 1 (2397612e). "
+                         "Must be even (ABBA balance).")
     ap.add_argument("--arms", default="C,T1,T1s,T1c",
                     help="comma list; C and T1 are registered, the rest exploratory")
     ap.add_argument("--out", default="")
@@ -240,7 +236,8 @@ def main():
     t0 = time.time()
     result = run(args)
     result["wall_s"] = time.time() - t0
-    result["prereg"] = "bench/context/PREREG-routed-residual.md ba7a29ce"
+    result["prereg"] = ("bench/context/PREREG-routed-residual.md ba7a29ce "
+                        "+ amendment-1 2397612e")
 
     v = result["verdicts"]
     print("\n=== GATES ===")
