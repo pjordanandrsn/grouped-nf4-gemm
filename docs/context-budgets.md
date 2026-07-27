@@ -1836,6 +1836,52 @@ one diagnosed fix (split-T parallelization, worth 19.6× — the first version p
 more accurate than the old one, and is kept as the correctness oracle for any
 future attempt.
 
+## Finding #39 — the NF4 decode is near-optimal; the grouped GEMM's cost is elsewhere
+
+#38's post-mortem blamed the inner loop — nibble unpack and LUT gather — for a
+kernel that a byte-count profile had misdiagnosed. The grouped NF4 GEMM shares
+those primitives and is now **46%** of the 235B step at **1.3%** of A100 HBM, so
+the same suspicion applied. Measured directly, on identical packed bytes (A40,
+8 experts of [3072, 4096], 56.62 MB):
+
+| kernel | ms | GB/s | % of gemm |
+|---|---:|---:|---:|
+| read (bytes only) | 0.0826 | 685.5 | 14.5% |
+| decode (unpack + LUT + scale) | 0.1163 | **487.0** | 20.4% |
+| gemm (shipped grouped) | 0.5710 | 99.2 | 100% |
+| achievable (pure read) | 0.0992 | 570.9 | |
+
+**The decode is not the problem — it runs at 85.3% of achievable bandwidth and
+costs 1.4× a raw byte read.** A1a predicted ≥50% of the GEMM and measured
+**20.4%**, falsified below its 25% line. The LUT gather that #38 blamed is
+essentially free.
+
+Decomposing the grouped GEMM:
+
+```
+reading the bytes    0.0826 ms   14.5%
++ the NF4 decode     0.0337 ms    5.9%
++ everything else    0.4547 ms   79.6%   <- the target
+```
+
+**It is bound by none of the three things it was suspected of.** Not memory
+(99 of 487 GB/s reachable on the same bytes), not compute (201 MFLOP in 0.571 ms
+= 352 GFLOP/s, **0.95%** of an A40's ~37 TFLOP/s), not decode (20.4%). The
+remaining 79.6% is tiling and dispatch — at bs=1 the GEMM is an M=1 GEMV padded
+to `tl.dot`'s M≥16 minimum, so most of every tensor-core tile is wasted work on
+padding.
+
+**Headroom against its own decode floor: 4.9×**, and the pre-committed branch for
+a falsified A1a fires — **the target is the GEMM's tiling and dispatch, not the
+decode primitive.**
+
+**This also re-reads #38.** That kernel was not decode-bound either; the shared
+inner-loop *primitives* were never the issue in either case. What both have in
+common is a `tl.dot` on a shape tensor cores cannot use well. The lesson from #38
+("traffic analysis says what a kernel should be bound by, not what it is")
+survives, but its follow-on guess — that the decode was the culprit — is now
+falsified by direct measurement rather than inherited.
+
 ## Reproducing
 
 `bench/context/kv_budget.py` (derivation, from config.json only) and
@@ -1919,3 +1965,6 @@ Finding #37: `bench/context/PREREG-kv-dial-sweep.md`; receipts
 
 Finding #38: `bench/context/PREREG-nf4-flash.md`; kernel `flash_nf4_kv_gqa` in
 `kernel/nf4_kv.py`; receipts `bench/context/receipts-nf4flash-20260727.json`.
+
+Finding #39 (part A): `bench/context/PREREG-decode-bound.md`; receipts
+`bench/context/receipts-decodeiso-20260727.json`.
