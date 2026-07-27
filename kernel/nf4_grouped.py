@@ -218,26 +218,39 @@ def _gemv_nf4_grouped(
 
     offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
     n_mask = offs_n < N
-    offs_k = tl.arange(0, BLOCK_K)
+    # 32 BYTES == 64 packed elements == exactly one absmax block. Indexing the
+    # packed buffer by BYTE (not by k) is the whole point: the previous form
+    # addressed kk[None,:]//2 over BLOCK_K CONSECUTIVE k, so lanes 0,1 hit byte
+    # 0 and lanes 2,3 hit byte 1 -- a 32-lane warp covered 16 distinct bytes,
+    # halving sector efficiency and issuing 2x the loads. Measured 2.4x on its
+    # own (finding #43).
+    offs_b = tl.arange(0, 32)
+    NSUB: tl.constexpr = BLOCK_K // 64
     b_base = b_ptr + eid * stride_be + offs_n[:, None] * stride_bn
     a_base = a_ptr + g * K
+    am_base = amax_ptr + eid * stride_ae + offs_n * stride_an
 
-    acc = tl.zeros((BLOCK_N,), dtype=tl.float32)
+    # 2-D accumulator reduced ONCE after the loop, rather than a cross-lane
+    # tl.sum every iteration. Worth nothing alone (measured 0.97x) but composes
+    # with the single-load form for a further 1.2x.
+    acc2 = tl.zeros((BLOCK_N, 32), dtype=tl.float32)
     for k0 in range(0, K, BLOCK_K):
-        kk = k0 + offs_k
-        bytes_ = tl.load(b_base + (kk[None, :] // 2), mask=n_mask[:, None], other=0).to(
-            tl.int32
-        )
-        nib = tl.where((kk[None, :] % 2) == 0, (bytes_ >> 4) & 0xF, bytes_ & 0xF)
-        w = tl.load(lut_ptr + nib)
-        am = tl.load(
-            amax_ptr + eid * stride_ae + offs_n * stride_an + (k0 // BLOCK_K),
-            mask=n_mask,
-            other=0.0,
-        )
-        a = tl.load(a_base + kk).to(tl.float32)
-        acc += tl.sum(w * a[None, :], axis=1) * am
+        for s in tl.static_range(NSUB):
+            base_k = k0 + s * 64
+            bytes_ = tl.load(
+                b_base + ((base_k // 2) + offs_b)[None, :],
+                mask=n_mask[:, None],
+                other=0,
+            ).to(tl.int32)
+            # bnb packs element 2j into the HIGH nibble, 2j+1 into the LOW one
+            w_hi = tl.load(lut_ptr + ((bytes_ >> 4) & 0xF))
+            w_lo = tl.load(lut_ptr + (bytes_ & 0xF))
+            a_hi = tl.load(a_base + base_k + 2 * offs_b).to(tl.float32)
+            a_lo = tl.load(a_base + base_k + 2 * offs_b + 1).to(tl.float32)
+            am = tl.load(am_base + (base_k // 64), mask=n_mask, other=0.0)
+            acc2 += (w_hi * a_hi[None, :] + w_lo * a_lo[None, :]) * am[:, None]
 
+    acc = tl.sum(acc2, axis=1)
     tl.store(out_ptr + g * N + offs_n, acc.to(tl.bfloat16), mask=n_mask)
 
 
@@ -273,7 +286,7 @@ def _gemv_nf4_grouped_splitk(
 
     offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
     n_mask = offs_n < N
-    offs_k = tl.arange(0, BLOCK_K)
+    offs_h = tl.arange(0, BLOCK_K // 2)   # BYTE offsets, not k offsets
     b_base = b_ptr + eid * stride_be + offs_n[:, None] * stride_bn
     a_base = a_ptr + g * K
 
@@ -281,19 +294,25 @@ def _gemv_nf4_grouped_splitk(
     k_hi = tl.minimum(k_lo + KBLOCKS_PER_SPLIT * BLOCK_K, K)
     acc = tl.zeros((BLOCK_N,), dtype=tl.float32)
     for k0 in range(k_lo, k_hi, BLOCK_K):
-        kk = k0 + offs_k
-        bytes_ = tl.load(b_base + (kk[None, :] // 2), mask=n_mask[:, None], other=0).to(
-            tl.int32
-        )
-        nib = tl.where((kk[None, :] % 2) == 0, (bytes_ >> 4) & 0xF, bytes_ & 0xF)
-        w = tl.load(lut_ptr + nib)
+        # Single-load nibble extraction, same as _gemv_nf4_grouped (#43). The
+        # 2-D-accumulator and BLOCK_K>64 parts are deliberately NOT ported: the
+        # split span (KBLOCKS_PER_SPLIT) is counted in 64-element absmax blocks,
+        # so BLOCK_K here is load-bearing arithmetic, not a tuning knob.
+        bytes_ = tl.load(
+            b_base + ((k0 // 2) + offs_h)[None, :], mask=n_mask[:, None], other=0
+        ).to(tl.int32)
+        w_hi = tl.load(lut_ptr + ((bytes_ >> 4) & 0xF))
+        w_lo = tl.load(lut_ptr + (bytes_ & 0xF))
+        a_hi = tl.load(a_base + k0 + 2 * offs_h).to(tl.float32)
+        a_lo = tl.load(a_base + k0 + 2 * offs_h + 1).to(tl.float32)
         am = tl.load(
             amax_ptr + eid * stride_ae + offs_n * stride_an + (k0 // BLOCK_K),
             mask=n_mask,
             other=0.0,
         )
-        a = tl.load(a_base + kk).to(tl.float32)
-        acc += tl.sum(w * a[None, :], axis=1) * am
+        acc += (
+            tl.sum(w_hi * a_hi[None, :], axis=1) + tl.sum(w_lo * a_lo[None, :], axis=1)
+        ) * am
 
     tl.store(ws_ptr + pid_k * (T * N) + g * N + offs_n, acc, mask=n_mask)
 
@@ -478,6 +497,17 @@ def gemm_4bit_grouped(
             sk = split_k
         if sk <= 1:
             grid = (T, triton.cdiv(N, bn))
+            # BLOCK_K must be a multiple of BLOCKSIZE that EXACTLY divides K --
+            # the kernel walks whole absmax blocks with no tail predicate, and
+            # real shapes are not all 256-friendly (Gemma-4's I=704 = 11*64 is
+            # divisible by neither 256 nor 128). Falling back to 64 costs the
+            # trip-count part of #43 but keeps the single-load part, which is
+            # where the speedup actually lives.
+            gemv_bk = BLOCKSIZE
+            for _cand in (256, 128):
+                if K % _cand == 0:
+                    gemv_bk = _cand
+                    break
             _gemv_nf4_grouped[grid](
                 a_cat,
                 B,
@@ -492,7 +522,7 @@ def gemm_4bit_grouped(
                 absmax.stride(0),
                 absmax.stride(1),
                 BLOCK_N=bn,
-                BLOCK_K=BLOCKSIZE,
+                BLOCK_K=gemv_bk,
                 num_warps=warps,
                 num_stages=3,
             )
