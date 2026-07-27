@@ -55,7 +55,7 @@ def position_balance(records):
                            "loads onto the ratio. Use an even `reps` with interleave()."}
 
 
-def evaluate(records: list, ceiling_gbps: float) -> dict:
+def evaluate(records: list, ceiling_gbps: float, ceiling_range=None) -> dict:
     """Reduce arm records to the prereg's verdicts. PURE — no torch, no model.
 
     Split out so the decision logic is unit-testable on a laptop. A verdict
@@ -125,99 +125,129 @@ def evaluate(records: list, ceiling_gbps: float) -> dict:
 
     # --- R4 + R5: the decomposition, and the decision it forces. ---------------
     r4_invalid = False
-    gbps = [x["routed_gbps"] for x in by_arm["C"] if x.get("routed_gbps")]
-    if gbps and ceiling_gbps:
-        achieved = statistics.median(gbps)
-        frac = achieved / ceiling_gbps
 
-        # ---------------------------------------------------------------------
-        # RESOLVED 2026-07-27 -- AND THE DIAGNOSIS JUST BELOW THIS IS WRONG.
-        #
-        # The comment below blames the CEILING probe ("taken while the loader
-        # pins ~123 GB"). A size-swept re-probe on the same pod after the run
-        # gave 12.65-18.46 GB/s, so the in-run 14.68 was about right: the ceiling
-        # was never the defect.
-        #
-        # The DIVISOR was. `routed_gbps` came from `offload_stats_report`, which
-        # divided link bytes by the summed per-stage COPY WINDOW rather than by
-        # wall time, and that window does not bound the transfer. The bytes were
-        # always correct -- an independent model gives 7.984 GB/token, matching
-        # the harness's own 7.98. Fixed in e4b `fix/routed-gbps-wall`: `gbps` is
-        # now bytes/wall, the old value survives as `gbps_copy_window`.
-        #
-        # Recomputed soundly (7.984 GB / 0.9061 s = 8.81 GB/s), R4 HOLDS under
-        # EVERY ceiling estimate available:
-        #     14.68 -> 0.60    18.46 -> 0.48    26.0 -> 0.34    12.65 -> 0.70
-        # all at or under the 0.70 bar. The ceiling argument only ever mattered
-        # BECAUSE the numerator was broken: with the broken one the verdict flips
-        # between INVALID (frac 1.56) and FAIL (0.88) depending on which probe you
-        # believe; with the sound one it does not matter at all.
-        #
-        # FOR ANYONE RE-RUNNING THIS: the same code against the same box now
-        # yields a DIFFERENT R4 verdict than it did on 2026-07-27, because `gbps`
-        # changed meaning underneath it. That is a fix, not a regression -- but it
-        # is invisible in a diff of this file, which is why it is written in it.
-        # See finding #52.
-        # ---------------------------------------------------------------------
-        # PLAUSIBILITY GATE. A routed policy cannot move bytes faster than the
-        # link's own pinned ceiling, so frac > 1 does not mean "R4 falsified very
-        # hard" -- it means an input is wrong and NEITHER verdict is available.
-        #
-        # This is not hypothetical. The 2026-07-27 235B run reported 22.83 GB/s
-        # against a probed ceiling of 14.68 (frac 1.555) and the un-gated code
-        # dutifully emitted R4=fail and R5="DO NOT build the coalescer" -- a
-        # confident registered negative from a broken instrument. A standalone
-        # probe on the same box measured 26.0 GB/s best-case; the in-run ceiling
-        # had been taken while the loader was still pinning ~123 GB of host RAM,
-        # and it read PAGEABLE faster than PINNED, which is itself impossible and
-        # was the tell.
-        #
-        # Deliberately returns None, not False: "we cannot tell" and "the
-        # prediction failed" are different states and collapsing them is how a
-        # measurement bug becomes a finding.
+    # ---------------------------------------------------------------------
+    # RESOLVED 2026-07-27 (a74691a): the original diagnosis that lived here
+    # blamed the CEILING probe; it was WRONG (kept in git history). A size-swept
+    # re-probe on the same pod gave 12.65-18.46 GB/s, so the in-run 14.68 was
+    # about right -- the ceiling was never the defect.
+    #
+    # The DIVISOR was. `routed_gbps` came from `offload_stats_report`, which
+    # divided link bytes by the summed per-stage COPY WINDOW rather than by
+    # wall time, and that window does not bound a non_blocking transfer. The
+    # bytes were always correct -- an independent model gives 7.984 GB/token,
+    # matching the harness's own 7.98. Fixed in e4b `fix/routed-gbps-wall`
+    # (aa3e948): `gbps` is now bytes/wall; the old value survives as
+    # `gbps_copy_window`.
+    #
+    # Recomputed soundly (7.984 GB / 0.9061 s = 8.81 GB/s), R4 HOLDS under
+    # EVERY ceiling estimate available:
+    #     14.68 -> 0.60    18.46 -> 0.48    26.0 -> 0.34    12.65 -> 0.70
+    # The ceiling argument only ever mattered BECAUSE the numerator was broken:
+    # with the broken one the verdict flips between INVALID (1.56) and FAIL
+    # (0.88) depending on which probe you believe; with the sound one it does
+    # not matter at all. See finding #52.
+    #
+    # CONSEQUENCE FOR THIS FUNCTION (PREREG-2 amendment-1): the registered R4
+    # numerator is now computed HERE, from receipt fields, as
+    #     by_policy.routed.bytes / decode_wall_s
+    # -- both accumulated over the identical decode region (stats reset after
+    # prefill; wall summed over the same forwards). This cannot inherit any
+    # stats-layer divisor bug, whichever e4b build produced the receipt. The
+    # stats-reported gbps is carried as a DIAGNOSTIC only and never adjudicates.
+    # ---------------------------------------------------------------------
+    def _sound_gbps(rec):
+        bp = (rec.get("by_policy") or {}).get("routed") or {}
+        b, w = bp.get("bytes"), rec.get("decode_wall_s")
+        if not b or not w:
+            return None
+        return b / w / 1e9
+
+    sound = [g for g in (_sound_gbps(x) for x in by_arm["C"]) if g]
+    stats_reported = [x["routed_gbps"] for x in by_arm["C"] if x.get("routed_gbps")]
+
+    if sound and ceiling_gbps:
+        achieved = statistics.median(sound)
+        frac = achieved / ceiling_gbps
+        diag = statistics.median(stats_reported) if stats_reported else None
+
+        # PLAUSIBILITY GATE. frac > 1 means an INPUT is wrong -- and the broken
+        # input can be the NUMERATOR, not just the ceiling (that is exactly what
+        # happened on 2026-07-27: three ceiling re-probes before one divisor
+        # audit). Returns None, never False: "cannot tell" and "the prediction
+        # failed" are different states, and collapsing them is how a measurement
+        # bug becomes a finding. Does NOT early-return (97ee239): this run once
+        # had two independent defects and the first check masked the second.
         if frac > 1.0:
             out["registered"]["R4_decomposition"] = {
-                "pass": None, "routed_gbps": achieved, "ceiling_gbps": ceiling_gbps,
-                "fraction_of_ceiling": frac, "bar": 0.70,
-                "detail": (f"MEASUREMENT INVALID — achieved {achieved:.2f} GB/s exceeds the probed "
-                           f"ceiling {ceiling_gbps:.2f} GB/s (frac {frac:.3f}). A transfer cannot beat "
-                           "its own link. Re-probe the ceiling on a QUIET host (a probe taken while "
-                           "the loader pins host RAM reads low, and reports pageable > pinned) and "
-                           "re-run. Do not adjudicate R4 or R5 from this."),
+                "pass": None, "routed_gbps_sound": achieved, "ceiling_gbps": ceiling_gbps,
+                "fraction_of_ceiling": frac, "bar": 0.70, "stats_reported_gbps": diag,
+                "detail": (f"MEASUREMENT INVALID — sound numerator {achieved:.2f} GB/s exceeds the "
+                           f"ceiling {ceiling_gbps:.2f} (frac {frac:.3f}). A transfer cannot beat its "
+                           "own link; audit BOTH the numerator fields and the probe before re-running."),
             }
             out["registered"]["R5_decision"] = {
                 "build_expert_major_coalescer": None,
-                "detail": "R4 unadjudicable (see plausibility gate) — no decision is registered.",
+                "detail": "R4 unadjudicable (plausibility gate) — no decision is registered.",
             }
-            # Deliberately does NOT return early. The first version did, which hid
-            # every later diagnostic behind whichever defect happened to be checked
-            # first -- and the 2026-07-27 run has TWO independent ones (contended
-            # ceiling AND prefill contamination). A run broken in two places should
-            # say so in both places; you fix what you can see.
             r4_invalid = True
         else:
-            r4_invalid = False
-
-        holds = (not r4_invalid) and frac <= 0.70
-        if r4_invalid:
-            pass                      # verdicts already written by the plausibility gate
-        else:
-            out["registered"]["R4_decomposition"] = {
-                "routed_gbps": achieved, "ceiling_gbps": ceiling_gbps,
-                "fraction_of_ceiling": frac, "bar": 0.70, "pass": holds,
-            }
-            out["registered"]["R5_decision"] = {
-            "build_expert_major_coalescer": holds,
-            "detail": (
-                "R4 holds: residual is transfer inefficiency. BUILD the coalescer; its ceiling "
-                f"is the {(1 - frac) * 100:.1f}% of link left on the floor — claims beyond that "
-                "gap are unsupported."
-                if holds else
-                "R4 FALSIFIED: transfers are already near-efficient, so the copy count is not "
-                "costing what #22's phrasing implied. DO NOT build the coalescer. Record the "
-                "negative and move the lane to host-side stall."
-            ),
+            # ROBUSTNESS (PREREG-2 amendment-1): the verdict must be invariant
+            # across the measured spread of the ceiling readings, or there is no
+            # verdict. This clause exists so the denominator can never again be
+            # relitigated after the fact -- if the readings straddle the bar,
+            # the honest answer is "this box cannot resolve R4", not whichever
+            # side the chosen statistic happens to land on.
+            robust = None
+            if ceiling_range:
+                lo, hi = min(ceiling_range), max(ceiling_range)
+                if lo and lo > 0:
+                    robust = (achieved / lo <= 0.70) == (achieved / hi <= 0.70)
+            if robust is False:
+                out["registered"]["R4_decomposition"] = {
+                    "pass": None, "routed_gbps_sound": achieved, "ceiling_gbps": ceiling_gbps,
+                    "ceiling_range": list(ceiling_range), "bar": 0.70, "stats_reported_gbps": diag,
+                    "detail": (f"NOT ROBUST — the verdict flips across the measured ceiling spread "
+                               f"[{min(ceiling_range):.2f}, {max(ceiling_range):.2f}] at sound "
+                               f"{achieved:.2f} GB/s. This box cannot resolve R4; no verdict."),
+                }
+                out["registered"]["R5_decision"] = {
+                    "build_expert_major_coalescer": None,
+                    "detail": "R4 not robust across the ceiling spread — no decision is registered.",
+                }
+                r4_invalid = True
+            else:
+                holds = frac <= 0.70
+                out["registered"]["R4_decomposition"] = {
+                    "routed_gbps_sound": achieved, "ceiling_gbps": ceiling_gbps,
+                    "fraction_of_ceiling": frac, "bar": 0.70, "pass": holds,
+                    "stats_reported_gbps": diag, "robust_across_ceiling_range": robust,
+                    "numerator": "by_policy.routed.bytes / decode_wall_s (harness fields; build-independent)",
+                }
+                out["registered"]["R5_decision"] = {
+                    "build_expert_major_coalescer": holds,
+                    "detail": (
+                        "R4 holds: the routed step leaves link on the floor. BUILD the coalescer; "
+                        f"its ceiling is the {(1 - frac) * 100:.1f}% of link unclaimed — claims "
+                        "beyond that gap are unsupported."
+                        if holds else
+                        "R4 FALSIFIED: transfers are already near-efficient. DO NOT build the "
+                        "coalescer. Record the negative and move the lane to host-side stall."
+                    ),
+                }
+    elif stats_reported and ceiling_gbps:
+        # A receipt from before the sound fields existed (campaign 1's is exactly
+        # this: routed_gbps present, by_policy empty). The stats number's divisor
+        # depends on which e4b build produced it (copy-window before aa3e948,
+        # wall after), so it is NOT adjudicable -- refusing here is the whole
+        # point of moving the numerator into this module.
+        out["registered"]["R4_decomposition"] = {
+            "pass": None, "stats_reported_gbps": statistics.median(stats_reported),
+            "detail": "receipt lacks sound-numerator fields (by_policy.routed.bytes + decode_wall_s) — "
+                      "stats-reported gbps is build-dependent and does not adjudicate. Re-run with "
+                      "harness >= the amendment-1 commit.",
         }
+        out["registered"]["R5_decision"] = {"build_expert_major_coalescer": None}
     else:
         out["registered"]["R4_decomposition"] = {"pass": None, "detail": "no routed stats — was E4B_OFFLOAD_STATS=1 set?"}
         out["registered"]["R5_decision"] = {"build_expert_major_coalescer": None}
