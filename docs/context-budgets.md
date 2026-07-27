@@ -2835,3 +2835,66 @@ with a landing bar and a two-card rule, like the four before it.
 Profiled free on the QNAP A2000 (`gnf4-ncu:1`, `--cap-add=SYS_ADMIN`); counter
 ratios, not wall times, so the shared box is a valid testbed for it.
 
+
+---
+
+## Finding #54 — the coalescer is correct, and its premise is false: 2.7 MB is already past the knee
+
+`PREREG-expert-major-coalescer` predicted **1.06–1.18×** from cutting the routed
+stage's copy count 32 → 16 per layer. The whole prediction rested on one clause:
+*"~32 copies per layer of ~2.7 MB each — below where an H2D reaches asymptotic
+bandwidth."* **That clause is wrong**, and amendment 1 (stamped pre-data,
+`0afceab4…`) registered the check that shows it.
+
+### The copy-granularity sweep — two cards, same answer
+
+Same total bytes, pinned → device, moved as N copies of (total/N):
+
+| card | 2.7 MB (today) | 5.4 MB (coalesced) | best at any size | **gain** | self-pair |
+|---|---|---|---|---|---|
+| RTX A5000 | 22.82 GB/s | 23.06 GB/s | 24.57 GB/s | **1.010×** | 1.002× |
+| RTX A6000 | 19.07 GB/s | 19.27 GB/s | 19.78 GB/s | **1.010×** | 1.001× |
+
+Routed staging already runs at **92.9 %** / **96.4 %** of the best bandwidth
+either card reaches at *any* granularity. The knee sits between 0.25 and 2 MB —
+below 2 MB there is a real penalty (0.25 MB is 68 % of peak on the A5000) — but
+2.7 MB is past it and 5.4 MB is further past it. Registered rule `gain < 1.02`
+→ **DEAD**; the 235B A100 fixture was not rented.
+
+### What #52's 0.59× actually measured
+
+**A duty cycle, not a per-copy inefficiency.** `routed_gbps` divides bytes by
+**wall step time**, so 8.66 / 14.68 counts every microsecond the link sits idle
+during attention, the norms, the router and the expert GEMM (#40: experts are
+71.3 % of a step). The link runs at ~93–96 % of peak *while it runs*. The
+missing 41 % was never copy overhead waiting to be recovered — and no change to
+copy granularity can reach it.
+
+This is the third time in this arc that a gap turned out to be misattributed:
+#50/#51 (the gnf4 "headroom" was the access pattern, not overhead), #52 (the
+metric itself divided by the wrong denominator), and now #54.
+
+### The correctness half passed, and is kept
+
+Under `E4B_OFFLOAD_ARENA=expert`, staged rows are **bit-identical** to the
+name-major control (`max|Δ| = 0.000e+00`) and the instrumented copy count falls
+**12 → 6** at the test fixture, **32 → 16** at 235B shapes — inside the
+registered 8–16 band. e4b branch `feat/expert-major-coalescer` (`6d91e1e`),
+default off, **not merged**: the prereg's own rule already said a sub-6 % win
+does not pay for touching the pinned-memory layout every offload path depends
+on, and 1.010× is not close to 6 %.
+
+The copy-count assertion was itself nearly worthless. Its first version read
+`expert < name or name == 0`, the control was uninstrumented and reported **0**,
+and the `or` clause passed it vacuously — the precise no-op-fast-path failure the
+test was written to catch (`enable_fast` was dead on every offloaded model until
+#22). **A gate whose control is uninstrumented is not a gate.**
+
+### Cost of the check vs the run it replaced
+
+**$0.13 and ~25 minutes** on two cheap rented cards, against a ~62-minute A100
+fixture per card. The corollary from the gnf4 arc — *before optimising toward a
+bound, check the bound is reachable* — now has a second instance and a price tag
+on both sides.
+
+Timing rented (A5000, A6000); correctness on the QNAP A2000, per testbed policy.
