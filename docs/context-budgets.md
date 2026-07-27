@@ -2652,3 +2652,60 @@ Receipts: `bench/context/receipts-roofline-20260727/`, harnesses
 > wobble. The conclusions here rest on 3.25–3.49× and ~1.0×, both far outside
 > that, but a future run wanting tighter numbers should tighten the pairing first.
 
+## Finding #51 — the repack is FALSIFIED, and #50's attribution was too generous
+
+`PREREG-coalesced-repack.md` predicted the transposed store would win
+**1.8–3.0× isolated / 1.6–2.5× census geomean**. Measured, same kernel, arms
+differing only in `B.stride()` (logical bytes asserted identical):
+
+| | A6000 sm_86 | A100 sm_80 |
+|---|---:|---:|
+| geomean | **0.957×** | **0.843×** |
+| worst shape | 0.901× | 0.794× |
+| best shape | 1.019× | 0.911× |
+| self-pair | 1.004× | 1.007× |
+
+**It is slower on every shape but two, on both cards.** Agreement stayed inside
+the bf16 floor everywhere, so the layout is *correct* — it is simply not faster.
+Prediction missed by ~2×, in the wrong direction.
+
+The pre-committed rule fires: *"<1.2× on either card, or any shape regressing →
+the coalescing model is wrong … the structural line closes for good."*
+**It closes.**
+
+### Why — and it corrects #50
+
+#50 compared the GEMV's access against a **flat linear sweep** of the same bytes
+and attributed the whole **3.25–3.49×** to layout. That was too generous. A tiled
+GEMV reads a `[BLOCK_N, 32]` byte tile; **no layout makes that a linear sweep**:
+
+- contiguous `[E, N, K/2]` → 64 segments of 32 B (rows `K/2` apart)
+- transposed `[E, K/2, N]` → 32 segments of 64 B (columns `N` apart)
+
+Transposing trades segment count for segment length and buys nothing measurable;
+the extra address arithmetic costs more than the trade returns. **A large part of
+#50's 3.25–3.49× is the cost of tiled access at all, not of this layout** — and
+that part is not addressable by repacking.
+
+> **Corrected reading of #50:** its measurement stands (strided 150.0 vs
+> coalesced 487.7 GB/s), but "the remaining gap is the access pattern, reachable
+> by a repack" was over-claimed. The reachable part of that gap is now measured
+> at **≤ 1.02×**. #50's own conclusion — that the decode GEMV sits within
+> 1.01–1.06× of a stripped kernel — was the durable result; the repack corollary
+> was not.
+
+### The branch was deleted, deliberately
+
+The work made all three kernels stride-generic (an explicit `stride_bk`, nothing
+assumed contiguous) — harmless, arguably more robust, and **unused**. It was
+abandoned with the hypothesis rather than kept as tidy-looking generality: the
+project already shipped a 2.2× regression by letting components ride along on a
+result they did not earn (#43). Ship the confirmed mechanism, alone, or ship
+nothing.
+
+**Cost of closing the last performance line: $0.30 and one afternoon**, against a
+layout migration that #50 had (wrongly) framed as the remaining opportunity.
+
+Receipts: `bench/context/receipts-layout-20260727/`, harness
+`bench/context/layout_ab.py`.
+
