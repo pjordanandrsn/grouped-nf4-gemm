@@ -2061,11 +2061,11 @@ Findings #40 and #41: `bench/context/PREREG-decode-bound.md` and
 Finding #42: `bench/context/PREREG-bf16-ladder.md`; receipts
 `bench/context/receipts-bf16ladder-20260727.json`.
 
-## Finding #43 — the GEMV was loading every packed byte twice
+## Finding #43 — the GEMV was loading every packed byte twice, and I nearly shipped the wrong fix
 
 #41 ended with "I do not understand this kernel" after three registered
 falsifications. The fourth hypothesis came from reading the source rather than
-guessing at a resource, and it was right.
+guessing at a resource, and it was right:
 
 ```python
 bytes_ = tl.load(b_base + (kk[None, :] // 2), ...)   # kk spans BLOCK_K consecutive k
@@ -2074,78 +2074,103 @@ bytes_ = tl.load(b_base + (kk[None, :] // 2), ...)   # kk spans BLOCK_K consecut
 `kk` runs over **consecutive** k, so lanes 0,1 address byte 0 and lanes 2,3
 address byte 1: a 32-lane warp covers **16 distinct bytes**, halving sector
 efficiency and issuing **2× the loads**. Loading `BLOCK_K/2` bytes once and
-extracting both nibbles is the entire fix.
+extracting both nibbles is the whole fix.
 
-Three arms, A2000, isolated shape (E=8, N=3072, K=4096), median of 7-9,
-interleaved in one process, each agreeing with the shipped kernel far inside the
-bf16 floor:
+### The trap: a falsified component rode along on a confirmed one
 
-| arm | predicted | measured | verdict |
-|---|---|---:|---|
-| H4 — load each byte once | 1.15–1.6× | **2.375–2.448×** | above band |
-| H5 — one reduction, not per-iteration | 1.25–1.8× | **0.970×** | **falsified** |
-| H6 — `BLOCK_K` unpinned from blocksize | 1.1–1.5× | **0.987×** | **falsified** |
-| composed | ≥ 2.0× | **2.80–2.84×** | **confirmed** |
+Three arms were registered. On the A2000 the composition looked best, so that is
+what I first landed. It is a **severe regression** on the card the flagship
+actually runs on:
 
-**H4 is the whole mechanism.** H5 and H6 are worth nothing alone and about
-1.2× on top of H4. Retuning the now-open `BLOCK_K` knob reached 3.126×
-(BLOCK_N=128, BLOCK_K=512, warps=4), but the top eight configs span 2.85–3.13×
-— inside the measured noise, so **config choice is second-order** and the
-shipped default was left on the plan's existing `(bn, warps)`.
+| arm | A2000 sm_86 / triton 3.4 | A100 sm_80 / triton 3.0 |
+|---|---:|---:|
+| **H4 — load each byte once** | 2.375× | **4.080×** |
+| H5 — one reduction, not per-iteration | 0.970× | 0.806× |
+| H6 — `BLOCK_K` unpinned | 0.987× | 0.809× |
+| **composed (first landed)** | 2.838× | **0.361×** |
 
-**Landed through the real `gemm_4bit_grouped` API**, all eight census decode
-shapes, original vs modified on the same card in the same container:
+**H5 and H6 were falsified by my own preregistered measurement** (0.970×,
+0.987×) and I shipped them anyway because their *composition* with a confirmed
+mechanism measured well **on a single card**. The cause is almost certainly
+register spilling: the `[BLOCK_N, 32]` accumulator stays live across the
+unrolled `NSUB` inner loop, which triton 3.4 schedules on sm_86 and triton 3.0
+does not on sm_80.
 
-| shape | orig ms | new ms | speedup |
-|---|---:|---:|---:|
-| olmoe_gu | 0.8049 | 0.3730 | 2.158× |
-| olmoe_dn | 0.3031 | 0.1843 | 1.645× |
-| qwen_gu | 0.6871 | 0.3983 | 1.725× |
-| qwen_dn | 1.2257 | 0.3195 | **3.836×** |
-| gemma_gu | 0.5192 | 0.2836 | 1.831× |
-| gemma_dn | 0.4874 | 0.2086 | 2.337× |
-| gptoss_gu | 1.0107 | 0.5763 | 1.754× |
-| gptoss_dn | 0.5058 | 0.3400 | 1.488× |
+> **A falsified component does not earn a ride on a confirmed one.** Ship the
+> mechanism that was confirmed, alone, and re-measure a composition on every
+> target it claims.
 
-**Geometric mean 2.006×, range 1.49–3.84×.** `kernel/test_nf4_grouped.py`
-passes **44/44**, against a **44/44 control on the unmodified kernel** run in
-the same image — including the split-K exactness tests and Gemma's K=704, which
-divides neither 256 nor 128 and therefore exercises the `BLOCK_K` fallback.
+**Nothing in the test suite could have caught this.** All 44 tests passed on the
+composed kernel, because it was *correct* — just slow. The `err_vs_shipped` gate
+proves equivalence and says nothing about time. Only a second card did.
 
-### What this does and does not close
+### What H4 alone delivers
 
-#39 measured **4.9×** of headroom against the GEMM's own decode floor. This
-recovers **2.0×** of it, so roughly **2.4× remains** — the gap is **halved and
-explained**, not closed. The step-level consequence is **NOT measured**: #40's
-2.19× is arithmetic conditioned on the GEMM reaching its decode floor, and the
-prereg's confirmation branch requires a measured 235B number, which needs a
-2×A100 run this A2000 arm cannot provide.
+Through the real `gemm_4bit_grouped` API, all eight census decode shapes,
+original vs H4-only on the same card in the same container:
 
-### Two things I got wrong
+| | A100-SXM4-80GB (dedicated) | RTX A2000 12GB (shared) |
+|---|---:|---:|
+| geometric mean | **2.272×** | 2.257× |
+| worst shape | 1.443× (gptoss_dn) | 1.254× (olmoe_dn) |
+| best shape | 3.470× (olmoe_gu) | 6.154× (qwen_gu) |
 
-**The registered diagnostic is falsified.** I predicted the shipped kernel would
-be **super-linear** in loop trip count. Holding bytes constant and sweeping K it
-is strongly **sub-linear and saturating** (1.808 → 2.260 ms across an 8× trip
-increase). That is exactly why H5 and H6 — both trip-count mechanisms — did
-nothing, and it is consistent evidence for H4, a *per-load* defect. The sweep
-also carries a design confound I should have caught before registering it:
-holding bytes constant forces N to vary inversely with K, so grid size moves 8×
-alongside trip count.
+Two architectures, two Triton majors, **never a regression on any shape**.
+`kernel/test_nf4_grouped.py` passes **44/44** against a **44/44 control** on the
+unmodified kernel in the same image — including split-K exactness and Gemma's
+K=704.
 
-**The first harness failed every arm, including a verbatim copy of the shipped
-kernel.** The metric was per-element relative error, and the output is a sum of
-K random-signed terms, so entries land near zero and the ratio explodes on them.
-That a *known-good* kernel failed is what surfaced it. The gate is now agreement
-with the shipped kernel at the bf16 floor.
+> The A2000 is a **shared production GPU** and its per-shape numbers are noisy:
+> the *same* original kernel measured 0.687 ms and 1.519 ms for `qwen_gu` in two
+> runs, a 2.2× spread. Its geomean is directionally consistent with the A100 but
+> **the A100 figures are the trustworthy ones.**
 
-### Still open, and deliberately not attempted
+### Step level, measured rather than extrapolated
 
-`_gemm_nf4_grouped` (the prefill / M-tile path, `nf4_grouped.py:145`) has the
-**same duplicated-byte load**. The v6 "register-LUT" variant fixed the codebook
-gather there, not the byte addressing. It is **not** fixed here: that path feeds
-`tl.dot`, so splitting even/odd k restructures a tensor-core contraction and its
-A-operand layout — a different change with different risks, and prefill is not
-what #40's 2.19× was about. `_gemv_nf4_grouped_splitk` got H4 only, because its
-span arithmetic counts 64-element absmax blocks and `BLOCK_K` there is
-load-bearing rather than a tuning knob.
+94 layers, E=128, top_k=8, hidden 4096, inter 1536 — the flagship geometry with
+synthetic NF4 weights — on 2×A100-SXM, `--no-stream` so compute is exposed and
+no link is in frame:
 
+| kernel | c_box | vs original |
+|---|---:|---:|
+| original | 191.7 ms/token | 1.00× |
+| composed (reverted) | 424.8 ms/token | **0.45×** |
+| **H4-only** | **102.2 ms/token** | **1.876×** |
+
+Registered prediction for this cell was **1.4–2.0×**; measured **1.876×**.
+**Confirmed.**
+
+The streamed cells are **not quotable**: the two runs saw different link speeds
+(24.9 vs 22.5 GB/s). The confound favoured the fix and it still lost, so the
+direction is sound, but no ratio is claimed from them.
+
+### What is still NOT closed
+
+- #39 measured **4.9×** of headroom to the GEMM's decode floor; this recovers
+  ~2.3×, so roughly **2.1× remains**.
+- **#40's 2.19× is still unmeasured on its own mechanism.** It was derived by
+  decomposing the *e4b* step, where experts are 71.3% of wall. Everything above
+  is `bench/phase3`, a different mechanism (#29) that double-buffers. The
+  prereg recorded this exclusion before the run, and it stands.
+- `_gemm_nf4_grouped` (prefill, `nf4_grouped.py:145`) has the **same duplicated
+  byte load** and is deliberately untouched: it feeds `tl.dot`, so splitting
+  even/odd k restructures a tensor-core contraction and its A-operand layout.
+- `_gemv_nf4_grouped_splitk` got H4 only, for the same reason it is the only
+  part shipped anywhere: its span arithmetic counts 64-element absmax blocks, so
+  `BLOCK_K` there is load-bearing rather than a knob.
+
+### Two harness errors worth keeping
+
+**The first metric failed every arm, including a verbatim copy of the shipped
+kernel.** It used per-element relative error, and the output sums K random-signed
+terms, so entries land near zero and the ratio explodes. A *known-good* kernel
+failing is what surfaced it.
+
+**My own registered diagnostic was falsified.** I predicted the shipped kernel
+would be **super-linear** in loop trip count; holding bytes constant it is
+**sub-linear and saturating** (1.808 → 2.260 ms across an 8× trip increase) —
+which is exactly why the two trip-count hypotheses did nothing. The sweep also
+carries a confound: holding bytes constant forces N to vary inversely with K, so
+grid size moves 8× alongside trip count.
+
+Receipts: `bench/context/receipts-gemv-steplevel-20260727/`.

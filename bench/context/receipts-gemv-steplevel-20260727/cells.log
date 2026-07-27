@@ -1,0 +1,10 @@
+=== streamed_fixed 06:02:04 ===
+rc=0 MODE=fused: 2.32 tok/s (waterfall 3.12, 74%), VRAM peak 13.6 GB -> /workspace/streamed_fixed.json
+=== streamed_orig 06:29:12 ===
+rc=0 MODE=fused: 3.13 tok/s (waterfall 2.82, 111%), VRAM peak 13.6 GB -> /workspace/streamed_orig.json
+=== nostream_orig 06:55:01 ===
+rc=0 MODE=fused C-BOX-PROBE (no-stream): c_box = 191.7 ms/token (5.22 tok/s floor), VRAM peak 13.6 GB -> /workspace/nostream_orig.json
+=== nostream_fixed 07:19:37 ===
+rc=0 MODE=fused C-BOX-PROBE (no-stream): c_box = 424.8 ms/token (2.35 tok/s floor), VRAM peak 13.6 GB -> /workspace/nostream_fixed.json
+ALLDONE
+H4DONE
