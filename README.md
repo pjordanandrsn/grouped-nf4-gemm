@@ -388,9 +388,11 @@ at 4K, rising mildly to 1.156× at 32K — measured against transformers' own bf
 `DynamicCache` on an A100. Greedy output diverges from bf16 at the first
 generated token; that is what "lossy" means. The dials are off by default.
 
-Every comparative "first/only/faster" claim above is backed by a verified,
-dated entry in [`docs/COMPETITIVE.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.2/docs/COMPETITIVE.md)
-(the credited prior-art table + the same-box ik_llama A/B) — no entry, no claim.
+Every comparative "first/only/faster" claim above is backed by a verified, dated
+comparison against the named alternative's own published numbers or a same-box
+A/B (see [`docs/RESULTS-ikllama-ab.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/RESULTS-ikllama-ab.md)
+for the ik_llama run) — no receipt, no claim. Comparative claims are re-checked
+against upstream docs before each release.
 
 ## Reproduce
 
