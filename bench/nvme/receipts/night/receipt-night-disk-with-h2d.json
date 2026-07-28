@@ -1,0 +1,136 @@
+{
+ "probe": {
+  "kernel": "6.6.32-qnap",
+  "machine": "x86_64",
+  "python": "3.13.9",
+  "device": {
+   "target": "/dev/nvme1n1",
+   "kind": "block",
+   "device": "nvme1n1",
+   "logical_block_size": 512,
+   "physical_block_size": 512,
+   "rotational": "0",
+   "scheduler": "[none] mq-deadline kyber",
+   "model": "",
+   "pcie_speed": null,
+   "pcie_width": null,
+   "pcie_max_speed": null,
+   "pcie_max_width": null,
+   "size_bytes": 2000398934016
+  },
+  "io_uring": {
+   "available": false,
+   "errno": 38,
+   "reason": "ENOSYS"
+  },
+  "fio": {
+   "bin": "/sbin/fio",
+   "version": "fio-2.2.10"
+  },
+  "utc": "2026-07-28T04:25:06Z",
+  "host_redacted": "owned NAS (hostname withheld for publication)"
+ },
+ "params": {
+  "sizes_mib": [
+   13,
+   25
+  ],
+  "qds": [
+   1,
+   4
+  ],
+  "seconds": 10.0,
+  "span_bytes": 2000398934016,
+  "align": 4096,
+  "engines": [
+   "pread"
+  ],
+  "access": "random-aligned"
+ },
+ "cells": [
+  {
+   "engine": "pread",
+   "bs_mib": 13,
+   "qd": 1,
+   "requests": 2056,
+   "bytes": 28026339328,
+   "bytes_all": 30834425856,
+   "wall_s": 10.001,
+   "gbps": 2.802,
+   "lat_ms": {
+    "p50": 4.6,
+    "p90": 6.03,
+    "p99": 8.55,
+    "max": 15.44
+   },
+   "mode": "O_DIRECT",
+   "errors": [],
+   "total_wall_s": 11.003,
+   "other_read_mbps": 20.3,
+   "other_write_mbps": 32.5
+  },
+  {
+   "engine": "pread",
+   "bs_mib": 13,
+   "qd": 4,
+   "requests": 2381,
+   "bytes": 32456572928,
+   "bytes_all": 35755393024,
+   "wall_s": 10.01,
+   "gbps": 3.243,
+   "lat_ms": {
+    "p50": 16.29,
+    "p90": 21.24,
+    "p99": 28.87,
+    "max": 39.55
+   },
+   "mode": "O_DIRECT",
+   "errors": [],
+   "total_wall_s": 11.011,
+   "other_read_mbps": 9.1,
+   "other_write_mbps": 33.1
+  },
+  {
+   "engine": "pread",
+   "bs_mib": 25,
+   "qd": 1,
+   "requests": 1159,
+   "bytes": 30382489600,
+   "bytes_all": 33502003200,
+   "wall_s": 10.007,
+   "gbps": 3.036,
+   "lat_ms": {
+    "p50": 8.27,
+    "p90": 9.82,
+    "p99": 15.56,
+    "max": 19.0
+   },
+   "mode": "O_DIRECT",
+   "errors": [],
+   "total_wall_s": 11.01,
+   "other_read_mbps": 14.7,
+   "other_write_mbps": 29.7
+  },
+  {
+   "engine": "pread",
+   "bs_mib": 25,
+   "qd": 4,
+   "requests": 1247,
+   "bytes": 32689356800,
+   "bytes_all": 36071014400,
+   "wall_s": 10.017,
+   "gbps": 3.263,
+   "lat_ms": {
+    "p50": 30.88,
+    "p90": 41.1,
+    "p99": 55.52,
+    "max": 67.25
+   },
+   "mode": "O_DIRECT",
+   "errors": [],
+   "total_wall_s": 11.021,
+   "other_read_mbps": 7.6,
+   "other_write_mbps": 35.7
+  }
+ ]
+}

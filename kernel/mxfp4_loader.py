@@ -23,7 +23,10 @@ import json
 import os
 import struct
 
-import torch
+# torch is imported lazily inside the functions that touch tensors, so the
+# file-side primitives (header parse, byte-range hashing) stay importable in
+# torch-free environments — the nvme_arena bake runs on boxes with no GPU
+# stack at all.
 
 # expert-tensor suffixes on a gpt-oss MoE layer (verified live, Phase 0)
 GATE_UP_BLOCKS = "mlp.experts.gate_up_proj_blocks"
@@ -70,10 +73,11 @@ def file_tensor_sha256(path: str, name: str, chunk: int = 1 << 22) -> str:
     return h.hexdigest()
 
 
-def tensor_sha256(t: torch.Tensor) -> str:
+def tensor_sha256(t) -> str:
     """sha256 of a tensor's raw bytes AS LOADED (contiguous, native dtype).
     For a uint8 tensor this is the arena bytes; a contiguous reshape does not
     change these bytes, which the provenance test asserts."""
+    import torch
     return hashlib.sha256(t.detach().contiguous().view(torch.uint8).numpy().tobytes()).hexdigest()
 
 
@@ -81,6 +85,7 @@ def to_kernel_shapes(blocks: torch.Tensor, scales: torch.Tensor):
     """Native `blocks [E, N, n_blk, 16]` + `scales [E, N, n_blk]` (uint8) ->
     the kernel's `blocks [E, N, K//2]` (contiguous VIEW) + `scales [E, N, K//32]`
     (unchanged). K = n_blk*32; K//2 = n_blk*16."""
+    import torch
     assert blocks.dtype == torch.uint8 and scales.dtype == torch.uint8
     assert blocks.shape[-1] == 16 and blocks.shape[:-1] == scales.shape, \
         (blocks.shape, scales.shape)
