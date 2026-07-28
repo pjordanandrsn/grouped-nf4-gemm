@@ -8,8 +8,8 @@ segment hashes matched — `D1 = 1.000000` against a registered bar of
 
 | | A | B |
 |---|---|---|
-| box | RunPod L40S (Ada, **sm_89**) | QNAP `.68` A2000 (Ampere, **sm_86**) |
-| host | rented, 1.4 TB RAM | owned NAS, 128 GB RAM, live services |
+| box | rented L40S (Ada, **sm_89**) | owned A2000 (Ampere, **sm_86**) |
+| host | rented, 1.4 TB RAM | owned NAS-class appliance, 128 GB RAM, live services |
 | source | its own 438 GB download | its own **independent** 438 GB download |
 | bake | `nf4-quantize`, bnb 0.50.0 | `nf4-quantize`, bnb 0.50.0 |
 | wall | 552 s (94 layers) | 792 s (40 layers) |

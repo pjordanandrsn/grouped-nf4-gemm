@@ -48,6 +48,13 @@ jobs:
       - name: README CPU quickstart (executed) + CPU refusal guard
         run: cd kernel && python -m pytest test_readme_cpu_block.py test_cpu_refusal.py -q
 
+      # NVMe arena format + both bake modes. Pure CPU, no device, no GPU:
+      # tmpfile arenas, injected quantizer, hash comparisons. These shipped
+      # with the arena format but nothing in CI ran them — a green check that
+      # was green about other code.
+      - name: NVMe arena + bake contracts
+        run: cd kernel && python -m pytest test_nvme_arena.py test_nvme_bake_nf4.py test_nvme_bake_experts.py -q
+
   wheel-smoke:
     # Built-artifact gate: the README's promised import surface must equal the
     # wheel's importable surface (scripts/wheel_smoke.py is the hardcoded
