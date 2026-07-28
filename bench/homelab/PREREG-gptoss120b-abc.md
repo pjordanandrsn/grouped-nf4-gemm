@@ -8,7 +8,7 @@ labeled as such. This is a single-box exploratory benchmark — EXPLORATORY
 tier, r=1 per bench cell, one prompt for the A-arm; it is not a confirmatory
 and does not enter any law.
 
-**Box.** QNAP TVS-h1688X, Xeon W-1250 (6C/12T), 128 GB DDR4, NVIDIA RTX A2000
+**Box.** A NAS-class host: Xeon W-1250 (6C/12T), 128 GB DDR4, NVIDIA RTX A2000
 12 GB (sm_86, ~8.9 GB free beside co-tenant services). Model:
 `openai/gpt-oss-120b` — MXFP4 GGUF for B/C, requantized to bnb-NF4 for A.
 Everything thread-capped `-t 6` to protect HA/Plex/arr.
@@ -157,9 +157,9 @@ pre-data, as the energy rationale for the follow-on gated in the body.
 ## Correction 1 (2026-07-18) — UPS provenance (forward-only; stamped text above untouched)
 
 Amendment 1 states "no UPS/smart-plug wall meter is available (checked NUT +
-HA)." That is **imprecise and is corrected here**: a **PhxTec-A1000** UPS
+HA)." That is **imprecise and is corrected here**: a line-interactive UPS
 (~1000 VA) *is* connected and configured in QNAP (`/etc/config/ups/ups.conf`
-section `[qnapups]`, `UPS Type = PhxTec-A1000`). What Amendment 1 got right is
+as configured on the host). What Amendment 1 got right is
 that its telemetry is **not reachable from the shell**: the NUT stack is not
 live (no `usbhid-ups` driver process, empty `/var/state/ups/`, `upsd` not
 listening on 3493), QNAP reads load% only through its proprietary web daemon,

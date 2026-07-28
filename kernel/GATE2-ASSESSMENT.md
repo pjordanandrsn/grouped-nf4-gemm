@@ -47,7 +47,7 @@ Receipts + full honest accounting: `RESULTS-phase2-gate2.md`.
   presentation/timing call, not a correctness one. **Your decision.**
 
 **(B) The #1949 coordination comment.** Draft prepared at
-`~/e4b-outbox/gnf4-1949-coordination-comment-DRAFT.md` — a plain
+a local draft (not published) — a plain
 building-on-your-work heads-up to matthewdouglas, framed as the expert-grouped
 extension of the #1949 family, offering to coordinate. It reveals nothing
 commercial (the FusedStore/placement layer stays private; only the kernel is

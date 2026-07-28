@@ -4,7 +4,7 @@
 (artifact `smoke20b/run_artifact.json`, dev box, 2026-07-19) per the spin-5
 lesson: calibrate on dev evidence, then freeze. Stamped before either counted
 run; the 120b pod fires only after the 20b counted run grades GREEN
-(operator GO 2026-07-19, conditional on that green). PRIVATE fork only.
+(operator GO 2026-07-19, conditional on that green). Implementation not published.
 
 ## Claim under test
 

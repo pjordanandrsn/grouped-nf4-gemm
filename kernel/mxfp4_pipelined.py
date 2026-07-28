@@ -2,7 +2,7 @@
 """Native-MXFP4 pipelined residency (Phase 4) — the fused mxfp4 kernel + the
 address-table residency engine + the gpt-oss clamped-GLU epilogue, composed.
 
-Self-contained in the private fork (rail: the shipped integration threads a
+Self-contained in the unpublished implementation (rail: the shipped integration threads a
 FORMAT-AGNOSTIC row_bytes/codebook param through e4b's public pipelined.py; the
 word mxfp4 never enters a public file). The gather kernel here mirrors e4b
 pipelined.py's format-agnostic `_gather_rows_addr` byte-for-byte — it copies a

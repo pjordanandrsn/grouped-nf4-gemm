@@ -2,7 +2,7 @@
 
 **Tier: CONFIRMATORY of the Phase-1..4 local gates; the ppl/throughput/energy
 numbers are pre-data. Status: DRAFT → operator review + OTS stamp. NO POD
-BEFORE THE STAMP.** Code under test (private fork): `mxfp4_pack_ref.py`
+BEFORE THE STAMP.** Code under test (implementation not published): `mxfp4_pack_ref.py`
 (`2123da9`), `mxfp4_grouped.py` (`90d1b44`), `mxfp4_loader.py` (`90660f3`),
 `mxfp4_pipelined.py` (`9ee48ff`). Standing oracle: the A4 dequant path
 (`transformers _convert_moe_packed_tensors`), sha-pinned; disagreement = STOP.

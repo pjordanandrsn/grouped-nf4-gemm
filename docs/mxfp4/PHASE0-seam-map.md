@@ -1,6 +1,6 @@
 # Phase 0 — MXFP4 seam map
 
-Deliverable of the sprint's Phase 0 (sprint plan (private fork), stamped
+Deliverable of the sprint's Phase 0 (sprint plan (not published), stamped
 2026-07-19 sha `448cf954…`). One page: what changes vs NF4, what is untouched.
 Every constant here is source-extracted or spec-cited (R6) — none from memory.
 

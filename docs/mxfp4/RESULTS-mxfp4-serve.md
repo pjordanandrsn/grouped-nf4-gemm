@@ -1,8 +1,8 @@
-# RESULTS — native-MXFP4 serve, graded vs the stamped slip (PRIVATE)
+# RESULTS — native-MXFP4 serve, graded vs the stamped slip
 
 Grades `PREREG-mxfp4-serve.md` (OTS-stamped, sha `7b9df573…`). Pod: DO H200
 `585936308` (atl1), destroyed 404-verified. Receipt verbatim:
-`receipts-mxfp4-serve-585936308.txt`. Code: private fork
+`receipts-mxfp4-serve-585936308.txt`. Code: unpublished implementation
 `mxfp4_pack_ref/grouped/loader/pipelined` @ `b3de69a` (interleaved-GLU fix).
 
 **Method (shard-read):** transformers has no raw-native mode (dequantizes OR

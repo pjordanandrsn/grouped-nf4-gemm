@@ -1,6 +1,8 @@
 # Flagship 671B-class scaling point — the offload pipeline holds the PCIe waterfall at 3× the pinned store (S2/S3 PASS, two instances); the REGISTERED run's S4 drift guard FAILED on host contention, disclosed, with a post-hoc clean-host run supporting the attribution
 
-**DRAFT — held for owner review; not stamped, not committed.**
+**Tier: EXPLORATORY.** Not OTS-stamped. Its S4 drift guard failed on host
+contention, so treat the figure as report-tier and do not cite it as a
+confirmatory anchor.
 
 **2026-07-15 · Protocol:** `kernel/prereg_flagship_scale671.json` (OTS pre-data,
 `800e4f4`) · **Hosts:** two fresh RunPod SECURE 2× H100 80GB HBM3 pods (each
