@@ -1,0 +1,56 @@
+{
+ "prereg": "PREREG-nvme-bake-determinism.md",
+ "a": {
+  "label": "L40S-sm89",
+  "path": "/tmp/l40s_manifest.json",
+  "bake_mode": "nf4-quantize",
+  "quantizer": {
+   "kind": "bnb.quantize_4bit",
+   "quant_type": "nf4",
+   "blocksize": 64,
+   "bnb": "0.50.0",
+   "torch": "2.8.0+cu128",
+   "layout": "cat[gate;up] dim0, nested-absmax dequantized f32"
+  }
+ },
+ "b": {
+  "label": "QNAP-A2000-sm86",
+  "path": "/tmp/qnap_manifest.json",
+  "bake_mode": "nf4-quantize",
+  "quantizer": {
+   "kind": "bnb.quantize_4bit",
+   "quant_type": "nf4",
+   "blocksize": 64,
+   "bnb": "0.50.0",
+   "torch": "2.8.0+cu128",
+   "layout": "cat[gate;up] dim0, nested-absmax dequantized f32"
+  }
+ },
+ "segments_compared": 20480,
+ "segments_match": 20480,
+ "D1_fraction": 1.0,
+ "D1_bar": 0.999,
+ "D3_source_records": 30720,
+ "D3_divergent": 0,
+ "D3_clean": true,
+ "per_suffix": {
+  "nf4.down_absmax": {
+   "match": 5120,
+   "total": 5120
+  },
+  "nf4.down_blocks": {
+   "match": 5120,
+   "total": 5120
+  },
+  "nf4.gate_up_absmax": {
+   "match": 5120,
+   "total": 5120
+  },
+  "nf4.gate_up_blocks": {
+   "match": 5120,
+   "total": 5120
+  }
+ },
+ "mismatch_sample": [],
+ "pass": true
+}

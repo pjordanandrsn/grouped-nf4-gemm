@@ -1,0 +1,689 @@
+{
+ "probe": {
+  "kernel": "6.6.32-qnap",
+  "machine": "x86_64",
+  "python": "3.13.9",
+  "device": {
+   "target": "/dev/nvme1n1",
+   "kind": "block",
+   "device": "nvme1n1",
+   "logical_block_size": 512,
+   "physical_block_size": 512,
+   "rotational": "0",
+   "scheduler": "[none] mq-deadline kyber",
+   "model": "",
+   "pcie_speed": null,
+   "pcie_width": null,
+   "pcie_max_speed": null,
+   "pcie_max_width": null,
+   "size_bytes": 2000398934016
+  },
+  "io_uring": {
+   "available": false,
+   "errno": 38,
+   "reason": "ENOSYS"
+  },
+  "fio": {
+   "bin": "/sbin/fio",
+   "version": "fio-2.2.10"
+  },
+  "utc": "2026-07-27T22:13:41Z",
+  "host_redacted": "owned NAS (hostname withheld for publication)"
+ },
+ "params": {
+  "sizes_mib": [
+   4,
+   13,
+   25,
+   50
+  ],
+  "qds": [
+   1,
+   4,
+   16,
+   64
+  ],
+  "seconds": 8.0,
+  "span_bytes": 2000398934016,
+  "align": 4096,
+  "engines": [
+   "pread",
+   "fio"
+  ],
+  "access": "random-aligned"
+ },
+ "cells": [
+  {
+   "engine": "pread",
+   "bs_mib": 4,
+   "qd": 1,
+   "requests": 4587,
+   "bytes": 19239272448,
+   "wall_s": 8.0,
+   "gbps": 2.405,
+   "lat_ms": {
+    "p50": 1.64,
+    "p90": 1.99,
+    "p99": 3.69,
+    "max": 26.38
+   },
+   "mode": "O_DIRECT",
+   "errors": [],
+   "total_wall_s": 9.001,
+   "other_read_mbps": 278.2,
+   "other_write_mbps": 5.1
+  },
+  {
+   "engine": "pread",
+   "bs_mib": 4,
+   "qd": 4,
+   "requests": 5933,
+   "bytes": 24884805632,
+   "wall_s": 8.003,
+   "gbps": 3.11,
+   "lat_ms": {
+    "p50": 5.21,
+    "p90": 7.37,
+    "p99": 9.0,
+    "max": 16.56
+   },
+   "mode": "O_DIRECT",
+   "errors": [],
+   "total_wall_s": 9.003,
+   "other_read_mbps": 369.0,
+   "other_write_mbps": 5.3
+  },
+  {
+   "engine": "pread",
+   "bs_mib": 4,
+   "qd": 16,
+   "requests": 6308,
+   "bytes": 26457669632,
+   "wall_s": 8.016,
+   "gbps": 3.301,
+   "lat_ms": {
+    "p50": 17.14,
+    "p90": 34.26,
+    "p99": 46.47,
+    "max": 66.87
+   },
+   "mode": "O_DIRECT",
+   "errors": [],
+   "total_wall_s": 9.017,
+   "other_read_mbps": 356.3,
+   "other_write_mbps": 3.8
+  },
+  {
+   "engine": "pread",
+   "bs_mib": 4,
+   "qd": 64,
+   "requests": 6290,
+   "bytes": 26382172160,
+   "wall_s": 8.093,
+   "gbps": 3.26,
+   "lat_ms": {
+    "p50": 43.28,
+    "p90": 265.38,
+    "p99": 407.49,
+    "max": 459.58
+   },
+   "mode": "O_DIRECT",
+   "errors": [],
+   "total_wall_s": 9.093,
+   "other_read_mbps": 370.1,
+   "other_write_mbps": 2.4
+  },
+  {
+   "engine": "pread",
+   "bs_mib": 13,
+   "qd": 1,
+   "requests": 1658,
+   "bytes": 22601007104,
+   "wall_s": 8.0,
+   "gbps": 2.825,
+   "lat_ms": {
+    "p50": 4.69,
+    "p90": 5.32,
+    "p99": 7.3,
+    "max": 28.43
+   },
+   "mode": "O_DIRECT",
+   "errors": [],
+   "total_wall_s": 9.002,
+   "other_read_mbps": 283.6,
+   "other_write_mbps": 3.6
+  },
+  {
+   "engine": "pread",
+   "bs_mib": 13,
+   "qd": 4,
+   "requests": 1939,
+   "bytes": 26431455232,
+   "wall_s": 8.008,
+   "gbps": 3.301,
+   "lat_ms": {
+    "p50": 16.4,
+    "p90": 19.82,
+    "p99": 25.81,
+    "max": 36.46
+   },
+   "mode": "O_DIRECT",
+   "errors": [],
+   "total_wall_s": 9.01,
+   "other_read_mbps": 371.0,
+   "other_write_mbps": 1.8
+  },
+  {
+   "engine": "pread",
+   "bs_mib": 13,
+   "qd": 16,
+   "requests": 1933,
+   "bytes": 26349666304,
+   "wall_s": 8.045,
+   "gbps": 3.275,
+   "lat_ms": {
+    "p50": 56.37,
+    "p90": 118.0,
+    "p99": 192.72,
+    "max": 254.4
+   },
+   "mode": "O_DIRECT",
+   "errors": [],
+   "total_wall_s": 9.046,
+   "other_read_mbps": 363.4,
+   "other_write_mbps": 2.9
+  },
+  {
+   "engine": "pread",
+   "bs_mib": 13,
+   "qd": 64,
+   "requests": 2026,
+   "bytes": 27617394688,
+   "wall_s": 8.245,
+   "gbps": 3.35,
+   "lat_ms": {
+    "p50": 210.76,
+    "p90": 556.99,
+    "p99": 787.46,
+    "max": 954.57
+   },
+   "mode": "O_DIRECT",
+   "errors": [],
+   "total_wall_s": 9.247,
+   "other_read_mbps": 354.0,
+   "other_write_mbps": 1.1
+  },
+  {
+   "engine": "pread",
+   "bs_mib": 25,
+   "qd": 1,
+   "requests": 888,
+   "bytes": 23278387200,
+   "wall_s": 8.004,
+   "gbps": 2.908,
+   "lat_ms": {
+    "p50": 8.64,
+    "p90": 10.55,
+    "p99": 13.27,
+    "max": 21.05
+   },
+   "mode": "O_DIRECT",
+   "errors": [],
+   "total_wall_s": 9.008,
+   "other_read_mbps": 329.6,
+   "other_write_mbps": 4.4
+  },
+  {
+   "engine": "pread",
+   "bs_mib": 25,
+   "qd": 4,
+   "requests": 986,
+   "bytes": 25847398400,
+   "wall_s": 8.014,
+   "gbps": 3.225,
+   "lat_ms": {
+    "p50": 31.5,
+    "p90": 41.45,
+    "p99": 54.16,
+    "max": 63.68
+   },
+   "mode": "O_DIRECT",
+   "errors": [],
+   "total_wall_s": 9.018,
+   "other_read_mbps": 369.5,
+   "other_write_mbps": 7.7
+  },
+  {
+   "engine": "pread",
+   "bs_mib": 25,
+   "qd": 16,
+   "requests": 1060,
+   "bytes": 27787264000,
+   "wall_s": 8.1,
+   "gbps": 3.43,
+   "lat_ms": {
+    "p50": 108.25,
+    "p90": 220.18,
+    "p99": 296.03,
+    "max": 359.02
+   },
+   "mode": "O_DIRECT",
+   "errors": [],
+   "total_wall_s": 9.103,
+   "other_read_mbps": 363.1,
+   "other_write_mbps": 2.9
+  },
+  {
+   "engine": "pread",
+   "bs_mib": 25,
+   "qd": 64,
+   "requests": 1115,
+   "bytes": 29229056000,
+   "wall_s": 8.438,
+   "gbps": 3.464,
+   "lat_ms": {
+    "p50": 386.25,
+    "p90": 1023.61,
+    "p99": 1249.82,
+    "max": 1353.2
+   },
+   "mode": "O_DIRECT",
+   "errors": [],
+   "total_wall_s": 9.441,
+   "other_read_mbps": 349.9,
+   "other_write_mbps": 1.1
+  },
+  {
+   "engine": "pread",
+   "bs_mib": 50,
+   "qd": 1,
+   "requests": 497,
+   "bytes": 26057113600,
+   "wall_s": 8.006,
+   "gbps": 3.255,
+   "lat_ms": {
+    "p50": 15.92,
+    "p90": 16.92,
+    "p99": 19.27,
+    "max": 33.0
+   },
+   "mode": "O_DIRECT",
+   "errors": [],
+   "total_wall_s": 9.011,
+   "other_read_mbps": 349.4,
+   "other_write_mbps": 3.1
+  },
+  {
+   "engine": "pread",
+   "bs_mib": 50,
+   "qd": 4,
+   "requests": 511,
+   "bytes": 26791116800,
+   "wall_s": 8.025,
+   "gbps": 3.338,
+   "lat_ms": {
+    "p50": 60.38,
+    "p90": 82.1,
+    "p99": 106.54,
+    "max": 115.49
+   },
+   "mode": "O_DIRECT",
+   "errors": [],
+   "total_wall_s": 9.033,
+   "other_read_mbps": 360.2,
+   "other_write_mbps": 5.6
+  },
+  {
+   "engine": "pread",
+   "bs_mib": 50,
+   "qd": 16,
+   "requests": 525,
+   "bytes": 27525120000,
+   "wall_s": 8.207,
+   "gbps": 3.354,
+   "lat_ms": {
+    "p50": 205.1,
+    "p90": 481.19,
+    "p99": 746.01,
+    "max": 910.49
+   },
+   "mode": "O_DIRECT",
+   "errors": [],
+   "total_wall_s": 9.214,
+   "other_read_mbps": 352.9,
+   "other_write_mbps": 1.2
+  },
+  {
+   "engine": "pread",
+   "bs_mib": 50,
+   "qd": 64,
+   "requests": 560,
+   "bytes": 29360128000,
+   "wall_s": 8.994,
+   "gbps": 3.264,
+   "lat_ms": {
+    "p50": 972.44,
+    "p90": 1894.65,
+    "p99": 2653.4,
+    "max": 2848.09
+   },
+   "mode": "O_DIRECT",
+   "errors": [],
+   "total_wall_s": 9.999,
+   "other_read_mbps": 288.4,
+   "other_write_mbps": 1.1
+  },
+  {
+   "engine": "fio",
+   "bs_mib": 4,
+   "qd": 1,
+   "gbps": 2.342,
+   "iops": 558.43,
+   "lat_ms": {
+    "p50": 1.61,
+    "p90": 2.04,
+    "p99": 3.57,
+    "max": 11.43
+   },
+   "fio_version": "fio-2.2.10",
+   "other_read_mbps": 2183.8,
+   "other_write_mbps": 4.4
+  },
+  {
+   "engine": "fio",
+   "bs_mib": 4,
+   "qd": 4,
+   "gbps": 3.018,
+   "iops": 719.52,
+   "lat_ms": {
+    "p50": 5.34,
+    "p90": 6.94,
+    "p99": 9.15,
+    "max": 15.97
+   },
+   "fio_version": "fio-2.2.10",
+   "other_read_mbps": 2819.9,
+   "other_write_mbps": 3.3
+  },
+  {
+   "engine": "fio",
+   "bs_mib": 4,
+   "qd": 16,
+   "gbps": 3.1,
+   "iops": 739.05,
+   "lat_ms": {
+    "p50": 20.61,
+    "p90": 31.87,
+    "p99": 41.73,
+    "max": 53.41
+   },
+   "fio_version": "fio-2.2.10",
+   "other_read_mbps": 2895.5,
+   "other_write_mbps": 0.9
+  },
+  {
+   "engine": "fio",
+   "bs_mib": 4,
+   "qd": 64,
+   "gbps": 3.062,
+   "iops": 729.92,
+   "lat_ms": {
+    "p50": 68.1,
+    "p90": 185.34,
+    "p99": 276.48,
+    "max": 385.09
+   },
+   "fio_version": "fio-2.2.10",
+   "other_read_mbps": 2861.1,
+   "other_write_mbps": 2.1
+  },
+  {
+   "engine": "fio",
+   "bs_mib": 13,
+   "qd": 1,
+   "gbps": 2.982,
+   "iops": 218.77,
+   "lat_ms": {
+    "p50": 4.13,
+    "p90": 4.7,
+    "p99": 5.92,
+    "max": 10.47
+   },
+   "fio_version": "fio-2.2.10",
+   "other_read_mbps": 2788.8,
+   "other_write_mbps": 2.5
+  },
+  {
+   "engine": "fio",
+   "bs_mib": 13,
+   "qd": 4,
+   "gbps": 3.39,
+   "iops": 248.66,
+   "lat_ms": {
+    "p50": 15.04,
+    "p90": 19.84,
+    "p99": 26.75,
+    "max": 36.36
+   },
+   "fio_version": "fio-2.2.10",
+   "other_read_mbps": 3175.3,
+   "other_write_mbps": 1.6
+  },
+  {
+   "engine": "fio",
+   "bs_mib": 13,
+   "qd": 16,
+   "gbps": 3.41,
+   "iops": 250.12,
+   "lat_ms": {
+    "p50": 55.55,
+    "p90": 118.27,
+    "p99": 175.1,
+    "max": 204.73
+   },
+   "fio_version": "fio-2.2.10",
+   "other_read_mbps": 3153.1,
+   "other_write_mbps": 2.5
+  },
+  {
+   "engine": "fio",
+   "bs_mib": 13,
+   "qd": 64,
+   "gbps": 3.433,
+   "iops": 251.82,
+   "lat_ms": {
+    "p50": 201.73,
+    "p90": 536.58,
+    "p99": 798.72,
+    "max": 1001.82
+   },
+   "fio_version": "fio-2.2.10",
+   "other_read_mbps": 3209.4,
+   "other_write_mbps": 3.0
+  },
+  {
+   "engine": "fio",
+   "bs_mib": 25,
+   "qd": 1,
+   "gbps": 3.079,
+   "iops": 117.46,
+   "lat_ms": {
+    "p50": 7.33,
+    "p90": 8.64,
+    "p99": 10.3,
+    "max": 18.6
+   },
+   "fio_version": "fio-2.2.10",
+   "other_read_mbps": 2876.5,
+   "other_write_mbps": 2.9
+  },
+  {
+   "engine": "fio",
+   "bs_mib": 25,
+   "qd": 4,
+   "gbps": 3.334,
+   "iops": 127.16,
+   "lat_ms": {
+    "p50": 28.54,
+    "p90": 43.26,
+    "p99": 57.09,
+    "max": 68.17
+   },
+   "fio_version": "fio-2.2.10",
+   "other_read_mbps": 3122.2,
+   "other_write_mbps": 2.3
+  },
+  {
+   "engine": "fio",
+   "bs_mib": 25,
+   "qd": 16,
+   "gbps": 3.422,
+   "iops": 130.54,
+   "lat_ms": {
+    "p50": 105.98,
+    "p90": 230.4,
+    "p99": 346.11,
+    "max": 510.33
+   },
+   "fio_version": "fio-2.2.10",
+   "other_read_mbps": 3201.9,
+   "other_write_mbps": 7.0
+  },
+  {
+   "engine": "fio",
+   "bs_mib": 25,
+   "qd": 64,
+   "gbps": 3.439,
+   "iops": 131.2,
+   "lat_ms": {
+    "p50": 378.88,
+    "p90": 1011.71,
+    "p99": 1400.83,
+    "max": 1841.44
+   },
+   "fio_version": "fio-2.2.10",
+   "other_read_mbps": 3201.9,
+   "other_write_mbps": 2.4
+  },
+  {
+   "engine": "fio",
+   "bs_mib": 50,
+   "qd": 1,
+   "gbps": 3.231,
+   "iops": 61.62,
+   "lat_ms": {
+    "p50": 14.02,
+    "p90": 15.04,
+    "p99": 19.07,
+    "max": 34.23
+   },
+   "fio_version": "fio-2.2.10",
+   "other_read_mbps": 3004.4,
+   "other_write_mbps": 1.5
+  },
+  {
+   "engine": "fio",
+   "bs_mib": 50,
+   "qd": 4,
+   "gbps": 3.428,
+   "iops": 65.39,
+   "lat_ms": {
+    "p50": 56.06,
+    "p90": 87.55,
+    "p99": 107.01,
+    "max": 116.66
+   },
+   "fio_version": "fio-2.2.10",
+   "other_read_mbps": 3164.0,
+   "other_write_mbps": 3.6
+  },
+  {
+   "engine": "fio",
+   "bs_mib": 50,
+   "qd": 16,
+   "gbps": 3.437,
+   "iops": 65.56,
+   "lat_ms": {
+    "p50": 199.68,
+    "p90": 473.09,
+    "p99": 724.99,
+    "max": 842.75
+   },
+   "fio_version": "fio-2.2.10",
+   "other_read_mbps": 3196.8,
+   "other_write_mbps": 2.1
+  },
+  {
+   "engine": "fio",
+   "bs_mib": 50,
+   "qd": 64,
+   "gbps": 3.458,
+   "iops": 65.96,
+   "lat_ms": {
+    "p50": 774.14,
+    "p90": 1892.35,
+    "p99": 2342.91,
+    "max": 2554.6
+   },
+   "fio_version": "fio-2.2.10",
+   "other_read_mbps": 3200.6,
+   "other_write_mbps": 1.8
+  },
+  {
+   "self_pair": {
+    "engine": "pread",
+    "bs_mib": 25,
+    "qd": 64,
+    "requests": 1124,
+    "bytes": 29464985600,
+    "wall_s": 8.489,
+    "gbps": 3.471,
+    "lat_ms": {
+     "p50": 426.63,
+     "p90": 853.44,
+     "p99": 1860.26,
+     "max": 1977.6
+    },
+    "mode": "O_DIRECT",
+    "errors": [],
+    "total_wall_s": 9.492,
+    "self_pair_ratio": 1.002
+   }
+  },
+  {
+   "seq_control": {
+    "bs_mib": 25,
+    "qd": 64,
+    "gbps": 3.421,
+    "iops": 130.49,
+    "lat_ms": {
+     "p50": 358.4,
+     "p90": 1073.15,
+     "p99": 1695.74,
+     "max": 1858.39
+    },
+    "fio_version": "fio-2.2.10"
+   }
+  },
+  {
+   "sustained_best": {
+    "seconds": 30.0,
+    "bs_mib": 25,
+    "qd": 64,
+    "requests": 4016,
+    "bytes": 105277030400,
+    "wall_s": 30.479,
+    "gbps": 3.454,
+    "lat_ms": {
+     "p50": 432.8,
+     "p90": 955.74,
+     "p99": 1316.56,
+     "max": 1654.64
+    },
+    "mode": "O_DIRECT",
+    "errors": [],
+    "total_wall_s": 31.481
+   }
+  }
+ ]
+}
