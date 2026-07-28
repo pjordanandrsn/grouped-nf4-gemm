@@ -20,6 +20,11 @@ n=$(wc -l < "$PATS" | tr -d ' ')
 while read -r _lref lsha _rref _rsha; do
   [ "$lsha" = "0000000000000000000000000000000000000000" ] && continue
 
+  # Path denylist: content scanning misses artifact dumps (JSON exhibits carry
+  # no prose markers). Deny the directories outright.
+  if git ls-tree -r --name-only "$lsha" | grep -qE 'docs/artifacts/coordination-|-exhibit/|intel-[0-9]+\.md'; then
+    fail "tip tree contains private-lane artifact paths (coordination/exhibit dumps)"
+  fi
   if git ls-tree -r --name-only "$lsha" | grep -qE '(^|/)AGENT-'; then
     fail "tip tree contains AGENT-* planning docs (private-lane denylist)"
   fi

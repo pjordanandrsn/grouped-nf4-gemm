@@ -59,6 +59,21 @@ jobs:
             exit 1
           fi
 
+      - name: refuse private-lane PATHS (content scanning is not enough)
+        run: |
+          set -euo pipefail
+          # A content scan catches PROSE. The 2026-07-16 coordination directory
+          # is mostly JSON API dumps that trip none of the phrase patterns, so a
+          # branch could carry the whole exhibit and still scan "clean" (observed
+          # on a local worktree 2026-07-28). Deny the paths outright.
+          bad=$(git ls-files | grep -E 'docs/artifacts/coordination-|-exhibit/|intel-[0-9]+\.md' || true)
+          if [ -n "${bad}" ]; then
+            echo "::error::private-lane artifact paths in the public tree:"
+            printf '%s\n' "${bad}" | head -20
+            exit 1
+          fi
+          echo "no private-lane artifact paths"
+
       - name: refuse AGENT-* planning docs at any depth
         run: |
           set -euo pipefail
