@@ -253,9 +253,10 @@ in-repo):
   greedy output 6/6) and validates SM-issued UVA reads at ≥ copy-engine
   throughput at 7.98 GB/token.
 
-Every comparative "first/only/faster" claim above is backed by a verified,
-dated entry in [`docs/COMPETITIVE.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.2/docs/COMPETITIVE.md)
-(the credited prior-art table + the same-box ik_llama A/B) — no entry, no claim.
+Every comparative "first/only/faster" claim above is backed by a verified, dated
+comparison against the named alternative's own published numbers or a same-box
+A/B (see [`docs/RESULTS-ikllama-ab.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/RESULTS-ikllama-ab.md)
+for the ik_llama run) — no receipt, no claim.
 
 ## Reproduce
 
