@@ -17,7 +17,7 @@ claim, and no number in this lane may be quoted without that scope.
 
 | | |
 |---|---|
-| host | QNAP TVS-h1688X kernel 6.6.32-qnap, Xeon W-1250 |
+| host | NAS-class appliance, kernel 6.6.32, Xeon W-1250 |
 | device | Seagate FireCuda 530 2 TB (`/dev/nvme1n1`), lbs=pbs=512 |
 | negotiated link | **PCIe Gen3 x4** (8.0 GT/s ×4) — drive is Gen4-capable (16 GT/s ×4) |
 | rated (drive) | 7.3 GB/s sequential read (Gen4 figure) |
