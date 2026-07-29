@@ -17,6 +17,7 @@ BATTERY = [
     "mxfp4_pack_ref", "mxfp4_grouped", "mxfp4_loader", "mxfp4_pipelined",
     "mxfp4_qlora", "mxfp4_native_load", "moonshot_gather", "verify_provenance",
     "run_mxfp4_20b_qlora", "gate_native_load_20b",
+    "nvme_arena", "nvme_bake_nf4", "nvme_reader",
 ]
 
 def main() -> int:
@@ -40,6 +41,26 @@ def main() -> int:
                        capture_output=True, text=True, timeout=120)
     assert r.returncode == 0 and "artifact" in r.stdout, r.stderr[-400:]
     print("verify_provenance -h OK")
+
+    # NVMe arena: the distribution claim is "bake locally, verify against a
+    # published manifest", so the wheel must actually be able to DO that --
+    # an import alone would not catch a broken CLI or a missing dependency.
+    r = subprocess.run([sys.executable, "-m", "nvme_arena", "--help"],
+                       capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0 and "verify" in r.stdout, r.stderr[-400:]
+    print("nvme_arena CLI (bake/bake-experts/verify) OK")
+
+    from nvme_arena import load_index, row_offset  # noqa: F401
+    from nvme_reader import alloc_landing, check_aligned
+    mv, keep = alloc_landing(1 << 16)          # mmap-backed, page-aligned
+    check_aligned(mv, 4096)                    # raises if O_DIRECT would EINVAL
+    try:
+        check_aligned(mv[1:], 4096)            # deliberately off by one byte
+        raise AssertionError("check_aligned accepted a misaligned buffer")
+    except ValueError:
+        pass
+    del mv, keep
+    print("nvme_reader landing alloc + O_DIRECT alignment guard OK")
 
     from moonshot_gather import discover_layer
     wm = {}

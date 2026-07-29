@@ -1,0 +1,4 @@
+torch>=2.8.0.dev0
+
+[:platform_system == "Linux"]
+triton>=3.4

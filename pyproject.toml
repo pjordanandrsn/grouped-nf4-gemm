@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "grouped-nf4-gemm"
-version = "0.2.2"
+version = "0.2.3"
 description = "Fused grouped GEMM on bitsandbytes NF4-packed weights with host streaming, on consumer GPUs."
 readme = "README.md"
 license = { text = "MIT" }
@@ -23,7 +23,13 @@ dependencies = [
     # stack. ">=2.8.0.dev0" is satisfied by those builds, so pip leaves a
     # working torch alone.
     "torch>=2.8.0.dev0",
-    "triton>=3.4",
+    # Triton has NO macOS/Windows distribution, and an unconditional pin made
+    # `pip install grouped-nf4-gemm` impossible there -- including for the
+    # pure-torch surface (provenance verifier, NVMe arena bake/verify) that has
+    # no CUDA in it at all. The published distribution claim is "bake locally,
+    # check your manifest against a published one", which is exactly a laptop
+    # task. torch itself marks its own triton dep this way.
+    "triton>=3.4; platform_system == 'Linux'",
 ]
 classifiers = [
     "License :: OSI Approved :: MIT License",
@@ -43,4 +49,5 @@ py-modules = [
     "mxfp4_pack_ref", "mxfp4_grouped", "mxfp4_loader", "mxfp4_pipelined",
     "mxfp4_qlora", "mxfp4_native_load", "moonshot_gather", "verify_provenance",
     "run_mxfp4_20b_qlora", "gate_native_load_20b",
+    "nvme_arena", "nvme_bake_nf4", "nvme_reader",
 ]
