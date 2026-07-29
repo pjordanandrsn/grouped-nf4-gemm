@@ -9,6 +9,7 @@ mxfp4_pipelined
 mxfp4_qlora
 nf4_grouped
 nf4_pack_ref
+nf4_qlora
 nvme_arena
 nvme_bake_nf4
 nvme_reader

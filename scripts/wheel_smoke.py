@@ -18,6 +18,7 @@ BATTERY = [
     "mxfp4_qlora", "mxfp4_native_load", "moonshot_gather", "verify_provenance",
     "run_mxfp4_20b_qlora", "gate_native_load_20b",
     "nvme_arena", "nvme_bake_nf4", "nvme_reader",
+    "nf4_qlora",
 ]
 
 def main() -> int:
@@ -61,6 +62,15 @@ def main() -> int:
         pass
     del mv, keep
     print("nvme_reader landing alloc + O_DIRECT alignment guard OK")
+
+    # the differentiable training wrapper must be importable from the wheel:
+    # without it, training silently falls back off the fused kernel
+    from nf4_qlora import (FusedGroupedNf4, gemm_4bit_grouped_train,  # noqa: F401
+                           fused_grouped_lora, lora_delta_grouped)
+    import torch as _t
+    _d = lora_delta_grouped(_t.zeros(2, 8), _t.zeros(1, 4, 8), _t.zeros(1, 6, 4), [2], [0])
+    assert _d.shape == (2, 6) and _t.count_nonzero(_d) == 0
+    print("nf4_qlora training wrapper OK (zero-B delta is exactly zero)")
 
     from moonshot_gather import discover_layer
     wm = {}

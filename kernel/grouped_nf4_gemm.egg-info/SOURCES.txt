@@ -12,6 +12,7 @@ kernel/mxfp4_pipelined.py
 kernel/mxfp4_qlora.py
 kernel/nf4_grouped.py
 kernel/nf4_pack_ref.py
+kernel/nf4_qlora.py
 kernel/nvme_arena.py
 kernel/nvme_bake_nf4.py
 kernel/nvme_reader.py
