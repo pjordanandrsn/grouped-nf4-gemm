@@ -162,16 +162,18 @@ def test_split_gate_up_fuses_byte_exactly(tmp_path):
         tier.close()
 
 
-def test_arena_experts_kinds_order_is_refused_and_names_the_right_one(tmp_path):
-    """The expensive trap, as a test. `arena_experts.K3_KINDS` is the DOCUMENTED
-    released-K3 spelling and is correct for `ArenaExpertSource`, which slices each
-    segment by suffix. But its per-projection interleave puts w1's SCALES inside
-    what this engine reads as one contiguous gate_up BLOCKS segment. Reaching for
-    the documented constant is the obvious move, and finding out after baking
-    ~1.45 TB is the bad outcome — so refuse, and name the order that works.
+GEO = (E, 2 * INTER, H // 2, H // MX_BLOCK, H, INTER // 2, INTER // MX_BLOCK)
+
+
+def test_both_k3_kinds_orders_give_the_same_geometry(tmp_path):
+    """`arena_experts.K3_KINDS` (per-projection interleave — what the real
+    1.446 TB arena on disk was baked in) and `K3_RESIDENCY_KINDS`
+    (blocks-then-scales — what the engine reads) hold the same six tensors in a
+    different order. Both must resolve to the same geometry; the difference shows
+    up as a permutation to apply on gather, not as a refusal.
     """
     from arena_experts import K3_KINDS
-    from mxfp4_residency import K3_RESIDENCY_KINDS
+    from mxfp4_residency import K3_RESIDENCY_KINDS, engine_segment_map
 
     assert set(K3_KINDS) == set(K3_RESIDENCY_KINDS), (
         "same six tensors, different order — if these sets ever diverge one of "
@@ -179,26 +181,36 @@ def test_arena_experts_kinds_order_is_refused_and_names_the_right_one(tmp_path):
     assert K3_KINDS != K3_RESIDENCY_KINDS, "the orders must actually differ"
 
     stacks = _packed()
-    path, index = _bake(tmp_path, stacks, kinds=K3_KINDS, split_gate_up=True,
-                        interleave=True)
-    assert [g["suffix"] for g in index["segments"]] == list(K3_KINDS)
-    with pytest.raises(ValueError) as ei:
-        mxfp4_geometry_from_arena(index)
-    msg = str(ei.value)
-    assert "wrong kinds ORDER" in msg, msg
-    for k in K3_RESIDENCY_KINDS:            # the fix must be in the message
-        assert k in msg, (k, msg)
-    del path
+    _p1, inter = _bake(tmp_path, stacks, kinds=K3_KINDS, split_gate_up=True,
+                       interleave=True, name="a.arena")
+    _p2, resid = _bake(tmp_path, stacks, kinds=K3_RESIDENCY_KINDS,
+                       split_gate_up=True, interleave=False, name="b.arena")
+    assert [g["suffix"] for g in inter["segments"]] == list(K3_KINDS)
+    assert [g["suffix"] for g in resid["segments"]] == list(K3_RESIDENCY_KINDS)
+    assert mxfp4_geometry_from_arena(inter) == GEO
+    assert mxfp4_geometry_from_arena(resid) == GEO
+
+    # residency order needs no permutation; the interleaved one does
+    for idx, want_identity in ((resid, True), (inter, False)):
+        groups, _geo = engine_segment_map(idx)
+        dst, identity = 0, True
+        for grp in groups:
+            for s_off, ln in grp:
+                identity &= (s_off == dst)
+                dst += ln
+        assert identity is want_identity, (want_identity, groups)
 
 
-def test_residency_kinds_order_is_accepted(tmp_path):
-    """The counterpart: the SAME six tensors in K3_RESIDENCY_KINDS order fuse."""
-    from mxfp4_residency import K3_RESIDENCY_KINDS
+def test_shape_grouping_does_not_depend_on_tensor_names(tmp_path):
+    """Grouping is by SHAPE. A release that renames its tensors again — three
+    times since K2 — still maps correctly."""
+    from mxfp4_residency import engine_segment_map
     stacks = _packed()
-    _p, index = _bake(tmp_path, stacks, kinds=K3_RESIDENCY_KINDS,
-                      split_gate_up=True, interleave=False)
-    assert mxfp4_geometry_from_arena(index) == (
-        E, 2 * INTER, H // 2, H // MX_BLOCK, H, INTER // 2, INTER // MX_BLOCK)
+    weird = ("zz.packed", "aa.packed", "mm.scale", "bb.scale",
+             "qq.packed", "cc.scale")
+    _p, index = _bake(tmp_path, stacks, kinds=weird, split_gate_up=True)
+    _groups, geo = engine_segment_map(index)
+    assert geo == GEO
 
 
 def test_noncontiguous_split_segments_are_refused():
@@ -232,13 +244,30 @@ def test_nf4_arena_is_refused_by_dtype(arena):
         mxfp4_geometry_from_arena(bad)
 
 
-def test_mismatched_layout_is_refused(arena):
+def test_shifted_offsets_are_followed_not_refused(arena):
+    """A shifted seg_off used to be refused as "not the engine's layout". It is
+    now simply where the bytes are, and the gather follows it — that is the whole
+    point of permuting on gather. Geometry is unchanged because geometry comes
+    from SHAPES, and the piece table picks up the shift."""
+    from mxfp4_residency import engine_segment_map
     _s, _p, index = arena
-    bad = dict(index)
-    bad["segments"] = [dict(g) for g in index["segments"]]
-    bad["segments"][2]["seg_off"] += 8
-    with pytest.raises(ValueError, match="does not match the engine"):
-        mxfp4_geometry_from_arena(bad)
+    moved = dict(index)
+    moved["segments"] = [dict(g) for g in index["segments"]]
+    moved["segments"][2]["seg_off"] += 8
+    assert mxfp4_geometry_from_arena(moved) == mxfp4_geometry_from_arena(index)
+    groups, _geo = engine_segment_map(moved)
+    assert groups[2][0][0] == index["segments"][2]["seg_off"] + 8
+
+
+def test_misaligned_segment_offset_is_refused(arena):
+    """The gather moves int64 words, so an offset that is not 8-byte aligned
+    cannot be expressed as a word offset — refuse rather than silently truncate
+    to the nearest word and read shifted nibbles."""
+    from mxfp4_residency import _chunk_table
+    with pytest.raises(ValueError, match="not 8-byte aligned"):
+        _chunk_table([(4, 0, 64)], 2048)
+    with pytest.raises(ValueError, match="not 8-byte aligned"):
+        _chunk_table([(0, 0, 60)], 2048)
 
 
 # ------------------------------------------- 2. address arithmetic, no GPU ----
@@ -525,6 +554,82 @@ def test_k3_forward_matches_a_dequant_reference(arena):
         assert tie.traffic()["tier"]["misses"] > 0
     finally:
         tie.tier.close()
+
+
+@cuda
+def test_interleaved_arena_forwards_identically_to_residency_order(tmp_path):
+    """THE gate for permuting on gather, and the reason the real 1.446 TB arena
+    does not have to be re-baked.
+
+    Two arenas, same packed tensors, segment orders differing: `K3_KINDS` (what
+    the arena on disk actually is) and `K3_RESIDENCY_KINDS` (what the engine
+    reads natively). The first takes the permuting kernel, the second the
+    original contiguous one. Their forwards must be `torch.equal` — not close,
+    equal, since both are the same bytes multiplied in the same order.
+    """
+    _needs_gather_kernel()
+    from arena_experts import K3_KINDS
+    from mxfp4_residency import K3_RESIDENCY_KINDS, Mxfp4NvmeResidency
+    stacks = _packed()
+    p_int, i_int = _bake(tmp_path, stacks, kinds=K3_KINDS, split_gate_up=True,
+                         interleave=True, name="int.arena")
+    p_res, i_res = _bake(tmp_path, stacks, kinds=K3_RESIDENCY_KINDS,
+                         split_gate_up=True, interleave=False, name="res.arena")
+    a = Mxfp4NvmeResidency(p_int, LAYER, k_slots=K_SLOTS, hot_rows=K_SLOTS,
+                           device="cuda", index=i_int)
+    b = Mxfp4NvmeResidency(p_res, LAYER, k_slots=K_SLOTS, hot_rows=K_SLOTS,
+                           device="cuda", index=i_res)
+    try:
+        assert a.permuted is True, "the interleaved arena must need a permutation"
+        assert b.permuted is False, "the residency order must take the fast path"
+        x, idx, sc = _route(5, seed=31)
+        for t in range(x.shape[0]):
+            ra = a.forward(x[t], idx[t:t + 1], sc[t:t + 1])
+            rb = b.forward(x[t], idx[t:t + 1], sc[t:t + 1])
+            assert torch.equal(ra, rb), (t, (ra - rb).abs().max().item())
+        assert a.traffic()["tier"]["misses"] > 0
+    finally:
+        a.tier.close()
+        b.tier.close()
+
+
+@cuda
+def test_permuted_slots_hold_the_engine_layout_byte_exactly(tmp_path):
+    """One level below the forward: after a gather from the interleaved arena, the
+    device slot's bytes must equal the row a residency-order bake would have
+    produced. A forward comparison could in principle pass while both engines read
+    the same wrong thing; this cannot.
+
+    Needs triton and CUDA but NOT ``tl.gather`` — the permuting gather moves int64
+    words with load/store/arange/cast only. ``tl.gather`` is a
+    ``gemm_mxfp4_grouped`` requirement, and no GEMM runs here, so this gate is
+    reachable on a triton-3.2 box where the forward tests must skip.
+    """
+    pytest.importorskip("triton")
+    from arena_experts import K3_KINDS
+    from mxfp4_residency import K3_RESIDENCY_KINDS, Mxfp4NvmeResidency
+    stacks = _packed()
+    p_int, i_int = _bake(tmp_path, stacks, kinds=K3_KINDS, split_gate_up=True,
+                         interleave=True, name="int2.arena")
+    p_res, i_res = _bake(tmp_path, stacks, kinds=K3_RESIDENCY_KINDS,
+                         split_gate_up=True, interleave=False, name="res2.arena")
+    a = Mxfp4NvmeResidency(p_int, LAYER, k_slots=K_SLOTS, hot_rows=K_SLOTS,
+                           device="cuda", index=i_int)
+    b = Mxfp4NvmeResidency(p_res, LAYER, k_slots=K_SLOTS, hot_rows=K_SLOTS,
+                           device="cuda", index=i_res)
+    try:
+        want = torch.tensor([2, 3, 5, 6], device="cuda")
+        a._fetch(want)
+        b._fetch(want)
+        assert torch.equal(a.slots, b.slots), (
+            "permuted gather did not reproduce the residency-order row: "
+            f"{(a.slots.int() - b.slots.int()).abs().sum().item()} bytes differ")
+        # and the engine's four views agree, which is what the kernel consumes
+        for name in ("gu_p_v", "gu_a_v", "dn_p_v", "dn_a_v"):
+            assert torch.equal(getattr(a, name), getattr(b, name)), name
+    finally:
+        a.tier.close()
+        b.tier.close()
 
 
 @cuda

@@ -34,7 +34,13 @@ _KERNEL = None
 def _gather_kernel():
     """Per-slot absolute-address gather with have-skip — mirrors e4b
     pipelined.py::_gather_rows_addr (format-agnostic; copies bytes)."""
-    global _KERNEL
+    # `tl` into MODULE globals, not locals: with `from __future__ import
+    # annotations` the `BLOCK: tl.constexpr` annotation is the string
+    # "tl.constexpr", which triton resolves against the jitted function's
+    # __globals__. A local import raises NameError('tl is not defined') from
+    # inside the triton compiler on 3.2. 3.4 tolerates it, so the bug is
+    # invisible on a current box and fatal on an older one.
+    global _KERNEL, tl
     if _KERNEL is None:
         import triton
         import triton.language as tl
@@ -189,12 +195,21 @@ class Mxfp4PipelinedGptOss:
     def _commit(self, src):
         self.have.copy_(src)
 
-    def _prime(self):
+    def _gather(self, src):
+        """Copy each wanted row into its device slot, verbatim.
+
+        The single place the gather is launched, so a subclass can substitute a
+        kernel that REORDERS segments while copying — see
+        :meth:`mxfp4_residency.Mxfp4NvmeResidency._gather`, which reads an arena
+        whose segments are laid out in a different order than this engine's."""
         kern = _gather_kernel()
+        grid = (self.k, -(-self.row_words // 2048))
+        kern[grid](self.slots64, src, self.have, self.row_words, BLOCK=2048, num_warps=4)
+
+    def _prime(self):
         self.want_buf.zero_()
         src0 = self._resolve_src()
-        grid = (self.k, -(-self.row_words // 2048))
-        kern[grid](self.slots64, src0, self.have, self.row_words, BLOCK=2048, num_warps=4)
+        self._gather(src0)
         self._commit(src0)
 
     def _fetch(self, want):
@@ -205,9 +220,7 @@ class Mxfp4PipelinedGptOss:
         hot = self.is_hot.index_select(0, self.want_buf)   # resident -> D2D, cold -> UVA
         self.cold_pcie_bytes += (miss & ~hot).sum() * self.row_bytes
         self.hot_d2d_bytes += (miss & hot).sum() * self.row_bytes
-        kern = _gather_kernel()
-        grid = (self.k, -(-self.row_words // 2048))
-        kern[grid](self.slots64, src, self.have, self.row_words, BLOCK=2048, num_warps=4)
+        self._gather(src)
         self._commit(src)
 
     def forward(self, hidden_states, router_indices, router_scores):

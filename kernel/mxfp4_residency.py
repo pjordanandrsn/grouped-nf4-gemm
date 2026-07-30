@@ -43,25 +43,27 @@ import torch
 from mxfp4_pipelined import Mxfp4PipelinedGptOss, _align8
 from nvme_residency import ColdTier
 
-# THE BAKE ORDER FOR THIS ENGINE IS NOT `arena_experts.K3_KINDS`.
+# The order this engine READS in. No longer the order a bake must WRITE in.
 #
-# K3 ships gate (w1) and up (w3) as SEPARATE per-expert tensors while the engine
-# wants one fused gate_up. `cat([w1, w3], dim=0)` is byte-wise w1's bytes then
-# w3's, so a bake CAN feed the engine directly -- but only if the two blocks
-# segments are ADJACENT, and likewise the two scales:
+# The engine reads `[gu_blocks | gu_scales | dn_blocks | dn_scales]`, so a row
+# feeds it directly only when the two blocks segments are adjacent and likewise
+# the two scales:
 #
 #     w1_packed | w3_packed | w1_scale | w3_scale | w2_packed | w2_scale
 #     \___ engine's gu_blocks __/ \___ gu_scales __/ \_ dn_b _/ \_ dn_s _/
 #
 # `arena_experts.K3_KINDS` interleaves per projection instead
-# (w1_packed, w1_scale, w3_packed, w3_scale, ...) and is perfectly correct for
-# `ArenaExpertSource`, which slices each segment by suffix out of the index and
-# does not care about order. This engine computes segment offsets, so that
-# layout puts w1_scale in the middle of what it reads as gu_blocks.
+# (w1_packed, w1_scale, w3_packed, w3_scale, ...). That is correct for
+# `ArenaExpertSource`, which slices by suffix out of the index, but it puts
+# w1_scale in the middle of what this engine reads as gu_blocks.
 #
-# Both orders are legitimate; they are for different consumers. Baking ~1.45 TB
-# in the wrong one is the expensive mistake, so `fuse_gate_up_segments` refuses a
-# mis-ordered arena and names this order in the error.
+# The released K3 arena on disk is in the INTERLEAVED order (checked 2026-07-30:
+# 82,432 rows, 1.446 TB, baked before this was noticed). Re-baking it would cost
+# 1.45 TB of IO and permuting it in place ~482 GB, so instead the gather reorders
+# segments as it copies each row into its device slot -- the copy was happening
+# anyway. See `_perm_gather_kernel` and `Mxfp4NvmeResidency._init_permutation`.
+# Any bake order is now readable; this constant is what the engine WANTS, and a
+# fresh bake may as well use it to take the identity fast path.
 #
 # Names are the released-K3 spelling, taken from `arena_experts.K3_KINDS` rather
 # than guessed -- guessing tensor names is what silently returned n_experts=0
@@ -69,6 +71,180 @@ from nvme_residency import ColdTier
 K3_RESIDENCY_KINDS = ("w1.weight_packed", "w3.weight_packed",
                       "w1.weight_scale", "w3.weight_scale",
                       "w2.weight_packed", "w2.weight_scale")
+
+
+_PERM_KERNEL = None
+
+
+def _perm_gather_kernel():
+    """Per-slot gather that REORDERS segments as it copies.
+
+    Same contract as ``mxfp4_pipelined._gather_kernel`` — per-slot absolute source
+    address, skip when unchanged — except the row is copied piecewise: each program
+    handles one precomputed BLOCK-sized chunk carrying its own (src, dst) word
+    offsets. Because the row is already being copied into the device slot, landing
+    the segments in a different ORDER costs no extra bandwidth. That is what makes
+    a mis-ordered 1.45 TB arena readable without rewriting it.
+
+    Still format-agnostic: it moves int64 words and cannot see MXFP4.
+    """
+    # `tl` must land in MODULE globals, not this function's locals: with
+    # `from __future__ import annotations` the `BLOCK: tl.constexpr` annotation is
+    # the STRING "tl.constexpr", which triton evaluates against the jitted
+    # function's __globals__ at compile time. A local import gives
+    # NameError('tl is not defined') from inside the triton compiler — on
+    # triton 3.2; 3.4 happens to tolerate it, so this hides on newer boxes.
+    global _PERM_KERNEL, tl
+    if _PERM_KERNEL is None:
+        import triton
+        import triton.language as tl
+
+        @triton.jit
+        def _gather_rows_perm(dst_ptr, src_ptr, have_ptr, c_src, c_dst, c_len,
+                              row_words, BLOCK: tl.constexpr):
+            slot = tl.program_id(0)
+            piece = tl.program_id(1)
+            want = tl.load(src_ptr + slot)
+            have = tl.load(have_ptr + slot)
+            if want == have:
+                return
+            so = tl.load(c_src + piece)
+            do = tl.load(c_dst + piece)
+            n = tl.load(c_len + piece)
+            offs = tl.arange(0, BLOCK)
+            mask = offs < n
+            src = tl.cast(want, tl.pointer_type(tl.int64))
+            vals = tl.load(src + so + offs, mask=mask)
+            tl.store(dst_ptr + slot.to(tl.int64) * row_words + do + offs,
+                     vals, mask=mask)
+
+        _PERM_KERNEL = _gather_rows_perm
+    return _PERM_KERNEL
+
+
+def _chunk_table(pieces, block_words: int):
+    """Split (src_off, dst_off, n) byte-triples into BLOCK-sized word chunks.
+
+    Precomputed on the host so every launched program does real work — a
+    grid over (segment, chunk) would launch the widest segment's chunk count for
+    the narrow scale segments too, which here is ~47% waste.
+    """
+    src, dst, ln = [], [], []
+    for s_off, d_off, n in pieces:
+        for bad, name in ((s_off, "src_off"), (d_off, "dst_off"), (n, "length")):
+            if bad % 8:
+                raise ValueError(
+                    f"{name}={bad} is not 8-byte aligned; the gather moves int64 "
+                    "words, so every segment offset and length must be. Re-bake "
+                    "with 8-aligned segments.")
+        s_w, d_w, n_w = s_off // 8, d_off // 8, n // 8
+        for c in range(0, n_w, block_words):
+            src.append(s_w + c)
+            dst.append(d_w + c)
+            ln.append(min(block_words, n_w - c))
+    return src, dst, ln
+
+
+def engine_segment_map(index: dict):
+    """Map an arena's segments onto the engine's four, in engine order.
+
+    Returns ``(groups, geometry)`` where ``groups`` is the engine's
+    ``[gu_blocks, gu_scales, dn_blocks, dn_scales]``, each a list of source
+    ``(seg_off, length)`` pieces to be concatenated.
+
+    Two signals, neither of them tensor names — names are the obvious key and are
+    exactly what has moved three times since K2:
+
+    * **blocks vs scales** from the MXFP4 packing invariant. Blocks hold two
+      values per byte (``k//2`` wide), scales one e8m0 byte per group of 32
+      (``k//32``), so a projection's blocks width is always exactly 16x its
+      scales width. Shape *equality* is NOT a usable signal: when hidden equals
+      intermediate all three projections share both shapes.
+    * **which projection** from SOURCE ORDER. Both ``arena_experts.K3_KINDS`` and
+      :data:`K3_RESIDENCY_KINDS` place w1 before w3 before w2, so the blocks in
+      source order are (gate, up, down) and likewise the scales. w1=gate is
+      confirmed against the release by shape (``moonshot_gather.K3_SCHEME``).
+    """
+    segs = index["segments"]
+    for g in segs:
+        if g["dtype"] != "U8":
+            raise ValueError(
+                f"segment {g['suffix']!r} is {g['dtype']}, not U8 — native MXFP4 "
+                "rows are packed nibbles + e8m0 scale bytes, both uint8. An F32 "
+                "segment means this is an NF4 arena (fp32 absmax); serve it with "
+                "experts4bit_qlora.nvme_experts instead.")
+        if len(g["shape_per_expert"]) != 2:
+            raise ValueError(f"segment {g['suffix']!r} shape "
+                             f"{g['shape_per_expert']} is not [n, k]")
+    if len(segs) not in (4, 6):
+        raise ValueError(
+            f"expected 4 segments (fused gate_up) or 6 (split w1/w3), got "
+            f"{len(segs)}: {[g['suffix'] for g in segs]}")
+
+    # BLOCKS vs SCALES from the MXFP4 packing invariant, not from shapes being
+    # distinct and not from names: blocks hold 2 values per byte (k//2 wide) and
+    # scales one e8m0 byte per group of 32 (k//32), so a projection's blocks width
+    # is ALWAYS exactly 16x its scales width. Shape alone is not a discriminator —
+    # when hidden == intermediate all three projections share both shapes.
+    widths = {tuple(g["shape_per_expert"])[1] for g in segs}
+    blocks, scales = [], []
+    for g in segs:
+        w = g["shape_per_expert"][1]
+        is_scale = (w * 32 // 2) in widths          # w*16, spelled to keep ints
+        is_block = (w % 16 == 0) and (w // 16) in widths
+        if is_scale and not is_block:
+            scales.append(g)
+        elif is_block and not is_scale:
+            blocks.append(g)
+        else:
+            raise ValueError(
+                f"segment {g['suffix']!r} width {w} is ambiguous against the "
+                f"widths present {sorted(widths)}: cannot tell packed blocks "
+                f"(k//2) from e8m0 scales (k//32), which must differ by exactly "
+                f"16x. Is this really an MXFP4 arena?")
+    if len(blocks) != len(scales) or len(blocks) != len(segs) // 2:
+        raise ValueError(
+            f"expected {len(segs) // 2} blocks and {len(segs) // 2} scales, got "
+            f"{[g['suffix'] for g in blocks]} / {[g['suffix'] for g in scales]}")
+
+    # SOURCE ORDER assigns projections. Both arena_experts.K3_KINDS and
+    # K3_RESIDENCY_KINDS place w1 before w3 before w2, so the blocks in source
+    # order are (gate, up, down) and likewise the scales. w1=gate is confirmed
+    # against the release by shape (see moonshot_gather.K3_SCHEME).
+    n_gu = len(blocks) - 1                 # 2 for split w1/w3, 1 for fused
+    gu_blocks, dn_blocks = blocks[:n_gu], blocks[n_gu:]
+    gu_scales, dn_scales = scales[:n_gu], scales[n_gu:]
+
+    def _one_shape(group, what):
+        shapes = {tuple(g["shape_per_expert"]) for g in group}
+        if len(shapes) != 1:
+            raise ValueError(f"{what}: members disagree on shape {shapes} "
+                             f"({[g['suffix'] for g in group]})")
+        return shapes.pop()
+
+    gu_b = _one_shape(gu_blocks, "gate_up blocks")
+    gu_s = _one_shape(gu_scales, "gate_up scales")
+    dn_b = _one_shape(dn_blocks, "down blocks")
+    dn_s = _one_shape(dn_scales, "down scales")
+
+    def pieces(group):
+        return [(g["seg_off"], g["length"]) for g in group]
+
+    groups = [pieces(gu_blocks), pieces(gu_scales),
+              pieces(dn_blocks), pieces(dn_scales)]
+    n1, n2 = gu_b[0] * len(gu_blocks), dn_b[0] * len(dn_blocks)
+    if gu_s[0] * len(gu_scales) != n1 or dn_s[0] * len(dn_scales) != n2:
+        raise ValueError(
+            f"blocks/scales row counts disagree: gate_up {n1} vs "
+            f"{gu_s[0] * len(gu_scales)}, down {n2} vs {dn_s[0] * len(dn_scales)}")
+    for what, half, nb in (("gate_up", gu_b[1], gu_s[1]),
+                           ("down", dn_b[1], dn_s[1])):
+        if nb * 32 != half * 2:
+            raise ValueError(
+                f"{what}: {nb} scale groups do not tile {half * 2} columns at "
+                f"MXFP4 group_size 32 (got {nb * 32})")
+    return groups, (index["n_experts_per_layer"], n1, gu_b[1], gu_s[1],
+                    n2, dn_b[1], dn_s[1])
 
 
 def fuse_gate_up_segments(index: dict) -> dict:
@@ -137,52 +313,13 @@ def mxfp4_geometry_from_arena(index: dict):
     experts are built at ``routed_expert_hidden_size`` (3584, the latent width),
     not ``hidden_size`` (7168), so a config-derived width is 2x too wide.
 
-    Also re-derives the engine's row layout from those shapes and requires it to
-    equal the layout the bake actually wrote. ``test_mxfp4_arena_layout`` proves
-    the two derivations agree in general; this is the same claim checked for THIS
-    arena, before a single byte is served.
+    Segment ORDER no longer has to match the engine's — see
+    :func:`engine_segment_map` and
+    :meth:`Mxfp4NvmeResidency._init_permutation`, which reorder on gather. This
+    is the geometry half of that result, kept as its own name because callers
+    sizing buffers want the shapes without the piece table.
     """
-    index = fuse_gate_up_segments(index)
-    segs = index["segments"]
-    if len(segs) != 4:
-        raise ValueError(f"need 4 segments, got {len(segs)}")
-    for g in segs:
-        if g["dtype"] != "U8":
-            raise ValueError(
-                f"segment {g['suffix']!r} is {g['dtype']}, not U8 — native MXFP4 "
-                "rows are packed nibbles + e8m0 scale bytes, both uint8. An F32 "
-                "segment means this is an NF4 arena (fp32 absmax); serve it with "
-                "experts4bit_qlora.nvme_experts instead.")
-        if len(g["shape_per_expert"]) != 2:
-            raise ValueError(f"segment {g['suffix']!r} shape "
-                             f"{g['shape_per_expert']} is not [n, k]")
-    (n1, half1), (n1s, nb1), (n2, half2), (n2s, nb2) = (
-        tuple(g["shape_per_expert"]) for g in segs)
-    if n1s != n1 or n2s != n2:
-        raise ValueError(f"blocks/scales row counts disagree: gate_up {n1} vs "
-                         f"{n1s}, down {n2} vs {n2s}")
-    for what, half, nb in (("gate_up", half1, nb1), ("down", half2, nb2)):
-        if nb * 32 != half * 2:
-            raise ValueError(
-                f"{what}: {nb} scale groups do not tile {half * 2} columns at "
-                f"MXFP4 group_size 32 (got {nb * 32})")
-
-    # the runtime layout gate
-    seg = [n1 * half1, n1 * nb1, n2 * half2, n2 * nb2]
-    off = [0]
-    for s in seg[:-1]:
-        off.append(_align8(off[-1] + s))
-    row_bytes = _align8(off[-1] + seg[-1])
-    have_off = [g["seg_off"] for g in segs]
-    have_len = [g["length"] for g in segs]
-    if have_len != seg or have_off != off or index["row_bytes"] != row_bytes:
-        raise ValueError(
-            "arena row layout does not match the engine's: "
-            f"offsets {have_off} vs {off}, lengths {have_len} vs {seg}, "
-            f"row_bytes {index['row_bytes']} vs {row_bytes}. The engine reads "
-            "each segment at a computed offset, so serving this arena would "
-            "hand the kernel misaligned nibbles, not an error.")
-    return index["n_experts_per_layer"], n1, half1, nb1, n2, half2, nb2
+    return engine_segment_map(index)[1]
 
 
 class Mxfp4NvmeResidency(Mxfp4PipelinedGptOss):
@@ -208,9 +345,11 @@ class Mxfp4NvmeResidency(Mxfp4PipelinedGptOss):
                  compute_dtype=torch.bfloat16, tier=None, index=None, qd=4):
         from nvme_arena import load_index
         index = index if index is not None else load_index(arena_path)
-        E, n1, half1, nb1, n2, half2, nb2 = mxfp4_geometry_from_arena(index)
+        groups, geo = engine_segment_map(index)
+        E, n1, half1, nb1, n2, half2, nb2 = geo
         self.layer = int(layer)
         self.index = index
+        self._src_groups = groups
 
         if tier is None:
             if hot_rows is None:
@@ -234,6 +373,7 @@ class Mxfp4NvmeResidency(Mxfp4PipelinedGptOss):
                              f"{self.row_bytes}")
         self.row_stride = tier.row_stride
         self.pinned = True
+        self._init_permutation()
         self._build_source_from_arena(hot_ids)
         self._init_slots()
         self._init_bias(gate_up_bias, down_bias)
@@ -245,6 +385,50 @@ class Mxfp4NvmeResidency(Mxfp4PipelinedGptOss):
             "Mxfp4NvmeResidency never builds an all-E host arena — that arena is "
             "the 1.446 TB this class exists to avoid. Rows come from the tier; "
             "hot rows are read once by _build_source_from_arena.")
+
+    _BLOCK_WORDS = 2048
+
+    def _init_permutation(self):
+        """Decide whether rows must be REORDERED as they are gathered.
+
+        The engine reads ``[gu_blocks | gu_scales | dn_blocks | dn_scales]`` at
+        offsets it computes. An arena baked in a different segment order holds the
+        same bytes elsewhere in the row. Rather than refuse it — or rewrite 482 GB
+        of a 1.45 TB arena — the gather lands each segment at the offset the engine
+        expects. The copy was happening anyway, so this is free.
+
+        The identity case keeps the original contiguous kernel untouched: no new
+        code on the path #21 measured, and no perf risk for gpt-oss.
+        """
+        pieces, dst = [], 0
+        for group, want_off in zip(self._src_groups, self.off):
+            if dst != want_off:                # groups are laid out back to back
+                dst = want_off
+            for s_off, ln in group:
+                pieces.append((s_off, dst, ln))
+                dst += ln
+        self._perm_pieces = pieces
+        self.permuted = any(s != d for s, d, _ in pieces)
+        if not self.permuted:
+            self._c_src = self._c_dst = self._c_len = None
+            return
+        src, dstw, lnw = _chunk_table(pieces, self._BLOCK_WORDS)
+        dev = self.device
+        self._c_src = torch.tensor(src, dtype=torch.int64, device=dev)
+        self._c_dst = torch.tensor(dstw, dtype=torch.int64, device=dev)
+        self._c_len = torch.tensor(lnw, dtype=torch.int64, device=dev)
+        covered = sum(n for _s, _d, n in pieces)
+        if covered != sum(self.seg):
+            raise ValueError(f"permutation covers {covered} B but the engine's "
+                             f"segments total {sum(self.seg)} B")
+
+    def _gather(self, src):
+        if not self.permuted:
+            return super()._gather(src)
+        kern = _perm_gather_kernel()
+        kern[(self.k, self._c_src.numel())](
+            self.slots64, src, self.have, self._c_src, self._c_dst, self._c_len,
+            self.row_words, BLOCK=self._BLOCK_WORDS, num_warps=4)
 
     def _build_source_from_arena(self, hot_ids):
         """Read the hot set out of the arena ONCE into VRAM; the tail stays cold.
