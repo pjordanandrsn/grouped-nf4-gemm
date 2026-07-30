@@ -239,6 +239,58 @@ class ColdTier:
         self.close()
 
 
+# safetensors dtype tag -> torch dtype. Only the tags the bake accepts.
+_ST_TO_TORCH = {
+    "U8": "uint8", "I8": "int8", "F16": "float16", "BF16": "bfloat16",
+    "F32": "float32", "F64": "float64", "I16": "int16", "I32": "int32",
+    "I64": "int64", "U16": "uint16", "U32": "uint32", "U64": "uint64",
+}
+
+
+def segment_tensor(tier: "ColdTier", index: dict, layer: int, experts,
+                   suffix: str, *, cast=None):
+    """Reconstruct one arena segment across `experts` as a ``[R, *shape]`` tensor.
+
+    This is the seam a serving engine sits on: the engine wants expert-major
+    tensors per projection, while the arena is expert-major with segments nested
+    inside each row. Geometry (per-expert shape + safetensors dtype) comes from
+    the bake's own index, so nothing here guesses a layout.
+
+    **Bit-identity:** the bytes are the shipped bytes (relocation bakes are
+    single-source and hash-preserving) and reinterpreting them at the recorded
+    dtype is bit-preserving, so the result equals the tensor read from the
+    original checkpoint exactly. ``cast`` applies a deliberate, documented
+    transform afterwards — e.g. the engine holds NF4 absmax as float32
+    (``mod.gate_up_absmax.view(...).float()``), so a caller replacing that stack
+    must pass ``cast="float32"`` or it will hand the kernel raw scale bytes
+    reinterpreted as floats: plausible shapes, garbage numerics.
+
+    Rows are made resident first, so this is where NVMe reads happen.
+    """
+    import torch
+
+    geo = next((g for g in index["segments"] if g["suffix"] == suffix), None)
+    if geo is None:
+        raise KeyError(f"segment {suffix!r} not in this arena "
+                       f"(have {[g['suffix'] for g in index['segments']]})")
+    dt = getattr(torch, _ST_TO_TORCH[geo["dtype"]])
+    shape = tuple(geo["shape_per_expert"])
+    off, ln = geo["seg_off"], geo["length"]
+
+    experts = [int(e) for e in experts]
+    tier.ensure(layer, experts)
+    rows = []
+    for e in experts:
+        mv = tier.row(layer, e)[off:off + ln]
+        # bytearray() copies: frombuffer needs a writable buffer, and the stack
+        # below would copy regardless.
+        rows.append(torch.frombuffer(bytearray(mv), dtype=dt).view(shape))
+    out = torch.stack(rows)
+    if cast is not None:
+        out = out.to(getattr(torch, cast) if isinstance(cast, str) else cast)
+    return out
+
+
 def capacity_for_bytes(usable_bytes: int, row_stride: int) -> int:
     """How many rows fit in a byte budget.
 

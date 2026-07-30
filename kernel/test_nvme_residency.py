@@ -235,3 +235,60 @@ def test_bit_identity_survives_eviction_and_refill(arena):
                 assert served == ground[f"model.layers.0.{suf}"][e], (
                     f"expert {e} corrupted after eviction/refill")
         assert t.stats()["evictions"] > 0, "test did not actually force eviction"
+
+
+# ------------- the last hop: reconstructed TENSOR == shipped TENSOR ---------
+def test_segment_tensor_is_bit_identical_to_the_shipped_tensor(arena):
+    """Closes the chain. Bytes being bit-identical is necessary but not
+    sufficient: the engine consumes TENSORS, so reinterpreting arena bytes at the
+    recorded dtype must reproduce the original tensor exactly — element for
+    element, not merely byte for byte at some assumed layout.
+    """
+    torch = pytest.importorskip("torch")
+    from mxfp4_loader import EXPERT_SUFFIXES
+    from nvme_residency import segment_tensor
+    path, index, ground = arena
+
+    with _tier(path, index, E) as t:
+        for lay in range(L):
+            for suf in EXPERT_SUFFIXES:
+                geo = next(g for g in index["segments"] if g["suffix"] == suf)
+                dt = getattr(torch, {"U8": "uint8"}.get(geo["dtype"], "uint8"))
+                got = segment_tensor(t, index, lay, range(E), suf)
+                # rebuild the reference straight from the shipped per-expert bytes
+                ref = torch.stack([
+                    torch.frombuffer(bytearray(ground[f"model.layers.{lay}.{suf}"][e]),
+                                     dtype=dt).view(tuple(geo["shape_per_expert"]))
+                    for e in range(E)])
+                assert got.shape == ref.shape
+                assert got.dtype == ref.dtype
+                assert torch.equal(got, ref), (
+                    f"layer {lay} segment {suf}: reconstructed tensor differs "
+                    f"from the shipped checkpoint")
+
+
+def test_segment_tensor_cast_is_the_only_transform(arena):
+    """`cast` must be the ONLY thing that changes values — and it must be applied,
+    because the engine holds NF4 absmax as float32. Reinterpreting raw scale bytes
+    as float32 instead would give plausible shapes and garbage numerics."""
+    torch = pytest.importorskip("torch")
+    from mxfp4_loader import EXPERT_SUFFIXES
+    from nvme_residency import segment_tensor
+    path, index, _ = arena
+    suf = EXPERT_SUFFIXES[1]                       # a scales segment
+    with _tier(path, index, E) as t:
+        raw = segment_tensor(t, index, 0, range(E), suf)
+        cast = segment_tensor(t, index, 0, range(E), suf, cast="float32")
+        assert raw.dtype == torch.uint8 and cast.dtype == torch.float32
+        # value-preserving: casting uint8 -> f32 must not reinterpret bits
+        assert torch.equal(cast, raw.to(torch.float32))
+        assert cast.max() <= 255.0
+
+
+def test_segment_tensor_rejects_an_unknown_segment(arena):
+    pytest.importorskip("torch")
+    from nvme_residency import segment_tensor
+    path, index, _ = arena
+    with _tier(path, index, E) as t:
+        with pytest.raises(KeyError, match="not in this arena"):
+            segment_tensor(t, index, 0, [0], "no.such.segment")
