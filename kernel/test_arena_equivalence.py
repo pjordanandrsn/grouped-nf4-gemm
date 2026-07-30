@@ -208,3 +208,32 @@ def test_traffic_matches_the_bytes_per_token_model(baked):
     assert useful == predicted, (useful, predicted)
     # padding overhead is explicit, not hidden
     assert read_bytes >= useful
+
+
+@cuda
+def test_high_expert_ids_do_not_read_past_the_stack(baked):
+    """Regression: moe_layer_forward passed the model's GLOBAL expert ids to a
+    kernel that indexes the stack it is handed. fused_stacks returns only the
+    requested experts, so any id >= len(expert_ids) read out of bounds --
+    silently, because the kernel cannot know the stack was subsetted. Ids below
+    the group count (e.g. [0,1,2]) hid it completely."""
+    arena, ground = baked
+    ids, sizes = [7, 6, 5], [2, 2, 2]        # every id >= n_groups
+    a = torch.randn(sum(sizes), H, device="cuda", dtype=torch.bfloat16) * 0.1
+    with ArenaExpertSource(arena, device="cuda") as src:
+        got = moe_layer_forward(src, 3, a, torch.tensor(sizes, device="cuda",
+                                                        dtype=torch.int32), ids)
+    assert torch.isfinite(got).all(), "out-of-bounds expert_ids regressed"
+    ref, start = [], 0
+    for e, n in zip(ids, sizes):
+        w = {k: ground[K3_TEMPLATE.format(layer=3, expert=e, kind=k)].cuda()
+             for k in K3_KINDS}
+        ref.append(_upstream_expert(
+            a[start:start + n].float(),
+            w["w1.weight_packed"], w["w1.weight_scale"],
+            w["w3.weight_packed"], w["w3.weight_scale"],
+            w["w2.weight_packed"], w["w2.weight_scale"]))
+        start += n
+    ref = torch.cat(ref).to(torch.bfloat16)
+    rel = (got.float() - ref.float()).abs().max() / ref.float().abs().max()
+    assert rel < (H ** 0.5) * (2 ** -8) * 4, rel

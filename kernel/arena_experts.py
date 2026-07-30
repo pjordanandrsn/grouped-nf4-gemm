@@ -181,12 +181,20 @@ def moe_layer_forward(src: "ArenaExpertSource", layer: int,
     dev = a_cat.device
     mv = lambda t: t.to(dev, non_blocking=True)  # noqa: E731
 
-    gate = gemm_mxfp4_grouped(a_cat, mv(gb), mv(gs), sizes, expert_ids,
+    # The kernel's `expert_ids` indexes the STACK it is handed, not the model's
+    # expert numbering. `fused_stacks` returns exactly the requested experts in
+    # request order, so group g uses stack row g. Passing the model-global ids
+    # here reads out of bounds whenever any id >= len(expert_ids) -- silently,
+    # since the kernel cannot know the stack was subsetted.
+    n_groups = len(list(expert_ids))
+    stack_ids = torch.arange(n_groups, device=dev, dtype=torch.int32)
+
+    gate = gemm_mxfp4_grouped(a_cat, mv(gb), mv(gs), sizes, stack_ids,
                               block_m=block_m)
-    up = gemm_mxfp4_grouped(a_cat, mv(ub), mv(us), sizes, expert_ids,
+    up = gemm_mxfp4_grouped(a_cat, mv(ub), mv(us), sizes, stack_ids,
                             block_m=block_m)
     h = glu(gate) * up
-    return gemm_mxfp4_grouped(h, mv(db), mv(ds), sizes, expert_ids,
+    return gemm_mxfp4_grouped(h, mv(db), mv(ds), sizes, stack_ids,
                               block_m=block_m)
 
 
