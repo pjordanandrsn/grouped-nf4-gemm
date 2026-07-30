@@ -285,11 +285,47 @@ SITU_UNVERIFIED = _UnverifiedEpilogue(
     ),
 )
 
-# name -> callable(gate, up) -> hidden. Add K3's confirmed SiTU here at seam.
+def make_situ(beta: float, linear_beta: float | None = None):
+    """SiTU epilogue factory — SOURCED, not guessed.
+
+    Transcribed from Kimi-K3's own `modeling_kimi_linear.py::SituAndMul`
+    (fetched from the release 2026-07-30)::
+
+        situ_a = beta * tanh(gate / beta) * sigmoid(gate)
+        if linear_beta is not None:
+            up = linear_beta * tanh(up / linear_beta)
+        return situ_a * up
+
+    Both branches are BOUNDED by a tanh whose scale is a config parameter — and
+    note that **none of the four candidate readings guarded below is this**. The
+    nearest (``gate * sigmoid(gate) * tanh(up)``) has the tanh on the wrong
+    branch and no beta scaling, so guessing would have produced a model that ran
+    and was quietly wrong. `beta`/`linear_beta` are per-checkpoint
+    (`activation_situ_beta`, `activation_situ_linear_beta`), so a different
+    checkpoint must re-register with its own values.
+    """
+    def _situ(gate, up):
+        situ_a = beta * torch.tanh(gate / beta) * torch.sigmoid(gate)
+        if linear_beta is not None:
+            up = linear_beta * torch.tanh(up / linear_beta)
+        return (situ_a * up).to(gate.dtype)
+    _situ.__name__ = f"situ_beta{beta:g}" + (
+        f"_lin{linear_beta:g}" if linear_beta is not None else "")
+    return _situ
+
+
+# Kimi-K3 as released: activation_situ_beta 4.0, activation_situ_linear_beta 25.0
+# (config.json text_config). Registered under the bare name so `apply_glu(x,
+# "situ")` matches the shipped checkpoint; re-register for any other values.
+SITU_K3_BETA, SITU_K3_LINEAR_BETA = 4.0, 25.0
+_situ_k3 = make_situ(SITU_K3_BETA, SITU_K3_LINEAR_BETA)
+
+# name -> callable(gate, up) -> hidden.
 GLU_VARIANTS = {
     "swiglu": _swiglu,          # K2 / DeepSeek-V3 — VERIFIED
     "silu": _swiglu,            # alias
-    "situ": SITU_UNVERIFIED,    # K3 — GUARDED until sourced
+    "situ": _situ_k3,           # K3 — SOURCED from the release's own modeling code
+    "situ_unverified": SITU_UNVERIFIED,   # the guard, kept for future unknowns
 }
 
 
