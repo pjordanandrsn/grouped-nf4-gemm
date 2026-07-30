@@ -169,15 +169,26 @@ def check_aligned(mv: memoryview, align: int):
             "page-aligned), not bytes()/bytearray().")
 
 
-def alloc_landing(n_bytes: int, *, pinned: bool = False):
+def alloc_landing(n_bytes: int, *, pinned: bool = False, align: int = 4096):
     """Page-aligned landing buffer. pinned=True requires torch+CUDA (the
     engine path: gather reads it over UVA); tests use plain mmap. Returns
-    (memoryview, keepalive) — hold keepalive as long as the view lives."""
+    (memoryview, keepalive) — hold keepalive as long as the view lives.
+
+    A pinned tensor is NOT reliably page-aligned. PyTorch's caching host
+    allocator SUBALLOCATES: a fresh `pin_memory()` lands on a page boundary, but
+    once other pinned blocks exist it can return an interior offset — measured
+    1024 B off on 2026-07-30, immediately after an engine pinned its cold expert
+    stacks, which made O_DIRECT reads EINVAL far from the cause. So over-allocate
+    by one alignment unit and hand back an aligned sub-view rather than trusting
+    the allocator.
+    """
     if pinned:
         import torch
-        t = torch.empty(n_bytes, dtype=torch.uint8).pin_memory()
+        t = torch.empty(n_bytes + align, dtype=torch.uint8).pin_memory()
         mv = memoryview(t.numpy())
-        check_aligned(mv, 4096)
+        pad = (-buffer_address(mv)) % align
+        mv = mv[pad:pad + n_bytes]
+        check_aligned(mv, align)
         return mv, t
     import mmap
     m = mmap.mmap(-1, n_bytes)
