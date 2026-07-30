@@ -130,6 +130,42 @@ automatic fallback for training and ineligible modules.
 from nf4_grouped import gemm_4bit_grouped, dequant_ref
 ```
 
+## The NVMe tier: compute on packed bytes that never fit in RAM (0.2.5 / 0.2.6)
+
+`nvme_arena` relocates a checkpoint's per-expert tensors into an expert-major
+arena — hash-preserving, because every row segment is one whole source tensor
+range. `arena_experts` then turns a row into the fused `[E, N, K//2]` blocks and
+`[E, N, K//32]` e8m0 scales `gemm_mxfp4_grouped` already takes:
+
+```python
+from arena_experts import ArenaExpertSource, moe_layer_forward
+
+src = ArenaExpertSource("k3.arena", device="cuda")      # O_DIRECT, async, qd-deep
+out = moe_layer_forward(src, layer, a_cat, sizes, expert_ids)   # gate → GLU → down
+```
+
+Those shapes are not a coincidence worth glossing: a DeepSeek-V3-lineage MXFP4
+release ships each expert as **exactly** `weight_packed [N, K//2]` +
+`weight_scale [N, K//32]`, which *is* the kernel's input contract. So the bytes
+travel disk → arena → GEMM with **no dequantize round trip and no
+requantization** — what gets multiplied is what shipped.
+
+`arena_moe_patch.enable_arena_experts(model, arena)` wires it into a real model
+by rebinding `KimiSparseMoeBlock.moe_infer`, which already produces the kernel's
+inputs (group-sorted tokens + per-expert counts) and then loops one matmul per
+expert. The patch collapses that loop and changes nothing else — sorting,
+weighting, unsorting and shared experts stay upstream's.
+`arena_call_stats(model)` reports **`patched` and `calls` separately**, because a
+patch count is not a call count.
+
+**Scope, unhedged:** this is a *batch* tier. At a measured per-box
+`S ≈ 3.45 GB/s` a fully cold 235B streams ~2.3 s/token and a K3-class model
+~7.5 s/token. Interactive use is not the claim — see
+[`docs/nvme-ceilings.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.6/docs/nvme-ceilings.md). What the tier buys is
+reachability and provenance, not latency:
+[`docs/K3-PROVENANCE-CHAIN.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.2.6/docs/K3-PROVENANCE-CHAIN.md) composes the
+receipts from a publication hash to the multiply.
+
 ## The claim (blind-confirmed, receipts in-repo)
 
 Everything below is from **pre-registered, OpenTimestamps-stamped blind
