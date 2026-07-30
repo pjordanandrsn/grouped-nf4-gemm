@@ -168,3 +168,58 @@ def test_patched_block_calls_the_arena_and_counts_it():
     assert 0 not in [n for n in seen["sizes"]], "empty groups must be dropped"
     s = arena_call_stats(m)
     assert s["calls"] == 1 and s["experts_read"] == len(seen["ids"])
+
+
+# ---------------------------------------------- geometry invariants (K3) -----
+# The experts contract over `routed_expert_hidden_size` (3584), NOT
+# `hidden_size` (7168): "Stable LatentMoE" down-projects OUTSIDE the experts, in
+# forward(), before moe_infer is reached. Patching forward() instead of
+# moe_infer would hand the arena a 7168-wide activation against 3584-wide
+# weights. Measured from the real release:
+#     w1/w3 [3072, 1792] -> N=moe_inter 3072, K=3584
+#     w2    [3584, 1536] -> N=3584,           K=moe_inter 3072
+K3_REAL = {"hidden": 7168, "latent": 3584, "inter": 3072,
+           "w1": (3072, 1792), "w1s": (3072, 112),
+           "w2": (3584, 1536), "w2s": (3584, 96)}
+
+
+def test_k3_expert_geometry_contracts_over_the_latent_dim():
+    """If this ever reads `hidden` the patch is attached at the wrong level."""
+    assert K3_REAL["w1"][1] * 2 == K3_REAL["latent"], "gate/up K must be latent"
+    assert K3_REAL["w1"][0] == K3_REAL["inter"]
+    assert K3_REAL["w2"][1] * 2 == K3_REAL["inter"], "down K must be moe_inter"
+    assert K3_REAL["w2"][0] == K3_REAL["latent"], "down N returns to latent"
+    assert K3_REAL["w1"][1] * 2 != K3_REAL["hidden"], (
+        "gate/up contracted over hidden -> patched above the down-projection")
+
+
+def test_scale_columns_are_K_over_32_on_both_projections():
+    """A group-size slip shows up here before it shows up as garbage output."""
+    assert K3_REAL["w1s"][1] == K3_REAL["latent"] // 32 == 112
+    assert K3_REAL["w2s"][1] == K3_REAL["inter"] // 32 == 96
+
+
+def test_patch_passes_the_activation_through_untouched():
+    """moe_infer's `x` is already down-projected; the patch must not reshape or
+    re-project it, only route it to the kernel."""
+    import arena_moe_patch
+    m = FakeModel()
+    got = {}
+
+    def spy(src, layer, a_cat, sizes, expert_ids, **kw):
+        got["K"] = a_cat.shape[-1]
+        got["ptr"] = a_cat.data_ptr()
+        return torch.zeros(a_cat.shape[0], a_cat.shape[1], dtype=a_cat.dtype)
+
+    orig = arena_moe_patch.moe_layer_forward
+    arena_moe_patch.moe_layer_forward = spy
+    try:
+        enable_arena_experts(m, "unused", source=StubSource([1, 2, 3]),
+                             verbose=False)
+        blk = m.model.layers[1].block_sparse_moe
+        x = torch.randn(4, 64)
+        blk.moe_infer(x, torch.tensor([[0, 1], [1, 2], [0, 2], [1, 2]]),
+                      torch.full((4, 2), 0.5))
+    finally:
+        arena_moe_patch.moe_layer_forward = orig
+    assert got["K"] == 64, "activation width changed before reaching the kernel"
