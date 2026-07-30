@@ -106,30 +106,43 @@ class ColdTier:
         Hits are free. Misses are submitted concurrently (bounded by the
         reader's queue depth) and land directly in the slot they will be
         gathered from.
+
+        Capacity is counted in UNIQUE rows: repeats in one request share a slot,
+        so ``ensure(l, [7, 7, 7])`` needs one row, not three.
+
+        A slot is *reserved* while its read is in flight and only PUBLISHED into
+        the residency maps once the fill lands. Nothing can observe a slot as
+        resident while it holds partial or stale bytes, and a failed batch drains
+        every in-flight read before reclaiming slots, so no read can still be
+        writing into a slot that has been handed to someone else.
         """
         experts = [int(e) for e in experts]
-        if len(experts) > self.hot_rows:
+        keys = [(layer, e) for e in experts]
+        uniq = list(dict.fromkeys(keys))          # order-preserving dedupe
+        if len(uniq) > self.hot_rows:
             raise ValueError(
-                f"request of {len(experts)} rows exceeds hot_rows={self.hot_rows}")
+                f"request of {len(uniq)} unique rows exceeds "
+                f"hot_rows={self.hot_rows}")
         with self._lock:
             self.requests += 1
             self._clock += 1
             now = self._clock
-            slots = [None] * len(experts)
-            protected = set()
-            pending = []                     # (index, slot, key, expert)
-
-            # Pass 1 — resolve hits, reserve slots for misses. Reserving before
-            # any read means a miss can never evict a row this same request
-            # already hit or placed.
-            for i, e in enumerate(experts):
-                key = (layer, e)
+            for key in keys:                      # frequency counts every pick
                 self._freq[key] += 1
                 self._last_use[key] = now
+
+            resolved: dict = {}
+            reserved: list = []                   # (key, slot) awaiting fill
+            protected = set()
+
+            # Pass 1 — resolve hits and RESERVE slots for misses. Reserving
+            # before any read means a miss cannot evict a row this same request
+            # already hit or claimed.
+            for key in uniq:
                 slot = self._slot_of.get(key)
                 if slot is not None:
                     self.hits += 1
-                    slots[i] = slot
+                    resolved[key] = slot
                     protected.add(slot)
                     continue
                 self.misses += 1
@@ -140,36 +153,52 @@ class ColdTier:
                     old = self._key_of[slot]
                     if old is not None:
                         del self._slot_of[old]
+                        self._key_of[slot] = None   # unpublish before refilling
                         self.evictions += 1
-                self._key_of[slot] = key
-                self._slot_of[key] = slot
-                slots[i] = slot
                 protected.add(slot)
-                pending.append((i, slot, key, e))
+                resolved[key] = slot
+                reserved.append((key, slot))
 
-            # Pass 2 — concurrent O_DIRECT fills into the reserved slots.
-            futures = [(self.reader.read_row(layer, e, self._slot_view(sl)), sl, ky)
-                       for (_i, sl, ky, e) in pending]
-            for fut, sl, ky in futures:
+            # Pass 2 — concurrent O_DIRECT fills, then publish. Every future is
+            # drained even on failure: returning early could hand a slot back to
+            # the free list while a read is still landing bytes in it.
+            futures = [(self.reader.read_row(layer, k[1], self._slot_view(s)), k, s)
+                       for k, s in reserved]
+            first_err = None
+            for fut, key, slot in futures:
                 try:
                     fut.result()
-                except Exception:
-                    # a failed fill must never stay advertised as resident
-                    self._key_of[sl] = None
-                    self._slot_of.pop(ky, None)
-                    self._free.append(sl)
-                    raise
-            return slots
+                except Exception as exc:          # noqa: BLE001 - re-raised below
+                    if first_err is None:
+                        first_err = exc
+                    continue
+                self._key_of[slot] = key          # publish only now
+                self._slot_of[key] = slot
+            if first_err is not None:
+                for key, slot in reserved:        # reclaim whatever never landed
+                    if self._slot_of.get(key) != slot:
+                        self._key_of[slot] = None
+                        if slot not in self._free:
+                            self._free.append(slot)
+                raise first_err
+            return [resolved[k] for k in keys]
 
     def row(self, layer: int, expert: int) -> memoryview:
-        """A resident row's bytes (``row_bytes``, excluding alignment padding)."""
-        slot = self._slot_of.get((layer, int(expert)))
-        if slot is None:
-            raise KeyError(f"(layer {layer}, expert {expert}) not resident")
-        return self._slot_view(slot)[:self.row_bytes]
+        """A resident row's bytes (``row_bytes``, excluding alignment padding).
+
+        Lock-guarded: the residency maps are only published after a fill lands, so
+        taking the lock here is what guarantees a caller can never be handed a
+        view of a slot whose read is still in flight.
+        """
+        with self._lock:
+            slot = self._slot_of.get((layer, int(expert)))
+            if slot is None:
+                raise KeyError(f"(layer {layer}, expert {expert}) not resident")
+            return self._slot_view(slot)[:self.row_bytes]
 
     def resident(self, layer: int, expert: int) -> bool:
-        return (layer, int(expert)) in self._slot_of
+        with self._lock:
+            return (layer, int(expert)) in self._slot_of
 
     def pinned_tensor(self):
         """The pinned buffer as a ``[hot_rows, row_stride]`` uint8 tensor — what
@@ -180,6 +209,10 @@ class ColdTier:
 
     # --------------------------------------------------------------- stats --
     def stats(self) -> dict:
+        with self._lock:
+            return self._stats_locked()
+
+    def _stats_locked(self) -> dict:
         total = self.hits + self.misses
         t = self.reader.traffic()
         return {

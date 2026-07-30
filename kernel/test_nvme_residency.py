@@ -131,3 +131,107 @@ def test_hit_rate_rises_with_hot_fraction_under_skewed_routing(arena):
             rates[hot] = t.stats()["hit_rate"]
     assert rates[E] >= rates[max(2, E // 2)] >= rates[2], rates
     assert rates[E] > 0.5, f"a fully-resident hot set should hit often: {rates}"
+
+
+# ------------------------------------------------ Bugbot #17 regressions --
+def test_duplicates_do_not_count_against_capacity(arena):
+    """`ensure(l, [7,7,7])` needs ONE row, not three: repeats share a slot, so
+    the capacity check must count UNIQUE (layer, expert) pairs."""
+    path, index, _ = arena
+    with _tier(path, index, 1) as t:
+        slots = t.ensure(0, [1, 1, 1])          # 3 ids, 1 unique, hot_rows=1
+        assert slots == [slots[0]] * 3
+        assert t.stats()["disk_reads"] == 1
+    with _tier(path, index, 2) as t:            # still rejects genuinely-too-many
+        with pytest.raises(ValueError, match="unique rows exceeds"):
+            t.ensure(0, [0, 1, 2])
+
+
+def test_failed_fill_is_never_published_as_resident(arena, monkeypatch):
+    """A slot must not appear resident until its read LANDS. Publishing in pass 1
+    let a failed (or in-flight) read expose partial bytes to the gather path."""
+    path, index, _ = arena
+    with _tier(path, index, E) as t:
+        boom = RuntimeError("simulated NVMe failure")
+
+        def fail(layer, expert, dst):
+            fut = __import__("concurrent.futures", fromlist=["Future"]).Future()
+            fut.set_exception(boom)
+            return fut
+
+        monkeypatch.setattr(t.reader, "read_row", fail)
+        with pytest.raises(RuntimeError, match="simulated NVMe failure"):
+            t.ensure(0, [0, 1])
+        # nothing advertised, and the slots came back for reuse
+        assert not t.resident(0, 0) and not t.resident(0, 1)
+        assert t.stats()["resident_rows"] == 0
+        monkeypatch.undo()
+        # the tier is still usable afterwards — slots were reclaimed, not leaked
+        t.ensure(0, [0, 1])
+        assert t.resident(0, 0) and t.resident(0, 1)
+
+
+def test_partial_batch_failure_publishes_only_what_landed(arena, monkeypatch):
+    """One bad row in a batch must not poison the rows that read cleanly, and
+    must not leave the failed slot advertised."""
+    path, index, _ = arena
+    import concurrent.futures as cf
+    with _tier(path, index, E) as t:
+        real = t.reader.read_row
+
+        def flaky(layer, expert, dst):
+            if expert == 1:
+                fut = cf.Future(); fut.set_exception(RuntimeError("bad row"))
+                return fut
+            return real(layer, expert, dst)
+
+        monkeypatch.setattr(t.reader, "read_row", flaky)
+        with pytest.raises(RuntimeError, match="bad row"):
+            t.ensure(0, [0, 1, 2])
+        assert not t.resident(0, 1), "failed row must not be advertised"
+        assert t.resident(0, 0) and t.resident(0, 2), "clean rows should survive"
+
+
+# -------------------------------------- bit-identity back to the release --
+def test_served_row_is_bit_identical_to_the_SHIPPED_bytes(arena):
+    """The claim that matters: bytes served out of the tier are bit-identical to
+    the bytes in the original checkpoint — not merely to the arena.
+
+    Chain of custody: `nvme_arena.verify(--against-source)` proves arena ==
+    shipped, and this proves tier == arena, so tier == shipped transitively. Here
+    it is checked DIRECTLY against the per-expert source tensors instead, which
+    needs no transitivity argument at all.
+    """
+    from nvme_arena import _seg_len, _seg_off
+    from mxfp4_loader import EXPERT_SUFFIXES
+    path, index, ground = arena
+    with _tier(path, index, E) as t:
+        for lay in range(L):
+            t.ensure(lay, range(E))
+            for e in range(E):
+                row = t.row(lay, e)
+                for suf in EXPERT_SUFFIXES:
+                    off, ln = _seg_off(index, suf), _seg_len(index, suf)
+                    served = bytes(row[off:off + ln])
+                    shipped = ground[f"model.layers.{lay}.{suf}"][e]
+                    assert served == shipped, (
+                        f"layer {lay} expert {e} segment {suf}: served bytes "
+                        f"differ from the shipped checkpoint")
+
+
+def test_bit_identity_survives_eviction_and_refill(arena):
+    """Re-reading an evicted row must reproduce the shipped bytes exactly — a
+    stale or partially-overwritten slot would show up here."""
+    from nvme_arena import _seg_len, _seg_off
+    from mxfp4_loader import EXPERT_SUFFIXES
+    path, index, ground = arena
+    suf = EXPERT_SUFFIXES[0]
+    off, ln = _seg_off(index, suf), _seg_len(index, suf)
+    with _tier(path, index, 2) as t:            # tiny hot set forces churn
+        for _round in range(3):
+            for e in range(E):
+                t.ensure(0, [e])
+                served = bytes(t.row(0, e)[off:off + ln])
+                assert served == ground[f"model.layers.0.{suf}"][e], (
+                    f"expert {e} corrupted after eviction/refill")
+        assert t.stats()["evictions"] > 0, "test did not actually force eviction"
