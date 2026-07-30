@@ -292,3 +292,24 @@ def test_segment_tensor_rejects_an_unknown_segment(arena):
     with _tier(path, index, E) as t:
         with pytest.raises(KeyError, match="not in this arena"):
             segment_tensor(t, index, 0, [0], "no.such.segment")
+
+
+def test_pinned_landing_is_aligned_even_when_the_allocator_suballocates():
+    """Regression: PyTorch's caching host allocator suballocates, so
+    `pin_memory()` is page-aligned only while the allocator is virgin. After
+    other pinned blocks exist it can hand back an interior offset (measured
+    1024 B off on 2026-07-30), which made O_DIRECT reads EINVAL far from the
+    cause. `alloc_landing` must align defensively rather than trust it."""
+    torch = pytest.importorskip("torch")
+    if not torch.cuda.is_available():
+        pytest.skip("pinned memory needs CUDA")
+    from nvme_reader import alloc_landing, buffer_address
+    # churn the pinned allocator with odd sizes first, to provoke suballocation
+    keep = [torch.empty(n, dtype=torch.uint8).pin_memory()
+            for n in (1234, 5678, 9012, 34567)]
+    for n in (16384, 16384 * 6, 4096 * 3 + 17):
+        mv, ka = alloc_landing(n, pinned=True)
+        assert len(mv) == n, "aligned sub-view must still be the requested size"
+        assert buffer_address(mv) % 4096 == 0, f"n={n} came back misaligned"
+        del ka
+    del keep
