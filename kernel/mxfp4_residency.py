@@ -3,7 +3,9 @@
 
 :class:`~mxfp4_pipelined.Mxfp4PipelinedGptOss` pins **all E rows** in host DRAM and
 dispatches through a static address table. For Kimi K3 that arena is **1.446 TB**
-(93 layers x 896 experts x ~17.5 MB, measured 2026-07-30) against a **503 GB**
+(**92 routed** layers x 896 experts x 17,547,264 B, measured 2026-07-30 -- K3
+has 93 layers in total but 92 carry a routed MoE block, and 92 x 896 = 82,432 rows
+is exactly the baked arena) against a **503 GB**
 per-container host-RAM ceiling that renting more GPUs does not raise. So the arena
 is the thing to remove, not the thing to grow.
 

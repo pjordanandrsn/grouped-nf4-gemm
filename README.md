@@ -24,9 +24,7 @@ accurate than the baseline.**
 ## Install
 
 ```bash
-pip install grouped-nf4-gemm    # nf4_grouped + nf4_pack_ref + host_gather,
-                                # plus the mxfp4_* lane + moonshot_gather + verify_provenance,
-                                # plus the NVMe arena: nvme_arena + nvme_bake_nf4 + nvme_reader
+pip install grouped-nf4-gemm
 ```
 
 `pip install nf4gemm` and `pip install gnf4` are equivalent aliases.
@@ -36,6 +34,15 @@ Published via trusted publishing; every wheel carries a PEP 740 attestation.
 
 No GPU needed for the pack/decode/provenance surface — the fused GEMM is
 CUDA-only, but the reference decode and the provenance hashing are pure torch.
+
+> **On Linux this works from a bare `pip install`; on macOS and Windows it does
+> not, today.** `nf4_pack_ref` imports `nf4_grouped`, which does a module-level
+> `import triton` — and triton is declared
+> `triton>=3.4; platform_system == 'Linux'`, so it is simply absent elsewhere and
+> these blocks raise `ModuleNotFoundError`. The *math* is pure torch; the import
+> graph is not. CI executes these blocks on Linux, where triton is present, so it
+> validates the code without validating this sentence. Tracked as a real defect —
+> the reference decode should not need the kernel's dependency.
 These three blocks are extracted and executed by CI (`test_readme_cpu_block.py`),
 so they cannot drift from the API.
 
@@ -107,12 +114,27 @@ the conversion tax. Stamped, receipts in `docs/mxfp4/`:
 - **Verify it yourself**: `verify_provenance` re-hashes a checkpoint's expert
   byte ranges against a served/trained arena from the artifact alone
   (96/96 on the real shipped 20b bytes).
-<!-- update same-day when shards land: format verdict (MXFP4 vs INT4) + first measurements or their absence -->
-- **Kimi K3** (native MXFP4 via QAT, weights announced for July 27, 2026):
-  `moonshot_gather` — the DeepSeek-lineage per-expert → fused gather loader —
-  is included and **K2-verified** (live K2 index, 9/9 gates). Every
-  K3-specific number stays unclaimed until the weights drop and the oracle
-  re-adjudicates against K3's own dequant reference (the per-model STOP gate).
+- **Kimi K3** — released, and the per-model STOP gate **PASSED**. That gate said
+  no K3-specific number would be claimed until the oracle re-adjudicated our
+  decode against K3's *own* declared reference. It did, on 2026-07-30:
+  compressed-tensors 0.17.1, format `mxfp4-pack-quantized`, **33,030,144
+  elements across w1/w3/w2, max abs delta 0, exact**
+  ([`docs/RESULTS-k3-phase1-oracle.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.3.1/docs/RESULTS-k3-phase1-oracle.md)).
+  A real-bytes arena round-trip on a byte-verified 1.56 TB store (96 shards
+  checked against Moonshot's LFS hashes) came back **48/48 segments identical**
+  with a byte-flip negative control, fixing the released row at **17,547,264 B**
+  ([`docs/RESULTS-k3-slice-roundtrip.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.3.1/docs/RESULTS-k3-slice-roundtrip.md)).
+  `moonshot_gather` is no longer merely K2-verified: it carries a `K3_SCHEME`
+  measured against the real checkpoint, and K3's SiTU epilogue is registered
+  from the release's own modeling code rather than inferred — none of the
+  guesses had been right.
+
+  **What the gate does not cover, stated because the receipts state it:** the
+  oracle gates the *reference* decode (`mxfp4_pack_ref`), not the Triton kernel;
+  it covers one expert of one layer; the round-trip is a slice (8 of 82,432
+  rows) and carries no throughput claim; and both `.ots` stamps were applied
+  *after* their runs, so these sit at this project's **`measured`** tier, not
+  `confirmed`.
 
 The engine composes with the hot/cold serving work in
 [experts4bit-qlora](https://pypi.org/project/experts4bit-qlora/): hot sets
@@ -188,8 +210,9 @@ dequantize-then-matmul baseline on the same stacks:
   instances). Fresh off-census shapes with `top_k ≥ 6` (DeepSeek-V3,
   granite-3.1, Qwen3-Next) run **1.0–1.8× at median**; `k=2`-large shapes
   (Grok-1, Mixtral-8x22B) 1.0–1.24×, never slower.
-- **Versus the other execution classes** (same-run census on the v6
-  kernel, [receipts](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.3.1/bench/phase1/results/comparators_v6/RESULTS-comparators-v6.md)):
+- **Versus the other execution classes** (same-run census on the v6 kernel —
+  an **exploratory census, not a blind confirmatory run**, as its own receipt
+  says; treat these as measured, not confirmed, [receipts](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.3.1/bench/phase1/results/comparators_v6/RESULTS-comparators-v6.md)):
   the grouped-bf16-GEMM class that unsloth's MoE backend rides
   (`grouped_gemm.ops.gmm`, dequant inside the timed path as 4-bit storage
   requires) loses to the fused kernel on **every census cell — decode
