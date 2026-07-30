@@ -47,7 +47,13 @@ def make_snapshot(root, seed=11):
         for e in range(E):
             for kind in K3_KINDS:
                 shape = SHAPES[kind]
-                t = torch.randint(0, 256, shape, generator=g, dtype=torch.uint8)
+                # Packed nibbles: fully random, so byte-identity is a strong
+                # claim. e8m0 SCALES: a sane exponent band. Random 0-255 scales
+                # reach 2**128 and the dequantized product overflows to inf/nan
+                # -- which then silently breaks any torch.equal comparison,
+                # because NaN != NaN even bit-for-bit.
+                lo, hi = (120, 135) if kind.endswith("weight_scale") else (0, 256)
+                t = torch.randint(lo, hi, shape, generator=g, dtype=torch.uint8)
                 name = K3_TEMPLATE.format(layer=lay, expert=e, kind=kind)
                 ground[name] = t
                 shard[name] = (t.numpy().tobytes(), shape)
@@ -205,7 +211,12 @@ def test_arena_fed_gemm_equals_memory_fed_gemm(baked):
     assert torch.equal(ab, mb) and torch.equal(as_, ms)
     from_arena = gemm_mxfp4_grouped(a, ab, as_, sizes, eids, block_m=16)
     from_mem = gemm_mxfp4_grouped(a, mb, ms, sizes, eids, block_m=16)
-    assert torch.equal(from_arena, from_mem)
+    # Compare BITS, not values: torch.equal reports False for identical NaNs,
+    # so a value compare can fail on outputs that are byte-for-byte the same.
+    assert torch.equal(from_arena.view(torch.int16), from_mem.view(torch.int16))
+    assert torch.isfinite(from_arena).all(), "fixture produced inf/nan"
+    # and sizes must be reusable across the two calls
+    assert sizes.tolist() == [4, 4], sizes.tolist()
 
 
 @cuda
