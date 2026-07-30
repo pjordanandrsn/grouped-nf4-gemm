@@ -335,6 +335,91 @@ class Mxfp4PipelinedGptOss:
         self._commit(src)
 
     def forward(self, hidden_states, router_indices, router_scores):
+        """``x [T, K]``, ``router_indices/scores [T, topk]`` -> ``[T, N]``.
+
+        T == 1 takes the decode path unchanged — it is the validated one, and its
+        reduction order is part of what was validated. T > 1 takes
+        :meth:`_forward_prefill`.
+        """
+        if router_indices.reshape(-1).numel() > self.k:
+            return self._forward_prefill(hidden_states, router_indices, router_scores)
+        return self._forward_decode(hidden_states, router_indices, router_scores)
+
+    def _forward_prefill(self, hidden_states, router_indices, router_scores):
+        """Many tokens per call, with the expert set chunked to the slot budget.
+
+        Prefill is not merely decode in a loop, and the difference is I/O, not
+        convenience. Stepping T tokens one at a time re-reads the DENSE side T times
+        (107.3 GB each) and every routed expert row T times. Here each layer is
+        entered once for the whole prompt, and each distinct expert is read once no
+        matter how many of the T tokens routed to it. On Kimi K3 at T=10 that is
+        ~310 GB against ~1,346 GB — a 4x cut, at batch one.
+
+        The device slot budget stays exactly k. A prompt can route to far more than k
+        distinct experts (up to ``T * topk``), so the distinct set is processed in
+        chunks of at most k: make a chunk resident, run every (token, expert) pair
+        belonging to it, accumulate, move on. The grouped GEMM was built for this —
+        ``sizes`` is its per-group token count and it switches to the tiled kernel on
+        its own once any group holds more than one row.
+        """
+        in_dtype, in_dev = hidden_states.dtype, hidden_states.device
+        x = hidden_states.reshape(-1, hidden_states.shape[-1]).to(
+            device=self.device, dtype=self.cd)
+        T = x.shape[0]
+        ids = router_indices.reshape(T, -1).to(device=self.device, dtype=torch.long)
+        topk = ids.shape[1]
+        if not torch.cuda.is_current_stream_capturing():
+            if bool((ids >= self.E).any()):
+                raise ValueError(
+                    "padded routing index (== num_experts) reached the pipelined "
+                    "prefill engine — drop padding upstream")
+        wt = router_scores.reshape(-1).to(device=self.device, dtype=torch.float32)
+
+        # Sort the T*topk (token, expert) pairs by EXPERT so each expert's rows are
+        # contiguous — which is what `sizes` describes. stable=True only to make the
+        # row order reproducible; correctness does not depend on it, since every row
+        # is scattered back to its own token below.
+        flat_e = ids.reshape(-1)
+        order = torch.argsort(flat_e, stable=True)
+        pair_tok = torch.div(order, topk, rounding_mode="floor")
+        sorted_e = flat_e.index_select(0, order)
+        uniq, counts = torch.unique_consecutive(sorted_e, return_counts=True)
+        uniq_l, counts_l = uniq.tolist(), counts.tolist()
+
+        out = torch.zeros(T, self.n2, dtype=torch.float32, device=self.device)
+        k, pstart = self.k, 0
+        for c0 in range(0, len(uniq_l), k):
+            chunk, ccounts = uniq_l[c0:c0 + k], counts_l[c0:c0 + k]
+            npairs = sum(ccounts)
+            # `_fetch` gathers all k slots, so a short chunk is padded by REPEATING an
+            # id already in it. The padded slots are never referenced by `sizes` or
+            # `slot_eids`, and a duplicate id is already routine on this path —
+            # `_prime` asks all k slots for expert 0.
+            want = torch.tensor(chunk + [chunk[-1]] * (k - len(chunk)),
+                                dtype=torch.long, device=self.device)
+            self._fetch(want)
+
+            rows = pair_tok[pstart:pstart + npairs]
+            eids = sorted_e[pstart:pstart + npairs]
+            a = x.index_select(0, rows).contiguous()      # group-sorted, [npairs, K]
+            gu = gemm_mxfp4_grouped(a, self.gu_p_v, self.gu_a_v, ccounts,
+                                    self.slot_eids[:len(chunk)])
+            if self.gate_up_bias is not None:
+                # per ROW now, not per slot: a row's bias is its own expert's
+                gu = gu + self.gate_up_bias.index_select(0, eids)
+            h = self._glu(gu)
+            dn = gemm_mxfp4_grouped(h.contiguous().to(self.cd), self.dn_p_v,
+                                    self.dn_a_v, ccounts,
+                                    self.slot_eids[:len(chunk)]).to(torch.float32)
+            if self.down_bias is not None:
+                dn = dn + self.down_bias.index_select(0, eids).to(torch.float32)
+            # weight each pair by its own router score, then sum into its token
+            out.index_add_(0, rows, dn * wt.index_select(0, order[pstart:pstart + npairs])[:, None])
+            pstart += npairs
+
+        return out.to(device=in_dev, dtype=in_dtype)
+
+    def _forward_decode(self, hidden_states, router_indices, router_scores):
         in_dtype, in_dev = hidden_states.dtype, hidden_states.device
         x = hidden_states.to(device=self.device, dtype=self.cd)
         want = router_indices.reshape(-1).to(device=self.device, dtype=torch.long)
