@@ -69,24 +69,47 @@ class Mxfp4PipelinedGptOss:
     def __init__(self, gu_blocks, gu_scales, dn_blocks, dn_scales,
                  gate_up_bias, down_bias, hot_ids, k_slots, device="cuda",
                  alpha=1.702, limit=7.0, compute_dtype=torch.bfloat16):
+        E, n1, half1 = gu_blocks.shape
+        _, n2, half2 = dn_blocks.shape
+        nb1, nb2 = gu_scales.shape[-1], dn_scales.shape[-1]
+        assert nb1 == (half1 * 2) // 32 and nb2 == (half2 * 2) // 32
+        self._init_geometry(E, n1, half1, nb1, n2, half2, nb2, k_slots=k_slots,
+                            device=device, alpha=alpha, limit=limit,
+                            compute_dtype=compute_dtype)
+        self._build_source(gu_blocks, gu_scales, dn_blocks, dn_scales, hot_ids)
+        self._init_slots()
+        self._init_bias(gate_up_bias, down_bias)
+        self._prime()
+
+    # ------------------------------------------------------------- geometry --
+    def _init_geometry(self, E, n1, half1, nb1, n2, half2, nb2, *, k_slots,
+                       device, alpha, limit, compute_dtype):
+        """Row layout only — no weights, so a subclass that gets its geometry
+        from a baked arena's index rather than from tensors shares this exactly."""
         self.device = torch.device(device)
         self.k = int(k_slots)
         self.cd = compute_dtype
         self.alpha, self.limit = float(alpha), float(limit)
-        E, n1, half1 = gu_blocks.shape
-        _, n2, half2 = dn_blocks.shape
         self.E, self.n1, self.n2 = E, n1, n2
+        self.half1, self.half2, self.nb1, self.nb2 = half1, half2, nb1, nb2
         self.k1, self.k2 = half1 * 2, half2 * 2
-        nb1, nb2 = gu_scales.shape[-1], dn_scales.shape[-1]
-        assert nb1 == self.k1 // 32 and nb2 == self.k2 // 32
 
         seg = [n1 * half1, n1 * nb1, n2 * half2, n2 * nb2]
         off = [0]
         for s in seg[:-1]:
             off.append(_align8(off[-1] + s))
         row_bytes = _align8(off[-1] + seg[-1])
+        self.seg = seg
         self.row_bytes, self.off, self.row_words = row_bytes, off, row_bytes // 8
 
+    def _build_source(self, gu_blocks, gu_scales, dn_blocks, dn_scales, hot_ids):
+        """Where rows come from: here, a pinned arena holding ALL E of them.
+
+        That is the piece a >host-RAM model cannot afford — see
+        :mod:`mxfp4_residency`, which REPLACES this step (and refuses this
+        method outright) to keep only the hot rows and stream the tail from
+        NVMe."""
+        E, off, seg, row_bytes = self.E, self.off, self.seg, self.row_bytes
         # pinned arena [E, row_bytes]: native bytes, laid out, not converted
         arena = torch.zeros(E, row_bytes, dtype=torch.uint8)
         try:
@@ -114,7 +137,10 @@ class Mxfp4PipelinedGptOss:
         hot_addr = self.hot_stack.data_ptr() + h_row * row_bytes
         self.src_of_expert = torch.where(is_hot, hot_addr, host_addr)
 
-        k = self.k
+    def _init_slots(self):
+        k, off, row_bytes = self.k, self.off, self.row_bytes
+        n1, half1, nb1 = self.n1, self.half1, self.nb1
+        n2, half2, nb2 = self.n2, self.half2, self.nb2
         slots = torch.empty(k, row_bytes, dtype=torch.uint8, device=self.device)
         self.slots, self.slots64 = slots, slots.view(torch.int64)
         self.gu_p_v = torch.as_strided(slots, (k, n1, half1), (row_bytes, half1, 1), off[0])
@@ -127,22 +153,54 @@ class Mxfp4PipelinedGptOss:
         self.have = torch.full((k,), -1, dtype=torch.long, device=self.device)
         self.want_buf = torch.zeros(k, dtype=torch.long, device=self.device)
         self.a_buf = None
-        self.gate_up_bias = gate_up_bias.to(self.device)
-        self.down_bias = down_bias.to(self.device)
         self.hot_d2d_bytes = torch.zeros((), dtype=torch.long, device=self.device)
         self.cold_pcie_bytes = torch.zeros((), dtype=torch.long, device=self.device)
-        self._prime()
+
+    def _init_bias(self, gate_up_bias, down_bias):
+        """``None`` means this family has no per-expert bias — SKIP the add, do
+        not synthesize zeros. gpt-oss ships biases; Kimi K3's experts are three
+        bias-free Linears, and an `[E, n]` zeros pair is real VRAM at E=896."""
+        for name, b, n in (("gate_up_bias", gate_up_bias, self.n1),
+                           ("down_bias", down_bias, self.n2)):
+            if b is None:
+                setattr(self, name, None)
+                continue
+            if tuple(b.shape) != (self.E, n):
+                raise ValueError(f"{name} must be [E={self.E}, {n}], "
+                                 f"got {tuple(b.shape)}")
+            setattr(self, name, b.to(self.device))
+
+    # -------------------------------------------------------------- fetch ----
+    def _resolve_src(self):
+        """Absolute byte address of the row each slot wants, from ``want_buf``.
+
+        A static table suffices here because pinning every row makes
+        address <-> expert a BIJECTION. A tiering subclass must override this
+        together with :meth:`_invalidate`, because a tier slot's address
+        identifies the SLOT, not what currently lives in it."""
+        return self.src_of_expert.index_select(0, self.want_buf)
+
+    def _invalidate(self, src):
+        """Force a re-gather of device slots whose CONTENTS changed while their
+        source address did not. Nothing to do under a bijection; overridden by
+        the tiering subclass, where it is the difference between correct output
+        and silently stale experts."""
+
+    def _commit(self, src):
+        self.have.copy_(src)
 
     def _prime(self):
         kern = _gather_kernel()
-        src0 = self.src_of_expert[0].expand(self.k).contiguous()
+        self.want_buf.zero_()
+        src0 = self._resolve_src()
         grid = (self.k, -(-self.row_words // 2048))
         kern[grid](self.slots64, src0, self.have, self.row_words, BLOCK=2048, num_warps=4)
-        self.have.copy_(src0)
+        self._commit(src0)
 
     def _fetch(self, want):
         self.want_buf.copy_(want)
-        src = self.src_of_expert.index_select(0, self.want_buf)
+        src = self._resolve_src()
+        self._invalidate(src)                             # before the miss count
         miss = src != self.have
         hot = self.is_hot.index_select(0, self.want_buf)   # resident -> D2D, cold -> UVA
         self.cold_pcie_bytes += (miss & ~hot).sum() * self.row_bytes
@@ -150,7 +208,7 @@ class Mxfp4PipelinedGptOss:
         kern = _gather_kernel()
         grid = (self.k, -(-self.row_words // 2048))
         kern[grid](self.slots64, src, self.have, self.row_words, BLOCK=2048, num_warps=4)
-        self.have.copy_(src)
+        self._commit(src)
 
     def forward(self, hidden_states, router_indices, router_scores):
         in_dtype, in_dev = hidden_states.dtype, hidden_states.device
@@ -160,7 +218,7 @@ class Mxfp4PipelinedGptOss:
         # routing index (== num_experts) would index bias/expert data OOB.
         # Checked eagerly only — a sync inside CUDA-graph capture is illegal.
         if not torch.cuda.is_current_stream_capturing():
-            if bool((want >= self.gate_up_bias.shape[0]).any()):
+            if bool((want >= self.E).any()):
                 raise ValueError(
                     "padded routing index (== num_experts) reached the pipelined "
                     "decode engine — drop padding upstream; this engine takes "
@@ -171,17 +229,27 @@ class Mxfp4PipelinedGptOss:
             self.a_buf = torch.empty(k, x.shape[-1], dtype=self.cd, device=self.device)
         self.a_buf.copy_(x.expand(k, -1))
         gu = gemm_mxfp4_grouped(self.a_buf, self.gu_p_v, self.gu_a_v, self.sizes, self.slot_eids)
-        gu = gu + self.gate_up_bias.index_select(0, self.want_buf)
-        gate, up = gu[..., ::2], gu[..., 1::2]     # gpt-oss INTERLEAVED, not chunk(2)
-        gate = gate.clamp(max=self.limit)
-        up = up.clamp(min=-self.limit, max=self.limit)
-        h = (up + 1) * (gate * torch.sigmoid(gate * self.alpha))
+        if self.gate_up_bias is not None:
+            gu = gu + self.gate_up_bias.index_select(0, self.want_buf)
+        h = self._glu(gu)
         dn = gemm_mxfp4_grouped(h.contiguous().to(self.cd), self.dn_p_v, self.dn_a_v,
                                 self.sizes, self.slot_eids)
-        dn = dn.to(torch.float32) + self.down_bias.index_select(0, self.want_buf).to(torch.float32)
+        dn = dn.to(torch.float32)
+        if self.down_bias is not None:
+            dn = dn + self.down_bias.index_select(0, self.want_buf).to(torch.float32)
         w = router_scores.reshape(-1).to(device=self.device, dtype=torch.float32)
         out = (dn * w[:, None]).sum(0, keepdim=True)
         return out.to(device=in_dev, dtype=in_dtype)
+
+    def _glu(self, gu):
+        """gpt-oss epilogue: gate/up are INTERLEAVED in the output columns (not
+        two halves), then clamped-GLU. Other families differ in BOTH respects —
+        Kimi K3 concatenates (``cat([w1(x), w3(x)])``) and activates with SiTU —
+        so this is a hook, not inlined arithmetic."""
+        gate, up = gu[..., ::2], gu[..., 1::2]     # gpt-oss INTERLEAVED, not chunk(2)
+        gate = gate.clamp(max=self.limit)
+        up = up.clamp(min=-self.limit, max=self.limit)
+        return (up + 1) * (gate * torch.sigmoid(gate * self.alpha))
 
     def traffic(self):
         return {"hot_d2d_bytes": int(self.hot_d2d_bytes.item()),

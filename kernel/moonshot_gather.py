@@ -330,9 +330,10 @@ GLU_VARIANTS = {
 
 
 def apply_glu(gate_up: torch.Tensor, variant: str = "swiglu") -> torch.Tensor:
-    """Clean-split GLU by registry name. `variant='swiglu'` works today;
-    `'situ'` raises until its formula is confirmed and registered. The split
-    is always clean-concat ([gate; up]), never interleaved."""
+    """Clean-split GLU by registry name. `'swiglu'` (K2/DeepSeek) and `'situ'`
+    (K3, transcribed from the release's own modeling code) are both live;
+    `'situ_unverified'` remains the guard for a future unsourced epilogue. The
+    split is always clean-concat ([gate; up]), never interleaved."""
     fn = GLU_VARIANTS.get(variant)
     if fn is None:
         raise KeyError(f"unknown GLU variant {variant!r}; have {sorted(GLU_VARIANTS)}")
