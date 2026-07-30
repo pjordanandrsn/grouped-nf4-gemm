@@ -72,3 +72,14 @@ constant function.
 A wrong `name_template` or `kinds` order would have produced a clean-looking
 arena of the wrong bytes, discovered only after ~1.4 TB of IO. That failure is
 now excluded for ~1 second of work.
+
+---
+
+**On this document's OpenTimestamps anchor.** The `.ots` beside this file was
+created *after* the run it reports. It therefore proves this text existed at
+stamp time and has not been edited since — useful, and it is why corrections go
+in separate errata rather than in place. It does **not** establish that the
+protocol predated the data, so it does **not** raise these results to this
+project's `confirmed` tier. Pre-data existence here rests on public git history
+alone. A stamp can only earn `confirmed` when it is applied to a protocol
+*before* the hardware is provisioned.

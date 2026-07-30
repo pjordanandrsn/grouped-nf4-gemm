@@ -58,3 +58,14 @@ computed from these bytes are not resting on a format guess.
   shared misreading of the OCP spec.
 
 Reproduce: `K3_EXPERT=<expert.safetensors> pytest kernel/test_k3_oracle.py`.
+
+---
+
+**On this document's OpenTimestamps anchor.** The `.ots` beside this file was
+created *after* the run it reports. It therefore proves this text existed at
+stamp time and has not been edited since — useful, and it is why corrections go
+in separate errata rather than in place. It does **not** establish that the
+protocol predated the data, so it does **not** raise these results to this
+project's `confirmed` tier. Pre-data existence here rests on public git history
+alone. A stamp can only earn `confirmed` when it is applied to a protocol
+*before* the hardware is provisioned.
