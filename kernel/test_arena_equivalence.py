@@ -52,17 +52,27 @@ def _st_bytes(tensors):
 @pytest.fixture(scope="module")
 def baked(tmp_path_factory):
     root = tmp_path_factory.mktemp("snap")
+    from mxfp4_pack_ref import quantize_pack_mxfp4
     g = torch.Generator().manual_seed(4242)
     ground, shard, wm = {}, {}, {}
+    # Quantize REALISTIC weights rather than drawing random bytes. Random
+    # nibbles paired with random e8m0 scales encode magnitudes ~1e3, and the
+    # GLU squares them -- the product overflows and the comparison degenerates
+    # to NaN != NaN. quantize_pack_mxfp4 exists for exactly this.
     for lay in LAYERS:
         for e in range(E):
+            packed = {}
+            for proj, (rows, k) in (("w1", (I_, H)), ("w3", (I_, H)),
+                                    ("w2", (H, I_))):
+                w = torch.randn(rows, k, generator=g) * 0.02
+                blk, scl = quantize_pack_mxfp4(w)
+                packed[f"{proj}.weight_packed"] = blk.reshape(rows, k // 2)
+                packed[f"{proj}.weight_scale"] = scl.reshape(rows, k // 32)
             for kind in K3_KINDS:
-                lo, hi = (120, 135) if kind.endswith("weight_scale") else (0, 256)
-                t = torch.randint(lo, hi, SHAPES[kind], generator=g,
-                                  dtype=torch.uint8)
+                t = packed[kind].contiguous().to(torch.uint8)
                 name = K3_TEMPLATE.format(layer=lay, expert=e, kind=kind)
                 ground[name] = t
-                shard[name] = (t.numpy().tobytes(), SHAPES[kind])
+                shard[name] = (t.numpy().tobytes(), list(t.shape))
                 wm[name] = "a.safetensors"
     with open(os.path.join(root, "a.safetensors"), "wb") as f:
         f.write(_st_bytes(shard))
@@ -118,6 +128,8 @@ def test_arena_path_matches_upstream_dequantized_loop(baked):
     ref = torch.cat(ref).to(torch.bfloat16)
 
     assert got.shape == ref.shape, (got.shape, ref.shape)
+    assert torch.isfinite(ref).all(), "reference overflowed — fixture magnitudes"
+    assert torch.isfinite(got).all(), "arena path produced inf/nan"
     # bf16 over a K-term dot product: ~sqrt(K)*eps, eps=2**-8
     tol = (H ** 0.5) * (2 ** -8) * 4
     rel = (got.float() - ref.float()).abs().max() / ref.float().abs().max()
@@ -144,6 +156,7 @@ def test_decode_path_t1_matches_reference(baked):
             w["w3.weight_packed"], w["w3.weight_scale"],
             w["w2.weight_packed"], w["w2.weight_scale"]))
     ref = torch.cat(ref).to(torch.bfloat16)
+    assert torch.isfinite(ref).all() and torch.isfinite(got).all()
     rel = (got.float() - ref.float()).abs().max() / ref.float().abs().max()
     assert rel < (H ** 0.5) * (2 ** -8) * 4, rel
 
