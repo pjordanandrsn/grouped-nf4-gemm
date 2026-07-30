@@ -55,54 +55,38 @@ def test_real_k3_expert_shapes_are_what_the_release_ships():
 
 
 @needs_bytes
-def test_our_decode_matches_compressed_tensors_own_dequant():
-    """The oracle. Exact equality is the bar: both claim to implement the same
-    packed format over the same bytes, so any difference is a convention gap,
-    not noise."""
-    ct = pytest.importorskip("compressed_tensors",
-                             reason="pip install compressed-tensors")
+@pytest.mark.parametrize("proj", ["w1", "w3", "w2"])
+def test_our_decode_matches_compressed_tensors_own_dequant(proj):
+    """The oracle. Exact equality is the bar: both implement the same packed
+    format over the same bytes, so any difference is a convention gap in nibble
+    order, e8m0 bias or group axis -- not noise.
+
+    Entry points resolved against compressed-tensors 0.17.1: MXFP4PackedCompressor
+    extends NVFP4PackedCompressor, so the nibble unpack is theirs and the scale
+    decode is mx_utils'. Composed here rather than guessed.
+    """
+    pytest.importorskip("compressed_tensors", reason="pip install compressed-tensors")
+    from compressed_tensors.compressors.mx_utils import decompress_mx_scale
+    from compressed_tensors.compressors.nvfp4.helpers import unpack_fp4_from_uint8
     from mxfp4_pack_ref import dequant_mxfp4
 
     t = _load(K3_EXPERT)
-    blocks, scales = t["w1.weight_packed"], t["w1.weight_scale"]
+    blocks, scales = t[f"{proj}.weight_packed"], t[f"{proj}.weight_scale"]
     rows, half = blocks.shape
     K = half * 2
 
     ours = dequant_mxfp4(blocks.reshape(rows, K // 32, 16), scales,
                          dtype=torch.float32)
+    theirs_q = unpack_fp4_from_uint8(blocks, rows, K, dtype=torch.float32)
+    theirs_s = decompress_mx_scale(scales).to(torch.float32)
+    theirs = (theirs_q.reshape(rows, K // 32, 32)
+              * theirs_s.reshape(rows, K // 32, 1)).reshape(rows, K)
 
-    # compressed-tensors' own path. The import surface has moved between
-    # releases; try the documented entry points and report what was used.
-    theirs = used = None
-    for modpath, fn in (
-        ("compressed_tensors.quantization.lifecycle.forward", "dequantize"),
-        ("compressed_tensors.quantization.utils", "dequantize"),
-        ("compressed_tensors.compressors.quantized_compressors.mxfp4_quantized",
-         "unpack_mxfp4"),
-        ("compressed_tensors.utils", "unpack_fp4_from_uint8"),
-    ):
-        try:
-            mod = __import__(modpath, fromlist=[fn])
-            f = getattr(mod, fn)
-        except (ImportError, AttributeError):
-            continue
-        try:
-            theirs = f(blocks, scales)
-            used = f"{modpath}.{fn}"
-            break
-        except TypeError:
-            continue
-    if theirs is None:
-        pytest.skip(f"no usable compressed-tensors dequant entry point "
-                    f"(version {getattr(ct, '__version__', '?')}) — resolve the "
-                    f"API before treating the oracle as run")
-
-    theirs = theirs.to(torch.float32).reshape(ours.shape)
-    same = torch.equal(ours, theirs)
-    if not same:
+    if not torch.equal(ours, theirs):
         d = (ours - theirs).abs()
-        pytest.fail(f"decode differs from {used}: max|delta|={d.max():.6g}, "
-                    f"mismatched={int((d > 0).sum())}/{d.numel()}")
+        bad = torch.nonzero(d > 0)[:3].tolist()
+        pytest.fail(f"{proj}: max|delta|={d.max():.6g}, "
+                    f"mismatched={int((d > 0).sum())}/{d.numel()}, first={bad}")
 
 
 @needs_bytes
