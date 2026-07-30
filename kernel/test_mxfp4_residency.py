@@ -657,3 +657,180 @@ def test_cuda_graph_capture_is_refused(arena, monkeypatch):
             tie.forward(x, idx, sc)
     finally:
         tie.tier.close()
+
+
+# ------------------------------------- 4. sharing the k slots across layers ----
+# Slots are the engine's only large device allocation: k x row_bytes, which is 281 MB
+# at K3's geometry. One store per layer would spend 25.8 GB of VRAM on 92 buffers of
+# which exactly one is ever live. These gate sharing them -- the mechanics on CPU, the
+# correctness consequence (a handover must not serve the previous layer's rows) on CUDA.
+
+def _bare(k_slots=K_SLOTS, device="cpu", n1=2 * INTER):
+    """An engine with geometry and nothing else -- enough to build/attach a store."""
+    from mxfp4_pipelined import Mxfp4PipelinedGptOss
+    eng = Mxfp4PipelinedGptOss.__new__(Mxfp4PipelinedGptOss)
+    eng._init_geometry(E, n1, H // 2, H // MX_BLOCK, H, INTER // 2,
+                       INTER // MX_BLOCK, k_slots=k_slots, device=device,
+                       alpha=ALPHA, limit=LIMIT, compute_dtype=torch.bfloat16)
+    return eng
+
+
+def _bake_two_layers(tmp_path, seeds=(1689, 4242)):
+    """A 2-layer arena whose layers hold DIFFERENT experts.
+
+    Same-weights layers would make every assertion below pass regardless of which
+    layer's bytes the shared buffer actually held.
+    """
+    per_layer = [_packed(seed=s) for s in seeds]
+    tensors = {}
+    for lay, stacks in enumerate(per_layer):
+        for kind, stack in zip(KINDS, stacks):
+            for e in range(E):
+                t = stack[e].contiguous().cpu()
+                tensors[f"model.layers.{lay}.mlp.experts.{e}.{kind}"] = (
+                    tuple(t.shape), "U8", t.numpy().tobytes())
+    snap = tmp_path / "snap2"
+    snap.mkdir(exist_ok=True)
+    (snap / "model.safetensors").write_bytes(_st_bytes(tensors))
+    path = str(tmp_path / "two.arena")
+    bake_expert_tensors(
+        str(snap), path,
+        name_template="model.layers.{layer}.mlp.experts.{expert}.{kind}",
+        kinds=KINDS, align=4096, log=lambda *a: None)
+    return per_layer, path, load_index(path)
+
+
+def test_a_shared_store_is_one_allocation():
+    """The point of the whole exercise: N engines, one slot buffer."""
+    from mxfp4_pipelined import SlotStore
+    a, b = _bare(), _bare()
+    a._init_slots()
+    b._init_slots(a.store)
+    assert b.store is a.store
+    assert a.slots.data_ptr() == b.slots.data_ptr()
+    assert a.store.users == 2 and a.store.bytes == K_SLOTS * a.row_bytes
+    # every view the GEMM consumes must be the shared buffer's, not a private copy
+    for name in ("slots64", "gu_p_v", "gu_a_v", "dn_p_v", "dn_a_v", "have",
+                 "want_buf", "slot_eids"):
+        assert getattr(a, name).data_ptr() == getattr(b, name).data_ptr(), name
+    # and a private store is still the default, for callers that never opt in
+    c = _bare()
+    c._init_slots()
+    assert isinstance(c.store, SlotStore) and c.store is not a.store
+    assert c.slots.data_ptr() != a.slots.data_ptr()
+
+
+def test_a_store_built_for_another_geometry_is_refused():
+    """Slots are raw bytes read at fixed segment offsets, so a store built for a
+    different layout is not merely wasteful -- it would be read as this one."""
+    a = _bare()
+    a._init_slots()
+    for other in (_bare(k_slots=K_SLOTS + 1), _bare(n1=INTER)):
+        with pytest.raises(ValueError, match="does not match this engine"):
+            other._init_slots(a.store)
+    assert a.store.users == 1, "a refused engine must not register as a user"
+
+
+def test_taking_the_buffer_over_poisons_have():
+    """`have` describes the BUFFER, so it moves with it. An engine that finds
+    another layer holding the slots must not believe anything is resident."""
+    a, b = _bare(), _bare()
+    a._init_slots()
+    b._init_slots(a.store)
+    a._claim()
+    a.have.fill_(1234)                    # pretend a's rows are resident
+    assert a.store.claims == 1
+    a._claim()                            # already the owner
+    assert a.store.claims == 1, "re-claiming must not poison, or the skip never hits"
+    assert int(a.have[0]) == 1234
+    b._claim()
+    assert a.store.claims == 2 and a.store.owner is b
+    assert torch.equal(b.have, torch.full((K_SLOTS,), -1, dtype=torch.long)), (
+        "the slots now hold another layer's rows; every one must re-gather")
+
+
+def test_the_tiered_engine_forgets_its_residency_mirror():
+    """`_invalidate` rebuilds `have` from this mirror, so a stale mirror would
+    reconstruct a `have` that claims another layer's bytes are already resident."""
+    from mxfp4_residency import Mxfp4NvmeResidency
+
+    class Stub:
+        k = 3
+    s = Stub()
+    s._have_eid, s._have_addr = [7, 7, 7], [0xF00D, 0xF00D, 0xF00D]
+    Mxfp4NvmeResidency._forget(s)
+    assert s._have_eid == [-1] * 3 and s._have_addr == [-1] * 3
+
+
+@cuda
+def test_layers_sharing_slots_answer_as_if_each_had_its_own(tmp_path):
+    """THE cross-layer correctness gate, and the reason `_forget` exists.
+
+    Two layers, one slot buffer, one tier, and the SAME expert ids on both -- the
+    worst case, because `_invalidate`'s test is `want_eid != have_eid` and the ids
+    match, while `hot_rows == K_SLOTS` forces the tier to hand back the very slots
+    (hence the very addresses) it just gave the other layer. Without the handover
+    poison, layer 1's fetch is skipped as already-resident and layer 1 computes with
+    layer 0's experts, finitely and plausibly.
+    """
+    _needs_gather_kernel()
+    from mxfp4_residency import Mxfp4NvmeResidency
+    _per_layer, path, index = _bake_two_layers(tmp_path)
+    tier = ColdTier(path, hot_rows=K_SLOTS, pinned=True, index=index)
+
+    def engine(layer, store=None):
+        return Mxfp4NvmeResidency(path, layer, k_slots=K_SLOTS, tier=tier,
+                                  index=index, device="cuda", alpha=ALPHA,
+                                  limit=LIMIT, store=store)
+    try:
+        shared0 = engine(0)
+        shared1 = engine(1, store=shared0.store)
+        ref0, ref1 = engine(0), engine(1)          # private stores: the reference
+        assert shared0.store is shared1.store and shared0.store.users == 2
+        assert ref0.store is not shared0.store and ref1.store is not ref0.store
+
+        g = torch.Generator(device="cuda").manual_seed(41)
+        x = torch.randn(1, H, dtype=torch.bfloat16, device="cuda", generator=g)
+        idx = torch.tensor([[0, 1, 2, 3]], device="cuda")
+        sc = torch.full((1, K_SLOTS), 0.25, dtype=torch.bfloat16, device="cuda")
+
+        want0, want1 = ref0.forward(x, idx, sc), ref1.forward(x, idx, sc)
+        assert not torch.equal(want0, want1), (
+            "the two layers must hold different experts or this proves nothing")
+
+        for step in range(4):
+            assert torch.equal(shared0.forward(x, idx, sc), want0), f"L0 step {step}"
+            assert torch.equal(shared1.forward(x, idx, sc), want1), f"L1 step {step}"
+
+        # pin that the collision this test is about actually happened: both engines
+        # recorded the SAME tier addresses, so `have` could not have discriminated
+        assert set(shared0._have_addr) == set(shared1._have_addr), (
+            "the tier did not reuse addresses across layers; the test lost its teeth")
+        assert shared0.store.claims >= 8, shared0.store.claims
+    finally:
+        tier.close()
+
+
+@cuda
+def test_a_sole_owner_still_skips_re_reading(tmp_path):
+    """Sharing must not cost the have-skip. One engine holding the buffer across
+    consecutive decode steps re-reads nothing and hands over nothing."""
+    _needs_gather_kernel()
+    from mxfp4_residency import Mxfp4NvmeResidency
+    _per_layer, path, index = _bake_two_layers(tmp_path)
+    tier = ColdTier(path, hot_rows=E, pinned=True, index=index)
+    try:
+        eng = Mxfp4NvmeResidency(path, 0, k_slots=K_SLOTS, tier=tier, index=index,
+                                 device="cuda", alpha=ALPHA, limit=LIMIT)
+        idx = torch.tensor([[2, 3, 4, 5]], device="cuda")
+        sc = torch.full((1, K_SLOTS), 0.25, dtype=torch.bfloat16, device="cuda")
+        x = torch.zeros(1, H, dtype=torch.bfloat16, device="cuda")
+        first = eng.forward(x, idx, sc)
+        claims, reads = eng.store.claims, tier.stats()["disk_reads"]
+        assert torch.equal(eng.forward(x, idx, sc), first)
+        assert eng.store.claims == claims, "no handover happened; do not poison"
+        assert tier.stats()["disk_reads"] == reads, "resident rows were re-read"
+        assert eng.traffic()["slots"] == {"bytes": K_SLOTS * eng.row_bytes,
+                                          "users": 1, "claims": claims}
+    finally:
+        tier.close()
