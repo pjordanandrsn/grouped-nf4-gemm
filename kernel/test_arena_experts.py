@@ -203,7 +203,11 @@ def test_arena_fed_gemm_equals_memory_fed_gemm(baked):
     T = 8
     a = torch.randn(T, K, device="cuda", dtype=torch.bfloat16)
     sizes = torch.tensor([4, 4], device="cuda", dtype=torch.int32)
-    eids = torch.tensor(ids, device="cuda", dtype=torch.int32)
+    # POSITIONAL ids: the kernel's expert_ids indexes the stack it is handed,
+    # and these stacks hold only the requested experts. Passing `ids` (global
+    # [3, 0]) against a 2-expert stack read out of bounds -- and this test still
+    # "passed", because both arms read the SAME garbage and compared equal.
+    eids = torch.arange(len(ids), device="cuda", dtype=torch.int32)
 
     with ArenaExpertSource(arena, device="cuda") as src:
         ab, as_ = src.fused_stacks(1, ids, "gate")
@@ -232,8 +236,6 @@ def test_moe_layer_forward_runs_off_the_arena(baked):
     a = torch.randn(8, K, device="cuda", dtype=torch.bfloat16)
     sizes = torch.tensor([4, 4], device="cuda", dtype=torch.int32)
     with ArenaExpertSource(arena, device="cuda") as src:
-        out = moe_layer_forward(src, 1, a, sizes,
-                                torch.tensor(ids, device="cuda",
-                                             dtype=torch.int32))
+        out = moe_layer_forward(src, 1, a, sizes, ids)
     assert out.shape[0] == a.shape[0]
     assert torch.isfinite(out).all()
