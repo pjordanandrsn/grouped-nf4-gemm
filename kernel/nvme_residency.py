@@ -37,7 +37,7 @@ from __future__ import annotations
 import threading
 from collections import Counter
 
-from nvme_reader import ArenaReader, alloc_landing
+from nvme_reader import ArenaReader, alloc_landing, buffer_address
 
 
 class ColdTier:
@@ -202,10 +202,29 @@ class ColdTier:
 
     def pinned_tensor(self):
         """The pinned buffer as a ``[hot_rows, row_stride]`` uint8 tensor — what
-        the gather kernel indexes by slot. Requires ``pinned=True``."""
+        the gather kernel indexes by slot. Requires ``pinned=True``.
+
+        Sliced from the keepalive at the SAME offset :func:`alloc_landing`
+        aligned to, never viewed from its base: since that function over-allocates
+        by one alignment unit and hands back an interior sub-view, a base view
+        would describe different bytes than :attr:`buffer` (and, at the shapes
+        used here, raise on numel). This tensor's ``data_ptr()`` is what an
+        address-table engine adds slot offsets to, so a silent skew here would
+        make every gather read one page early.
+        """
         if not self.pinned:
             raise RuntimeError("pinned_tensor() requires pinned=True")
-        return self._keepalive.view(self.hot_rows, self.row_stride)
+        n = self.hot_rows * self.row_stride
+        pad = self.buffer_ptr - self._keepalive.data_ptr()
+        return self._keepalive[pad:pad + n].view(self.hot_rows, self.row_stride)
+
+    @property
+    def buffer_ptr(self) -> int:
+        """Address of slot 0. Slots are :attr:`row_stride` apart — *not*
+        ``row_bytes``: the arena pads rows out to ``align`` for O_DIRECT, so an
+        engine that strides its own ``row_bytes`` through this buffer starts
+        reading mid-row on slot 1 and never fails loudly."""
+        return buffer_address(self.buffer)
 
     # --------------------------------------------------------------- stats --
     def stats(self) -> dict:
