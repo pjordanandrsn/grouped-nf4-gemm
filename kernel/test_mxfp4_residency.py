@@ -403,6 +403,83 @@ def test_no_all_expert_arena_is_allocated(arena):
         tie.tier.close()
 
 
+# ------------------------------------------------- K3's epilogue, on CUDA ----
+SITU_BETA, SITU_LINEAR_BETA = 4.0, 25.0
+
+
+def _situ_ref(gate, up):
+    """SiTU as transcribed from K3's own modeling_kimi_linear.py::SituAndMul,
+    written out here rather than imported, so this test can disagree with
+    moonshot_gather instead of inheriting its answer."""
+    a = SITU_BETA * torch.tanh(gate / SITU_BETA) * torch.sigmoid(gate)
+    return a * (SITU_LINEAR_BETA * torch.tanh(up / SITU_LINEAR_BETA))
+
+
+@cuda
+def test_k3_epilogue_is_situ_on_a_clean_concat(arena):
+    """K3 differs from gpt-oss in BOTH respects: clean-concat halves (not
+    interleaved columns) and SiTU (not clamped-GLU). Getting the split wrong
+    still produces finite numbers of the right shape."""
+    _needs_gather_kernel()
+    from mxfp4_residency import Mxfp4NvmeResidencyK3
+    _s, path, index = arena
+    tie = Mxfp4NvmeResidencyK3(path, LAYER, k_slots=K_SLOTS, hot_rows=K_SLOTS,
+                               device="cuda", index=index)
+    try:
+        g = torch.Generator(device="cuda").manual_seed(17)
+        gu = torch.randn(K_SLOTS, 2 * INTER, device="cuda", generator=g) * 3
+        got = tie._glu(gu)
+        want = _situ_ref(gu[..., :INTER], gu[..., INTER:])
+        assert got.shape == (K_SLOTS, INTER), got.shape
+        assert got.dtype == torch.bfloat16, got.dtype
+        # bounded at the precision the epilogue COMPUTES in: bfloat16 has an
+        # 8-bit mantissa (eps ~3.9e-3), so a tighter bound would fail on
+        # rounding alone. A wrong split or wrong formula is O(1) wrong, not
+        # O(eps), so this still discriminates.
+        rel = ((got.float() - want).abs().max() / want.abs().max()).item()
+        assert rel < 1e-2, rel
+        # and it is NOT the gpt-oss epilogue, on the same input
+        base = super(Mxfp4NvmeResidencyK3, tie)._glu(gu)
+        assert not torch.allclose(got.float(), base.float(), atol=1e-2)
+    finally:
+        tie.tier.close()
+
+
+@cuda
+def test_k3_forward_matches_a_dequant_reference(arena):
+    """End to end for the K3 shape: NVMe-served MXFP4 experts + bias-free
+    projections + SiTU must reproduce a dequantize-and-matmul reference. Not
+    torch.equal — the reference accumulates in a different order — so the bound
+    is the same 3e-2 relative the pipelined engine's own gates use."""
+    _needs_gather_kernel()
+    from mxfp4_pack_ref import MX_BLOCK as MXB, dequant_mxfp4
+    from mxfp4_residency import Mxfp4NvmeResidencyK3
+    (gu_b, gu_s, dn_b, dn_s), path, index = arena
+    tie = Mxfp4NvmeResidencyK3(path, LAYER, k_slots=K_SLOTS, hot_rows=K_SLOTS,
+                               device="cuda", index=index)
+    try:
+        g = torch.Generator(device="cuda").manual_seed(23)
+        x = torch.randn(1, H, dtype=torch.bfloat16, device="cuda", generator=g)
+        sc, idx = torch.topk(torch.softmax(
+            torch.randn(1, E, device="cuda", generator=g), -1), k=K_SLOTS, dim=-1)
+        got = tie.forward(x, idx, sc.to(torch.bfloat16))
+
+        ref = torch.zeros(1, H, dtype=torch.float32)
+        xc = x[0].float().cpu()
+        for j in range(K_SLOTS):
+            e, w = int(idx[0, j]), float(sc[0, j])
+            gW = dequant_mxfp4(gu_b[e].reshape(2 * INTER, H // MXB, 16), gu_s[e])
+            dW = dequant_mxfp4(dn_b[e].reshape(H, INTER // MXB, 16), dn_s[e])
+            gu = xc @ gW.t()                       # no bias: K3 experts are bias-free
+            h = _situ_ref(gu[..., :INTER], gu[..., INTER:])
+            ref[0] += w * (h @ dW.t())
+        rel = ((got.float().cpu() - ref).abs().max() / ref.abs().max()).item()
+        assert rel < 3e-2, rel
+        assert tie.traffic()["tier"]["misses"] > 0
+    finally:
+        tie.tier.close()
+
+
 @cuda
 def test_cuda_graph_capture_is_refused(arena, monkeypatch):
     """Capturing would freeze one fetch's addresses into the graph and never run
