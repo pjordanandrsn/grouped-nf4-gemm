@@ -17,7 +17,7 @@ BATTERY = [
     "mxfp4_pack_ref", "mxfp4_grouped", "mxfp4_loader", "mxfp4_pipelined",
     "mxfp4_qlora", "mxfp4_native_load", "moonshot_gather", "verify_provenance",
     "run_mxfp4_20b_qlora", "gate_native_load_20b",
-    "nvme_arena", "nvme_bake_nf4", "nvme_reader", "arena_experts",
+    "nvme_arena", "nvme_bake_nf4", "nvme_reader", "arena_experts", "arena_moe_patch",
     "nf4_qlora",
 ]
 

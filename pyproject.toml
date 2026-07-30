@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "grouped-nf4-gemm"
-version = "0.2.5"
+version = "0.2.6"
 description = "Fused grouped GEMM on bitsandbytes NF4-packed weights with host streaming, on consumer GPUs."
 readme = "README.md"
 license = { text = "MIT" }
@@ -47,7 +47,7 @@ package-dir = { "" = "kernel" }
 py-modules = [
     "nf4_grouped", "nf4_pack_ref", "host_gather",
     "mxfp4_pack_ref", "mxfp4_grouped", "mxfp4_loader", "mxfp4_pipelined",
-    "mxfp4_qlora", "mxfp4_native_load", "moonshot_gather", "arena_experts", "verify_provenance",
+    "mxfp4_qlora", "mxfp4_native_load", "moonshot_gather", "arena_experts", "arena_moe_patch", "verify_provenance",
     "run_mxfp4_20b_qlora", "gate_native_load_20b",
     "nvme_arena", "nvme_bake_nf4", "nvme_reader",
     "nf4_qlora",
