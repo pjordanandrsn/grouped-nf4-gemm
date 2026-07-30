@@ -63,6 +63,81 @@ def _gather_kernel():
     return _KERNEL
 
 
+class SlotStore:
+    """The k device slots, factored out so every layer's engine can share ONE.
+
+    Slots are the engine's only large device allocation: ``k`` rows of ``row_bytes``,
+    which for Kimi K3 is 16 x 17,547,264 = **281 MB**. Fine for one layer, fatal for
+    92 — 25.8 GB of VRAM in slot buffers alone, for a model whose entire point is
+    fitting on a card that size. Nothing justifies the duplication: decode walks the
+    layers in sequence, so at most one engine's slots are live at any instant.
+
+    What sharing costs is that residency state stops being per-engine. ``have`` moves in
+    here with the buffer it describes, and an engine taking the buffer over from another
+    layer must FORGET what it believed was resident — see
+    :meth:`Mxfp4PipelinedGptOss._claim`. Under a tier that is not paranoia: tier slot
+    addresses are reused across layers, so the previous owner's recorded address can
+    equal what this layer now wants, and the gather's ``src == have`` skip would then
+    serve another layer's expert. Same unsoundness as within one layer
+    (:meth:`mxfp4_residency.Mxfp4NvmeResidency._invalidate`), one level up.
+
+    Not shared, on purpose: ``a_buf`` (k x hidden activations, 114 KB at K3's latent
+    width — 10 MB across 92 layers, and sharing it would mean touching ``forward``),
+    the traffic counters, and ``hot_stack``, which is genuinely per-layer data.
+    """
+
+    __slots__ = ("k", "row_bytes", "off", "geo", "device", "slots", "slots64",
+                 "gu_p_v", "gu_a_v", "dn_p_v", "dn_a_v", "have", "want_buf",
+                 "slot_eids", "owner", "claims", "users")
+
+    def __init__(self, engine):
+        k, off, row_bytes, dev = engine.k, engine.off, engine.row_bytes, engine.device
+        n1, half1, nb1 = engine.n1, engine.half1, engine.nb1
+        n2, half2, nb2 = engine.n2, engine.half2, engine.nb2
+        self.k, self.row_bytes, self.off = k, row_bytes, list(off)
+        self.geo = (n1, half1, nb1, n2, half2, nb2)
+        self.device = dev
+        slots = torch.empty(k, row_bytes, dtype=torch.uint8, device=dev)
+        self.slots, self.slots64 = slots, slots.view(torch.int64)
+        self.gu_p_v = torch.as_strided(slots, (k, n1, half1), (row_bytes, half1, 1), off[0])
+        self.gu_a_v = torch.as_strided(slots, (k, n1, nb1), (row_bytes, nb1, 1), off[1])
+        self.dn_p_v = torch.as_strided(slots, (k, n2, half2), (row_bytes, half2, 1), off[2])
+        self.dn_a_v = torch.as_strided(slots, (k, n2, nb2), (row_bytes, nb2, 1), off[3])
+        self.slot_eids = torch.arange(k, dtype=torch.int32, device=dev)
+        self.have = torch.full((k,), -1, dtype=torch.long, device=dev)
+        self.want_buf = torch.zeros(k, dtype=torch.long, device=dev)
+        self.owner = None          # the engine whose rows the slots currently hold
+        self.claims = 0            # buffer handovers; per token this is the layer count
+        self.users = 0
+
+    def _shape(self, engine):
+        return (engine.k, engine.row_bytes, list(engine.off),
+                (engine.n1, engine.half1, engine.nb1,
+                 engine.n2, engine.half2, engine.nb2), engine.device)
+
+    def check(self, engine):
+        """Refuse a store whose row layout is not this engine's, byte for byte.
+
+        Slots are raw bytes read at fixed segment offsets; a store built for a
+        different layout would be read as this one and give plausible garbage.
+        """
+        mine = (self.k, self.row_bytes, list(self.off), self.geo, self.device)
+        theirs = self._shape(engine)
+        if mine != theirs:
+            raise ValueError(
+                f"shared SlotStore does not match this engine: store {mine} vs "
+                f"engine {theirs}. Every engine sharing a store must have identical "
+                "row geometry.")
+
+    @property
+    def bytes(self) -> int:
+        return self.k * self.row_bytes
+
+    def __repr__(self) -> str:
+        return (f"SlotStore(k={self.k}, row_bytes={self.row_bytes}, "
+                f"{self.bytes/1e6:.0f} MB, users={self.users}, claims={self.claims})")
+
+
 class Mxfp4PipelinedGptOss:
     """Per-layer engine: pinned native-mxfp4 arena + resident hot stack + k-slot
     store, address-table dispatch, fused mxfp4 GEMM, gpt-oss GLU epilogue.
@@ -74,7 +149,8 @@ class Mxfp4PipelinedGptOss:
 
     def __init__(self, gu_blocks, gu_scales, dn_blocks, dn_scales,
                  gate_up_bias, down_bias, hot_ids, k_slots, device="cuda",
-                 alpha=1.702, limit=7.0, compute_dtype=torch.bfloat16):
+                 alpha=1.702, limit=7.0, compute_dtype=torch.bfloat16,
+                 store=None):
         E, n1, half1 = gu_blocks.shape
         _, n2, half2 = dn_blocks.shape
         nb1, nb2 = gu_scales.shape[-1], dn_scales.shape[-1]
@@ -83,7 +159,7 @@ class Mxfp4PipelinedGptOss:
                             device=device, alpha=alpha, limit=limit,
                             compute_dtype=compute_dtype)
         self._build_source(gu_blocks, gu_scales, dn_blocks, dn_scales, hot_ids)
-        self._init_slots()
+        self._init_slots(store)
         self._init_bias(gate_up_bias, down_bias)
         self._prime()
 
@@ -143,21 +219,30 @@ class Mxfp4PipelinedGptOss:
         hot_addr = self.hot_stack.data_ptr() + h_row * row_bytes
         self.src_of_expert = torch.where(is_hot, hot_addr, host_addr)
 
-    def _init_slots(self):
-        k, off, row_bytes = self.k, self.off, self.row_bytes
-        n1, half1, nb1 = self.n1, self.half1, self.nb1
-        n2, half2, nb2 = self.n2, self.half2, self.nb2
-        slots = torch.empty(k, row_bytes, dtype=torch.uint8, device=self.device)
-        self.slots, self.slots64 = slots, slots.view(torch.int64)
-        self.gu_p_v = torch.as_strided(slots, (k, n1, half1), (row_bytes, half1, 1), off[0])
-        self.gu_a_v = torch.as_strided(slots, (k, n1, nb1), (row_bytes, nb1, 1), off[1])
-        self.dn_p_v = torch.as_strided(slots, (k, n2, half2), (row_bytes, half2, 1), off[2])
-        self.dn_a_v = torch.as_strided(slots, (k, n2, nb2), (row_bytes, nb2, 1), off[3])
+    def _init_slots(self, store=None):
+        """Bind the device slots — a fresh :class:`SlotStore`, or a shared one.
 
-        self.sizes = [1] * k
-        self.slot_eids = torch.arange(k, dtype=torch.int32, device=self.device)
-        self.have = torch.full((k,), -1, dtype=torch.long, device=self.device)
-        self.want_buf = torch.zeros(k, dtype=torch.long, device=self.device)
+        Pass another engine's ``.store`` to share; the idiom mirrors ``tier=``::
+
+            engines = []
+            for layer in range(1, 93):
+                engines.append(Mxfp4NvmeResidencyK3(
+                    arena, layer, k_slots=16, tier=tier,
+                    store=engines[0].store if engines else None))
+        """
+        if store is None:
+            store = SlotStore(self)
+        else:
+            store.check(self)
+        store.users += 1
+        self.store = store
+        self.slots, self.slots64 = store.slots, store.slots64
+        self.gu_p_v, self.gu_a_v = store.gu_p_v, store.gu_a_v
+        self.dn_p_v, self.dn_a_v = store.dn_p_v, store.dn_a_v
+        self.slot_eids = store.slot_eids
+        self.have, self.want_buf = store.have, store.want_buf
+
+        self.sizes = [1] * self.k
         self.a_buf = None
         self.hot_d2d_bytes = torch.zeros((), dtype=torch.long, device=self.device)
         self.cold_pcie_bytes = torch.zeros((), dtype=torch.long, device=self.device)
@@ -206,13 +291,39 @@ class Mxfp4PipelinedGptOss:
         grid = (self.k, -(-self.row_words // 2048))
         kern[grid](self.slots64, src, self.have, self.row_words, BLOCK=2048, num_warps=4)
 
+    def _claim(self):
+        """Take the shared slot buffer, discarding residency another layer left.
+
+        A no-op when this engine already holds it, which is the single-engine case and
+        the repeated-decode-step case — so the have-skip keeps working exactly as
+        before. On a handover, ``have`` is poisoned wholesale (the slots hold another
+        layer's rows now) and :meth:`_forget` drops whatever else the engine believed.
+        """
+        store = self.store
+        if store.owner is self:
+            return
+        store.owner = self
+        store.claims += 1
+        self.have.fill_(-1)
+        self._forget()
+
+    def _forget(self):
+        """Per-engine residency bookkeeping to discard on a buffer handover.
+
+        Nothing here: with every row pinned, address <-> expert is a BIJECTION, so an
+        address another layer's engine recorded cannot name one of this layer's rows.
+        Overridden by the tiering subclass, where that stops being true.
+        """
+
     def _prime(self):
+        self._claim()
         self.want_buf.zero_()
         src0 = self._resolve_src()
         self._gather(src0)
         self._commit(src0)
 
     def _fetch(self, want):
+        self._claim()
         self.want_buf.copy_(want)
         src = self._resolve_src()
         self._invalidate(src)                             # before the miss count

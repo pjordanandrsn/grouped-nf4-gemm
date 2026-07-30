@@ -337,12 +337,18 @@ class Mxfp4NvmeResidency(Mxfp4PipelinedGptOss):
         tier: a prebuilt :class:`~nvme_residency.ColdTier` to share across layers
             — the usual arrangement, since one pinned buffer should back all 92
             MoE layers rather than 92 buffers each sized for one.
+        store: a prebuilt :class:`~mxfp4_pipelined.SlotStore` to share across layers,
+            for the same reason one layer deeper. Slots are k x row_bytes of VRAM
+            (281 MB at K3's geometry), and only one layer's are live at a time, so
+            92 private stores would spend 25.8 GB of a 24 GB card on buffers that sit
+            idle. Pass ``engines[0].store``.
     """
 
     def __init__(self, arena_path, layer, *, hot_ids=(), k_slots,
                  hot_rows=None, gate_up_bias=None, down_bias=None,
                  device="cuda", alpha=1.702, limit=7.0,
-                 compute_dtype=torch.bfloat16, tier=None, index=None, qd=4):
+                 compute_dtype=torch.bfloat16, tier=None, index=None, qd=4,
+                 store=None):
         from nvme_arena import load_index
         index = index if index is not None else load_index(arena_path)
         groups, geo = engine_segment_map(index)
@@ -375,7 +381,7 @@ class Mxfp4NvmeResidency(Mxfp4PipelinedGptOss):
         self.pinned = True
         self._init_permutation()
         self._build_source_from_arena(hot_ids)
-        self._init_slots()
+        self._init_slots(store)
         self._init_bias(gate_up_bias, down_bias)
         self._init_tier_state()
         self._prime()
@@ -527,9 +533,25 @@ class Mxfp4NvmeResidency(Mxfp4PipelinedGptOss):
         self._have_eid = list(self._want_eid)
         self._have_addr = list(self._src_host)
 
+    def _forget(self):
+        """Drop this engine's residency mirror when another layer takes the slots.
+
+        The base class can skip this because pinning every row makes address <->
+        expert a bijection. Under a tier it is load-bearing twice over: the slots now
+        hold another LAYER's rows, and — because the tier is shared and its slot
+        addresses are reused across layers — the address this engine recorded for slot
+        i can be exactly the address it wants next. ``_invalidate`` rebuilds ``have``
+        from this mirror, so a stale mirror would reconstruct a ``have`` that says
+        "already resident" about another layer's bytes.
+        """
+        self._have_eid = [-1] * self.k
+        self._have_addr = [-1] * self.k
+
     def traffic(self):
         t = super().traffic()
         t["tier"] = self.tier.stats()
+        t["slots"] = {"bytes": self.store.bytes, "users": self.store.users,
+                      "claims": self.store.claims}
         return t
 
 
