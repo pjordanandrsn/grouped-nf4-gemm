@@ -36,6 +36,14 @@ from nvme_reader import ArenaReader, alloc_landing
 # Released-K3 spelling. `kinds` order here fixes the on-disk segment order and
 # must match the order passed to `bake_expert_tensors` — the index records it,
 # and `ArenaExpertSource` reads geometry from the index rather than assuming.
+#
+# NOT the order to bake in if the arena will also feed the PIPELINED engine.
+# `ArenaExpertSource` slices each segment by suffix, so any order works here; but
+# `mxfp4_residency.Mxfp4NvmeResidency` reads gate_up at one computed offset and
+# therefore needs both blocks segments adjacent and both scales segments
+# adjacent — see `mxfp4_residency.K3_RESIDENCY_KINDS`. That order works for BOTH
+# consumers, so prefer it for any bake big enough that you would not want to
+# repeat it.
 K3_KINDS = ("w1.weight_packed", "w1.weight_scale",
             "w3.weight_packed", "w3.weight_scale",
             "w2.weight_packed", "w2.weight_scale")
