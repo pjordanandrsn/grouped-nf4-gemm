@@ -80,10 +80,21 @@ def repack_from_bnb(packed_list, states, N: int, K: int):
 
 
 def build_group_tiles(sizes, block_m: int, device):
-    """Expand jagged group sizes into fixed M-tiles: (row0, valid_rows, group_idx)."""
+    """Expand jagged group sizes into fixed M-tiles: (row0, valid_rows, group_idx).
+
+    ``sizes`` is READ-ONLY here, and `int(m)` is what keeps it that way. When
+    `sizes` is a tensor, `enumerate` yields 0-dim VIEWS into it, so a bare
+    `left = m` followed by `left -= take` subtracts *in place* and zeroes the
+    caller's tensor. Every caller until now passed a Python list (where `m` is
+    an int and `-=` rebinds) or called once and discarded the tensor, so the
+    aliasing never surfaced; the first caller to run two GEMMs off one `sizes`
+    tensor — gate/up/down within a single MoE layer — saw `[0, 0]` on the
+    second call.
+    """
     t_row0, t_rows, t_group = [], [], []
     row = 0
     for g, m in enumerate(sizes):
+        m = int(m)
         left = m
         while left > 0:
             take = min(block_m, left)

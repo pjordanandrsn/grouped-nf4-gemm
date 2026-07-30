@@ -110,7 +110,9 @@ class ArenaExpertSource:
     def fetch_raw(self, layer: int, expert_ids: Sequence[int]) -> dict:
         """``{suffix: [E, *shape_per_expert]}`` for the given experts, stacked
         in the order given — the caller's routing order, not sorted."""
-        ids = list(expert_ids)
+        # Routing hands ids as a device tensor; row_offset keys on plain ints,
+        # and a 0-dim tensor key misses the map with an opaque KeyError.
+        ids = [int(e) for e in expert_ids]
         out = {s: [] for s in self.segments}
         for base in range(0, len(ids), self._qd):
             chunk = ids[base:base + self._qd]
