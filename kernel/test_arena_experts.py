@@ -21,10 +21,15 @@ from arena_experts import (ArenaExpertSource, K3_KINDS, K3_TEMPLATE,  # noqa: E4
 from nvme_arena import bake_expert_tensors, load_index, row_offset  # noqa: E402
 
 E, L_ROUTED = 6, (1, 2)
-N, K = 4, 64                      # per expert: blocks [N, K//2], scales [N, K//32]
-SHAPES = {"w1.weight_packed": [N, K // 2], "w1.weight_scale": [N, K // 32],
-          "w3.weight_packed": [N, K // 2], "w3.weight_scale": [N, K // 32],
-          "w2.weight_packed": [N, K // 2], "w2.weight_scale": [N, K // 32]}
+# A faithful MoE geometry, not three identically-shaped tensors: gate/up map
+# hidden->intermediate and down maps intermediate->hidden, so down's contracted
+# dim is I and must itself be a multiple of MX_BLOCK=32. Getting this wrong
+# makes down's scales [.., I//32] == [.., 0] and the kernel rejects it.
+H, I_ = 64, 32                    # hidden, intermediate
+N, K = I_, H                      # gate/up output rows, contracted dim
+SHAPES = {"w1.weight_packed": [I_, H // 2], "w1.weight_scale": [I_, H // 32],
+          "w3.weight_packed": [I_, H // 2], "w3.weight_scale": [I_, H // 32],
+          "w2.weight_packed": [H, I_ // 2], "w2.weight_scale": [H, I_ // 32]}
 
 
 def _st_bytes(tensors):
