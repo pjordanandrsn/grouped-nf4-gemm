@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.1 — 2026-07-30
+
+**0.3.0 announced two modules it did not ship.** `mxfp4_residency` and
+`nvme_residency` were absent from `pyproject`'s `py-modules` allowlist, so they
+were never in any wheel — while 0.3.0's release notes described
+`K3_RESIDENCY_KINDS`, `fuse_gate_up_segments` and `Mxfp4NvmeResidency` as
+shipped. Anyone who followed those notes got `ModuleNotFoundError`.
+
+`py-modules` is an explicit allowlist: adding a file under `kernel/` does not
+package it, and nothing warned. `kernel/test_packaging_covers_kernel.py` now
+diffs the directory against the allowlist and fails naming the missing modules,
+so the next gap lands on the pull request instead of on a user. A module that
+genuinely should not ship goes in `_DELIBERATELY_UNPACKAGED` with a reason,
+which keeps that decision visible rather than silent.
+
+Nothing else changed. Everything 0.3.0 describes is accurate; two of its modules
+were simply unreachable from an installed wheel.
+
 ## 0.3.0 — 2026-07-30
 
 **If you are on triton 3.2, the pipelined MXFP4 engine did not work at all.**

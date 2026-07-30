@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "grouped-nf4-gemm"
-version = "0.3.0"
+version = "0.3.1"
 description = "Fused grouped GEMM on bitsandbytes NF4-packed weights with host streaming, on consumer GPUs."
 readme = "README.md"
 license = { text = "MIT" }
@@ -50,5 +50,11 @@ py-modules = [
     "mxfp4_qlora", "mxfp4_native_load", "moonshot_gather", "arena_experts", "arena_moe_patch", "verify_provenance",
     "run_mxfp4_20b_qlora", "gate_native_load_20b",
     "nvme_arena", "nvme_bake_nf4", "nvme_reader",
+    # 0.3.0's headline surface. These were absent from this allowlist, so the
+    # NVMe residency tier and the MXFP4 residency engine -- K3_RESIDENCY_KINDS,
+    # fuse_gate_up_segments, Mxfp4NvmeResidency -- shipped in the CHANGELOG and
+    # NOT in the wheel. tests/test_packaging_covers_kernel.py now fails if any
+    # non-test kernel/*.py is missing here.
+    "mxfp4_residency", "nvme_residency",
     "nf4_qlora",
 ]
