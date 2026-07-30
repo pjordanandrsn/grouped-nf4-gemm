@@ -144,3 +144,157 @@ def test_cuda_graph_replay_parity():
     for (x, i, sc), o in zip(routes[3:], got):
         ref = _ref_forward(m, x.cpu(), i.cpu(), sc.cpu())
         assert _b_rel(o.cpu(), ref) < 3e-2
+
+
+# ------------------------------------------------------- 5. prefill (T > 1) ----
+# The engine was decode-only: `a_buf.copy_(x.expand(k, -1))` broadcasts ONE token
+# across the k slots. Prefill is not a convenience -- stepping T tokens one at a time
+# re-reads the whole dense side T times and every routed row T times, where entering
+# each layer once for the prompt reads each DISTINCT expert once. These gate that the
+# new path computes what the validated decode path computes, and that it really does
+# dedup the reads.
+
+def _needs_gather_kernel():
+    """`gemm_mxfp4_grouped`'s prefill variant uses `tl.gather` (triton >= 3.4). Skip
+    loudly rather than fail obscurely inside the compiler on an older box."""
+    pytest.importorskip("triton")
+    import triton.language as tl
+    if not hasattr(tl, "gather"):
+        import triton
+        pytest.skip(f"prefill needs triton>=3.4 for tl.gather; have {triton.__version__}")
+
+
+def _prefill_engine(monkeypatch=None):
+    """A resident engine plus its packed source, at E=8 / k=4 so that a handful of
+    tokens ALREADY overrun the slot budget and force chunking."""
+    from mxfp4_pipelined import Mxfp4PipelinedGptOss
+    from mxfp4_pack_ref import quantize_pack_mxfp4
+    g = torch.Generator().manual_seed(4242)
+    E, N1, N2, H, INTER = 8, 2 * 64, 64, 64, 64
+
+    def pack(w):
+        E_, N_, K_ = w.shape
+        B = torch.empty(E_, N_, K_ // 2, dtype=torch.uint8)
+        S = torch.empty(E_, N_, K_ // 32, dtype=torch.uint8)
+        for e in range(E_):
+            b, s = quantize_pack_mxfp4(w[e])
+            B[e], S[e] = b.reshape(N_, K_ // 2), s
+        return B, S
+
+    gu_b, gu_s = pack(torch.randn(E, N1, H, generator=g) * 0.1)
+    dn_b, dn_s = pack(torch.randn(E, N2, INTER, generator=g) * 0.1)
+    return (gu_b, gu_s, dn_b, dn_s), E, H, N2
+
+
+def _routes(T, E, topk, seed):
+    g = torch.Generator(device="cuda").manual_seed(seed)
+    logits = torch.randn(T, E, device="cuda", generator=g)
+    sc, idx = torch.topk(torch.softmax(logits, -1), k=topk, dim=-1)
+    return idx, sc.to(torch.bfloat16)
+
+
+def _build(stacks, E, k_slots, bias):
+    from mxfp4_pipelined import Mxfp4PipelinedGptOss
+    gu_b, gu_s, dn_b, dn_s = stacks
+    g = torch.Generator().manual_seed(7)
+    gub = (torch.randn(E, gu_b.shape[1], generator=g) * 0.05).to(torch.bfloat16)
+    dnb = (torch.randn(E, dn_b.shape[1], generator=g) * 0.05).to(torch.bfloat16)
+    return Mxfp4PipelinedGptOss(
+        gu_b, gu_s, dn_b, dn_s, gub if bias else None, dnb if bias else None,
+        hot_ids=torch.tensor([], dtype=torch.long), k_slots=k_slots,
+        device="cuda", alpha=1.702, limit=7.0)
+
+
+@pytest.mark.parametrize("bias", [False, True])
+def test_prefill_equals_running_the_tokens_one_at_a_time(bias):
+    """THE gate. Prefill must compute what the decode path computes for the same
+    tokens -- decode being the path already validated against a dequant reference.
+
+    Not `torch.equal`: a group holding more than one row takes the TILED kernel while
+    decode takes the GEMV reduction, so the K-dimension accumulates in a different
+    order. Same weights, same math, different order -- so the bound is bf16-scale, and
+    a wrong split or a mis-scattered row is O(1) wrong, not O(eps).
+    """
+    _needs_gather_kernel()
+    stacks, E, H, _N2 = _prefill_engine()
+    topk, T = 4, 5
+    eng = _build(stacks, E, topk, bias)
+    idx, sc = _routes(T, E, topk, seed=11)
+    g = torch.Generator(device="cuda").manual_seed(3)
+    x = torch.randn(T, H, dtype=torch.bfloat16, device="cuda", generator=g)
+
+    got = eng.forward(x, idx, sc)
+    assert tuple(got.shape) == (T, eng.n2), got.shape
+    ref = torch.cat([eng.forward(x[t:t + 1], idx[t:t + 1], sc[t:t + 1])
+                     for t in range(T)], dim=0)
+    rel = ((got.float() - ref.float()).abs().max()
+           / ref.float().abs().max()).item()
+    assert rel < 2e-2, rel
+    # and it is not passing because everything is zero
+    assert ref.float().abs().max().item() > 1e-3
+
+
+def test_prefill_chunks_the_expert_set_to_the_slot_budget():
+    """T*topk distinct experts can far exceed k. The slot budget must not grow with
+    the prompt -- that is the whole reason VRAM stays flat -- so the distinct set is
+    processed in chunks, and there must really be more than one."""
+    _needs_gather_kernel()
+    stacks, E, H, _ = _prefill_engine()
+    topk, T, k_slots = 4, 6, 2            # <= 2 slots, up to 8 distinct experts
+    eng = _build(stacks, E, topk, bias=False)
+    eng2 = _build(stacks, E, k_slots, bias=False)
+    idx, sc = _routes(T, E, topk, seed=5)
+    g = torch.Generator(device="cuda").manual_seed(9)
+    x = torch.randn(T, H, dtype=torch.bfloat16, device="cuda", generator=g)
+
+    calls = []
+    orig = eng2._fetch
+    eng2._fetch = lambda want, _o=orig, _c=calls: (_c.append(want.tolist()), _o(want))[1]
+    got = eng2.forward(x, idx, sc)
+    n_distinct = len(set(idx.reshape(-1).tolist()))
+    assert len(calls) == -(-n_distinct // k_slots) > 1, (len(calls), n_distinct)
+    assert all(len(w) == k_slots for w in calls), "every fetch asks for exactly k ids"
+    # chunking must not change the answer: compare against the k=topk engine, which
+    # needs no chunking for a single token
+    ref = torch.cat([eng.forward(x[t:t + 1], idx[t:t + 1], sc[t:t + 1])
+                     for t in range(T)], dim=0)
+    rel = ((got.float() - ref.float()).abs().max() / ref.float().abs().max()).item()
+    assert rel < 2e-2, rel
+
+
+def test_prefill_reads_each_distinct_expert_once_not_once_per_token():
+    """The I/O claim that makes prefill worth building. Route every token to the SAME
+    experts: stepping tokens one at a time would gather them T times over, prefill
+    gathers them once."""
+    _needs_gather_kernel()
+    stacks, E, H, _ = _prefill_engine()
+    topk, T = 4, 6
+    eng = _build(stacks, E, topk, bias=False)
+    idx = torch.tensor([[0, 1, 2, 3]] * T, device="cuda")
+    sc = torch.full((T, topk), 0.25, dtype=torch.bfloat16, device="cuda")
+    g = torch.Generator(device="cuda").manual_seed(13)
+    x = torch.randn(T, H, dtype=torch.bfloat16, device="cuda", generator=g)
+
+    calls = []
+    orig = eng._fetch
+    eng.__dict__["_fetch"] = lambda want, _o=orig, _c=calls: (
+        _c.append(1), _o(want))[1]
+    eng.forward(x, idx, sc)
+    assert len(calls) == 1, (
+        f"{T} tokens over 4 distinct experts should be ONE chunk, got {len(calls)}")
+
+
+def test_one_token_still_takes_the_decode_path():
+    """Decode is the validated path and its reduction order is part of what was
+    validated, so T == 1 must not silently start going through prefill."""
+    _needs_gather_kernel()
+    stacks, E, H, _ = _prefill_engine()
+    topk = 4
+    eng = _build(stacks, E, topk, bias=False)
+    idx, sc = _routes(1, E, topk, seed=17)
+    x = torch.randn(1, H, dtype=torch.bfloat16, device="cuda")
+    seen = []
+    eng.__dict__["_forward_prefill"] = lambda *a, **k: seen.append(1)
+    out = eng.forward(x, idx, sc)
+    assert not seen, "T == 1 must dispatch to decode"
+    assert tuple(out.shape) == (1, eng.n2)
