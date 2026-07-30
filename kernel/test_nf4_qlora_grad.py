@@ -65,6 +65,34 @@ def test_lora_delta_matches_explicit_per_expert_math():
         row += n
 
 
+def test_delta_applies_lora_alpha_over_r_scaling():
+    """The delta must equal scaling * B(Ax), matching ExpertsLoRA._lora.
+
+    Shipped without this, lora_delta_grouped ignored `scaling` while the caller
+    ran alpha=16/r=8 -- so every fused update was exactly HALF the reference's.
+    Forward parity and bit-exactness both still passed; only the training
+    TRAJECTORY diverged (48-layer gate: median loss delta 0.367 vs a 0.05 band).
+    A test that only checks shapes or zero-B cannot see this.
+    """
+    import torch.nn.functional as F
+    a, sizes, eids = _grouped_inputs()
+    A = torch.randn(E, R, K) * 0.05
+    B = torch.randn(E, N, R) * 0.05
+    for alpha, r in ((16, 8), (32, 8), (8, 8)):
+        scaling = alpha / r
+        got = lora_delta_grouped(a, A, B, sizes, eids, scaling)
+        row = 0
+        for g, e in enumerate(eids):
+            n = sizes[g]
+            want = scaling * F.linear(F.linear(a[row:row + n], A[e]), B[e])
+            torch.testing.assert_close(got[row:row + n], want, rtol=1e-5, atol=1e-5)
+            row += n
+    # and scaling=1 must NOT silently equal scaling=2
+    d1 = lora_delta_grouped(a, A, B, sizes, eids, 1.0)
+    d2 = lora_delta_grouped(a, A, B, sizes, eids, 2.0)
+    assert not torch.allclose(d1, d2), "scaling argument is being ignored"
+
+
 def test_zero_B_delta_is_exactly_zero():
     """B is zero-initialised, so an untrained adapter must contribute NOTHING
     -- identically, not approximately. e4b's delegate-to-base decision rests on

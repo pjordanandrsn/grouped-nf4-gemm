@@ -109,12 +109,19 @@ def gemm_4bit_grouped_train(a_cat, packed, absmax, sizes, expert_ids,
                                  weights_fn)
 
 
-def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids):
+def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
     """Per-expert low-rank delta over a group-sorted activation block.
 
     ``a_cat`` is ``[T_cat, K]`` grouped by expert; ``lora_A`` is ``[E, r, K]``
     and ``lora_B`` is ``[E, N, r]``. Returns ``[T_cat, N]`` where each group's
-    rows got ``B_e @ (A_e @ x)``.
+    rows got ``scaling * (B_e @ (A_e @ x))``.
+
+    ``scaling`` is LoRA's ``alpha / r`` and is NOT optional in practice: the
+    reference adapter applies it (``ExpertsLoRA.scaling``), so omitting it makes
+    every update the wrong size. Shipping it defaulted to 1.0 while the caller
+    used alpha=16/r=8 made the fused delta exactly HALF the reference's, which
+    trained visibly slower -- caught by the 48-layer parity gate at a median
+    loss delta of 0.367 against a 0.05 band, after 16-layer parity had passed.
 
     Kept separate from the kernel call so the caller controls *where* the delta
     lands — for gate_up it must be added before the activation.
@@ -127,7 +134,7 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids):
             continue
         x = a_cat[row:row + n]
         A, B = lora_A[e], lora_B[e]
-        d = (x.to(A.dtype) @ A.T) @ B.T          # [n, r] -> [n, N]
+        d = scaling * ((x.to(A.dtype) @ A.T) @ B.T)   # [n, r] -> [n, N]
         if out is None:
             out = torch.zeros(a_cat.shape[0], B.shape[0], dtype=d.dtype,
                               device=a_cat.device)
@@ -137,7 +144,7 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids):
 
 
 def fused_grouped_lora(a_cat, packed, absmax, sizes, expert_ids,
-                       lora_A=None, lora_B=None, weights_fn=None):
+                       lora_A=None, lora_B=None, weights_fn=None, scaling=1.0):
     """Frozen 4-bit projection through the fused kernel **plus** the trainable
     low-rank delta, returned pre-activation so callers can apply SwiGLU after.
 
@@ -149,5 +156,5 @@ def fused_grouped_lora(a_cat, packed, absmax, sizes, expert_ids,
                                   weights_fn=weights_fn)
     if lora_A is None or lora_B is None:
         return out
-    delta = lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids)
+    delta = lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling)
     return out + delta.to(out.dtype)
