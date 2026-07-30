@@ -17,7 +17,7 @@ BATTERY = [
     "mxfp4_pack_ref", "mxfp4_grouped", "mxfp4_loader", "mxfp4_pipelined",
     "mxfp4_qlora", "mxfp4_native_load", "moonshot_gather", "verify_provenance",
     "run_mxfp4_20b_qlora", "gate_native_load_20b",
-    "nvme_arena", "nvme_bake_nf4", "nvme_reader",
+    "nvme_arena", "nvme_bake_nf4", "nvme_reader", "arena_experts",
     "nf4_qlora",
 ]
 
@@ -71,6 +71,16 @@ def main() -> int:
     _d = lora_delta_grouped(_t.zeros(2, 8), _t.zeros(1, 4, 8), _t.zeros(1, 6, 4), [2], [0])
     assert _d.shape == (2, 6) and _t.count_nonzero(_d) == 0
     print("nf4_qlora training wrapper OK (zero-B delta is exactly zero)")
+
+    # arena_experts: the arena -> kernel link. Import-only would pass even if
+    # the K3 spelling map were empty, so assert the mapping the caller relies on.
+    from arena_experts import K3_KINDS, K3_PROJ, expert_bytes_per_token
+    assert K3_PROJ == {"gate": "w1", "up": "w3", "down": "w2"}, K3_PROJ
+    assert len(K3_KINDS) == 6 and all("." in k for k in K3_KINDS), K3_KINDS
+    _idx = {"segments": [{"suffix": "w1.weight_packed", "length": 100}],
+            "rows": [[1, 0, 0], [1, 1, 4096], [2, 0, 8192]]}
+    assert expert_bytes_per_token(_idx, 4) == 4 * 2 * 100
+    print("arena_experts surface (K3 map + bytes/token) OK")
 
     from moonshot_gather import discover_layer
     wm = {}
