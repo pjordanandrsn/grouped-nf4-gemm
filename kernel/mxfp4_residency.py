@@ -43,15 +43,32 @@ import torch
 from mxfp4_pipelined import Mxfp4PipelinedGptOss, _align8
 from nvme_residency import ColdTier
 
+# THE BAKE ORDER FOR THIS ENGINE IS NOT `arena_experts.K3_KINDS`.
+#
 # K3 ships gate (w1) and up (w3) as SEPARATE per-expert tensors while the engine
-# wants one fused gate_up. A bake whose `kinds` are ordered like this produces
-# rows the engine reads directly, because `cat([w1, w3], dim=0)` is byte-wise w1's
-# bytes then w3's -- see `fuse_gate_up_segments`, which checks that rather than
-# assuming it. The KIND NAMES are deliberately absent: read them off the real
-# checkpoint. Guessing tensor names is what silently returned n_experts=0 from
-# `moonshot_gather` on K3 (three renames since K2).
-K3_KIND_ORDER = ("<w1 blocks>", "<w3 blocks>", "<w1 scales>", "<w3 scales>",
-                 "<w2 blocks>", "<w2 scales>")
+# wants one fused gate_up. `cat([w1, w3], dim=0)` is byte-wise w1's bytes then
+# w3's, so a bake CAN feed the engine directly -- but only if the two blocks
+# segments are ADJACENT, and likewise the two scales:
+#
+#     w1_packed | w3_packed | w1_scale | w3_scale | w2_packed | w2_scale
+#     \___ engine's gu_blocks __/ \___ gu_scales __/ \_ dn_b _/ \_ dn_s _/
+#
+# `arena_experts.K3_KINDS` interleaves per projection instead
+# (w1_packed, w1_scale, w3_packed, w3_scale, ...) and is perfectly correct for
+# `ArenaExpertSource`, which slices each segment by suffix out of the index and
+# does not care about order. This engine computes segment offsets, so that
+# layout puts w1_scale in the middle of what it reads as gu_blocks.
+#
+# Both orders are legitimate; they are for different consumers. Baking ~1.45 TB
+# in the wrong one is the expensive mistake, so `fuse_gate_up_segments` refuses a
+# mis-ordered arena and names this order in the error.
+#
+# Names are the released-K3 spelling, taken from `arena_experts.K3_KINDS` rather
+# than guessed -- guessing tensor names is what silently returned n_experts=0
+# from `moonshot_gather` on K3 (three renames since K2).
+K3_RESIDENCY_KINDS = ("w1.weight_packed", "w3.weight_packed",
+                      "w1.weight_scale", "w3.weight_scale",
+                      "w2.weight_packed", "w2.weight_scale")
 
 
 def fuse_gate_up_segments(index: dict) -> dict:
@@ -76,7 +93,23 @@ def fuse_gate_up_segments(index: dict) -> dict:
             f"expected 4 fused or 6 split segments, got {len(segs)}: "
             f"{[g['suffix'] for g in segs]}")
 
+    order_hint = (
+        "This engine needs the two BLOCKS segments adjacent and the two SCALES "
+        "segments adjacent, because it reads gate_up at a single computed offset:\n"
+        f"    kinds={K3_RESIDENCY_KINDS}\n"
+        "`arena_experts.K3_KINDS` interleaves per projection "
+        "(w1_packed, w1_scale, w3_packed, w3_scale, ...) which is correct for "
+        "ArenaExpertSource (it slices by suffix) but NOT for this engine.\n"
+        f"This arena's order: {[g['suffix'] for g in segs]}")
+
     def _fuse(a, b, name):
+        sa, sb = tuple(a["shape_per_expert"]), tuple(b["shape_per_expert"])
+        if sa[1:] != sb[1:]:
+            raise ValueError(
+                f"{name}: cannot fuse {a['suffix']!r} + {b['suffix']!r} — their "
+                f"trailing dims differ ({sa} vs {sb}), so these are not the same "
+                f"KIND of segment. Almost certainly a blocks/scales pair, i.e. the "
+                f"bake used the wrong kinds ORDER.\n{order_hint}")
         if a["seg_off"] + a["length"] != b["seg_off"]:
             raise ValueError(
                 f"{name}: segments {a['suffix']!r} and {b['suffix']!r} are not "
@@ -86,9 +119,6 @@ def fuse_gate_up_segments(index: dict) -> dict:
         if a["dtype"] != b["dtype"]:
             raise ValueError(f"{name}: dtype mismatch "
                              f"{a['dtype']} vs {b['dtype']}")
-        sa, sb = tuple(a["shape_per_expert"]), tuple(b["shape_per_expert"])
-        if sa[1:] != sb[1:]:
-            raise ValueError(f"{name}: trailing dims differ {sa} vs {sb}")
         return {"suffix": f"{a['suffix']}+{b['suffix']}", "seg_off": a["seg_off"],
                 "length": a["length"] + b["length"], "dtype": a["dtype"],
                 "shape_per_expert": [sa[0] + sb[0], *sa[1:]]}

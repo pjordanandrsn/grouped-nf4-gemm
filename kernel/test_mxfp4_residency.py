@@ -73,12 +73,20 @@ def _packed(seed=1689):
     return gu_b, gu_s, dn_b, dn_s
 
 
-def _bake(tmp_path, stacks, kinds=KINDS, split_gate_up=False):
-    """Relocate the very tensors the resident engine will hold into an arena."""
+def _bake(tmp_path, stacks, kinds=KINDS, split_gate_up=False, interleave=False,
+          name="m.arena"):
+    """Relocate the very tensors the resident engine will hold into an arena.
+
+    ``interleave`` reproduces ``arena_experts.K3_KINDS`` ordering — per
+    projection (w1 blocks, w1 scales, w3 blocks, ...) rather than blocks-then-
+    scales. Correct for ArenaExpertSource, wrong for this engine.
+    """
     gu_b, gu_s, dn_b, dn_s = stacks
     if split_gate_up:                       # K3 shape: w1 and w3 kept apart
-        payload = [gu_b[:, :INTER], gu_b[:, INTER:], gu_s[:, :INTER],
-                   gu_s[:, INTER:], dn_b, dn_s]
+        w1b, w3b = gu_b[:, :INTER], gu_b[:, INTER:]
+        w1s, w3s = gu_s[:, :INTER], gu_s[:, INTER:]
+        payload = ([w1b, w1s, w3b, w3s, dn_b, dn_s] if interleave
+                   else [w1b, w3b, w1s, w3s, dn_b, dn_s])
     else:
         payload = [gu_b, gu_s, dn_b, dn_s]
     tensors = {}
@@ -90,7 +98,7 @@ def _bake(tmp_path, stacks, kinds=KINDS, split_gate_up=False):
     snap = tmp_path / "snap"
     snap.mkdir(exist_ok=True)
     (snap / "model.safetensors").write_bytes(_st_bytes(tensors))
-    path = str(tmp_path / "m.arena")
+    path = str(tmp_path / name)
     bake_expert_tensors(
         str(snap), path,
         name_template="model.layers.{layer}.mlp.experts.{expert}.{kind}",
@@ -152,6 +160,45 @@ def test_split_gate_up_fuses_byte_exactly(tmp_path):
         assert row == bytes(stacks[0][3].contiguous().numpy().tobytes())
     finally:
         tier.close()
+
+
+def test_arena_experts_kinds_order_is_refused_and_names_the_right_one(tmp_path):
+    """The expensive trap, as a test. `arena_experts.K3_KINDS` is the DOCUMENTED
+    released-K3 spelling and is correct for `ArenaExpertSource`, which slices each
+    segment by suffix. But its per-projection interleave puts w1's SCALES inside
+    what this engine reads as one contiguous gate_up BLOCKS segment. Reaching for
+    the documented constant is the obvious move, and finding out after baking
+    ~1.45 TB is the bad outcome — so refuse, and name the order that works.
+    """
+    from arena_experts import K3_KINDS
+    from mxfp4_residency import K3_RESIDENCY_KINDS
+
+    assert set(K3_KINDS) == set(K3_RESIDENCY_KINDS), (
+        "same six tensors, different order — if these sets ever diverge one of "
+        "the two constants has the wrong NAMES, which is a separate bug")
+    assert K3_KINDS != K3_RESIDENCY_KINDS, "the orders must actually differ"
+
+    stacks = _packed()
+    path, index = _bake(tmp_path, stacks, kinds=K3_KINDS, split_gate_up=True,
+                        interleave=True)
+    assert [g["suffix"] for g in index["segments"]] == list(K3_KINDS)
+    with pytest.raises(ValueError) as ei:
+        mxfp4_geometry_from_arena(index)
+    msg = str(ei.value)
+    assert "wrong kinds ORDER" in msg, msg
+    for k in K3_RESIDENCY_KINDS:            # the fix must be in the message
+        assert k in msg, (k, msg)
+    del path
+
+
+def test_residency_kinds_order_is_accepted(tmp_path):
+    """The counterpart: the SAME six tensors in K3_RESIDENCY_KINDS order fuse."""
+    from mxfp4_residency import K3_RESIDENCY_KINDS
+    stacks = _packed()
+    _p, index = _bake(tmp_path, stacks, kinds=K3_RESIDENCY_KINDS,
+                      split_gate_up=True, interleave=False)
+    assert mxfp4_geometry_from_arena(index) == (
+        E, 2 * INTER, H // 2, H // MX_BLOCK, H, INTER // 2, INTER // MX_BLOCK)
 
 
 def test_noncontiguous_split_segments_are_refused():
