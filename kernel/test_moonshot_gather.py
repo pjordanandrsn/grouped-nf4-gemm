@@ -89,12 +89,78 @@ def test_glu_registry_swiglu_matches_apply_gate():
     torch.testing.assert_close(apply_glu(fused, "swiglu"), moonshot_apply_gate(fused))
 
 
-def test_situ_is_guarded_not_guessed():
-    """K3's SiTU formula is unsourced — apply_glu('situ') must RAISE, never
-    silently substitute a guess (R6). The error names the candidate readings."""
+def test_unverified_epilogue_guard_still_raises():
+    """The guard machinery is retained under `situ_unverified` for the next
+    unsourced epilogue: it must RAISE, never substitute a guess (R6)."""
     fused = torch.randn(3, 16)
     with pytest.raises(NotImplementedError, match="SiTU: formula UNVERIFIED"):
-        apply_glu(fused, "situ")
+        apply_glu(fused, "situ_unverified")
+
+
+def _situ_reference(gate, up, beta, linear_beta):
+    """Transcribed verbatim from Kimi-K3's own modeling_kimi_linear.py
+    (`SituAndMul.forward`, fetched from the release 2026-07-30)."""
+    situ_a = beta * torch.tanh(gate / beta) * torch.sigmoid(gate)
+    if linear_beta is not None:
+        up = linear_beta * torch.tanh(up / linear_beta)
+    return (situ_a * up).to(gate.dtype)
+
+
+def test_situ_matches_the_release_reference_exactly():
+    """`apply_glu(x, 'situ')` must equal K3's shipped SituAndMul, at the released
+    beta values, bit-for-bit in fp64 and fp32."""
+    from moonshot_gather import SITU_K3_BETA, SITU_K3_LINEAR_BETA
+    assert (SITU_K3_BETA, SITU_K3_LINEAR_BETA) == (4.0, 25.0)   # config.json
+    for dtype in (torch.float64, torch.float32):
+        g = torch.Generator().manual_seed(1689)
+        fused = torch.randn(64, 2 * 48, generator=g, dtype=dtype) * 6
+        n = fused.shape[-1] // 2
+        got = apply_glu(fused, "situ")
+        ref = _situ_reference(fused[..., :n], fused[..., n:],
+                              SITU_K3_BETA, SITU_K3_LINEAR_BETA)
+        assert torch.equal(got, ref), f"{dtype}: diverges from the release"
+
+
+def test_situ_is_bounded_by_beta_on_both_branches():
+    """The distinguishing property: BOTH branches are tanh-bounded, so huge
+    activations saturate instead of exploding. |situ_a| <= beta and |up'| <=
+    linear_beta, hence |out| <= beta * linear_beta."""
+    from moonshot_gather import SITU_K3_BETA, SITU_K3_LINEAR_BETA
+    fused = torch.cat([torch.full((8, 8), 1e4), torch.full((8, 8), 1e4)], dim=-1)
+    out = apply_glu(fused, "situ")
+    assert torch.isfinite(out).all()
+    assert out.abs().max() <= SITU_K3_BETA * SITU_K3_LINEAR_BETA + 1e-3
+
+
+def test_none_of_the_guarded_candidates_was_correct():
+    """Regression note, not a hypothetical: every candidate reading the guard
+    listed differs from the sourced formula. Guessing would have shipped a model
+    that ran and was quietly wrong — this pins WHY the guard earned its keep."""
+    from moonshot_gather import SITU_K3_BETA as B, SITU_K3_LINEAR_BETA as LB
+    g = torch.randn(32, 24, generator=torch.Generator().manual_seed(7)) * 3
+    u = torch.randn(32, 24, generator=torch.Generator().manual_seed(8)) * 3
+    real = _situ_reference(g, u, B, LB)
+    candidates = {
+        "gate*sigmoid(gate)*tanh(up)": g * torch.sigmoid(g) * torch.tanh(u),
+        "sigmoid(gate)*tanh(up)": torch.sigmoid(g) * torch.tanh(u),
+        "mish-like": (g * torch.tanh(torch.nn.functional.softplus(g))) * u,
+        "gate*tanh(sigmoid(gate))*up": g * torch.tanh(torch.sigmoid(g)) * u,
+    }
+    for name, cand in candidates.items():
+        assert not torch.allclose(real, cand, atol=1e-3), (
+            f"candidate {name!r} unexpectedly matches — revisit the sourcing")
+
+
+def test_register_glu_variant_can_override_situ_for_other_betas():
+    """beta/linear_beta are per-checkpoint config, so a different checkpoint must
+    be able to re-register without editing the module."""
+    from moonshot_gather import make_situ
+    fused = torch.randn(16, 2 * 8, generator=torch.Generator().manual_seed(3))
+    n = fused.shape[-1] // 2
+    fn = make_situ(1.0, None)
+    ref = _situ_reference(fused[..., :n], fused[..., n:], 1.0, None)
+    assert torch.equal(fn(fused[..., :n], fused[..., n:]), ref)
+    assert "beta1" in fn.__name__
 
 
 def test_register_glu_variant_activates_confirmed_formula():
