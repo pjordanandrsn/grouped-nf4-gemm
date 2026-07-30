@@ -11,9 +11,10 @@ import pytest
 import torch
 
 from moonshot_gather import (  # noqa: E402
-    GLU_VARIANTS, apply_glu, discover_layer, expert_tensor_name,
-    file_sha256_map, gather_layer, moonshot_apply_gate,
-    register_glu_variant, verify_gather_provenance,
+    GLU_VARIANTS, K2_SCHEME, K3_SCHEME, apply_glu, detect_scheme,
+    discover_layer, expert_tensor_name, file_sha256_map, gather_layer,
+    moonshot_apply_gate, register_glu_variant, resolve_scheme,
+    verify_gather_provenance,
 )
 
 
@@ -186,3 +187,113 @@ def test_real_k2_index_discovery():
     assert info["scale_suffix"] == "weight_scale_inv", info
     # layer 0 is dense (first_k_dense_replace=1) -> no routed experts
     assert discover_layer(wm, 0)["n_experts"] == 0
+
+
+# ------------------------------------------------- released-K3 name scheme --
+# Regression gates for the 2026-07-30 seam: released K3 renamed the container,
+# the projections, and the weight kind. With the historical (K2) default those
+# renames made discovery return n_experts=0 *silently* — a gather of nothing.
+def _synth_k3_layer(E, N, Kw, *, layer=1, prefix="language_model.model", seed=0):
+    """Per-expert tensors spelled the way the real K3 checkpoint spells them."""
+    g = torch.Generator().manual_seed(seed)
+    d = {}
+    for e in range(E):
+        for proj, wshape in (("gate_proj", (N, Kw)), ("up_proj", (N, Kw)),
+                             ("down_proj", (Kw, N))):
+            d[expert_tensor_name(layer, e, proj, "weight", prefix, "k3")] = \
+                torch.randint(0, 255, wshape, generator=g, dtype=torch.uint8)
+            d[expert_tensor_name(layer, e, proj, "weight_scale", prefix, "k3")] = \
+                torch.randint(112, 123, (wshape[0], Kw // 32 or 1),
+                              generator=g, dtype=torch.uint8)
+    return d
+
+
+def test_k3_scheme_spells_the_released_names():
+    """Exact strings observed in moonshotai/Kimi-K3's safetensors index."""
+    assert (expert_tensor_name(1, 0, "gate_proj", "weight",
+                               "language_model.model", "k3")
+            == "language_model.model.layers.1.block_sparse_moe.experts.0"
+               ".w1.weight_packed")
+    assert (expert_tensor_name(7, 42, "down_proj", "weight_scale",
+                               "language_model.model", "k3")
+            == "language_model.model.layers.7.block_sparse_moe.experts.42"
+               ".w2.weight_scale")
+    # w1=gate, w3=up, w2=down — confirmed by shapes, not by convention.
+    assert K3_SCHEME.proj == {"gate_proj": "w1", "up_proj": "w3",
+                              "down_proj": "w2"}
+
+
+def test_k2_naming_is_unchanged_by_the_scheme_refactor():
+    """The historical default must be byte-identical to the old hardcoded form."""
+    assert (expert_tensor_name(3, 5, "up_proj", "weight")
+            == "model.layers.3.mlp.experts.5.up_proj.weight")
+    assert K2_SCHEME.default_scale_suffix == "weight_scale_inv"
+
+
+def test_default_scheme_discovers_nothing_on_k3():
+    """THE BUG: silent n_experts=0, so gather_layer would stack zero experts."""
+    wm = dict.fromkeys(_synth_k3_layer(4, 32, 64), "shard-00001.safetensors")
+    assert discover_layer(wm, 1, prefix="language_model.model")["n_experts"] == 0
+    got = discover_layer(wm, 1, prefix="language_model.model", scheme="k3")
+    assert got["n_experts"] == 4
+    assert got["scale_suffix"] == "weight_scale"
+
+
+def test_detect_scheme_picks_the_right_family():
+    k3 = dict.fromkeys(_synth_k3_layer(3, 32, 64), "s.safetensors")
+    assert detect_scheme(k3, 1) is K3_SCHEME
+    k2 = dict.fromkeys(_synth_layer(3, 32, 64, dtype=torch.uint8,
+                                    scale_shape=(2, 4)), "s.safetensors")
+    assert detect_scheme(k2, 1) is K2_SCHEME
+    assert detect_scheme({"unrelated.tensor": "s.safetensors"}, 1) is None
+
+
+def test_k3_gather_fused_shapes_and_exactness():
+    """Same fusion logic, K3 spelling: bit-identical slices, mxfp4 bytes."""
+    E, N, Kw = 5, 32, 64
+    layer = _synth_k3_layer(E, N, Kw)
+    out = gather_layer(layer.__getitem__, 1, E,
+                       prefix="language_model.model", scheme="k3")
+    assert out["gate_up"].shape == (E, 2 * N, Kw)
+    assert out["down"].shape == (E, Kw, N)
+    assert out["gate_up"].dtype == torch.uint8
+    # scale_suffix defaults to the SCHEME's, so K3 scales come along unasked
+    assert "gate_up_scale" in out and "down_scale" in out
+    for e in range(E):
+        for i, proj in enumerate(("gate_proj", "up_proj")):
+            src = layer[expert_tensor_name(1, e, proj, "weight",
+                                           "language_model.model", "k3")]
+            assert torch.equal(out["gate_up"][e, i * N:(i + 1) * N], src)
+        assert torch.equal(out["down"][e], layer[expert_tensor_name(
+            1, e, "down_proj", "weight", "language_model.model", "k3")])
+
+
+def test_unknown_scheme_raises_and_namescheme_passes_through():
+    with pytest.raises(ValueError, match="unknown scheme"):
+        expert_tensor_name(1, 0, "gate_proj", scheme="k9")
+    assert resolve_scheme(K3_SCHEME) is K3_SCHEME
+    assert resolve_scheme(None) is K2_SCHEME
+
+
+@pytest.mark.network
+def test_real_k3_index_discovery():
+    """Optional gate against a real released snapshot: set
+    ``K3_SNAPSHOT=/path/to/Kimi-K3``. Asserts the scheme is auto-detected and
+    the release's own geometry (93 layers, layer 0 dense, 896 experts) is what
+    discovery reports. Verified 2026-07-30 on the real 1.5 TB checkpoint."""
+    import json
+    import os
+    snap = os.environ.get("K3_SNAPSHOT", "")
+    ix = os.path.join(snap, "model.safetensors.index.json") if snap else ""
+    if not ix or not os.path.exists(ix):
+        pytest.skip("set K3_SNAPSHOT to a released Kimi-K3 snapshot dir")
+    wm = json.load(open(ix))["weight_map"]
+    assert detect_scheme(wm, 1) is K3_SCHEME
+    d = discover_layer(wm, 1, prefix="language_model.model", scheme="k3")
+    assert d["n_experts"] == 896, d
+    assert d["scale_suffix"] == "weight_scale", d
+    # layer 0 is the dense `first_k_dense_replace` layer in the release
+    assert discover_layer(wm, 0, prefix="language_model.model",
+                          scheme="k3")["n_experts"] == 0
+    # and the historical default must find nothing (this is the reported bug)
+    assert discover_layer(wm, 1, prefix="language_model.model")["n_experts"] == 0

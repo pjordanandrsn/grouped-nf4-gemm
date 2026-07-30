@@ -44,35 +44,115 @@ from typing import Callable, Optional
 
 import torch
 
-# DeepSeek-V3 / Moonshot routed-expert tensor naming. The scale suffix is
-# parametric: K2 uses `weight_scale_inv` (fp8 block-inv); K3's mxfp4 scale
-# suffix is confirmed at seam time (pass via `scale_suffix`).
+# DeepSeek-V3 / Moonshot routed-expert tensor naming. Only `prefix` used to be
+# parametric, which was not enough: released K3 renamed the CONTAINER and the
+# per-projection spellings too (see K3_SCHEME), so a hardcoded regex silently
+# discovered zero experts. Naming is now a pluggable scheme; the gather logic
+# it feeds is unchanged.
 PROJ = ("gate_proj", "up_proj", "down_proj")
-_EXPERT_RE = re.compile(
-    r"^(?P<prefix>.*)\.layers\.(?P<layer>\d+)\.mlp\.experts\.(?P<idx>\d+)\."
-    r"(?P<proj>gate_proj|up_proj|down_proj)\.(?P<kind>weight(?:_scale_inv|_scale|_scales)?)$"
-)
 
 
-def expert_tensor_name(layer, idx, proj, kind="weight", prefix="model"):
-    return f"{prefix}.layers.{layer}.mlp.experts.{idx}.{proj}.{kind}"
+class NameScheme:
+    """How one checkpoint family spells its routed-expert tensors.
+
+    ``proj`` maps the canonical gate/up/down names this module speaks onto the
+    on-disk spelling. ``weight_kind`` is what the family calls the weight
+    itself — "weight" for a bare release, "weight_packed" for a pack-quantized
+    one. A caller asking for ``kind="weight"`` gets ``weight_kind``; any other
+    kind (i.e. a scale suffix) passes through verbatim, so callers never need
+    to know which family they are on.
+    """
+
+    _KINDS = ("weight", "weight_scale_inv", "weight_scale", "weight_scales")
+
+    def __init__(self, name, container, proj, weight_kind="weight",
+                 default_scale_suffix="weight_scale_inv"):
+        self.name = name
+        self.container = container
+        self.proj = dict(proj)
+        self.weight_kind = weight_kind
+        self.default_scale_suffix = default_scale_suffix
+        alts = "|".join(re.escape(p) for p in dict.fromkeys(self.proj.values()))
+        kinds = "|".join(re.escape(k) for k in
+                         dict.fromkeys((weight_kind,) + self._KINDS))
+        self.regex = re.compile(
+            rf"^(?P<prefix>.*)\.layers\.(?P<layer>\d+)\.{re.escape(container)}\."
+            rf"(?P<idx>\d+)\.(?P<proj>{alts})\.(?P<kind>{kinds})$")
+
+    def spell(self, kind):
+        """On-disk spelling of a requested tensor kind."""
+        return self.weight_kind if kind == "weight" else kind
+
+    def __repr__(self):
+        return f"NameScheme({self.name!r}, container={self.container!r})"
 
 
-def discover_layer(weight_map: dict, layer: int, prefix: str = "model") -> dict:
+# Kimi K2 (`DeepseekV3ForCausalLM`): bare fp8 weights under `mlp.experts`, with
+# `weight_scale_inv` block-inv scales. The historical default — unchanged.
+K2_SCHEME = NameScheme(
+    "k2", "mlp.experts",
+    {"gate_proj": "gate_proj", "up_proj": "up_proj", "down_proj": "down_proj"},
+    weight_kind="weight", default_scale_suffix="weight_scale_inv")
+# Kimi K3 AS RELEASED — measured 2026-07-30 against the real checkpoint
+# (moonshotai/Kimi-K3, 93 layers, 896 experts/layer, top-16). Three renames vs
+# K2: container `mlp.experts` -> `block_sparse_moe.experts`; projections
+# gate/up/down_proj -> w1/w3/w2 (w1=gate, w3=up, w2=down, confirmed by shapes,
+# not by convention); weights `weight` -> `weight_packed` with a `weight_scale`
+# companion. This CONFIRMS the mxfp4 prediction in the module docstring:
+# config declares format "mxfp4-pack-quantized", num_bits 4, group_size 32,
+# e8m0 uint8 scales — so the fused arena feeds the mxfp4 decode path verbatim.
+K3_SCHEME = NameScheme(
+    "k3", "block_sparse_moe.experts",
+    {"gate_proj": "w1", "up_proj": "w3", "down_proj": "w2"},
+    weight_kind="weight_packed", default_scale_suffix="weight_scale")
+SCHEMES = {s.name: s for s in (K2_SCHEME, K3_SCHEME)}
+_EXPERT_RE = K2_SCHEME.regex  # back-compat alias for the historical default
+_UNSET = object()
+
+
+def resolve_scheme(scheme) -> NameScheme:
+    """``None`` -> the K2 default; a key from ``SCHEMES``; or a NameScheme."""
+    if scheme is None:
+        return K2_SCHEME
+    if isinstance(scheme, NameScheme):
+        return scheme
+    try:
+        return SCHEMES[scheme]
+    except KeyError:
+        raise ValueError(
+            f"unknown scheme {scheme!r}; known: {sorted(SCHEMES)} "
+            "(or pass a NameScheme)") from None
+
+
+def expert_tensor_name(layer, idx, proj, kind="weight", prefix="model",
+                       scheme=None):
+    sc = resolve_scheme(scheme)
+    return (f"{prefix}.layers.{layer}.{sc.container}.{idx}."
+            f"{sc.proj.get(proj, proj)}.{sc.spell(kind)}")
+
+
+def discover_layer(weight_map: dict, layer: int, prefix: str = "model",
+                   scheme=None) -> dict:
     """From a safetensors `weight_map` (name->shard), return
     {n_experts, has_scale, scale_suffix, weight_names?} for a routed-MoE layer.
     A layer whose experts.* namespace is empty (e.g. the dense
-    `first_k_dense_replace` layer 0) reports n_experts=0."""
+    `first_k_dense_replace` layer 0) reports n_experts=0.
+
+    ``scheme`` selects the naming family (default K2). Pass ``"k3"`` for a
+    released-K3 checkpoint — with the default scheme a K3 index legitimately
+    reports n_experts=0, which is why the caller must say which family it has
+    (or use :func:`detect_scheme`)."""
+    sc = resolve_scheme(scheme)
     idxs, scale_suffixes = set(), set()
-    pat = f".layers.{layer}.mlp.experts."
+    pat = f".layers.{layer}.{sc.container}."
     for name in weight_map:
         if pat not in name:
             continue
-        m = _EXPERT_RE.match(name)
+        m = sc.regex.match(name)
         if not m or int(m["layer"]) != layer:
             continue
         idxs.add(int(m["idx"]))
-        if m["kind"] != "weight":
+        if m["kind"] != sc.weight_kind:
             scale_suffixes.add(m["kind"])
     n = (max(idxs) + 1) if idxs else 0
     if idxs and sorted(idxs) != list(range(n)):
@@ -87,9 +167,22 @@ def discover_layer(weight_map: dict, layer: int, prefix: str = "model") -> dict:
             "scale_suffix": scale_suffix}
 
 
+def detect_scheme(weight_map: dict, layer: int = 1):
+    """Pick the scheme whose container/spelling this checkpoint actually uses.
+
+    Returns the matching :class:`NameScheme`, or ``None`` if no known scheme
+    finds experts (a genuinely unknown family — better to say so than to
+    silently gather nothing)."""
+    for sc in SCHEMES.values():
+        if discover_layer(weight_map, layer, scheme=sc)["n_experts"]:
+            return sc
+    return None
+
+
 def gather_layer(get_tensor: Callable[[str], torch.Tensor], layer: int,
-                 n_experts: int, *, scale_suffix: Optional[str] = "weight_scale_inv",
-                 prefix: str = "model", concat_gate_up: bool = True) -> dict:
+                 n_experts: int, *, scale_suffix=_UNSET,
+                 prefix: str = "model", concat_gate_up: bool = True,
+                 scheme=None) -> dict:
     """Gather one layer's per-expert tensors into fused stacks.
 
     ``get_tensor(name)`` returns the tensor for a full tensor name (wrap a
@@ -105,9 +198,13 @@ def gather_layer(get_tensor: Callable[[str], torch.Tensor], layer: int,
     Stacking is `torch.stack` along a new leading E axis — format-agnostic,
     zero decode.
     """
+    sc = resolve_scheme(scheme)
+    if scale_suffix is _UNSET:
+        scale_suffix = sc.default_scale_suffix
+
     def stack(proj, kind):
         return torch.stack([
-            get_tensor(expert_tensor_name(layer, e, proj, kind, prefix))
+            get_tensor(expert_tensor_name(layer, e, proj, kind, prefix, sc))
             for e in range(n_experts)])
 
     out = {}
@@ -215,10 +312,11 @@ def register_glu_variant(name: str, fn) -> None:
 
 # ---- provenance (per-source-tensor; concat reorders bytes) ------------------
 def file_sha256_map(path: str, layer: int, n_experts: int, *,
-                    scale_suffix: Optional[str] = "weight_scale_inv",
+                    scale_suffix=_UNSET,
                     prefix: str = "model",
                     weight_map: Optional[dict] = None,
-                    snapshot: Optional[str] = None) -> dict:
+                    snapshot: Optional[str] = None,
+                    scheme=None) -> dict:
     """Per-expert-tensor sha256 of the file data-section byte ranges (the
     release bytes). Reuses `mxfp4_loader.file_tensor_sha256`.
 
@@ -226,13 +324,16 @@ def file_sha256_map(path: str, layer: int, n_experts: int, *,
     pass the index's ``weight_map`` (+ ``snapshot`` dir) so every name hashes
     against its own file. ``path`` alone serves single-file checkpoints."""
     from mxfp4_loader import file_tensor_sha256
+    sc = resolve_scheme(scheme)
+    if scale_suffix is _UNSET:
+        scale_suffix = sc.default_scale_suffix
     kinds = ("weight",) + ((scale_suffix,) if scale_suffix else ())
     base = snapshot if snapshot is not None else os.path.dirname(path)
     table = {}
     for e in range(n_experts):
         for proj in PROJ:
             for kind in kinds:
-                name = expert_tensor_name(layer, e, proj, kind, prefix)
+                name = expert_tensor_name(layer, e, proj, kind, prefix, sc)
                 if weight_map is not None:
                     if name not in weight_map:
                         raise KeyError(f"{name} not in the checkpoint index")
@@ -250,18 +351,21 @@ def _t_sha(t: torch.Tensor) -> str:
 
 def verify_gather_provenance(get_tensor: Callable[[str], torch.Tensor],
                              file_hashes: dict, layer: int, n_experts: int, *,
-                             scale_suffix: Optional[str] = "weight_scale_inv",
-                             prefix: str = "model") -> dict:
+                             scale_suffix=_UNSET,
+                             prefix: str = "model", scheme=None) -> dict:
     """Assert every per-expert tensor the gather READS is byte-identical to its
     release file range (`file_hashes`). This is the gathered-layout provenance
     receipt: the fused arena is built from exactly these verified bytes, so
     each arena slice inherits the identity. Raises on any mismatch."""
     report = {}
+    sc = resolve_scheme(scheme)
+    if scale_suffix is _UNSET:
+        scale_suffix = sc.default_scale_suffix
     kinds = ("weight",) + ((scale_suffix,) if scale_suffix else ())
     for e in range(n_experts):
         for proj in PROJ:
             for kind in kinds:
-                name = expert_tensor_name(layer, e, proj, kind, prefix)
+                name = expert_tensor_name(layer, e, proj, kind, prefix, sc)
                 got = _t_sha(get_tensor(name))
                 want = file_hashes[name]
                 report[name] = want == got
