@@ -42,6 +42,14 @@ Homepage = "https://cerinamroth.com/ml/grouped-nf4-gemm/"
 Source = "https://github.com/pjordanandrsn/grouped-nf4-gemm"
 Receipts = "https://github.com/pjordanandrsn/grouped-nf4-gemm/tree/main/kernel"
 
+[tool.pytest.ini_options]
+markers = [
+    # Unregistered, this emitted PytestUnknownMarkWarning on every run -- noise
+    # that makes a real warning easy to miss. The test it decorates self-gates on
+    # $K3_SNAPSHOT, so the mark is for selection (-m "not network"), not skipping.
+    "network: touches a real released snapshot or the network; opt-in via env",
+]
+
 [tool.setuptools]
 package-dir = { "" = "kernel" }
 py-modules = [
