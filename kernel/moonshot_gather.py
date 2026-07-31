@@ -271,12 +271,17 @@ class _UnverifiedEpilogue:
             f"Candidate readings to disambiguate: {self.candidates}")
 
 
-# SiTU = "Sigmoid Tanh Unit" (Kimi K3, launch coverage 2026-07-16). The tech
-# report / model card is not out; the name alone underdetermines the formula.
-# Guarded until a shard's modeling_*.py or the report pins it.
+# SiTU = "Sigmoid Tanh Unit" (Kimi K3). SUPERSEDED 2026-07-30: the release
+# shipped `modeling_kimi_linear.py::SituAndMul` and `make_situ()` below is
+# transcribed from it -- none of the candidate readings guessed here was right,
+# which is exactly why this guard refused to guess. Kept ONLY so a checkpoint
+# whose epilogue is genuinely unknown still fails loudly instead of silently
+# picking a plausible-looking formula; K3 itself no longer reaches it.
 SITU_UNVERIFIED = _UnverifiedEpilogue(
     "SiTU",
-    "K3 tech report unreleased; 'Sigmoid Tanh Unit' has several plausible forms",
+    "epilogue not registered for this checkpoint. NOTE: K3's SiTU IS known and "
+    "registered via make_situ() -- see moonshot_gather.SITU_K3_BETA. If you are "
+    "seeing this for K3, the scheme lookup failed, not the formula",
     candidates=(
         "gate * sigmoid(gate) * tanh(up)      # sigmoid-gate, tanh on the up branch",
         "sigmoid(gate) * tanh(up)             # both branches nonlinear",

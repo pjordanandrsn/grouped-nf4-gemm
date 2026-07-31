@@ -1,0 +1,112 @@
+"""Every shippable kernel module must be in pyproject's py-modules allowlist.
+
+0.3.0 shipped a CHANGELOG announcing the NVMe residency tier and the MXFP4
+residency engine -- `K3_RESIDENCY_KINDS`, `fuse_gate_up_segments`,
+`Mxfp4NvmeResidency` -- while `mxfp4_residency.py` and `nvme_residency.py` were
+absent from `py-modules`. They were never in any wheel. A user who followed the
+release notes got `ModuleNotFoundError`.
+
+`py-modules` is an explicit allowlist, so adding a file to `kernel/` does not
+package it and nothing complained. This test is the thing that complains: it
+diffs the directory against the allowlist and names what is missing. CI runs it,
+so the failure lands on the PR that adds the module rather than on a user.
+
+Excluded by design: `test_*` and `conftest` (tests are not part of the
+distribution). A module that genuinely should not ship must be added to
+`_DELIBERATELY_UNPACKAGED` with a reason, which keeps the decision visible
+instead of silent.
+"""
+import pathlib
+import re
+
+# Modules intentionally kept out of the wheel. Empty today; entries need a reason.
+_DELIBERATELY_UNPACKAGED: dict[str, str] = {}
+
+# Test files CI does not invoke, each with WHY. This started at 17 silent
+# omissions -- including the tests for the very module 0.3.0 failed to ship.
+# Everything CPU-reachable was wired into ci.yml instead of being listed here;
+# what remains needs a GPU, which the CI runner does not have. Adding an entry
+# is a decision that has to be written down, not a silent gap.
+_NOT_IN_CI: dict[str, str] = {
+    "test_arena_equivalence.py": "needs CUDA — arena-fed vs memory-fed GEMM equality on device",
+    "test_arena_experts.py": "needs CUDA — reconstructs expert tensors on device",
+    "test_mxfp4_grouped.py": "needs CUDA — the fused MXFP4 kernel",
+    "test_mxfp4_pipelined.py": "needs CUDA — pipelined engine, device k-slot store",
+    "test_mxfp4_qlora.py": "needs CUDA — differentiable path on device",
+    "test_mxfp4_residency.py": "needs CUDA — residency engine gathers to device",
+    "test_nf4_grouped.py": "needs CUDA — the fused NF4 kernel",
+    "test_nf4_qlora_grad.py": "needs CUDA — gradient checks on device",
+    "test_nvme_residency.py": "needs CUDA — cold tier stages to device",
+}
+
+_ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+
+def _listed_modules() -> set[str]:
+    text = (_ROOT / "pyproject.toml").read_text()
+    block = re.search(r"py-modules\s*=\s*\[(.*?)\]", text, re.S)
+    assert block, "pyproject.toml has no py-modules list"
+    return set(re.findall(r'"([^"]+)"', block.group(1)))
+
+
+def _shippable_modules() -> set[str]:
+    out = set()
+    for p in (_ROOT / "kernel").glob("*.py"):
+        stem = p.stem
+        if stem.startswith("test_") or stem == "conftest":
+            continue
+        out.add(stem)
+    return out
+
+
+def test_every_kernel_module_is_packaged():
+    listed = _listed_modules()
+    on_disk = _shippable_modules()
+    missing = sorted(on_disk - listed - set(_DELIBERATELY_UNPACKAGED))
+    assert not missing, (
+        "these kernel modules exist but are NOT in pyproject py-modules, so they "
+        f"will not be in the wheel: {missing}. Add them to py-modules, or to "
+        "_DELIBERATELY_UNPACKAGED with a reason. This exact gap shipped "
+        "mxfp4_residency and nvme_residency out of 0.3.0 while the CHANGELOG "
+        "announced them."
+    )
+
+
+def test_allowlist_has_no_ghosts():
+    listed = _listed_modules()
+    on_disk = _shippable_modules()
+    ghosts = sorted(listed - on_disk)
+    assert not ghosts, (
+        f"pyproject py-modules names modules that do not exist on disk: {ghosts}. "
+        "A build either fails or silently omits them."
+    )
+
+
+def test_every_test_file_is_actually_RUN_by_ci():
+    """A test CI never invokes is a check that cannot fail.
+
+    ci.yml runs pytest against NAMED files, not a directory. That is a
+    deliberate choice -- the suite is split by what each step needs installed --
+    but it means adding kernel/test_foo.py wires up nothing, silently, and the
+    green check stays green about other code. This file was itself added that
+    way and would never have run.
+
+    The comment already in ci.yml says the arena tests "shipped with the arena
+    format but nothing in CI ran them", so this has happened before. This makes
+    the next one fail here instead of shipping.
+    """
+    ci = (_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    tests = {p.name for p in (_ROOT / "kernel").glob("test_*.py")}
+    unrun = sorted(t for t in tests if t not in ci and t not in _NOT_IN_CI)
+    assert not unrun, (
+        f"these kernel test files are never invoked by ci.yml: {unrun}. Add them "
+        "to a pytest step (pick the one whose dependencies they need), or the "
+        "green check is green about other code."
+    )
+
+
+def test_the_modules_0_3_0_announced_are_packaged():
+    """Named explicitly, because these are the ones that got missed."""
+    listed = _listed_modules()
+    for m in ("mxfp4_residency", "nvme_residency"):
+        assert m in listed, f"{m} is 0.3.0 headline surface and must ship"

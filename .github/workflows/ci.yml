@@ -55,6 +55,18 @@ jobs:
       - name: NVMe arena + bake contracts
         run: cd kernel && python -m pytest test_nvme_arena.py test_nvme_bake_nf4.py test_nvme_bake_experts.py -q
 
+      # Packaging + CI coverage. 0.3.0 shipped a CHANGELOG announcing two modules
+      # that were not in py-modules and therefore not in the wheel. This also
+      # asserts every kernel/test_*.py is named somewhere in THIS file -- the
+      # step that would otherwise let the next guard be added and never run.
+      # These 8 were in the tree and invoked by nothing. They need triton (which
+      # this job installs) but not a device, so CPU CI can run them.
+      - name: CPU-reachable suites that CI never ran
+        run: cd kernel && python -m pytest test_arena_moe_patch.py test_k3_oracle.py test_moonshot_gather.py test_mxfp4_arena_layout.py test_mxfp4_oracle.py test_mxfp4_provenance.py test_group_tiles_readonly.py test_mxfp4_interp.py -q
+
+      - name: packaging allowlist + test-wiring guard
+        run: cd kernel && python -m pytest test_packaging_covers_kernel.py -q
+
   wheel-smoke:
     # Built-artifact gate: the README's promised import surface must equal the
     # wheel's importable surface (scripts/wheel_smoke.py is the hardcoded
