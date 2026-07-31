@@ -16,12 +16,28 @@ distribution). A module that genuinely should not ship must be added to
 `_DELIBERATELY_UNPACKAGED` with a reason, which keeps the decision visible
 instead of silent.
 """
-import os
 import pathlib
 import re
 
 # Modules intentionally kept out of the wheel. Empty today; entries need a reason.
 _DELIBERATELY_UNPACKAGED: dict[str, str] = {}
+
+# Test files CI does not invoke, each with WHY. This started at 17 silent
+# omissions -- including the tests for the very module 0.3.0 failed to ship.
+# Everything CPU-reachable was wired into ci.yml instead of being listed here;
+# what remains needs a GPU, which the CI runner does not have. Adding an entry
+# is a decision that has to be written down, not a silent gap.
+_NOT_IN_CI: dict[str, str] = {
+    "test_arena_equivalence.py": "needs CUDA — arena-fed vs memory-fed GEMM equality on device",
+    "test_arena_experts.py": "needs CUDA — reconstructs expert tensors on device",
+    "test_mxfp4_grouped.py": "needs CUDA — the fused MXFP4 kernel",
+    "test_mxfp4_pipelined.py": "needs CUDA — pipelined engine, device k-slot store",
+    "test_mxfp4_qlora.py": "needs CUDA — differentiable path on device",
+    "test_mxfp4_residency.py": "needs CUDA — residency engine gathers to device",
+    "test_nf4_grouped.py": "needs CUDA — the fused NF4 kernel",
+    "test_nf4_qlora_grad.py": "needs CUDA — gradient checks on device",
+    "test_nvme_residency.py": "needs CUDA — cold tier stages to device",
+}
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -63,6 +79,29 @@ def test_allowlist_has_no_ghosts():
     assert not ghosts, (
         f"pyproject py-modules names modules that do not exist on disk: {ghosts}. "
         "A build either fails or silently omits them."
+    )
+
+
+def test_every_test_file_is_actually_RUN_by_ci():
+    """A test CI never invokes is a check that cannot fail.
+
+    ci.yml runs pytest against NAMED files, not a directory. That is a
+    deliberate choice -- the suite is split by what each step needs installed --
+    but it means adding kernel/test_foo.py wires up nothing, silently, and the
+    green check stays green about other code. This file was itself added that
+    way and would never have run.
+
+    The comment already in ci.yml says the arena tests "shipped with the arena
+    format but nothing in CI ran them", so this has happened before. This makes
+    the next one fail here instead of shipping.
+    """
+    ci = (_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    tests = {p.name for p in (_ROOT / "kernel").glob("test_*.py")}
+    unrun = sorted(t for t in tests if t not in ci and t not in _NOT_IN_CI)
+    assert not unrun, (
+        f"these kernel test files are never invoked by ci.yml: {unrun}. Add them "
+        "to a pytest step (pick the one whose dependencies they need), or the "
+        "green check is green about other code."
     )
 
 
