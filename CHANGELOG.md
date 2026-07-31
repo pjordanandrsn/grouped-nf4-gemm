@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 — 2026-07-31
+
+**Version-number correction. No code change from 0.3.1.**
+
+0.3.1 shipped `#26` (prefill — many tokens per call) alongside a packaging fix and
+described itself as "nothing else changed". A new capability went out under a patch
+label, so anyone reading versions rather than diffs had no signal it existed. 0.4.0
+is the same tree under the number semver says that feature warranted, and 0.3.1's
+entry now describes what it actually contained.
+
+Nothing to migrate: if you are on 0.3.1 you already have prefill.
+
 ## 0.3.1 — 2026-07-30
 
 **0.3.0 announced two modules it did not ship.** `mxfp4_residency` and
@@ -15,8 +27,24 @@ so the next gap lands on the pull request instead of on a user. A module that
 genuinely should not ship goes in `_DELIBERATELY_UNPACKAGED` with a reason,
 which keeps that decision visible rather than silent.
 
-Nothing else changed. Everything 0.3.0 describes is accurate; two of its modules
-were simply unreachable from an installed wheel.
+**Correction (added after release): 0.3.1 also shipped a new capability, and its
+notes said it did not.** `#26` — prefill: the engine takes many tokens per call —
+merged to `main` before the packaging fix and was swept into this tag. The line
+"nothing else changed" was written from the packaging work alone rather than from
+the full `v0.3.0..main` delta, and it is wrong.
+
+What that feature does: the engine was decode-only (`a_buf.copy_(x.expand(k, -1))`
+broadcasts ONE token's hidden state across the k slots). The *kernel* never was —
+`gemm_mxfp4_grouped`'s `sizes` is a per-group token count and already switches to
+the tiled path above one row — so this is engine plumbing. Prefill is not decode in
+a loop, and the difference is I/O: stepping T tokens re-reads the whole dense side T
+times and every routed row T times; entering each layer once for the prompt reads
+each *distinct* expert once. Measured on Kimi K3 at full depth, 7 tokens: dense
+108.76 GB once vs 761 GB; expert rows 7,080 vs 10,304 (31 % deduped by route
+overlap); **233 GB vs 942 GB of I/O, 187.4 s vs 643 s**. VRAM peak unchanged at
+**3.59 GB**.
+
+By semver that warranted a minor bump, not a patch. See 0.4.0.
 
 ## 0.3.0 — 2026-07-30
 
