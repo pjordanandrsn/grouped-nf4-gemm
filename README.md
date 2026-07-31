@@ -30,6 +30,43 @@ pip install grouped-nf4-gemm
 `pip install nf4gemm` and `pip install gnf4` are equivalent aliases.
 Published via trusted publishing; every wheel carries a PEP 740 attestation.
 
+## Which entry point? Pick by where the weights live
+
+This package is one kernel plus the machinery to feed it. What you call depends
+on where the expert bytes are when you need them — nothing else.
+
+| the bytes are in… | call | needs |
+|---|---|---|
+| **VRAM**, NF4-packed | `nf4_grouped.gemm_4bit_grouped(...)` | CUDA + triton |
+| **VRAM**, native MXFP4 | `mxfp4_grouped.gemm_mxfp4_grouped(...)` | CUDA + triton |
+| **host DRAM**, all rows pinned | `mxfp4_pipelined.Mxfp4PipelinedGptOss` | CUDA + triton + RAM ≥ all experts |
+| **NVMe**, too big for DRAM | `mxfp4_residency.Mxfp4NvmeResidency` | a baked arena (below) |
+| **NVMe**, and you want a real model wired up | `arena_moe_patch.enable_arena_experts(model, arena)` | a baked arena |
+| nowhere yet — you need to *make* an arena | `nvme_arena.bake_expert_tensors(...)` | the checkpoint + disk |
+| a checkpoint you want to **verify**, not run | `verify_provenance` | torch only |
+
+**The one ordering trap, because it costs 1.45 TB to get wrong.** An arena's
+segment order has two legitimate forms. `arena_experts.K3_KINDS` is the
+released-K3 spelling and interleaves per projection — fine for
+`ArenaExpertSource`, which slices by suffix. `mxfp4_residency.K3_RESIDENCY_KINDS`
+puts the two blocks segments adjacent and the two scales segments adjacent,
+which the residency engine needs because it reads gate_up at **one computed
+offset**. **`K3_RESIDENCY_KINDS` serves both consumers — bake with it.** As of
+0.3.0 the gather can also permute a mis-ordered arena on the fly, so an existing
+bake is readable either way; the order still decides whether you pay for that.
+
+**Training** (LoRA over frozen 4-bit experts) goes through `nf4_qlora` /
+`mxfp4_qlora`, which is what the sibling package
+[`experts4bit-qlora`](https://pypi.org/project/experts4bit-qlora/) drives —
+`enable_fast()` for inference, `enable_fast_train()` for the differentiable path.
+Division of labour: this package makes one expert-stack matmul cheap; e4b decides
+which bytes are where.
+
+**Scope, unhedged:** the NVMe tier is a *batch* tier. At a measured per-box
+`S ≈ 3.45 GB/s` a fully cold 235B streams ~2.3 s/token and a K3-class model
+~7.5 s/token. If you need interactive latency, this is the wrong tier — what it
+buys is reachability and provenance.
+
 ## Try it on CPU right now
 
 No GPU needed for the pack/decode/provenance surface — the fused GEMM is
@@ -105,7 +142,10 @@ the conversion tax. Stamped, receipts in `docs/mxfp4/`:
   fused-native exact-chunk ppl **26.72** on gpt-oss-120b = the
   shipped-precision reference (26.75) — the measured **+9.4% ppl / KL 0.066
   NF4-requant tax is deleted**; per-shard provenance
-  `sha256(loaded bytes) == sha256(file range)` 4/4 on real 120b shards.
+  `sha256(loaded bytes) == sha256(file range)` on a **4-tensor spot sample** of
+  real 120b shards (4/4). Its own receipt grades this a sample, not shard-level
+  coverage — read it as a spot check that the byte path is honest, not as
+  "all four shards verified".
 - **Train** ([`RESULTS-mxfp4-train.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.3.1/docs/mxfp4/RESULTS-mxfp4-train.md)):
   **gpt-oss-120b QLoRA at 9.82 GB peak VRAM on native bytes**
   (recompute-in-backward + per-expert LoRA), step-0 ppl inside the stamped
@@ -298,7 +338,9 @@ in-repo):
   token-to-token expert stickiness is only 0.44;
   [B3](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.3.1/bench/phase3/flagship/RESULTS-flagship-phaseB3.md) early routing: the
   pre-attention router predicts the post-attention top-8 at **0.93** but the
-  CPU sync tax eats the win;
+  CPU sync tax is the **leading hypothesis** for why the win does not land —
+  the receipt labels it a suspect, not a measured cause, and the successor
+  experiment sized that whole sync class at ~1 %;
   [B4](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.3.1/bench/phase3/flagship/RESULTS-flagship-phaseB4.md) threaded issuance:
   GIL tax, 0.57×;
   [B5](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.3.1/bench/phase3/flagship/RESULTS-flagship-phaseB5.md) GPU-driven
@@ -312,6 +354,12 @@ in-repo):
   measured arm (4.39–4.41 tok/s, +1.5% over serialized memcpy, byte-identical
   greedy output 6/6) and validates SM-issued UVA reads at ≥ copy-engine
   throughput at 7.98 GB/token.
+
+  **Scope on that recommendation:** those figures are **one host** — a SECURE
+  H100 80GB HBM3 whose on-box link measured 45.0 GB/s, the slowest-link box in
+  the set. +1.5 % is a margin thin enough that a different link could reorder the
+  arms, and this is a *default* being recommended on a single-host result. Prefer
+  it, but measure on your own box before treating it as settled.
 
 Every comparative "first/only/faster" claim above is backed by a verified, dated
 comparison against the named alternative's own published numbers or a same-box
@@ -463,7 +511,8 @@ Phase-0 instrument gate passed 4/4 on planted fixtures. Phase 1 has run on
 low-expert-count families pin cleanly at first data volume (gpt-oss-20b E=32
 → 0.83, granite E=40 → 0.90, OLMoE E=64 → 0.91, all model-limited ×3 from the
 committed reducer), while **both E=128 families are data-unpinnable** (Qwen3-30B
-k=8 ≥0.845 after three data doublings; gpt-oss-120b k=4 ≥0.787 after two) —
+k=8 ≥0.845 after **two** data doublings — 147,456 → 294,912 → 589,824 records;
+gpt-oss-120b k=4 ≥0.787 after **one**) —
 high expert count doesn't just lower H, it makes H unmeasurable by data
 scaling on this ladder, at both k. Every observed plateau sits far below the
 ≈0.95 wire-law break-even for speculative expert streaming.

@@ -10,7 +10,9 @@ a derived, measured, budgeted quantity.
 *Verification* below). Full-depth real-weight confirmation for the two models
 that don't fit the A2000 (gpt-oss-120b, Qwen3-235B) is **rung two — pending**;
 rows are labelled accordingly. Kimi K2 is **derived-only** (no local weights).
-K3's config does not exist publicly yet — its row lands when it does.
+K3's config **is** public and this repo reads it (`moonshot_gather` registers K3's
+SiTU betas from the release's own `modeling_kimi_linear.py`); its row is still
+outstanding here, which is a gap in THIS document rather than in the source data.
 
 ## The budget identity
 
