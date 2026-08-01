@@ -600,6 +600,12 @@ class Mxfp4NvmeResidencyV4(Mxfp4NvmeResidency):
 
     def _glu(self, gu):
         gate, up = gu.chunk(2, dim=-1)          # clean concat, not interleaved
+        # fp32, cast back only on the way out — V4's reference computes the whole GLU in
+        # fp32 (`self.w1(x).float()`) and casts just before the down projection. The
+        # sibling epilogues above deliberately stay in compute dtype because THEIR
+        # references do; V4's is the one that promotes. Reproducing an epilogue means
+        # reproducing its precision, not only its shape.
+        gate, up = gate.float(), up.float()
         gate = gate.clamp(max=self.limit)       # one-sided, by design
         up = up.clamp(min=-self.limit, max=self.limit)
         return (torch.nn.functional.silu(gate) * up).to(self.cd)
