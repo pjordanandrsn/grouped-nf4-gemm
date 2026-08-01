@@ -71,6 +71,19 @@ from nvme_residency import ColdTier
 K3_RESIDENCY_KINDS = ("w1.weight_packed", "w3.weight_packed",
                       "w1.weight_scale", "w3.weight_scale",
                       "w2.weight_packed", "w2.weight_scale")
+# DeepSeek-V4 ships the same six tensors under plainer names — `weight`/`scale`
+# rather than `weight_packed`/`weight_scale`. Order is what the engine cares about:
+# both BLOCKS adjacent, then both SCALES adjacent (see fuse_gate_up_segments).
+V4_RESIDENCY_KINDS = ("w1.weight", "w3.weight",
+                      "w1.scale", "w3.scale",
+                      "w2.weight", "w2.scale")
+
+# safetensors dtypes that are one byte per element, i.e. raw packed storage the
+# arena can hold verbatim. MXFP4 rows are nibble pairs + e8m0 scale bytes; K3
+# labels both `U8`, DeepSeek-V4 labels them `I8` and `F8_E8M0`. Same bytes, and
+# the engine reinterprets them anyway — what must stay rejected is a WIDER dtype,
+# which means an NF4 arena (fp32 absmax) rather than a native MXFP4 one.
+_PACKED_BYTE_DTYPES = frozenset({"U8", "I8", "F8_E8M0", "F8_E4M3"})
 
 
 _PERM_KERNEL = None
@@ -167,12 +180,13 @@ def engine_segment_map(index: dict):
     """
     segs = index["segments"]
     for g in segs:
-        if g["dtype"] != "U8":
+        if g["dtype"] not in _PACKED_BYTE_DTYPES:
             raise ValueError(
-                f"segment {g['suffix']!r} is {g['dtype']}, not U8 — native MXFP4 "
-                "rows are packed nibbles + e8m0 scale bytes, both uint8. An F32 "
-                "segment means this is an NF4 arena (fp32 absmax); serve it with "
-                "experts4bit_qlora.nvme_experts instead.")
+                f"segment {g['suffix']!r} is {g['dtype']}, not one of "
+                f"{sorted(_PACKED_BYTE_DTYPES)} — native MXFP4 rows are packed "
+                "nibbles + e8m0 scale bytes, one byte per element either way. An "
+                "F32 segment means this is an NF4 arena (fp32 absmax); serve it "
+                "with experts4bit_qlora.nvme_experts instead.")
         if len(g["shape_per_expert"]) != 2:
             raise ValueError(f"segment {g['suffix']!r} shape "
                              f"{g['shape_per_expert']} is not [n, k]")
@@ -568,3 +582,22 @@ class Mxfp4NvmeResidencyK3(Mxfp4NvmeResidency):
     def _glu(self, gu):
         from moonshot_gather import apply_glu
         return apply_glu(gu, "situ").to(self.cd)
+
+
+class Mxfp4NvmeResidencyV4(Mxfp4NvmeResidency):
+    """DeepSeek-V4's epilogue on the NVMe-backed engine.
+
+    Like K3, gate and up are a CLEAN CONCAT rather than gpt-oss's interleaved
+    columns, so the split is ``chunk(2)`` and not ``[..., ::2]``. Unlike K3, the
+    activation is a CLAMPED SwiGLU: ``silu(clamp(gate, max=L)) * clamp(up, -L, L)``
+    with ``L = swiglu_limit`` (10.0 for both V4-Flash and V4-Pro).
+
+    That is gpt-oss's clamp with SwiGLU's combination — neither parent's ``_glu``
+    is correct for it, which is exactly why this hook exists. ``alpha`` is unused.
+    """
+
+    def _glu(self, gu):
+        gate, up = gu.chunk(2, dim=-1)          # clean concat, not interleaved
+        gate = gate.clamp(max=self.limit)       # one-sided, by design
+        up = up.clamp(min=-self.limit, max=self.limit)
+        return (torch.nn.functional.silu(gate) * up).to(self.cd)
