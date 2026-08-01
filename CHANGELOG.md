@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.5.1 — 2026-08-01
+
+**0.5.0's `source="mxfp4"` bake could not read a Kimi K3 checkpoint, which is the one it
+was fixed for.** 0.5.0 made `read_mxfp4`'s tensor suffixes a parameter (`mxfp4_suffixes`)
+because K3 spells them `.weight_packed`/`.weight_scale` where DeepSeek-V4 says
+`.weight`/`.scale`. It left the two places that go looking for those tensors — expert
+DISCOVERY and the geometry probe — hardcoded to `.weight`. So on a K3-spelled checkpoint
+nothing matched, and the bake died one line in with
+`ValueError: max() arg is an empty sequence`.
+
+Parameterizing the read was necessary and not sufficient. The signature tests 0.5.0 shipped
+passed either way; **only running it on real K3 bytes found this.**
+
+Verified on the A2000 against the real 1.4 TB `moonshotai_Kimi-K3` checkpoint: discovery
+now finds all **896 experts/layer**, geometry resolves to I=3072 / H=3584, and a 4-expert
+slice bakes in 5 s. The baked NF4 matches the source MXFP4 it came from at **cosine 1.0024,
+mean relative error 0.079** — which is NF4 re-quantization error, as expected, not agreement
+by construction.
+
+Two tests, both on a synthetic K3-spelled MXFP4 snapshot so they need no checkpoint: one
+that the bake completes and its provenance chain still closes against the source, and one
+that the WRONG (V4) suffix pair raises rather than producing an empty or half-built arena.
+The first fails against 0.5.0 with that same `max()` error.
+
 ## 0.5.0 — 2026-08-01
 
 **DeepSeek-V4's experts, read and served from a native MXFP4 arena.** This is the half of
