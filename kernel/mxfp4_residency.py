@@ -598,6 +598,17 @@ class Mxfp4NvmeResidencyV4(Mxfp4NvmeResidency):
     is correct for it, which is exactly why this hook exists. ``alpha`` is unused.
     """
 
+    def __init__(self, *a, limit=10.0, **kw):
+        """`limit` defaults to V4's `swiglu_limit`, **not** the base class's.
+
+        The base signature carries gpt-oss's constants (`alpha=1.702, limit=7.0`), so
+        inheriting it silently clamped V4 at 7.0 — a wrong answer that raises nothing,
+        since 7.0 is a perfectly valid bound and the shapes are identical. Both V4-Flash
+        and V4-Pro ship `swiglu_limit: 10.0`. `alpha` stays inherited and unused: this
+        epilogue is SwiGLU, not gpt-oss's sigmoid GLU.
+        """
+        super().__init__(*a, limit=limit, **kw)
+
     def _glu(self, gu):
         gate, up = gu.chunk(2, dim=-1)          # clean concat, not interleaved
         # fp32, cast back only on the way out — V4's reference computes the whole GLU in

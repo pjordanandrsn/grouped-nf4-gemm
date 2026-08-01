@@ -116,19 +116,26 @@ class _Shards:
         return raw, shape, dtype, (os.path.basename(path), lo, hi,
                                    hashlib.sha256(raw).hexdigest())
 
-    def read_mxfp4(self, base):
-        """`base` is the projection stem; reads `<base>.weight` (packed nibbles)
-        + `<base>.scale` (e8m0) and returns the dequantized bf16 matrix.
+    def read_mxfp4(self, base, weight_suffix=".weight", scale_suffix=".scale"):
+        """`base` is the projection stem; reads the packed-nibble weight and its
+        e8m0 scale and returns the dequantized bf16 matrix.
 
-        DeepSeek-V4 labels these `I8` and `F8_E8M0`; Kimi K3 labels both `U8`.
-        The bytes are identical either way, so they are read as raw uint8 rather
-        than through torch's dtype table -- which also means this works on a
-        torch too old to name `float8_e8m0fnu` at all.
+        **The suffixes differ by checkpoint and are not guessable from the stem.**
+        DeepSeek-V4 spells them `.weight` / `.scale` (the defaults); Kimi K3 spells
+        them `.weight_packed` / `.weight_scale` — compare `V4_RESIDENCY_KINDS` against
+        `K3_RESIDENCY_KINDS` in `mxfp4_residency`. This used to hardcode V4's pair while
+        the docstring named K3, so a K3 bake through `source="mxfp4"` looked supported
+        and could not resolve a single tensor.
+
+        The DTYPE labels differ too — V4 says `I8`/`F8_E8M0`, K3 says `U8` for both —
+        but the bytes are identical, so they are read as raw uint8 rather than through
+        torch's dtype table, which also means this works on a torch too old to name
+        `float8_e8m0fnu` at all.
         """
         from mxfp4_pack_ref import dequant_mxfp4
         torch = self.torch
-        b_raw, b_shape, _, b_src = self._raw(base + ".weight")
-        s_raw, s_shape, _, s_src = self._raw(base + ".scale")
+        b_raw, b_shape, _, b_src = self._raw(base + weight_suffix)
+        s_raw, s_shape, _, s_src = self._raw(base + scale_suffix)
         rows, kh = b_shape
         groups = s_shape[1]
         blocks = torch.frombuffer(bytearray(b_raw), dtype=torch.uint8).reshape(
@@ -150,7 +157,8 @@ class _Shards:
 
 def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
              align=4096, limit_experts=0, quantize_fn=None, log=print,
-             proj=PROJ, source="bf16", moe="mlp"):
+             proj=PROJ, source="bf16", moe="mlp",
+             mxfp4_suffixes=(".weight", ".scale")):
     """Quantize-bake. Discovers (L, E) from the checkpoint index; emits the
     same arena/index/manifest triple as the relocation bake, with the
     two-hop provenance schema."""
@@ -211,9 +219,9 @@ def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
                 names = _expert_names(lay, e, prefix, proj, moe=moe)
                 if source == "mxfp4":
                     stem = names[proj[0]].rsplit(".", 1)[0]
-                    gate, src_g = sh.read_mxfp4(stem)
-                    up, src_u = sh.read_mxfp4(names[proj[1]].rsplit(".", 1)[0])
-                    down, src_d = sh.read_mxfp4(names[proj[2]].rsplit(".", 1)[0])
+                    gate, src_g = sh.read_mxfp4(stem, *mxfp4_suffixes)
+                    up, src_u = sh.read_mxfp4(names[proj[1]].rsplit(".", 1)[0], *mxfp4_suffixes)
+                    down, src_d = sh.read_mxfp4(names[proj[2]].rsplit(".", 1)[0], *mxfp4_suffixes)
                 else:
                     gate, src_g = sh.read_bf16(names[proj[0]])
                     up, src_u = sh.read_bf16(names[proj[1]])

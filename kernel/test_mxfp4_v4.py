@@ -128,6 +128,43 @@ def test_limit_is_load_bearing():
     assert _rel(_glu(gu, limit=0.5), _glu(gu, limit=50.0)) > 1e-2
 
 
+def test_v4_does_not_inherit_gptoss_clamp_bound():
+    """The base signature carries gpt-oss's constants, so inheriting it clamped V4 at 7.0 —
+    a wrong answer that raises nothing, since 7.0 is a valid bound and the shapes match.
+    Asserted against the BASE's default too, so deleting the override fails here rather
+    than silently reverting."""
+    import inspect
+
+    from mxfp4_residency import Mxfp4NvmeResidency
+
+    base = inspect.signature(Mxfp4NvmeResidency.__init__).parameters["limit"].default
+    v4 = inspect.signature(Mxfp4NvmeResidencyV4.__init__).parameters["limit"].default
+    assert base == 7.0, f"base default moved to {base}; re-check V4's override"
+    assert v4 == 10.0, f"V4 defaults to {v4}, not its swiglu_limit of 10.0"
+    assert v4 != base, "V4 is inheriting gpt-oss's clamp bound again"
+
+
+def test_mxfp4_reader_suffixes_are_a_parameter_defaulting_to_v4():
+    """V4 spells the pair `.weight`/`.scale`; K3 spells it `.weight_packed`/`.weight_scale`
+    (see the two *_RESIDENCY_KINDS constants). The reader hardcoded V4's while its docstring
+    named K3, so a K3 bake looked supported and could not resolve a single tensor."""
+    import inspect
+
+    from mxfp4_residency import K3_RESIDENCY_KINDS
+    from nvme_bake_nf4 import _Shards, bake_nf4
+
+    rd = inspect.signature(_Shards.read_mxfp4).parameters
+    assert rd["weight_suffix"].default == ".weight"
+    assert rd["scale_suffix"].default == ".scale"
+    # and the bake threads them, so K3's spelling is reachable rather than hardcoded away
+    assert inspect.signature(bake_nf4).parameters["mxfp4_suffixes"].default \
+        == (".weight", ".scale")
+    # the two checkpoints really do differ in suffix — this is not a hypothetical
+    k3_suffixes = {k.split(".", 1)[1] for k in K3_RESIDENCY_KINDS}
+    v4_suffixes = {k.split(".", 1)[1] for k in V4_RESIDENCY_KINDS}
+    assert k3_suffixes.isdisjoint(v4_suffixes), (k3_suffixes, v4_suffixes)
+
+
 def test_residency_kinds_cover_both_projections_and_their_scales():
     """The bake and the engine must agree on the segment list; a missing scale reads as a
     silent exponent of zero rather than an error."""
