@@ -62,7 +62,7 @@ jobs:
       # These 8 were in the tree and invoked by nothing. They need triton (which
       # this job installs) but not a device, so CPU CI can run them.
       - name: CPU-reachable suites that CI never ran
-        run: cd kernel && python -m pytest test_arena_moe_patch.py test_k3_oracle.py test_moonshot_gather.py test_mxfp4_arena_layout.py test_mxfp4_oracle.py test_mxfp4_provenance.py test_group_tiles_readonly.py test_mxfp4_interp.py -q
+        run: cd kernel && python -m pytest test_arena_moe_patch.py test_k3_oracle.py test_moonshot_gather.py test_mxfp4_arena_layout.py test_mxfp4_oracle.py test_mxfp4_provenance.py test_group_tiles_readonly.py test_mxfp4_interp.py test_mxfp4_v4.py -q
 
       - name: packaging allowlist + test-wiring guard
         run: cd kernel && python -m pytest test_packaging_covers_kernel.py -q

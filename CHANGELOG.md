@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.5.0 — 2026-08-01
+
+**DeepSeek-V4's experts, read and served from a native MXFP4 arena.** This is the half of
+`experts4bit-qlora` 0.8.0's V4 path that lives here: `enable_mxfp4_nvme_residency` imports
+`Mxfp4NvmeResidencyV4` and `V4_RESIDENCY_KINDS` from this package, so without it the
+documented V4 arena path raises `ImportError`.
+
+`nvme_bake_nf4` gains a `source="mxfp4"` bake — a **relocation** of the released bytes
+rather than a re-quantization, which is why it is both smaller and faster to produce than
+the NF4 lane (V4-Flash: 147 GB and ~80 s, against 156 GB and a full quantize pass) — plus
+`proj=` for V4's `w1`/`w3`/`w2` spelling and `moe=` for its block name.
+
+`Mxfp4NvmeResidencyV4` is a third epilogue, and it is neither parent's: gpt-oss's **clamps**
+with SwiGLU's **combination**, over a **clean-concat** `gate_up` (like K3, unlike gpt-oss's
+interleaved columns). Three independent choices, each of which produces a correctly-shaped
+tensor when taken from the wrong parent.
+
+It also evaluates the GLU in **fp32** and casts back only for the down projection, because
+V4's reference does (`self.w1(x).float()`); the sibling epilogues stay in compute dtype
+because *theirs* do. Reproducing an epilogue means reproducing its precision, not only its
+shape — the same correction made across all five execution engines in
+`experts4bit-qlora` 0.8.0.
+
+`test_mxfp4_v4.py` gates all of it (pure python, no GPU, wired into CI): the transcribed
+reference, the one-sided gate clamp, not-gpt-oss's-GLU, clean-concat-not-interleaved, and
+the fp32 evaluation — the last asserted structurally, since the cast back to compute dtype
+is larger than the difference a numeric test would be trying to see.
+
 ## 0.4.0 — 2026-07-31
 
 **Version-number correction. No code change from 0.3.1.**

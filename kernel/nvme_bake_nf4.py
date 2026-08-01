@@ -41,11 +41,19 @@ from mxfp4_loader import _read_st_header  # noqa: E402
 from nvme_arena import MAGIC, VERSION, _align, _align8  # noqa: E402
 
 PROJ = ("gate_proj", "up_proj", "down_proj")
+# Per-expert MXFP4 checkpoints (Kimi K3, DeepSeek-V4) spell the same three
+# projections w1/w3/w2 -- gate/up/down, confirmed by SHAPES not convention --
+# and carry a companion scale tensor per projection instead of a bf16 weight.
+PROJ_W123 = ("w1", "w3", "w2")
 
 
-def _expert_names(layer, e, prefix="model.layers"):
-    base = f"{prefix}.{layer}.mlp.experts.{e}."
-    return {p: base + p + ".weight" for p in PROJ}
+def _expert_names(layer, e, prefix="model.layers", proj=PROJ, suffix="weight",
+                  moe="mlp"):
+    # `moe` is the attribute the experts hang off. transformers-canonical
+    # checkpoints say `mlp`; a checkpoint published in DeepSeek's own reference
+    # spelling says `ffn` and drops the `model.` prefix entirely.
+    base = f"{prefix}.{layer}.{moe}.experts.{e}."
+    return {p: f"{base}{p}.{suffix}" for p in proj}
 
 
 def default_quantize_expert(dev="cuda"):
@@ -75,7 +83,19 @@ class _Shards:
         self.torch = torch
         self.snapshot = snapshot
         idx = os.path.join(snapshot, "model.safetensors.index.json")
-        self.wm = json.load(open(idx))["weight_map"]
+        if os.path.exists(idx):
+            self.wm = json.load(open(idx))["weight_map"]
+        else:
+            # Unsharded snapshot: no index is emitted for a single-file
+            # checkpoint, so synthesize the map from the file's own key list.
+            single = os.path.join(snapshot, "model.safetensors")
+            if not os.path.exists(single):
+                raise FileNotFoundError(
+                    f"{snapshot}: neither model.safetensors.index.json (sharded) "
+                    "nor model.safetensors (single-file)")
+            hdr, _ = _read_st_header(single)
+            self.wm = {k: "model.safetensors" for k in hdr
+                       if k != "__metadata__"}
         self._hdrs = {}
 
     def locate(self, name):
@@ -87,6 +107,42 @@ class _Shards:
         lo, hi = hdr[name]["data_offsets"]
         return path, data_start + lo, data_start + hi, hdr[name]["shape"], \
             hdr[name]["dtype"]
+
+    def _raw(self, name):
+        path, lo, hi, shape, dtype = self.locate(name)
+        with open(path, "rb") as f:
+            f.seek(lo)
+            raw = f.read(hi - lo)
+        return raw, shape, dtype, (os.path.basename(path), lo, hi,
+                                   hashlib.sha256(raw).hexdigest())
+
+    def read_mxfp4(self, base, weight_suffix=".weight", scale_suffix=".scale"):
+        """`base` is the projection stem; reads the packed-nibble weight and its
+        e8m0 scale and returns the dequantized bf16 matrix.
+
+        **The suffixes differ by checkpoint and are not guessable from the stem.**
+        DeepSeek-V4 spells them `.weight` / `.scale` (the defaults); Kimi K3 spells
+        them `.weight_packed` / `.weight_scale` — compare `V4_RESIDENCY_KINDS` against
+        `K3_RESIDENCY_KINDS` in `mxfp4_residency`. This used to hardcode V4's pair while
+        the docstring named K3, so a K3 bake through `source="mxfp4"` looked supported
+        and could not resolve a single tensor.
+
+        The DTYPE labels differ too — V4 says `I8`/`F8_E8M0`, K3 says `U8` for both —
+        but the bytes are identical, so they are read as raw uint8 rather than through
+        torch's dtype table, which also means this works on a torch too old to name
+        `float8_e8m0fnu` at all.
+        """
+        from mxfp4_pack_ref import dequant_mxfp4
+        torch = self.torch
+        b_raw, b_shape, _, b_src = self._raw(base + weight_suffix)
+        s_raw, s_shape, _, s_src = self._raw(base + scale_suffix)
+        rows, kh = b_shape
+        groups = s_shape[1]
+        blocks = torch.frombuffer(bytearray(b_raw), dtype=torch.uint8).reshape(
+            rows, groups, kh // groups)
+        scales = torch.frombuffer(bytearray(s_raw), dtype=torch.uint8).reshape(s_shape)
+        w = dequant_mxfp4(blocks, scales, dtype=torch.float32).to(torch.bfloat16)
+        return w, [b_src, s_src]
 
     def read_bf16(self, name):
         path, lo, hi, shape, dtype = self.locate(name)
@@ -100,16 +156,23 @@ class _Shards:
 
 
 def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
-             align=4096, limit_experts=0, quantize_fn=None, log=print):
+             align=4096, limit_experts=0, quantize_fn=None, log=print,
+             proj=PROJ, source="bf16", moe="mlp",
+             mxfp4_suffixes=(".weight", ".scale")):
     """Quantize-bake. Discovers (L, E) from the checkpoint index; emits the
     same arena/index/manifest triple as the relocation bake, with the
     two-hop provenance schema."""
+    if source not in ("bf16", "mxfp4"):
+        raise ValueError(f"source must be 'bf16' or 'mxfp4'; got {source!r}")
     sh = _Shards(snapshot)
+    gate_key = f"{proj[0]}.weight"
+    marker = f".{moe}.experts."
+    depth = len(prefix.split("."))          # `model.layers` -> 2, `layers` -> 1
     lays, es = set(), set()
     for name in sh.wm:
-        if ".mlp.experts." in name and name.endswith("gate_proj.weight"):
+        if marker in name and name.endswith(gate_key) and name.startswith(prefix + "."):
             parts = name.split(".")
-            lays.add(int(parts[2]))
+            lays.add(int(parts[depth]))
             es.add(int(parts[parts.index("experts") + 1]))
     if layers is None:
         layers = sorted(lays)
@@ -117,8 +180,13 @@ def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
     n_e = min(E, limit_experts) if limit_experts else E
 
     # geometry from layer0/expert0 shapes
-    g_shape = sh.locate(_expert_names(layers[0], 0, prefix)["gate_proj"])[3]
-    d_shape = sh.locate(_expert_names(layers[0], 0, prefix)["down_proj"])[3]
+    _n0 = _expert_names(layers[0], 0, prefix, proj, moe=moe)
+    g_shape = sh.locate(_n0[proj[0]])[3]
+    d_shape = sh.locate(_n0[proj[2]])[3]
+    if source == "mxfp4":
+        # packed [rows, K//2] on disk; the logical matrix is twice as wide in K
+        g_shape = [g_shape[0], g_shape[1] * 2]
+        d_shape = [d_shape[0], d_shape[1] * 2]
     I, H = g_shape
     assert d_shape == [H, I], (g_shape, d_shape)
     segs = [
@@ -148,22 +216,29 @@ def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
     with open(out, "wb") as dst:
         for li, lay in enumerate(layers):
             for e in range(n_e):
-                names = _expert_names(lay, e, prefix)
-                gate, src_g = sh.read_bf16(names["gate_proj"])
-                up, src_u = sh.read_bf16(names["up_proj"])
-                down, src_d = sh.read_bf16(names["down_proj"])
+                names = _expert_names(lay, e, prefix, proj, moe=moe)
+                if source == "mxfp4":
+                    stem = names[proj[0]].rsplit(".", 1)[0]
+                    gate, src_g = sh.read_mxfp4(stem, *mxfp4_suffixes)
+                    up, src_u = sh.read_mxfp4(names[proj[1]].rsplit(".", 1)[0], *mxfp4_suffixes)
+                    down, src_d = sh.read_mxfp4(names[proj[2]].rsplit(".", 1)[0], *mxfp4_suffixes)
+                else:
+                    gate, src_g = sh.read_bf16(names[proj[0]])
+                    up, src_u = sh.read_bf16(names[proj[1]])
+                    down, src_d = sh.read_bf16(names[proj[2]])
+                    src_g, src_u, src_d = [src_g], [src_u], [src_d]
                 gu_b, gu_a = quantize_fn(torch.cat([gate, up], 0))
                 dn_b, dn_a = quantize_fn(down)
                 del gate, up, down
                 seg_bytes = [
                     (gu_b.contiguous().view(torch.uint8).numpy().tobytes(),
-                     [src_g, src_u]),
+                     src_g + src_u),
                     (gu_a.contiguous().view(torch.uint8).numpy().tobytes(),
-                     [src_g, src_u]),
+                     src_g + src_u),
                     (dn_b.contiguous().view(torch.uint8).numpy().tobytes(),
-                     [src_d]),
+                     src_d),
                     (dn_a.contiguous().view(torch.uint8).numpy().tobytes(),
-                     [src_d]),
+                     src_d),
                 ]
                 del gu_b, gu_a, dn_b, dn_a
                 man_segs = []
@@ -199,7 +274,8 @@ def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
     quantizer = {"kind": "bnb.quantize_4bit", "quant_type": "nf4",
                  "blocksize": 64, "bnb": bnb_v,
                  "torch": __import__("torch").__version__,
-                 "layout": "cat[gate;up] dim0, nested-absmax dequantized f32"}
+                 "layout": "cat[gate;up] dim0, nested-absmax dequantized f32",
+                 "source": source, "proj": list(proj), "moe_attr": moe}
     index = {"magic": MAGIC, "version": VERSION, "snapshot": snapshot,
              "prefix": prefix, "align": align, "row_bytes": row_bytes,
              "row_stride": row_stride, "n_layers": len(layers),
