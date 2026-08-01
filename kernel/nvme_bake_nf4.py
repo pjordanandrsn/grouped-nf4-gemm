@@ -165,7 +165,14 @@ def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
     if source not in ("bf16", "mxfp4"):
         raise ValueError(f"source must be 'bf16' or 'mxfp4'; got {source!r}")
     sh = _Shards(snapshot)
-    gate_key = f"{proj[0]}.weight"
+    # Discovery and the geometry probe must look for the suffix this SOURCE actually
+    # uses. 0.5.0 parameterized the READ (`mxfp4_suffixes`) but left these two hardcoded
+    # to `.weight`, so a checkpoint spelling it otherwise -- Kimi K3's `.weight_packed`
+    # -- matched zero keys and died on `max()` of an empty sequence, one line into the
+    # bake. Parameterizing the read was necessary and not sufficient; only running it on
+    # real K3 bytes showed that.
+    wsuf = mxfp4_suffixes[0] if source == "mxfp4" else ".weight"
+    gate_key = f"{proj[0]}{wsuf}"
     marker = f".{moe}.experts."
     depth = len(prefix.split("."))          # `model.layers` -> 2, `layers` -> 1
     lays, es = set(), set()
@@ -180,7 +187,7 @@ def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
     n_e = min(E, limit_experts) if limit_experts else E
 
     # geometry from layer0/expert0 shapes
-    _n0 = _expert_names(layers[0], 0, prefix, proj, moe=moe)
+    _n0 = _expert_names(layers[0], 0, prefix, proj, suffix=wsuf.lstrip("."), moe=moe)
     g_shape = sh.locate(_n0[proj[0]])[3]
     d_shape = sh.locate(_n0[proj[2]])[3]
     if source == "mxfp4":

@@ -161,3 +161,77 @@ def test_aligned_row_not_clobbered(tmp_path):
     idx = load_index(arena)
     assert idx["row_bytes"] == idx["row_stride"]
     assert verify(arena, against_source=str(snap), log=lambda *a: None)["ok"]
+
+
+# --------------- source="mxfp4" on a K3-spelled checkpoint -------------------
+# 0.5.0 parameterized read_mxfp4's suffixes but left DISCOVERY and the geometry probe
+# hardcoded to `.weight`, so a checkpoint spelling it `.weight_packed` (Kimi K3) matched
+# zero keys and died on `max()` of an empty sequence one line into the bake. The signature
+# tests passed; only running it on real K3 bytes found this.
+K3_SUF = (".weight_packed", ".weight_scale")
+MI, MH = 64, 128          # I, H for the synthetic expert
+
+
+def _st_bytes_typed(tensors):
+    """`_st_bytes` above hardcodes BF16; MXFP4 rows are U8 blocks + U8 e8m0 scales."""
+    hdr, blobs, off = {}, [], 0
+    for name, (t, dt) in tensors.items():
+        raw = t.contiguous().view(torch.uint8).numpy().tobytes()
+        hdr[name] = {"dtype": dt, "shape": list(t.shape),
+                     "data_offsets": [off, off + len(raw)]}
+        blobs.append(raw)
+        off += len(raw)
+    hj = json.dumps(hdr).encode()
+    return struct.pack("<Q", len(hj)) + hj + b"".join(blobs)
+
+
+def make_mxfp4_snapshot(root, spelling=K3_SUF, seed=5):
+    """One layer, two experts, K3's key layout: a `language_model.` prefix, experts under
+    `block_sparse_moe`, w1/w3/w2, and MXFP4 stored as packed nibbles + e8m0 scales."""
+    g = torch.Generator().manual_seed(seed)
+    t = {}
+    for e in range(2):
+        base = f"language_model.model.layers.1.block_sparse_moe.experts.{e}."
+        for proj, (rows, k) in (("w1", (MI, MH)), ("w3", (MI, MH)), ("w2", (MH, MI))):
+            blocks = torch.randint(0, 256, (rows, k // 2), generator=g, dtype=torch.uint8)
+            # e8m0 exponent 127 == 2**0, so the decoded values stay in a sane range
+            scales = torch.full((rows, k // 32), 127, dtype=torch.uint8)
+            t[base + proj + spelling[0]] = (blocks, "U8")
+            t[base + proj + spelling[1]] = (scales, "U8")
+    os.makedirs(root, exist_ok=True)
+    with open(os.path.join(root, "model.safetensors"), "wb") as f:
+        f.write(_st_bytes_typed(t))
+    with open(os.path.join(root, "model.safetensors.index.json"), "w") as f:
+        json.dump({"weight_map": {k: "model.safetensors" for k in t}}, f)
+    return t
+
+
+def _bake_k3(tmp_path, **kw):
+    from nvme_bake_nf4 import PROJ_W123
+    snap = tmp_path / "k3snap"
+    make_mxfp4_snapshot(str(snap))
+    arena = str(tmp_path / "k3.arena")
+    bake_nf4(str(snap), arena, quantize_fn=mock_quantize, log=lambda *a: None,
+             prefix="language_model.model.layers", moe="block_sparse_moe",
+             proj=PROJ_W123, source="mxfp4", **kw)
+    return snap, arena
+
+
+def test_mxfp4_source_bakes_a_k3_spelled_checkpoint(tmp_path):
+    """Discovery, geometry and the read must all follow the source's own suffix."""
+    snap, arena = _bake_k3(tmp_path, mxfp4_suffixes=K3_SUF)
+    idx = json.load(open(arena + ".index.json"))
+    assert idx["n_layers"] == 1 and idx["n_experts_per_layer"] == 2
+    # geometry is derived from the PACKED shape, doubled in K
+    seg = {s["suffix"]: s for s in idx["segments"]}
+    assert seg["nf4.gate_up_blocks"]["shape_per_expert"] == [2 * MI, MH // 2], seg["nf4.gate_up_blocks"]
+    assert seg["nf4.down_blocks"]["shape_per_expert"] == [MH, MI // 2], seg["nf4.down_blocks"]
+    # and the provenance chain still closes against the source
+    assert verify(arena, against_source=str(snap), log=lambda *a: None)["ok"]
+
+
+def test_mxfp4_source_with_the_wrong_suffix_fails_loudly(tmp_path):
+    """The default `.weight`/`.scale` pair is V4's. Against a K3-spelled checkpoint it
+    matches nothing — that must raise, not bake an empty or half-built arena."""
+    with pytest.raises(Exception):
+        _bake_k3(tmp_path)          # defaults to V4's suffixes
