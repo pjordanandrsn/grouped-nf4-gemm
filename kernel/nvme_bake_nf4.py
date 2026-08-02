@@ -77,6 +77,11 @@ def default_quantize_expert(dev="cuda"):
     return q
 
 
+_MXFP4_BYTE_DTYPES = ("U8", "I8", "F8_E8M0")
+"""Byte-typed labels seen across MXFP4 checkpoints for BOTH weight and scale.
+V4 says I8/F8_E8M0, K3 says U8/U8 -- same bytes, different label, so the reader
+accepts the set rather than one spelling."""
+
 class _Shards:
     def __init__(self, snapshot):
         import torch
@@ -134,8 +139,21 @@ class _Shards:
         """
         from mxfp4_pack_ref import dequant_mxfp4
         torch = self.torch
-        b_raw, b_shape, _, b_src = self._raw(base + weight_suffix)
-        s_raw, s_shape, _, s_src = self._raw(base + scale_suffix)
+        b_raw, b_shape, b_dt, b_src = self._raw(base + weight_suffix)
+        s_raw, s_shape, s_dt, s_src = self._raw(base + scale_suffix)
+        # Deliberately NOT an equality check: V4 labels these I8/F8_E8M0 and K3 labels
+        # both U8 for byte-identical content, so the reader takes raw bytes. What must
+        # be rejected is the OTHER format -- block-scaled FP8 spells its tensors
+        # `.weight`/`.scale` too, and crossing it into here otherwise dies much later on
+        # an opaque reshape (its F32 scale carries 4x the bytes the shape implies).
+        for nm, dt, ok in ((weight_suffix, b_dt, _MXFP4_BYTE_DTYPES),
+                           (scale_suffix, s_dt, _MXFP4_BYTE_DTYPES)):
+            if dt not in ok:
+                hint = ("; this is block-scaled FP8 -- use source='fp8'"
+                        if dt in ("F8_E4M3", "F32") else "")
+                raise ValueError(
+                    f"{base + nm!r} is {dt}, expected one of {sorted(ok)} for "
+                    f"source='mxfp4'{hint}")
         rows, kh = b_shape
         groups = s_shape[1]
         blocks = torch.frombuffer(bytearray(b_raw), dtype=torch.uint8).reshape(
