@@ -144,6 +144,44 @@ class _Shards:
         w = dequant_mxfp4(blocks, scales, dtype=torch.float32).to(torch.bfloat16)
         return w, [b_src, s_src]
 
+    def read_fp8(self, base, weight_suffix=".weight", scale_suffix=".scale",
+                 block=(128, 128)):
+        """Block-scaled FP8: `F8_E4M3` weights + one **F32** scale per `block` tile.
+
+        This is a DIFFERENT format from `read_mxfp4`, despite DeepSeek-V4 spelling both
+        pairs `.weight`/`.scale`. Two things change and both are silent if crossed:
+
+        * the on-disk weight shape IS the logical shape. MXFP4 packs two nibbles per byte
+          so its K is half the logical K; FP8 is one byte per element and doubling K here
+          would read a matrix twice as wide as the model has.
+        * the scale is F32 covering a `[128, 128]` TILE, not an e8m0 byte covering 32
+          contiguous elements. It is already the multiplier, so it is applied directly --
+          no `2**(x-127)`.
+
+        The instruct V4-Flash ships MXFP4 experts (137 GiB); V4-Flash-Base ships these
+        (258 GiB). Same architecture, same tensor names, 1.9x the bytes.
+        """
+        torch = self.torch
+        w_raw, w_shape, w_dt, w_src = self._raw(base + weight_suffix)
+        s_raw, s_shape, s_dt, s_src = self._raw(base + scale_suffix)
+        if w_dt != "F8_E4M3":
+            raise ValueError(f"{base + weight_suffix!r} is {w_dt}, expected F8_E4M3 for "
+                             f"source='fp8' (MXFP4 checkpoints use source='mxfp4')")
+        if s_dt != "F32":
+            raise ValueError(f"{base + scale_suffix!r} is {s_dt}, expected F32 block "
+                             f"scales; an e8m0 byte scale means this is MXFP4, not FP8")
+        # read as raw bytes and reinterpret, so a torch too old to NAME float8_e4m3fn in
+        # `frombuffer` still works -- the same discipline read_mxfp4 uses.
+        w = (torch.frombuffer(bytearray(w_raw), dtype=torch.uint8)
+             .view(torch.float8_e4m3fn).reshape(w_shape).float())
+        sc = torch.frombuffer(bytearray(s_raw), dtype=torch.float32).reshape(s_shape)
+        bh, bw = block
+        exp = sc.repeat_interleave(bh, 0).repeat_interleave(bw, 1)
+        if exp.shape[0] < w_shape[0] or exp.shape[1] < w_shape[1]:
+            raise ValueError(f"scale {tuple(s_shape)} x block {block} = {tuple(exp.shape)} "
+                             f"does not cover weight {tuple(w_shape)}")
+        return (w * exp[:w_shape[0], :w_shape[1]]).to(torch.bfloat16), [w_src, s_src]
+
     def read_bf16(self, name):
         path, lo, hi, shape, dtype = self.locate(name)
         assert dtype == "BF16", (name, dtype)
@@ -162,8 +200,8 @@ def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
     """Quantize-bake. Discovers (L, E) from the checkpoint index; emits the
     same arena/index/manifest triple as the relocation bake, with the
     two-hop provenance schema."""
-    if source not in ("bf16", "mxfp4"):
-        raise ValueError(f"source must be 'bf16' or 'mxfp4'; got {source!r}")
+    if source not in ("bf16", "mxfp4", "fp8"):
+        raise ValueError(f"source must be 'bf16', 'mxfp4' or 'fp8'; got {source!r}")
     sh = _Shards(snapshot)
     # Discovery and the geometry probe must look for the suffix this SOURCE actually
     # uses. 0.5.0 parameterized the READ (`mxfp4_suffixes`) but left these two hardcoded
@@ -171,7 +209,7 @@ def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
     # -- matched zero keys and died on `max()` of an empty sequence, one line into the
     # bake. Parameterizing the read was necessary and not sufficient; only running it on
     # real K3 bytes showed that.
-    wsuf = mxfp4_suffixes[0] if source == "mxfp4" else ".weight"
+    wsuf = mxfp4_suffixes[0] if source in ("mxfp4", "fp8") else ".weight"
     gate_key = f"{proj[0]}{wsuf}"
     marker = f".{moe}.experts."
     depth = len(prefix.split("."))          # `model.layers` -> 2, `layers` -> 1
@@ -191,7 +229,9 @@ def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
     g_shape = sh.locate(_n0[proj[0]])[3]
     d_shape = sh.locate(_n0[proj[2]])[3]
     if source == "mxfp4":
-        # packed [rows, K//2] on disk; the logical matrix is twice as wide in K
+        # packed [rows, K//2] on disk; the logical matrix is twice as wide in K.
+        # FP8 is one byte per element, so its on-disk shape is ALREADY logical --
+        # doubling it here would describe a matrix twice as wide as the model has.
         g_shape = [g_shape[0], g_shape[1] * 2]
         d_shape = [d_shape[0], d_shape[1] * 2]
     I, H = g_shape
@@ -224,11 +264,12 @@ def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
         for li, lay in enumerate(layers):
             for e in range(n_e):
                 names = _expert_names(lay, e, prefix, proj, moe=moe)
-                if source == "mxfp4":
-                    stem = names[proj[0]].rsplit(".", 1)[0]
-                    gate, src_g = sh.read_mxfp4(stem, *mxfp4_suffixes)
-                    up, src_u = sh.read_mxfp4(names[proj[1]].rsplit(".", 1)[0], *mxfp4_suffixes)
-                    down, src_d = sh.read_mxfp4(names[proj[2]].rsplit(".", 1)[0], *mxfp4_suffixes)
+                if source in ("mxfp4", "fp8"):
+                    rd = sh.read_mxfp4 if source == "mxfp4" else sh.read_fp8
+                    stems = [names[p].rsplit(".", 1)[0] for p in proj]
+                    gate, src_g = rd(stems[0], *mxfp4_suffixes)
+                    up, src_u = rd(stems[1], *mxfp4_suffixes)
+                    down, src_d = rd(stems[2], *mxfp4_suffixes)
                 else:
                     gate, src_g = sh.read_bf16(names[proj[0]])
                     up, src_u = sh.read_bf16(names[proj[1]])

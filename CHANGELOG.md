@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.6.0 — 2026-08-02
+
+**`bake_nf4(source="fp8")`: block-scaled FP8 checkpoints can be baked.** Until now the bake
+read `bf16` or `mxfp4`. DeepSeek ships *both* formats under the same tensor names —
+V4-Flash's experts are MXFP4 (137 GiB), **V4-Flash-Base's are block-scaled FP8 e4m3
+(258 GiB)** — so the Base checkpoint could not be baked at all, and the `source="mxfp4"`
+path pointed at it produces a correct-shaped arena of nonsense rather than an error.
+
+Two things differ from the MXFP4 path and both are silent if crossed:
+
+* **The on-disk shape is already logical.** MXFP4 packs two nibbles per byte so the bake
+  doubles its K back; FP8 is one byte per element, and doubling here would describe a
+  matrix twice as wide as the model has.
+* **The scale is an F32 per `[128, 128]` tile**, not an e8m0 byte per 32 elements, and it is
+  already the multiplier — no `2**(x-127)`. `read_fp8` rejects an `F8_E8M0` scale (that
+  means MXFP4) and a non-`F8_E4M3` weight, rather than reading either as the other.
+
+Validated against the real 149 GB `DeepSeek-V4-Flash-Base`: the reader is **bit-identical**
+(max relative error `0.000e+00`) to `experts4bit-qlora`'s independently written
+`dequantize_fp8_blocks`; geometry resolves to the correct `43L x 256E, I=2048, H=4096`; the
+full arena bakes to **155.8 GB in 4890 s**; and the served model answers
+`"The capital of Japan is"` with ` Tokyo` at p=0.90.
+
+5 tests on a synthetic FP8 snapshot (no checkpoint needed), 3 of which fail against 0.5.1.
+
 ## 0.5.1 — 2026-08-01
 
 **0.5.0's `source="mxfp4"` bake could not read a Kimi K3 checkpoint, which is the one it
