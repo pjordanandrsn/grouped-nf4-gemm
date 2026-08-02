@@ -235,3 +235,89 @@ def test_mxfp4_source_with_the_wrong_suffix_fails_loudly(tmp_path):
     matches nothing — that must raise, not bake an empty or half-built arena."""
     with pytest.raises(Exception):
         _bake_k3(tmp_path)          # defaults to V4's suffixes
+
+
+# ----------------------- source="fp8": block-scaled FP8 ----------------------
+# DeepSeek-V4-Flash ships MXFP4 experts (137 GiB); V4-Flash-Base ships block-scaled FP8
+# (258 GiB) under the SAME tensor names. `source="mxfp4"` cannot read the latter, so
+# V4-Base could not be baked at all. Two things differ and both are silent if crossed:
+# FP8's on-disk shape is already logical (no nibble packing), and its scale is an F32
+# per [128,128] tile rather than an e8m0 byte per 32 elements.
+FP8_I, FP8_H = 64, 128
+FP8_BLOCK = 32          # small tile so the synthetic expert stays tiny
+
+
+def make_fp8_snapshot(root, seed=7, scale_dtype="F32"):
+    g = torch.Generator().manual_seed(seed)
+    t = {}
+    for e in range(2):
+        base = f"model.layers.0.mlp.experts.{e}."
+        for proj, (rows, k) in (("w1", (FP8_I, FP8_H)), ("w3", (FP8_I, FP8_H)),
+                                ("w2", (FP8_H, FP8_I))):
+            w = (torch.randn(rows, k, generator=g) * 0.1).to(torch.float8_e4m3fn)
+            sc = torch.rand(rows // FP8_BLOCK, k // FP8_BLOCK, generator=g) * 0.5 + 0.5
+            t[base + proj + ".weight"] = (w.view(torch.uint8), "F8_E4M3")
+            t[base + proj + ".scale"] = (sc, scale_dtype)
+    os.makedirs(root, exist_ok=True)
+    with open(os.path.join(root, "model.safetensors"), "wb") as f:
+        f.write(_st_bytes_typed(t))
+    with open(os.path.join(root, "model.safetensors.index.json"), "w") as f:
+        json.dump({"weight_map": {k: "model.safetensors" for k in t}}, f)
+    return t
+
+
+def _bake_fp8(tmp_path, **kw):
+    from nvme_bake_nf4 import PROJ_W123
+    snap = tmp_path / "fp8snap"
+    make_fp8_snapshot(str(snap), **kw)
+    arena = str(tmp_path / "fp8.arena")
+    bake_nf4(str(snap), arena, quantize_fn=mock_quantize, log=lambda *a: None,
+             proj=PROJ_W123, source="fp8")
+    return snap, arena
+
+
+def test_fp8_source_bakes_and_geometry_is_not_doubled(tmp_path):
+    """The on-disk FP8 shape IS the logical shape. MXFP4 halves K by packing two nibbles
+    per byte, so the mxfp4 path doubles it back; doing that here would describe a matrix
+    twice as wide as the model has, and every downstream shape would still 'look' valid."""
+    snap, arena = _bake_fp8(tmp_path)
+    idx = json.load(open(arena + ".index.json"))
+    seg = {s["suffix"]: s for s in idx["segments"]}
+    assert seg["nf4.gate_up_blocks"]["shape_per_expert"] == [2 * FP8_I, FP8_H // 2]
+    assert seg["nf4.down_blocks"]["shape_per_expert"] == [FP8_H, FP8_I // 2]
+    assert idx["n_experts_per_layer"] == 2
+    assert verify(arena, against_source=str(snap), log=lambda *a: None)["ok"]
+
+
+def test_fp8_reader_applies_block_scales(tmp_path):
+    """The F32 scale is the multiplier for a whole [block, block] tile and is applied
+    directly -- no 2**(x-127). Reconstruct independently and compare."""
+    from nvme_bake_nf4 import _Shards
+    snap = tmp_path / "fp8snap"
+    t = make_fp8_snapshot(str(snap))          # compare against what we WROTE: the test
+    sh = _Shards(str(snap))                   # owns the bytes, so it needs no reader
+    got, _src = sh.read_fp8("model.layers.0.mlp.experts.0.w1", block=(FP8_BLOCK, FP8_BLOCK))
+    w = t["model.layers.0.mlp.experts.0.w1.weight"][0].view(torch.float8_e4m3fn).float()
+    sc = t["model.layers.0.mlp.experts.0.w1.scale"][0]
+    want = w * sc.repeat_interleave(FP8_BLOCK, 0).repeat_interleave(FP8_BLOCK, 1)
+    assert got.shape == want.shape == (FP8_I, FP8_H)
+    assert torch.allclose(got.float(), want.to(torch.bfloat16).float(), atol=0, rtol=0)
+
+
+def test_fp8_reader_rejects_an_mxfp4_scale(tmp_path):
+    """An e8m0 BYTE scale means the checkpoint is MXFP4, not FP8. Crossing the two reads
+    correct-shaped nonsense, so it must raise."""
+    from nvme_bake_nf4 import _Shards
+    snap = tmp_path / "badsnap"
+    make_fp8_snapshot(str(snap), scale_dtype="F8_E8M0")
+    with pytest.raises(ValueError, match="F32 block scales|expected F32"):
+        _Shards(str(snap)).read_fp8("model.layers.0.mlp.experts.0.w1",
+                                    block=(FP8_BLOCK, FP8_BLOCK))
+
+
+def test_unknown_source_is_rejected(tmp_path):
+    snap = tmp_path / "s"
+    make_fp8_snapshot(str(snap))
+    with pytest.raises(ValueError, match="source must be"):
+        bake_nf4(str(snap), str(tmp_path / "a.arena"), source="int4",
+                 quantize_fn=mock_quantize, log=lambda *a: None)
