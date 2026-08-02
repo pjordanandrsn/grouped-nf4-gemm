@@ -321,3 +321,24 @@ def test_unknown_source_is_rejected(tmp_path):
     with pytest.raises(ValueError, match="source must be"):
         bake_nf4(str(snap), str(tmp_path / "a.arena"), source="int4",
                  quantize_fn=mock_quantize, log=lambda *a: None)
+
+
+def test_mxfp4_reader_rejects_an_fp8_checkpoint(tmp_path):
+    """The mirror of `test_fp8_reader_rejects_an_mxfp4_scale`. Both formats spell their
+    tensors `.weight`/`.scale` on DeepSeek-V4, so `source=` is the ONLY thing separating
+    them. Without a guard this died later on an opaque reshape -- the F32 scale carries
+    4x the bytes its shape implies -- which reads as a corrupt checkpoint rather than the
+    wrong flag. The message must name the fix."""
+    from nvme_bake_nf4 import _Shards
+    snap = tmp_path / "fp8forxmx"
+    make_fp8_snapshot(str(snap))
+    with pytest.raises(ValueError, match="source='fp8'"):
+        _Shards(str(snap)).read_mxfp4("model.layers.0.mlp.experts.0.w1")
+
+
+def test_mxfp4_reader_accepts_both_dtype_SPELLINGS(tmp_path):
+    """V4 labels these I8/F8_E8M0; K3 labels both U8 for byte-identical content. The
+    guard admits a SET for exactly this reason -- an equality check like read_fp8's
+    would reject whichever family it was not written against."""
+    from nvme_bake_nf4 import _MXFP4_BYTE_DTYPES
+    assert {"U8", "I8", "F8_E8M0"} <= set(_MXFP4_BYTE_DTYPES)

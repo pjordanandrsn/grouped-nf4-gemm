@@ -45,6 +45,19 @@ on where the expert bytes are when you need them — nothing else.
 | nowhere yet — you need to *make* an arena | `nvme_arena.bake_expert_tensors(...)` | the checkpoint + disk |
 | a checkpoint you want to **verify**, not run | `verify_provenance` | torch only |
 
+**Do not quantize-bake a checkpoint that is already MXFP4.** The bake has two
+modes and they are not interchangeable. `nvme_arena.bake_expert_tensors` is a
+*relocation* — it copies the existing MXFP4 bytes into arena order, so the
+residency engine hands packed nibbles straight to the fused kernel.
+`nvme_bake_nf4.bake_nf4` *re-quantizes* to NF4, which then has to be
+dequantized to bf16 per expert on every read. Measured on the same host and the
+same task (DeepSeek-V4-Flash, 43L × 256E): **8.7 s per request on the MXFP4 lane
+against 34.9 s on the NF4 lane — ~4×.** Quantize-bake only when the source is
+bf16 or block-FP8 and there is no MXFP4 to relocate. `source=` on `bake_nf4`
+picks the reader, and the two formats share tensor *names* on DeepSeek-V4
+(`.weight`/`.scale` either way), so that flag is the only thing separating them —
+both readers assert their format and name the other in the error.
+
 **The one ordering trap, because it costs 1.45 TB to get wrong.** An arena's
 segment order has two legitimate forms. `arena_experts.K3_KINDS` is the
 released-K3 spelling and interleaves per projection — fine for
