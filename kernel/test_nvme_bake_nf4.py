@@ -263,6 +263,7 @@ def make_fp8_snapshot(root, seed=7, scale_dtype="F32"):
         f.write(_st_bytes_typed(t))
     with open(os.path.join(root, "model.safetensors.index.json"), "w") as f:
         json.dump({"weight_map": {k: "model.safetensors" for k in t}}, f)
+    return t
 
 
 def _bake_fp8(tmp_path, **kw):
@@ -293,13 +294,11 @@ def test_fp8_reader_applies_block_scales(tmp_path):
     directly -- no 2**(x-127). Reconstruct independently and compare."""
     from nvme_bake_nf4 import _Shards
     snap = tmp_path / "fp8snap"
-    make_fp8_snapshot(str(snap))
-    sh = _Shards(str(snap))
+    t = make_fp8_snapshot(str(snap))          # compare against what we WROTE: the test
+    sh = _Shards(str(snap))                   # owns the bytes, so it needs no reader
     got, _src = sh.read_fp8("model.layers.0.mlp.experts.0.w1", block=(FP8_BLOCK, FP8_BLOCK))
-    import safetensors.torch as st
-    d = st.load_file(str(snap / "model.safetensors"))
-    w = d["model.layers.0.mlp.experts.0.w1.weight"].view(torch.float8_e4m3fn).float()
-    sc = d["model.layers.0.mlp.experts.0.w1.scale"]
+    w = t["model.layers.0.mlp.experts.0.w1.weight"][0].view(torch.float8_e4m3fn).float()
+    sc = t["model.layers.0.mlp.experts.0.w1.scale"][0]
     want = w * sc.repeat_interleave(FP8_BLOCK, 0).repeat_interleave(FP8_BLOCK, 1)
     assert got.shape == want.shape == (FP8_I, FP8_H)
     assert torch.allclose(got.float(), want.to(torch.bfloat16).float(), atol=0, rtol=0)
