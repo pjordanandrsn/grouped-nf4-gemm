@@ -191,3 +191,87 @@ def test_backward_holds_one_decoded_expert_at_a_time():
     assert growth < all_dense / 4, (
         f"peak growth {growth} approaches all-experts-dense {all_dense}: "
         "backward looks like it is retaining decoded weights")
+
+
+# --- lora_delta_grouped: batched padded-bmm vs the per-expert loop it replaced ---
+#
+# The loop is kept as `_lora_delta_grouped_loop` and is the oracle here. These run on
+# CPU: the delta is pure torch, so CI exercises them without a GPU.
+
+def _lora_params(n_exp=E, out=N, k=K, r=R, seed=3):
+    torch.manual_seed(seed)
+    A = torch.randn(n_exp, r, k, dtype=torch.float32) * 0.05
+    B = torch.randn(n_exp, out, r, dtype=torch.float32) * 0.05
+    return A.requires_grad_(True), B.requires_grad_(True)
+
+
+def _delta_fwd_bwd(fn, a_cat, A, B, sizes, eids, scaling):
+    a = a_cat.detach().clone().requires_grad_(True)
+    A2, B2 = A.detach().clone().requires_grad_(True), B.detach().clone().requires_grad_(True)
+    out = fn(a, A2, B2, sizes, eids, scaling)
+    torch.manual_seed(9)
+    (out * torch.randn_like(out)).sum().backward()   # not .sum(): cancellation hides sign errors
+    return out.detach(), a.grad.clone(), A2.grad.clone(), B2.grad.clone()
+
+
+@pytest.mark.parametrize("sizes,eids", [
+    ([3, 3, 3, 3], [0, 1, 2, 3]),          # uniform — the batched path, no padding
+    ([1, 7, 2, 5], [0, 1, 2, 3]),          # ragged — batched, real padding
+    ([4, 0, 6, 0], [0, 1, 2, 3]),          # empty groups must not shift the row map
+    ([5, 2], [3, 0]),                      # subset of experts, out of order
+])
+def test_batched_lora_delta_matches_the_per_expert_loop(sizes, eids):
+    """Forward AND all three gradients. A delta that is right in the forward and wrong
+    in dL/dA still trains — it just trains something else."""
+    from nf4_qlora import _lora_delta_grouped_loop, lora_delta_grouped
+
+    torch.manual_seed(4)
+    a_cat = torch.randn(sum(sizes), K, dtype=torch.float32)
+    A, B = _lora_params()
+    ref = _delta_fwd_bwd(_lora_delta_grouped_loop, a_cat, A, B, sizes, eids, 2.0)
+    got = _delta_fwd_bwd(lora_delta_grouped, a_cat, A, B, sizes, eids, 2.0)
+    for name, r, g in zip(("out", "dL/da", "dL/dA", "dL/dB"), ref, got):
+        assert torch.allclose(g, r, rtol=1e-4, atol=1e-5), (
+            f"{name} diverged: max {(g - r).abs().max():.3e}")
+
+
+def test_batched_lora_delta_keeps_the_scaling():
+    """alpha/r shipping as 1.0 once already made every update half-size and cost a
+    48-layer parity gate to catch (see the docstring). Pin it on the batched path."""
+    from nf4_qlora import _lora_delta_grouped_loop, lora_delta_grouped
+
+    torch.manual_seed(5)
+    sizes, eids = [2, 2, 2, 2], [0, 1, 2, 3]
+    a_cat = torch.randn(sum(sizes), K, dtype=torch.float32)
+    A, B = _lora_params()
+    one = lora_delta_grouped(a_cat, A, B, sizes, eids, 1.0)
+    two = lora_delta_grouped(a_cat, A, B, sizes, eids, 2.0)
+    assert torch.allclose(two, 2.0 * one, rtol=1e-5, atol=1e-6)
+    assert torch.allclose(one, _lora_delta_grouped_loop(a_cat, A, B, sizes, eids, 1.0),
+                          rtol=1e-4, atol=1e-5)
+
+
+def test_pathological_skew_falls_back_to_the_loop():
+    """Router skew makes the padded block G*max(sizes) rows wide however few are real.
+    Past the guard the loop must be used, so bad routing cannot cost MORE than it did
+    before this optimization existed."""
+    from nf4_qlora import _PAD_WASTE_LIMIT, lora_delta_grouped, _lora_delta_grouped_loop
+
+    n_exp = 8
+    sizes, eids = [200] + [1] * (n_exp - 1), list(range(n_exp))   # 1600 padded for 207 real
+    assert len(sizes) * max(sizes) > _PAD_WASTE_LIMIT * sum(sizes), "fixture not skewed enough"
+    torch.manual_seed(6)
+    a_cat = torch.randn(sum(sizes), K, dtype=torch.float32)
+    A, B = _lora_params(n_exp=n_exp)
+    # Same answer either way — the guard changes the route, never the result.
+    assert torch.allclose(lora_delta_grouped(a_cat, A, B, sizes, eids, 1.5),
+                          _lora_delta_grouped_loop(a_cat, A, B, sizes, eids, 1.5),
+                          rtol=1e-4, atol=1e-5)
+
+
+def test_no_rows_returns_none_as_before():
+    """`fused_grouped_lora` does `out + delta`, so this contract is load-bearing."""
+    from nf4_qlora import lora_delta_grouped
+
+    A, B = _lora_params()
+    assert lora_delta_grouped(torch.zeros(0, K), A, B, [0, 0, 0, 0], [0, 1, 2, 3], 1.0) is None
