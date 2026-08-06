@@ -247,9 +247,11 @@ Layer-composed fidelity is **measured** (experts4bit-qlora's
 [`bench/dgrad-gate/`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/dgrad-gate/RESULTS-dgrad-gate.md),
 2026-08-06): at 48 layers on Qwen3-30B-A3B the dgrad kernel adds **nothing** to the fused
 lane's composed gradient error (4.97e-2 → 4.99e-2 mean vs the reference loop) and is the
-fastest training option at real width (2.52× vs 1.72× without it). The composed error that
-lane carries belongs to the *forward* fusion, present with or without dgrad; loss
-trajectories sit ≤0.002 median |Δ| against a 0.05 band.
+fastest training option at real width (2.52× vs 1.72× without it). An fp32-truth arm over
+the same NF4 bytes further shows every lane — the reference loop included — sitting on the
+composed bf16 noise floor (~5.2e-2 at 48 layers), with the fused lane landing *closest* to
+truth at 16 layers; divergence between lanes is two valid bf16 roundings, not one being
+looser. Loss trajectories sit ≤0.003 median |Δ| against a 0.05 band.
 
 From inside a model, [experts4bit-qlora](https://pypi.org/project/experts4bit-qlora/)
 ≥ 0.11.0 exposes it as `enable_fast_train(model, dgrad=True)`.
