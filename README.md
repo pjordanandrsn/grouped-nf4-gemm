@@ -463,7 +463,7 @@ extended it — under the same receipts discipline — into a stamped, pre-silic
 projection table for AMD, Intel, and NVIDIA unified-memory parts:
 [`PROJECTIONS-multiarch.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.7.0/PROJECTIONS-multiarch.md) (protocol:
 [`PROTOCOL-multiarch.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.7.0/PROTOCOL-multiarch.md); model + R1 anchor gate:
-[`projections/`](https://github.com/pjordanandrsn/grouped-nf4-gemm/tree/v0.6.0/projections/)). Both docs are OpenTimestamps-anchored (`.ots`)
+[`projections/`](https://github.com/pjordanandrsn/grouped-nf4-gemm/tree/v0.7.0/projections/)). Both docs are OpenTimestamps-anchored (`.ots`)
 **before any of this silicon was run** — the projections are a falsifiable
 prediction, not a marketing table.
 
