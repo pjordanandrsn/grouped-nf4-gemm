@@ -38,6 +38,7 @@ on where the expert bytes are when you need them — nothing else.
 | the bytes are in… | call | needs |
 |---|---|---|
 | **VRAM**, NF4-packed | `nf4_grouped.gemm_4bit_grouped(...)` | CUDA + triton |
+| …and you need its **backward** | `nf4_grouped.dgrad_4bit_grouped(...)` | CUDA + triton |
 | **VRAM**, native MXFP4 | `mxfp4_grouped.gemm_mxfp4_grouped(...)` | CUDA + triton |
 | **host DRAM**, all rows pinned | `mxfp4_pipelined.Mxfp4PipelinedGptOss` | CUDA + triton + RAM ≥ all experts |
 | **NVMe**, too big for DRAM | `mxfp4_residency.Mxfp4NvmeResidency` | a baked arena (below) |
@@ -204,6 +205,50 @@ automatic fallback for training and ineligible modules.
 ```python
 from nf4_grouped import gemm_4bit_grouped, dequant_ref
 ```
+
+### Training: the backward is a kernel too (0.7.0)
+
+`gemm_4bit_grouped` is forward-only. `nf4_qlora` wraps it so `dL/dx` flows, and until
+0.7.0 that backward was a Python loop over experts — one `dequant_ref` + matmul each,
+~10k pairs per step at 256 experts over 40 layers, measured at **78–84% of a training
+step**.
+
+`dgrad_4bit_grouped` is that backward in one launch: `grad_out @ dequant(B)`, decoding in
+registers exactly as the forward does, so it **materializes nothing**. Against the
+per-expert decode oracle on an A2000 (T_cat=4096): gate_up E=256 **5.92 ms vs 61.78 ms**,
+down E=256 **3.28 ms vs 85.12 ms**. Tuned it runs at 0.91× the *forward* kernel's time on
+the same problem — it reaches the forward's ceiling.
+
+`lora_delta_grouped` was the other per-expert Python loop, in the *forward*, putting `2E`
+matmul nodes per projection per layer on the autograd graph. It is batched as of 0.7.0
+(2.96× end-to-end), with a `_PAD_WASTE_LIMIT` fallback so pathological router skew cannot
+cost more than before.
+
+Together, one training step at E=256 goes **403.7 → 26.5 ms (~15×) at 134 MB peak**.
+
+```python
+from nf4_qlora import fused_grouped_lora
+from nf4_grouped import dgrad_eligible
+
+out = fused_grouped_lora(a_cat, packed, absmax, sizes, expert_ids,
+                         lora_A, lora_B, scaling=alpha / r,
+                         dgrad_kernel=True)      # opt-in; default is the loop
+```
+
+**Opt-in on purpose.** The loop decodes with the same oracle the reference uses, so its
+gradient is *exact* and a test pins that; the kernel accumulates fp32 in a different order
+and lands near 2.9e-3 — inside the bf16 budget, not zero. Ask `dgrad_eligible()` before
+committing rather than catching: opted in, it falls back to the loop for non-bf16
+gradients, a `BLOCK_K` that does not divide the quant blocksize, empty/evicted storage, and
+offload-staged weights on another device — where the kernel would need the whole stack
+resident, which is what offload exists to avoid.
+
+Layer-composed fidelity of the dgrad path is **unmeasured**. A path that measured
+better per-op has cost +0.023% perplexity through 16 layers in this lane before, so gate a
+real training run on your own parity check.
+
+From inside a model, [experts4bit-qlora](https://pypi.org/project/experts4bit-qlora/)
+≥ 0.11.0 exposes it as `enable_fast_train(model, dgrad=True)`.
 
 ## The NVMe tier: compute on packed bytes that never fit in RAM (0.2.5 / 0.2.6)
 
