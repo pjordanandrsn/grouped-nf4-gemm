@@ -52,6 +52,11 @@ peak**. For scale, experts4bit-qlora's kernel-free `enable_batched_train` runs
 that step in 25.0 ms but at 417 MB — this lane now matches it at under a third of
 the memory.
 
+That comparison baseline is not ours: `enable_batched_train` implements
+@jiwoon-ahn's whole-stack-dequant approach from
+pjordanandrsn/experts4bit-qlora#38. Measuring against it is what made the size of
+the backward gap visible in the first place — see #34.
+
 Layer-composed fidelity of the dgrad path is unmeasured. This repo has seen a
 per-op-more-accurate path cost +0.023% perplexity through 16 layers, so gate a
 real training run on your own parity check before flipping it on.
