@@ -1,5 +1,61 @@
 # Changelog
 
+## 0.7.0 — 2026-08-06
+
+**Both per-expert Python loops in the training lane are gone.** They were the
+dominant cost of a fused training step and each hid the other: removing one alone
+buys little, because whichever remains dominates.
+
+**`dgrad_4bit_grouped` — the backward of `gemm_4bit_grouped`, in one launch.**
+There was no backward kernel at all, so `FusedGroupedNf4.backward` looped the
+active experts in Python with a `dequant_ref` + matmul each. At 256 experts over
+40 layers that is ~10k decode+matmul pairs per step, measured at 78-84% of an
+experts4bit-qlora training step.
+
+The transposed contraction cost nothing structurally: the weight tile is
+`[BLOCK_N, BLOCK_K]` in both directions from the same pointer arithmetic, and
+with `BLOCK_K` dividing 64 the whole output tile sits in one quant group, so the
+absmax column index is a scalar rather than a gather. Against the per-expert
+decode oracle on an A2000, T_cat=4096: gate_up E=256 **5.92 ms vs 61.78 ms
+(10.4x)**, down E=256 **3.28 ms vs 85.12 ms (26.0x)**. A tile sweep put the
+default config at 0.91x of the *forward* kernel's time on the same problem — it
+reaches the forward's ceiling. Every config in the sweep produced bit-identical
+output, so the config knob is speed, not fidelity.
+
+It materializes nothing: the decode happens in registers inside the GEMM as the
+forward does, preserving "packed bytes are the only residency". The whole-stack
+dequantize alternative also beats the loop but spends ~1.6 GB per layer at
+production width.
+
+**Opt-in** via `dgrad_kernel=False` on `FusedGroupedNf4`,
+`gemm_4bit_grouped_train`, and `fused_grouped_lora`. The default stays the loop,
+whose gradient is EXACT (it decodes with the same oracle the reference uses, and
+a test asserts `grad_rel == 0.0`); the kernel accumulates fp32 in a different
+order and lands near 2.9e-3 — inside the bf16 budget, not zero. Opted in it
+declines rather than fails: `dgrad_eligible()` is askable before launch, and the
+fallbacks are non-bf16 gradients, a `BLOCK_K` that does not divide the quant
+blocksize, empty/evicted storage, and offload-staged weights on another device —
+where the kernel would need the whole stack resident, which is what offload
+exists to avoid.
+
+**`lora_delta_grouped` is batched.** It ran a Python loop over experts in the
+*forward*, putting `2E` matmul nodes per projection per layer on the autograd
+graph and paying for them again in backward. Padding the groups and running two
+`bmm`s measured **2.96x on the end-to-end training step** at E=256 (403.7 → 136.5
+ms) for +36% peak memory, gradients agreeing to 1.6e-3. Past `_PAD_WASTE_LIMIT`
+(4x real rows) the loop is used instead, so pathological router skew cannot cost
+more than it did before; the loop survives as `_lora_delta_grouped_loop` and is
+the oracle the tests compare against.
+
+**Together**, on the same A2000 step at E=256: **403.7 → 26.5 ms (~15x) at 134 MB
+peak**. For scale, experts4bit-qlora's kernel-free `enable_batched_train` runs
+that step in 25.0 ms but at 417 MB — this lane now matches it at under a third of
+the memory.
+
+Layer-composed fidelity of the dgrad path is unmeasured. This repo has seen a
+per-op-more-accurate path cost +0.023% perplexity through 16 layers, so gate a
+real training run on your own parity check before flipping it on.
+
 ## 0.6.0 — 2026-08-02
 
 **`bake_nf4(source="fp8")`: block-scaled FP8 checkpoints can be baked.** Until now the bake
