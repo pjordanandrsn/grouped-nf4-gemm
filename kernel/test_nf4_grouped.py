@@ -319,3 +319,82 @@ class TestPrefillConfig:
         d = (new.to(torch.float32) - old.to(torch.float32)).abs().max().item()
         assert d <= 2 * 2**-8 * old.to(torch.float32).abs().max().item()
         assert err_vs_fp64(new, a, sizes, ids, B, A, 256, 512) < 1e-2
+
+
+# --- dgrad: the backward companion to gemm_4bit_grouped -----------------------
+
+def _dgrad_oracle(grad_out, packed, absmax, sizes, expert_ids, N, K):
+    """What the dgrad kernel replaces: decode each expert, dense matmul."""
+    from nf4_grouped import dequant_ref
+    outs, row = [], 0
+    for g, e in enumerate(expert_ids):
+        n = sizes[g]
+        w = dequant_ref(packed[e], absmax[e], N, K).to(grad_out.dtype)
+        outs.append(grad_out[row:row + n] @ w)
+        row += n
+    return torch.cat(outs, dim=0)
+
+
+def _dgrad_fixture(E=4, N=128, K=128, rows=(3, 1, 7, 2), seed=0):
+    from nf4_pack_ref import quantize_pack_nf4
+    torch.manual_seed(seed)
+    packed, absmax = [], []
+    for _ in range(E):
+        p, a = quantize_pack_nf4(torch.randn(N, K))
+        packed.append(p.reshape(N, K // 2))
+        absmax.append(a.reshape(N, K // 64).float())
+    packed = torch.stack(packed).cuda()
+    absmax = torch.stack(absmax).cuda()
+    sizes = list(rows[:E])
+    eids = list(range(E))
+    go = torch.randn(sum(sizes), N, dtype=torch.bfloat16, device="cuda")
+    return go, packed, absmax, sizes, eids, N, K
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="fused kernel is CUDA/Triton only")
+@pytest.mark.parametrize("rows", [(3, 3, 3, 3), (1, 7, 2, 5), (64, 1, 1, 1)])
+def test_dgrad_matches_the_per_expert_decode_oracle(rows):
+    """The bar: `grad_out @ decode(W)` per group, the loop this replaces.
+
+    Not bit-exactness — the kernel accumulates in fp32 over a different order than
+    a dense bf16 matmul. bf16 carries an 8-bit mantissa (eps ~ 3.9e-3) and a
+    K-term dot accumulates ~sqrt(K)*eps, so agreement is bounded by the dtype, not
+    by the implementation. Measured 2.6e-3 to 2.9e-3 relative on sm_86.
+    """
+    from nf4_grouped import dgrad_4bit_grouped
+    go, packed, absmax, sizes, eids, N, K = _dgrad_fixture(rows=rows)
+    got = dgrad_4bit_grouped(go, packed, absmax, sizes, eids)
+    want = _dgrad_oracle(go, packed, absmax, sizes, eids, N, K)
+    assert got.shape == want.shape == (sum(sizes), K)
+    rel = ((got.float() - want.float()).norm() / want.float().norm()).item()
+    assert rel < 1e-2, f"dgrad relative error {rel} exceeds the bf16 budget"
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="fused kernel is CUDA/Triton only")
+def test_dgrad_output_does_not_depend_on_the_tile_config():
+    """`config` is benchmark support. If tiling moved the numbers it would be a
+    fidelity knob wearing a performance knob's name, and the default would need
+    defending on accuracy rather than speed."""
+    from nf4_grouped import _DGRAD_DEFAULT, dgrad_4bit_grouped
+    go, packed, absmax, sizes, eids, _N, _K = _dgrad_fixture()
+    base = dgrad_4bit_grouped(go, packed, absmax, sizes, eids)
+    for cfg in ((32, 64, 64, 2), (64, 64, 64, 4), (32, 128, 32, 2), (64, 32, 64, 8)):
+        alt = dgrad_4bit_grouped(go, packed, absmax, sizes, eids, config=cfg)
+        assert torch.equal(alt, base), f"config {cfg} changed the result (default {_DGRAD_DEFAULT})"
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="fused kernel is CUDA/Triton only")
+def test_dgrad_eligibility_is_decidable_before_launching():
+    """Callers that can fall back must be able to ASK, not catch — a training
+    backward discovering ineligibility by exception has already lost the step."""
+    from nf4_grouped import dgrad_4bit_grouped, dgrad_eligible
+    go, packed, absmax, sizes, eids, _N, _K = _dgrad_fixture()
+    assert dgrad_eligible(go, packed, absmax) is None
+    # fp16 grad: the kernel's epilogue stores bf16, so it must decline rather
+    # than silently hand back a different dtype than the caller's graph expects.
+    assert "bfloat16" in dgrad_eligible(go.to(torch.float16), packed, absmax)
+    # a BLOCK_K that does not divide the quant blocksize breaks the scalar-absmax
+    # assumption the kernel is built on
+    assert "does not divide" in dgrad_eligible(go, packed, absmax, block_k=48)
+    with pytest.raises(ValueError, match="cannot run this problem"):
+        dgrad_4bit_grouped(go.to(torch.float16), packed, absmax, sizes, eids)

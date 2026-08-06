@@ -275,3 +275,87 @@ def test_no_rows_returns_none_as_before():
 
     A, B = _lora_params()
     assert lora_delta_grouped(torch.zeros(0, K), A, B, [0, 0, 0, 0], [0, 1, 2, 3], 1.0) is None
+# --- the opt-in dgrad route through the autograd Function --------------------
+
+@pytest.mark.skipif(not CUDA, reason="fused kernel is CUDA/Triton only")
+def test_dgrad_kernel_is_off_by_default():
+    """The default backward must stay the exact one.
+
+    `test_fused_backward_matches_dequant_reference` asserts grad_rel == 0.0, which
+    holds because the loop decodes with the same oracle the reference uses. The
+    kernel is fp32-accumulating and lands near 2.9e-3 — inside the bf16 budget but
+    not zero. Inheriting that silently is what this test prevents.
+    """
+    packed, absmax = _packed_stack()
+    a, sizes, eids = _grouped_inputs()
+    packed_c, absmax_c = packed.cuda(), absmax.cuda()
+
+    a_ref = a.clone().cuda().to(torch.bfloat16).requires_grad_(True)
+    _reference_forward(a_ref, packed_c, absmax_c, sizes, eids).sum().backward()
+
+    a_def = a.clone().cuda().to(torch.bfloat16).requires_grad_(True)
+    FusedGroupedNf4.apply(a_def, packed_c, absmax_c, sizes, eids).sum().backward()
+    rel = ((a_def.grad.float() - a_ref.grad.float()).norm()
+           / a_ref.grad.float().norm()).item()
+    assert rel == 0.0, f"default backward is no longer the exact one: rel {rel}"
+
+
+@pytest.mark.skipif(not CUDA, reason="fused kernel is CUDA/Triton only")
+def test_dgrad_kernel_route_matches_within_the_bf16_budget():
+    """Opted in, the gradient must still agree with decode-then-matmul."""
+    packed, absmax = _packed_stack()
+    a, sizes, eids = _grouped_inputs()
+    packed_c, absmax_c = packed.cuda(), absmax.cuda()
+
+    a_ref = a.clone().cuda().to(torch.bfloat16).requires_grad_(True)
+    _reference_forward(a_ref, packed_c, absmax_c, sizes, eids).sum().backward()
+
+    a_k = a.clone().cuda().to(torch.bfloat16).requires_grad_(True)
+    FusedGroupedNf4.apply(a_k, packed_c, absmax_c, sizes, eids, None, True).sum().backward()
+    assert a_k.grad.shape == a_ref.grad.shape
+    rel = ((a_k.grad.float() - a_ref.grad.float()).norm()
+           / a_ref.grad.float().norm()).item()
+    assert rel < 1e-2, f"dgrad-kernel backward relative error {rel} exceeds the bf16 budget"
+    assert rel > 0.0, "identical to the loop — the opt-in did not take effect"
+
+
+@pytest.mark.skipif(not CUDA, reason="fused kernel is CUDA/Triton only")
+def test_dgrad_kernel_opt_in_falls_back_for_offload_staged_weights():
+    """Opting in is a preference, not an assertion.
+
+    The offload case is the one that matters: `weights_fn` hands back CPU-resident
+    storage, and the kernel would need the whole stack on device — the thing
+    offload exists to avoid. Backward must quietly take the per-expert staging
+    loop and still produce a correct gradient, not raise.
+    """
+    packed, absmax = _packed_stack()
+    a, sizes, eids = _grouped_inputs()
+    packed_c, absmax_c = packed.cuda(), absmax.cuda()
+
+    a_ref = a.clone().cuda().to(torch.bfloat16).requires_grad_(True)
+    _reference_forward(a_ref, packed_c, absmax_c, sizes, eids).sum().backward()
+
+    a_off = a.clone().cuda().to(torch.bfloat16).requires_grad_(True)
+    out = FusedGroupedNf4.apply(a_off, packed_c, absmax_c, sizes, eids,
+                                lambda: (packed, absmax), True)   # CPU-staged
+    out.sum().backward()
+    assert a_off.grad is not None and torch.isfinite(a_off.grad).all()
+    # It took the loop, so the gradient is the EXACT one, not the kernel's.
+    rel = ((a_off.grad.float() - a_ref.grad.float()).norm()
+           / a_ref.grad.float().norm()).item()
+    assert rel == 0.0, f"offload fallback did not take the exact loop: rel {rel}"
+
+
+@pytest.mark.skipif(not CUDA, reason="fused kernel is CUDA/Triton only")
+def test_dgrad_kernel_reaches_lora_params_too():
+    """The flag threads through fused_grouped_lora; A and B must still train."""
+    packed, absmax = _packed_stack()
+    a, sizes, eids = _grouped_inputs()
+    packed_c, absmax_c = packed.cuda(), absmax.cuda()
+    a_c = a.cuda().to(torch.bfloat16)
+    A = (torch.randn(E, R, K, device="cuda") * 0.05).requires_grad_(True)
+    B = (torch.randn(E, N, R, device="cuda") * 0.05).requires_grad_(True)
+    out = fused_grouped_lora(a_c, packed_c, absmax_c, sizes, eids, A, B,
+                             dgrad_kernel=True)
+    out.sum().backward()
+    assert torch.count_nonzero(A.grad) > 0 and torch.count_nonzero(B.grad) > 0

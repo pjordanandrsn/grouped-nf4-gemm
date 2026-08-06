@@ -42,9 +42,11 @@ class FusedGroupedNf4(torch.autograd.Function):
     """
 
     @staticmethod
-    def forward(ctx, a_cat, packed, absmax, sizes, expert_ids, weights_fn=None):
+    def forward(ctx, a_cat, packed, absmax, sizes, expert_ids, weights_fn=None,
+                dgrad_kernel=False):
         from nf4_grouped import gemm_4bit_grouped
 
+        ctx.dgrad_kernel = dgrad_kernel
         out = gemm_4bit_grouped(a_cat, packed, absmax, sizes, expert_ids)
         # DO NOT stash the weight tensors themselves when a weights_fn is
         # supplied. e4b's expert offload keeps a SINGLE layer GPU-resident:
@@ -71,7 +73,7 @@ class FusedGroupedNf4(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_out: torch.Tensor):
-        from nf4_grouped import dequant_ref
+        from nf4_grouped import dequant_ref, dgrad_4bit_grouped, dgrad_eligible
 
         grad_a = None
         if ctx.needs_input_grad[0]:
@@ -80,6 +82,23 @@ class FusedGroupedNf4(torch.autograd.Function):
             _E, N, half = packed.shape
             K = half * 2
             grad_out = grad_out.contiguous()
+
+            # Opt-in single-launch dgrad. Off by default on purpose: the loop
+            # below decodes with `dequant_ref`, the same oracle the reference
+            # path uses, so its gradient is EXACT and a test pins that. The
+            # kernel accumulates in fp32 over a different order and lands at
+            # ~2.9e-3 relative -- inside the bf16 budget, but not zero, so
+            # switching is a decision a training run makes deliberately rather
+            # than inherits. Same bargain as e4b's `enable_fast_train`.
+            if ctx.dgrad_kernel and dgrad_eligible(grad_out, packed, absmax) is None:
+                if packed.device == grad_out.device:
+                    return ((dgrad_4bit_grouped(grad_out, packed, absmax,
+                                                ctx.sizes, ctx.expert_ids),)
+                            + (None,) * 6)
+                # Offload-staged on another device: the kernel would need the
+                # whole stack resident, which is the thing offload exists to
+                # avoid. Per-expert staging below stays correct there.
+
             grad_a = torch.empty(grad_out.shape[0], K, dtype=grad_out.dtype,
                                  device=grad_out.device)
             row = 0
@@ -99,11 +118,11 @@ class FusedGroupedNf4(torch.autograd.Function):
                 grad_a[row:row + n] = grad_out[row:row + n] @ w
                 del pe, ae, w
                 row += n
-        return grad_a, None, None, None, None, None
+        return grad_a, None, None, None, None, None, None
 
 
 def gemm_4bit_grouped_train(a_cat, packed, absmax, sizes, expert_ids,
-                            weights_fn=None):
+                            weights_fn=None, dgrad_kernel=False):
     """Differentiable ``gemm_4bit_grouped``. Same arguments, same output; the
     only difference is that ``a_cat`` may require grad.
 
@@ -112,7 +131,7 @@ def gemm_4bit_grouped_train(a_cat, packed, absmax, sizes, expert_ids,
     function holds no reference that would defeat eviction. Omit it when the
     weights are permanently resident."""
     return FusedGroupedNf4.apply(a_cat, packed, absmax, sizes, expert_ids,
-                                 weights_fn)
+                                 weights_fn, dgrad_kernel)
 
 
 def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
@@ -197,7 +216,8 @@ def _lora_delta_grouped_loop(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1
 
 
 def fused_grouped_lora(a_cat, packed, absmax, sizes, expert_ids,
-                       lora_A=None, lora_B=None, weights_fn=None, scaling=1.0):
+                       lora_A=None, lora_B=None, weights_fn=None, scaling=1.0,
+                       dgrad_kernel=False):
     """Frozen 4-bit projection through the fused kernel **plus** the trainable
     low-rank delta, returned pre-activation so callers can apply SwiGLU after.
 
@@ -206,7 +226,7 @@ def fused_grouped_lora(a_cat, packed, absmax, sizes, expert_ids,
     w.r.t. ``A`` and ``B``, summed before any nonlinearity.
     """
     out = gemm_4bit_grouped_train(a_cat, packed, absmax, sizes, expert_ids,
-                                  weights_fn=weights_fn)
+                                  weights_fn=weights_fn, dgrad_kernel=dgrad_kernel)
     if lora_A is None or lora_B is None:
         return out
     delta = lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling)
