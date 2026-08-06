@@ -636,3 +636,188 @@ def dequant_ref(packed_row_major: torch.Tensor, absmax: torch.Tensor, N: int, K:
     vals = lut[codes]
     am = absmax.to(torch.float32).reshape(-1).repeat_interleave(BLOCKSIZE)
     return (vals * am).reshape(N, K)
+
+
+# ---------------------------------------------------------------------------
+# dgrad: the backward of `gemm_4bit_grouped`.
+#
+# `gemm_4bit_grouped` computes out = a @ dequant(B).T, contracting over K. Its
+# backward needs grad_a = grad_out @ dequant(B), contracting over N — identical
+# FLOPs, identical packed-byte traffic, different axis. Until this existed there
+# was no backward kernel at all: `nf4_qlora.FusedGroupedNf4.backward` looped the
+# active experts in Python, one `dequant_ref` + matmul each. At 256 experts over
+# 40 layers that is ~10k decode+matmul pairs per step, and it measured 78-84% of
+# an experts4bit-qlora training step.
+#
+# The transposed contraction costs nothing structurally. The weight tile is
+# [BLOCK_N, BLOCK_K] here exactly as in the forward, from the same pointer
+# arithmetic; what changes is that the mainloop walks N instead of K, `a` becomes
+# grad_out (strided by N), the output tile is [BLOCK_M, BLOCK_K], and `tl.dot`
+# needs no transpose. With BLOCK_K dividing 64 the whole output tile sits inside
+# one quant group, so the absmax column index is a compile-time-constant scalar
+# and the load is the forward's [BLOCK_N] read rather than a per-element gather.
+# ---------------------------------------------------------------------------
+
+
+@triton.jit
+def _dgrad_nf4_grouped(
+    g_ptr,
+    b_ptr,
+    amax_ptr,
+    out_ptr,
+    lut_ptr,
+    t_row0_ptr,
+    t_rows_ptr,
+    t_group_ptr,
+    expert_ids_ptr,
+    K,
+    N,
+    stride_be,
+    stride_bn,
+    stride_ae,
+    stride_an,
+    BLOCK_M: tl.constexpr,
+    BLOCK_N: tl.constexpr,
+    BLOCK_K: tl.constexpr,
+):
+    pid_m = tl.program_id(0)
+    pid_k = tl.program_id(1)
+
+    row0 = tl.load(t_row0_ptr + pid_m)
+    rows = tl.load(t_rows_ptr + pid_m)
+    grp = tl.load(t_group_ptr + pid_m)
+    eid = tl.load(expert_ids_ptr + grp)
+
+    offs_m = tl.arange(0, BLOCK_M)
+    offs_k = pid_k * BLOCK_K + tl.arange(0, BLOCK_K)
+    m_mask = offs_m < rows
+    k_mask = offs_k < K
+
+    lut_reg = tl.load(lut_ptr + tl.arange(0, 16))  # codebook in registers
+    acc = tl.zeros((BLOCK_M, BLOCK_K), dtype=tl.float32)
+    offs_n = tl.arange(0, BLOCK_N)
+    g_base = g_ptr + (row0 + offs_m)[:, None] * N
+    # BLOCK_K divides 64, so every element of this output tile shares one quant
+    # group and the absmax column is a scalar — not a gather. The 64 is the
+    # literal `BLOCKSIZE`, spelled out because a @triton.jit body cannot read a
+    # module global that is not a tl.constexpr; the forward mainloop does the same.
+    g0 = (pid_k * BLOCK_K) // 64
+
+    for n0 in range(0, N, BLOCK_N):
+        nn = n0 + offs_n
+        n_mask = nn < N
+        bytes_ = tl.load(
+            b_ptr + eid * stride_be + nn[:, None] * stride_bn + (offs_k[None, :] // 2),
+            mask=n_mask[:, None] & k_mask[None, :],
+            other=0,
+        ).to(tl.int32)
+        # bnb packs element 2j into the HIGH nibble, 2j+1 into the LOW nibble
+        nib = tl.where((offs_k[None, :] % 2) == 0, (bytes_ >> 4) & 0xF, bytes_ & 0xF)
+        w = tl.reshape(
+            tl.gather(lut_reg, tl.reshape(nib, [BLOCK_N * BLOCK_K]), 0),
+            [BLOCK_N, BLOCK_K],
+        )
+        am = tl.load(amax_ptr + eid * stride_ae + nn * stride_an + g0, mask=n_mask, other=0.0)
+        w = w * am[:, None]
+        g = tl.load(
+            g_base + nn[None, :], mask=m_mask[:, None] & n_mask[None, :], other=0.0
+        ).to(tl.float32)
+        acc += tl.dot(g, w)  # [BM,BN] @ [BN,BK] — no transpose, unlike the forward
+
+    out_ptrs = out_ptr + (row0 + offs_m)[:, None] * K + offs_k[None, :]
+    tl.store(out_ptrs, acc.to(tl.bfloat16), mask=m_mask[:, None] & k_mask[None, :])
+
+
+# Measured on an RTX A2000 by sweeping (BLOCK_M, BLOCK_N, BLOCK_K, num_warps) over
+# the E=256 gate_up shape (N=1536, K=512, T_cat=4096): this config ran 3.29 ms,
+# 0.91x of the FORWARD kernel's time on the same problem — i.e. dgrad reaches the
+# forward's ceiling rather than landing above it. Every config in the sweep
+# produced bit-identical output, so this is a speed choice, not a fidelity one.
+_DGRAD_DEFAULT = (32, 64, 64, 2)  # BLOCK_M, BLOCK_N, BLOCK_K, num_warps
+
+
+def dgrad_eligible(grad_out, B, absmax, block_k: int = 64):
+    """None if this problem can take the dgrad kernel, else the reason it cannot.
+
+    Separate from the launch so callers can decide *before* committing — the
+    training path falls back to its per-expert loop rather than failing.
+    """
+    if grad_out.dtype != torch.bfloat16:
+        # The kernel's epilogue stores bf16. fp16 callers would get a silent
+        # dtype change, so they keep the reference path.
+        return f"grad_out dtype {grad_out.dtype} is not bfloat16"
+    if BLOCKSIZE % block_k:
+        return f"BLOCK_K {block_k} does not divide the quant blocksize {BLOCKSIZE}"
+    K = B.shape[2] * 2
+    if K % block_k:
+        return f"K {K} not divisible by BLOCK_K {block_k}"
+    if absmax.shape[2] * BLOCKSIZE != K:
+        return f"absmax blocks {absmax.shape[2]} do not tile K {K} at blocksize {BLOCKSIZE}"
+    if B.numel() == 0:
+        return "packed storage is empty (evicted?)"
+    return None
+
+
+def dgrad_4bit_grouped(grad_out, B, absmax, sizes, expert_ids, config=None):
+    """``grad_a[t, :] = grad_out[t, :] @ dequant_nf4(B[e(t)])`` in one launch.
+
+    The backward companion to :func:`gemm_4bit_grouped`, taking the same
+    group-sorted layout: ``grad_out [T, N]`` bf16, ``B [E, N, K//2]`` uint8,
+    ``absmax [E, N, K//64]`` fp32, ``sizes`` the per-group row counts,
+    ``expert_ids [G]``. Returns ``[T, K]`` bf16 in the same group order.
+
+    Materializes nothing — the decode happens in registers inside the GEMM,
+    exactly as the forward does, so this preserves the "packed bytes are the only
+    residency" property that a whole-stack dequantize would spend.
+
+    ``config`` overrides ``(BLOCK_M, BLOCK_N, BLOCK_K, num_warps)``; see
+    ``_DGRAD_DEFAULT`` for where the default came from. Benchmark support — the
+    output does not depend on it.
+    """
+    E, N, half = B.shape
+    K = half * 2
+    T = grad_out.shape[0]
+    assert sum(sizes) == T, (sum(sizes), T)
+    dev = grad_out.device
+    if dev.type != "cuda" and os.environ.get("TRITON_INTERPRET") != "1":
+        raise RuntimeError(
+            f"dgrad_4bit_grouped runs the fused Triton kernel and requires CUDA tensors "
+            f"(got device '{dev.type}'). The CPU-checkable equivalent is "
+            f"grad_out @ dequant_ref(packed, absmax, N, K) per group."
+        )
+    block_m, block_n, block_k, warps = config or _DGRAD_DEFAULT
+    why = dgrad_eligible(grad_out, B, absmax, block_k)
+    if why is not None:
+        raise ValueError(
+            f"dgrad_4bit_grouped cannot run this problem: {why}. Callers that can "
+            "fall back should check dgrad_eligible() first rather than catching this."
+        )
+    t_row0, t_rows, t_group = build_group_tiles(sizes, block_m, dev)
+    eids = (
+        expert_ids
+        if torch.is_tensor(expert_ids)
+        else torch.tensor(expert_ids, dtype=torch.int32, device=dev)
+    ).to(torch.int32)
+    out = torch.empty(T, K, dtype=torch.bfloat16, device=dev)
+    _dgrad_nf4_grouped[(t_row0.numel(), triton.cdiv(K, block_k))](
+        grad_out.contiguous(),
+        B,
+        absmax,
+        out,
+        _lut(dev),
+        t_row0,
+        t_rows,
+        t_group,
+        eids,
+        K,
+        N,
+        B.stride(0),
+        B.stride(1),
+        absmax.stride(0),
+        absmax.stride(1),
+        BLOCK_M=block_m,
+        BLOCK_N=block_n,
+        BLOCK_K=block_k,
+        num_warps=warps,
+    )
+    return out
