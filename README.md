@@ -243,9 +243,13 @@ gradients, a `BLOCK_K` that does not divide the quant blocksize, empty/evicted s
 offload-staged weights on another device — where the kernel would need the whole stack
 resident, which is what offload exists to avoid.
 
-Layer-composed fidelity of the dgrad path is **unmeasured**. A path that measured
-better per-op has cost +0.023% perplexity through 16 layers in this lane before, so gate a
-real training run on your own parity check.
+Layer-composed fidelity is **measured** (experts4bit-qlora's
+[`bench/dgrad-gate/`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/dgrad-gate/RESULTS-dgrad-gate.md),
+2026-08-06): at 48 layers on Qwen3-30B-A3B the dgrad kernel adds **nothing** to the fused
+lane's composed gradient error (4.97e-2 → 4.99e-2 mean vs the reference loop) and is the
+fastest training option at real width (2.52× vs 1.72× without it). The composed error that
+lane carries belongs to the *forward* fusion, present with or without dgrad; loss
+trajectories sit ≤0.002 median |Δ| against a 0.05 band.
 
 From inside a model, [experts4bit-qlora](https://pypi.org/project/experts4bit-qlora/)
 ≥ 0.11.0 exposes it as `enable_fast_train(model, dgrad=True)`.
