@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.7.1 — 2026-08-06
+
+Docs-only patch: the PyPI page for 0.7.0 froze a warning that has since been resolved
+by measurement, and the training work had no README presence at all.
+
+- **The dgrad layer-composed caveat is retired.** 0.7.0 shipped "layer-composed fidelity
+  is unmeasured — gate a real run on your own parity check." Measured same-day at 16 and
+  48 layers from the published wheels (experts4bit-qlora `bench/dgrad-gate/`): dgrad adds
+  nothing to the fused lane's composed gradient error (4.97e-2 → 4.99e-2 mean at 48
+  layers), an fp32-truth arm shows every lane on the composed bf16 noise floor (the fused
+  lane *closest* to truth at 16 layers), and a 20-step real-data trajectory gate passes at
+  a third of its band with dgrad at 2.87x the reference's step rate.
+- **sm_120 verified.** 66 kernel tests at the v0.7.0 tag pass on an RTX PRO 4500
+  Blackwell (capability 12.0 — the same arch as the RTX 5090); `_DGRAD_DEFAULT` tuned on
+  sm_86 holds there, every swept config bit-identical, and dgrad measures 67–103x over
+  the Python decode loop (vs 10–26x on sm_86).
+- **README documents the 0.7.0 training work** — `dgrad_4bit_grouped` in the entry-point
+  table, a training section with the measured numbers, and the opt-in's semantics.
+- **Attribution**: the comparison baseline in the 0.7.0 notes (`enable_batched_train`)
+  is @jiwoon-ahn's whole-stack-dequant approach from experts4bit-qlora#38; now credited.
+
+No code changes; the kernel is byte-identical to 0.7.0.
+
 ## 0.7.0 — 2026-08-06
 
 **Both per-expert Python loops in the training lane are gone.** They were the
