@@ -54,6 +54,11 @@ def _remote_header(url: str):
         try:
             return parse_header(buf)
         except NeedMoreBytes as e:
+            if len(buf) < want:
+                # The server returned everything it has and the header still
+                # does not parse: truncated/corrupt object. Growing the request
+                # cannot help — the local read_header has this same guard.
+                raise ValueError(f"truncated GGUF at {url} ({len(buf)} bytes)") from e
             want = max(e.minimum, want * 2)
 
 
