@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.8.0 — 2026-08-10
+
+**GGUF k-quant decode lane.** Reads released GGUF files and computes their bytes
+directly — never a re-quantization — so a llama.cpp-format checkpoint can be served
+from the exact weights its publisher shipped.
+
+- **`kernel/kquant_ref.py`** — pure-torch dequant for `Q2_K`/`Q3_K`/`Q4_K`/`Q5_K`/
+  `Q6_K`/`Q8_0` plus `F32`/`F16`/`BF16` passthrough, dispatched **by ggml type per
+  tensor**. That is what makes any publisher's file work through one table: a
+  "Q4_K_M" file is a mix (attention in Q4_K, some ffn in Q6_K, norms in F32), and
+  dynamic quants re-mix per tensor. Scope was set by parsing real released headers,
+  not filenames. IQ i-quants refuse explicitly rather than guess a codebook.
+- **`kernel/gguf_reader.py`** — GGUF v2/v3 header parse (metadata, tensor table,
+  absolute byte extents). Every length is bounds-checked before use and a truncated
+  header raises `NeedMoreBytes(minimum)` instead of guessing, so the same parser is
+  safe against a ranged prefix as against a local file.
+- **Oracle-adjudicated bit-exactness.** `kernel/test_kquant_ref.py` compares against
+  gguf-py (the llama.cpp project's own numpy implementation) with int32-view equality
+  — disagreement is STOP, not tolerance. A synthetic arm always runs; an env-gated arm
+  checks sha256-pinned tensors range-fetched from real released files by
+  `scripts/fetch_gguf_fixtures.py`.
+- Validated on real bytes at scale: 27 sampled tensors across two publishers' 30B
+  GGUFs (every quant type, layers 0 through 51) decode bit-exact and finite.
+
 ## 0.7.1 — 2026-08-06
 
 Docs-only patch: the PyPI page for 0.7.0 froze a warning that has since been resolved
