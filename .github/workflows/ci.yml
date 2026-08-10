@@ -55,6 +55,14 @@ jobs:
       - name: NVMe arena + bake contracts
         run: cd kernel && python -m pytest test_nvme_arena.py test_nvme_bake_nf4.py test_nvme_bake_experts.py -q
 
+      # GGUF k-quant lane: oracle adjudication vs gguf-py (installed here so
+      # the oracle arm RUNS in CI — importorskip must never silently green
+      # this suite). Real-byte fixture arm stays env-gated/off in CI.
+      - name: GGUF k-quant oracle
+        run: |
+          python -m pip install --quiet gguf
+          cd kernel && python -m pytest test_kquant_ref.py -q
+
       # Packaging + CI coverage. 0.3.0 shipped a CHANGELOG announcing two modules
       # that were not in py-modules and therefore not in the wheel. This also
       # asserts every kernel/test_*.py is named somewhere in THIS file -- the

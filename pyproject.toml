@@ -65,4 +65,6 @@ py-modules = [
     # non-test kernel/*.py is missing here.
     "mxfp4_residency", "nvme_residency",
     "nf4_qlora",
+    # The GGUF k-quant lane (Glimmer-era): reader + reference decoders.
+    "gguf_reader", "kquant_ref",
 ]
