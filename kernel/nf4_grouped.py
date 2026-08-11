@@ -29,6 +29,19 @@ import torch
 import triton
 import triton.language as tl
 
+#: ``tl.gather`` arrived in triton 3.3. Bind it ONCE here rather than naming it
+#: inside a kernel, because triton's JIT walks the whole kernel AST to build its
+#: cache key and calls ``getattr`` on every attribute it sees — including inside
+#: a ``tl.constexpr`` branch that codegen would prune. So merely *mentioning*
+#: ``tl.gather`` in the source raises AttributeError on triton < 3.3, even when
+#: the variant that uses it was never selected. That made the whole fused path
+#: unusable on triton 3.2, which is what torch 2.6 pins. Resolving the name to
+#: None here keeps the walker happy; the pruned branch never calls it.
+_TL_GATHER = getattr(tl, "gather", None)
+HAS_TL_GATHER = _TL_GATHER is not None
+#: Escape hatch for debugging the v5 loop; never for real results.
+_ALLOW_UNVERIFIED_V5 = os.environ.get("GNF4_ALLOW_UNVERIFIED_V5") == "1"
+
 # The NF4 codebook (QLoRA appendix / bitsandbytes source). Code 7 decodes to
 # exactly 0.0 — the zero-decode byte 0x77 the e4b mask fix relies on. The
 # property suite asserts EXACT agreement (values and nibble order) against the
@@ -161,7 +174,7 @@ def _gemm_nf4_grouped(
         if VARIANT == 1:
             # register-resident codebook: shuffle-gather, no per-element L1 LDG
             w = tl.reshape(
-                tl.gather(lut_reg, tl.reshape(nib, [BLOCK_N * BLOCK_K]), 0),
+                _TL_GATHER(lut_reg, tl.reshape(nib, [BLOCK_N * BLOCK_K]), 0),
                 [BLOCK_N, BLOCK_K],
             )
         else:
@@ -537,7 +550,7 @@ def gemm_4bit_grouped(
     if block_m is None:
         block_m = _prefill_block_m(max(sizes))
     if prefill_variant is None:
-        prefill_variant = 1 if hasattr(tl, "gather") else 0
+        prefill_variant = 1 if HAS_TL_GATHER else 0
     if prefill_config is not None:
         block_n, warps, stages = prefill_config
     elif prefill_variant == 1:
@@ -558,8 +571,28 @@ def gemm_4bit_grouped(
         block_n = 128
         warps = 8 if block_m >= 128 else 4
         stages = 3 if block_m >= 128 else 2
-    if prefill_variant == 1 and not hasattr(tl, "gather"):
+    if prefill_variant == 1 and not HAS_TL_GATHER:
         raise RuntimeError("prefill_variant=1 needs triton with tl.gather")
+    if prefill_variant == 0 and not HAS_TL_GATHER and not _ALLOW_UNVERIFIED_V5:
+        # The v5 loop is the automatic fallback on triton < 3.3, and it is
+        # WRONG there. Measured on triton 3.2.0 against an fp32 ground truth
+        # built from the pre-quantization weights: the NF4 baseline lands at
+        # 1.7e-01 relative (ordinary 4-bit error) while this path lands at
+        # 1.7e+00 — not a rounding difference, a different answer.
+        #
+        # It went unnoticed because CI runs on triton >= 3.3, where variant 1
+        # is always selected, so nothing ever exercised this loop; and on older
+        # triton the kernel failed to compile at all, so the wrong numbers were
+        # masked by a crash. Refusing here keeps that property: a user on old
+        # triton still cannot get silently wrong logits, but now they get a
+        # sentence explaining why instead of an AttributeError from the JIT.
+        raise RuntimeError(
+            "grouped-nf4 prefill: this triton (%s) lacks tl.gather, and the v5 "
+            "fallback loop is numerically WRONG here (measured 1.7e+00 relative "
+            "vs fp32 truth, against 1.7e-01 for the NF4 reference). Upgrade to "
+            "triton >= 3.3, or set GNF4_ALLOW_UNVERIFIED_V5=1 to run it anyway "
+            "for debugging — do not use it to produce results."
+            % getattr(triton, "__version__", "?"))
     block_k = BLOCKSIZE * prefill_groups
     if prefill_groups != 1:
         assert prefill_groups == 2 and K % block_k == 0, (prefill_groups, K)
