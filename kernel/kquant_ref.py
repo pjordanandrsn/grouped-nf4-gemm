@@ -203,15 +203,32 @@ def dequantize_ggml(ggml_type: int, data: bytes | torch.Tensor,
     total = 1
     for s in shape:
         total *= s
+    name = GGML_TYPE_NAMES[ggml_type]
+    # These are ValueErrors, not asserts. A caller here is holding bytes off
+    # disk — a truncated download, a wrong tensor offset, a mis-parsed header —
+    # so the check has to survive `python -O` (which strips asserts) and has to
+    # say what actually disagrees. The previous bare asserts raised
+    # `AssertionError: (288, 1, 144)`, which tells the user nothing.
     if fn is None:
         dt = {GGML_F32: torch.float32, GGML_F16: torch.float16,
               GGML_BF16: torch.bfloat16}[ggml_type]
         out = buf.view(dt).float()
-        assert out.numel() == total, (out.numel(), shape)
+        if out.numel() != total:
+            raise ValueError(
+                f"{name}: data holds {out.numel()} values but shape {tuple(shape)} "
+                f"needs {total} — the buffer and the header disagree")
         return out.reshape(shape)
     ne0 = shape[-1] if shape else total
-    assert ne0 % elems == 0, f"ne0 {ne0} not a multiple of {elems} for {GGML_TYPE_NAMES[ggml_type]}"
+    if ne0 % elems:
+        raise ValueError(
+            f"{name}: last dim {ne0} is not a multiple of the {elems}-value "
+            f"block size — a k-quant row cannot end mid-block")
     n_blocks = total // elems
-    assert buf.numel() == n_blocks * bbytes, (buf.numel(), n_blocks, bbytes)
+    want = n_blocks * bbytes
+    if buf.numel() != want:
+        raise ValueError(
+            f"{name}: shape {tuple(shape)} implies {n_blocks} blocks = {want} "
+            f"bytes, but got {buf.numel()} — likely a truncated read or a wrong "
+            f"tensor offset")
     out = fn(buf.reshape(n_blocks, bbytes))
     return out.reshape(shape)

@@ -99,3 +99,29 @@ def test_real_released_bytes_decode_and_match_oracle():
                 f"{e['tensor']} ({e['type_name']}): real-byte mismatch — STOP"
         assert torch.isfinite(ours).all(), \
             f"{e['tensor']}: released bytes decoded to non-finite values"
+
+
+# --- malformed-input guards -------------------------------------------------
+# These decode bytes that came off disk: a truncated download, a wrong tensor
+# offset, a mis-parsed header. The guards were bare `assert`s, which (a) print
+# nothing useful and (b) VANISH under `python -O`. They are ValueErrors now, so
+# they survive optimization and name what disagrees.
+
+@pytest.mark.parametrize("data, shape, expect", [
+    (bytes(288), (256,), "288"),          # 2 blocks of data, shape claims 1
+    (bytes(143), (256,), "143"),          # one byte short of a block
+    (bytes(288), (2, 128), "not a multiple"),   # row ends mid-block
+])
+def test_malformed_kquant_buffers_raise_a_useful_valueerror(data, shape, expect):
+    import kquant_ref as K
+    with pytest.raises(ValueError) as ei:
+        K.dequantize_ggml(12, data, shape)      # 12 = Q4_K
+    msg = str(ei.value)
+    assert "Q4_K" in msg, "the error must name the quant type"
+    assert expect in msg, f"expected {expect!r} in: {msg}"
+
+
+def test_unquantized_types_also_validate_their_length():
+    import kquant_ref as K
+    with pytest.raises(ValueError, match="disagree"):
+        K.dequantize_ggml(0, bytes(16), (8,))   # 0 = F32: 16B = 4 values, not 8
