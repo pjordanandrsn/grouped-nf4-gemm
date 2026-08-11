@@ -105,6 +105,38 @@ def test_every_test_file_is_actually_RUN_by_ci():
     )
 
 
+def test_conftest_knows_every_interpreter_mode_test_file():
+    """conftest's interpreter-file list must match the files that really set it.
+
+    ``TRITON_INTERPRET`` latches process-globally when triton is first
+    imported, so a file that sets it at module scope poisons every compiled
+    test collected alongside it -- on a device that is a process ABORT, not a
+    failure. conftest refuses that mix, but only for the files it knows about.
+
+    That list is hardcoded, so a third interpreter-mode file added later would
+    be silently unguarded and the fatal crash would come back. This diffs the
+    list against the files that actually assign the variable at import time.
+    """
+    setters = set()
+    for p in sorted((_ROOT / "kernel").glob("test_*.py")):
+        for line in p.read_text().splitlines():
+            # Column 0 == module scope, which is what latches before any test
+            # runs. An indented monkeypatch.delenv inside a test is scoped and
+            # harmless, and a docstring mention is not an assignment.
+            if re.match(r"""os\.environ(\[|\.setdefault\()\s*["']TRITON_INTERPRET["']""", line):
+                setters.add(p.name)
+                break
+
+    conftest = (_ROOT / "kernel" / "conftest.py").read_text()
+    declared = set(re.findall(r"""["'](test_\w+\.py)["']""", conftest))
+    assert setters == declared, (
+        f"conftest guards {sorted(declared)} but the files that actually set "
+        f"TRITON_INTERPRET at import are {sorted(setters)}. Update "
+        "_INTERP_FILES in kernel/conftest.py -- an unguarded interpreter-mode "
+        "file crashes the whole pytest process on a GPU box."
+    )
+
+
 def test_the_modules_0_3_0_announced_are_packaged():
     """Named explicitly, because these are the ones that got missed."""
     listed = _listed_modules()
