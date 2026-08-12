@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.8.3 — 2026-08-12
+
+**Test isolation enforced, not just documented.**
+
+- **`pytest kernel/` on a GPU box now refuses up front instead of aborting mid-run.**
+  `TRITON_INTERPRET` is read when triton is first imported and latches for the life of
+  the process. Two test files set it at module scope, so collecting one flipped the
+  global knob and the process then died with `Cannot call @triton.jit'd outside of the
+  scope of a kernel` — a stack dump, not a test failure. A fixture cannot fix it (triton
+  has already read the variable before any test runs), so `conftest.py` rejects the mixed
+  run and prints the split commands. The constraint was documented; nothing enforced it.
+
+  Gated on a CUDA device actually being present. The crash needs a test that launches a
+  real kernel, and with no device those skip, so mixing is harmless — which is exactly
+  CI's "CPU-reachable suites" step, running `test_mxfp4_interp.py` alongside eight
+  compiled-path files and passing. Refusing on filenames alone would have broken that
+  green step.
+
+## 0.8.2 — 2026-08-11
+
+Backfilled: this entry was missing when 0.8.2 shipped.
+
+- **Malformed k-quant input raises `ValueError` with diagnostics rather than tripping a
+  bare `assert`.** Asserts vanish under `python -O`, so on-disk validation stated as an
+  assert is validation that silently disappears in exactly the deployment that strips it.
+
+## 0.8.1 — 2026-08-11
+
+Backfilled: this entry was missing when 0.8.1 shipped.
+
+- **The fused path is refused below triton 3.4** — it crashed there, and the obvious
+  guard then made it silently *wrong* rather than absent. Both halves fixed (#45).
+
 ## 0.8.0 — 2026-08-10
 
 **GGUF k-quant decode lane.** Reads released GGUF files and computes their bytes
