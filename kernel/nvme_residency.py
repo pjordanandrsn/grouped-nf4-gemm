@@ -266,6 +266,82 @@ _ST_TO_TORCH = {
 }
 
 
+def segment_geometry(index: dict, suffix: str):
+    """``(torch_dtype, shape_per_expert, seg_off, length)`` for one segment.
+
+    Pulled out of :func:`segment_tensor` so a caller can size a destination
+    buffer *before* any row is resident — a staging path has to allocate its
+    landing tensor once, at setup, not per read.
+    """
+    import torch
+
+    geo = next((g for g in index["segments"] if g["suffix"] == suffix), None)
+    if geo is None:
+        raise KeyError(f"segment {suffix!r} not in this arena "
+                       f"(have {[g['suffix'] for g in index['segments']]})")
+    return (getattr(torch, _ST_TO_TORCH[geo["dtype"]]),
+            tuple(geo["shape_per_expert"]), geo["seg_off"], geo["length"])
+
+
+def segment_into(tier: "ColdTier", index: dict, layer: int, experts,
+                 suffix: str, out, *, rows=None, non_blocking: bool = False):
+    """Fill ``out`` with one segment's bytes for ``experts``, into storage the
+    CALLER owns. Returns ``out``.
+
+    Same bytes as :func:`segment_tensor`, and the same residency side effect —
+    the difference is who owns the destination, which is what makes this usable
+    on a staging path. ``segment_tensor`` allocates a fresh pageable tensor per
+    call, and a pageable source silently downgrades ``non_blocking=True`` to a
+    synchronous copy; a caller holding one reusable buffer (or copying straight
+    to the device) avoids both.
+
+    When the tier is pinned this is a genuinely zero-bounce path: ``ColdTier``
+    already lands rows in pinned memory, so the segment is copied out of the
+    pinned slot itself — disk -> pinned slot -> ``out``, with no intermediate
+    host allocation. ``segment_tensor`` cannot do that: ``torch.frombuffer``
+    needs a writable buffer, so it copies through a ``bytearray`` first.
+    Unpinned tiers keep that fallback, correct but with the extra copy.
+
+    ``out`` must be contiguous and shaped ``[R, *shape_per_expert]`` at the
+    segment's own dtype, where ``R == len(experts)``; it may live on any device.
+    ``rows`` restricts the write to those row indices of ``out`` (same length and
+    order as ``experts``), which lets a caller fill only the routed rows of a
+    full-shaped ``[E, ...]`` destination and leave the rest untouched.
+
+    Bytes are moved as ``uint8``, so this is bit-preserving by construction —
+    there is no dtype reinterpretation step that could disagree with
+    ``segment_tensor``'s. Any deliberate cast is the caller's, applied after.
+    """
+    import torch
+
+    dt, shape, off, ln = segment_geometry(index, suffix)
+    experts = [int(e) for e in experts]
+    dst_rows = list(range(len(experts))) if rows is None else [int(r) for r in rows]
+    if len(dst_rows) != len(experts):
+        raise ValueError(f"rows has {len(dst_rows)} entries for {len(experts)} experts")
+    if out.dtype != dt:
+        raise TypeError(f"out has dtype {out.dtype} but segment {suffix!r} is {dt}")
+    if tuple(out.shape[1:]) != shape:
+        raise ValueError(f"out is {tuple(out.shape)}; segment {suffix!r} needs "
+                         f"[R, {', '.join(str(s) for s in shape)}]")
+    if not out.is_contiguous():
+        raise ValueError("out must be contiguous — rows are filled as flat byte runs")
+
+    slots = tier.ensure(layer, experts)
+    pinned = tier.pinned_tensor() if tier.pinned else None
+    for r, e, slot in zip(dst_rows, experts, slots):
+        # Reinterpret the destination row as bytes. `out` is contiguous, so each
+        # row is a flat byte run of exactly `ln` bytes and the copy is a memcpy
+        # (or one H2D) regardless of the segment's logical dtype.
+        dv = out[r].reshape(-1).view(torch.uint8)
+        if pinned is not None:
+            dv.copy_(pinned[slot, off:off + ln], non_blocking=non_blocking)
+        else:
+            mv = tier.row(layer, e)[off:off + ln]
+            dv.copy_(torch.frombuffer(bytearray(mv), dtype=torch.uint8))
+    return out
+
+
 def segment_tensor(tier: "ColdTier", index: dict, layer: int, experts,
                    suffix: str, *, cast=None):
     """Reconstruct one arena segment across `experts` as a ``[R, *shape]`` tensor.
