@@ -1,5 +1,68 @@
 # Changelog
 
+## 0.9.0 — 2026-08-12
+
+**The arena grew a staging seam: `segment_into` fills a destination the caller owns.**
+
+- **`nvme_residency.segment_into(tier, index, layer, experts, suffix, out, rows=…, non_blocking=…)`.**
+  `segment_tensor` is the *serving* seam and allocates its own `[R, *shape]` result,
+  which a staging path cannot use: staging holds one reusable buffer (or writes
+  straight to the device) and fills only the routed rows of a full-shaped
+  `[E, …]` destination. A pageable result is also a quiet correctness trap —
+  copying from pageable memory silently downgrades `non_blocking=True` to a
+  synchronous copy, so a caller believes it overlapped a transfer it did not.
+
+  When the tier is pinned this is genuinely zero-bounce. `ColdTier` already lands
+  rows in pinned memory, so the segment is read out of the pinned slot itself:
+  disk → slot → `out`, with no intermediate host allocation. `segment_tensor`
+  cannot do that at all — `torch.frombuffer` needs a writable buffer, so it copies
+  through a `bytearray` first. Unpinned tiers keep that fallback, correct but with
+  the extra copy.
+
+  Bytes move as `uint8`, so bit-identity holds by construction rather than through
+  a dtype-reinterpretation step that could disagree with `segment_tensor`'s.
+
+- **`nvme_residency.segment_geometry(index, suffix)`** — `(dtype, shape_per_expert,
+  seg_off, length)` without touching the tier, so a caller can size its landing
+  buffer at setup rather than after the first row is resident.
+
+- **Destinations that cannot be filled correctly are refused, not mangled.** A
+  mismatched dtype reinterprets the bytes, a wrong trailing shape shifts every
+  row, and a non-contiguous `out` makes `reshape(-1)` a copy that is silently
+  discarded. Each raises with the mismatch named.
+
+- **13 tests, wired into CI's NVMe step.** `test_packaging_covers_kernel` caught
+  that the new file would otherwise have run nowhere — the guard working as
+  designed. The pinned branch is exercised against a stand-in tier whose
+  `pinned_tensor()` is an ordinary CPU tensor, because the `[slot, off:off+len]`
+  arithmetic is where a skew hides and both a wrong stride and a dropped segment
+  offset produce plausibly-shaped output. Two mutations confirmed the suite is
+  armed: dropping the segment offset on the pinned path, and ignoring `rows=`.
+
+  A real pinned `ColdTier` needs CUDA and is **not** exercised on CPU CI.
+
+Consumer: `experts4bit-qlora`'s arena-backed training path
+(`enable_nvme_train_residency`) stages every layer through this.
+
+**Also, CI-side — no effect on the published wheel:**
+
+- **The README link check stopped calling throttling a dead link.** It opened a
+  fresh TLS connection for each of ~35 links in a tight loop and GitHub's edge
+  dropped some of that churn, so the step failed on load — SSL handshake timeouts
+  here, and on `experts4bit-qlora` a run reporting 28 of 28 links dead on a tree
+  where every path existed. Established by measurement, not assumption: a URL that
+  failed four `urlopen` attempts in a row answered 200 three times in a row under
+  `curl`. One pooled keep-alive connection per host fixes it — 35/35 in 16 s.
+  Retry is a backstop, scoped to answers that are not verdicts: **404 and 403 are
+  never retried into a pass**, because a gate that turns dead links green is worse
+  than one that is merely flaky.
+- **The link check no longer forwards `Authorization` across origins.** Replacing
+  `urlopen` with a hand-rolled `http.client` loop silently dropped its cross-host
+  header stripping, and GitHub 302s assets to `*.githubusercontent.com` and object
+  storage — so the Actions token would have followed. Same-origin only now (scheme
+  **and** host; an `http` downgrade counts as foreign). Caught by Cursor Bugbot on
+  #47.
+
 ## 0.8.3 — 2026-08-12
 
 **Test isolation enforced, not just documented.**
