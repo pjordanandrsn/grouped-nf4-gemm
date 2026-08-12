@@ -73,7 +73,7 @@ jobs:
         run: cd kernel && python -m pytest test_arena_moe_patch.py test_k3_oracle.py test_moonshot_gather.py test_mxfp4_arena_layout.py test_mxfp4_oracle.py test_mxfp4_provenance.py test_group_tiles_readonly.py test_mxfp4_interp.py test_mxfp4_v4.py -q
 
       - name: packaging allowlist + test-wiring guard
-        run: cd kernel && python -m pytest test_packaging_covers_kernel.py -q
+        run: cd kernel && python -m pytest test_packaging_covers_kernel.py test_check_readme_links.py -q
 
   wheel-smoke:
     # Built-artifact gate: the README's promised import surface must equal the
@@ -101,6 +101,11 @@ jobs:
           cp scripts/wheel_smoke.py /tmp/
           cd /tmp && ./venv/bin/python wheel_smoke.py
       - name: README link check (tag mapped to this tree pre-release)
+        env:
+          # ~40 unauthenticated HEADs from a shared Actions IP get throttled. The
+          # script reuses one connection per host (the actual fix) and retries
+          # transient answers only — never a 404.
+          GITHUB_TOKEN: ${{ github.token }}
         # map to the PR head / pushed SHA, not main — a PR that ADDS a
         # README-linked file must validate against its own tree (Bugbot,
         # e4b PR #31; same job pattern here).
