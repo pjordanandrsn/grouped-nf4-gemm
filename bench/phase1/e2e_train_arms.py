@@ -316,10 +316,24 @@ def main():
     # than no check. Record it so a green integrity result can be read against
     # how much it actually covered.
     vacuous = nbytes < (0.25 * 2**30)
-    print("frozen tensors under check: %d (%.2f GiB)%s"
-          % (len(frozen_before), nbytes / 2**30,
-             "  !! COVERAGE TOO SMALL — integrity result is near-vacuous"
-             if vacuous else ""), flush=True)
+    # Under offload the only uint8 expert tensors resident are e4b's per-layer
+    # STAGING buffers, reused as layers stream in and out -- their contents
+    # change every step BY DESIGN. Hashing them reports "frozen bytes CHANGED"
+    # for every arm including `reference` against itself, which is a false
+    # positive about the instrument, not a finding about the arms. Measured:
+    # offload=1 hashes 32 tensors / 0.00 GiB and flags all 5 arms; offload=0
+    # hashes 3.00 GiB of the same model and flags none. So the integrity claim
+    # is carried by the resident cell only, and under offload it is recorded as
+    # NOT APPLICABLE rather than as a pass or a failure.
+    integrity_applicable = bool(a.offload) is False and not vacuous
+    if not integrity_applicable:
+        print("frozen-storage check NOT APPLICABLE under offload=%d (%d tensors, "
+              "%.2f GiB — these are streaming staging buffers, not frozen "
+              "storage); the resident cell carries this claim"
+              % (a.offload, len(frozen_before), nbytes / 2**30), flush=True)
+    else:
+        print("frozen tensors under check: %d (%.2f GiB)"
+              % (len(frozen_before), nbytes / 2**30), flush=True)
 
     # `reference` runs FIRST and LAST. The pair brackets the whole sweep, so its
     # ratio is drift + noise; every other arm's margin is read against it.
@@ -340,7 +354,8 @@ def main():
                    offload=bool(a.offload), env=env,
                    frozen_tensors_hashed=len(frozen_before),
                    frozen_bytes_hashed=nbytes,
-                   frozen_check_vacuous=bool(vacuous), cells={})
+                   frozen_check_vacuous=bool(vacuous),
+                   integrity_applicable=integrity_applicable, cells={})
     dest = Path(a.out)
     dest.mkdir(parents=True, exist_ok=True)
     art = dest / f"e2e_{a.tag}.json"
