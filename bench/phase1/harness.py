@@ -269,8 +269,31 @@ def bk_dequant_grouped_mm(stack: QuantStack, groups):
 
 
 def bk_unsloth(stack, groups):  # pragma: no cover - optional dependency
-    """Dequant + the grouped-GEMM kernel unsloth's MoE backend uses. Probes the
-    known entry points at runtime; the receipt records which one actually ran."""
+    """Dequant + a grouped-GEMM of the CLASS unsloth's MoE backend rides.
+
+    ⚠️ This backend has never executed unsloth's own kernel, and cannot. Two
+    independent reasons, either one sufficient — both verified on real silicon
+    by ``validate_unsloth_native.py`` G1, not argued from source:
+
+      1. It tries tgale96's ``grouped_gemm.ops.gmm`` FIRST and returns on
+         success. Wherever that package is installed — as it was in the env
+         that banked the v6 comparator receipts — the unsloth probes below are
+         never reached, and ``IMPL_NOTE`` records ``grouped_gemm.ops.gmm``.
+      2. Where it IS reached, ``getattr(unsloth.kernels.moe, "grouped_gemm")``
+         yields the SUBMODULE, not a callable, so the call raises
+         ``TypeError: 'module' object is not callable``. Observed verbatim.
+
+    (An earlier note here blamed the empty ``unsloth/kernels/moe/__init__.py``
+    for making that getattr return None. The file really is 0 bytes, but the
+    inference was wrong: python binds a submodule onto its parent package on
+    import regardless of __init__ contents. Conclusion unchanged, mechanism
+    corrected in place.)
+
+    So this arm is a fair proxy for the execution CLASS, and was always
+    reported as one — but it is not a head-to-head against unsloth.
+
+    For unsloth's actual kernel use ``unsloth_native`` / ``unsloth_native_bf16``
+    below. Kept unchanged so the v6 comparator receipts stay reproducible."""
     import importlib
 
     a_cat, b, sizes = _grouped_inputs(stack, groups)
@@ -314,6 +337,127 @@ def bk_unsloth(stack, groups):  # pragma: no cover - optional dependency
         if probes
         else "unsloth/grouped_gemm not installed"
     )
+
+
+_UNSLOTH_NATIVE_ENTRY = "unsloth.kernels.moe.grouped_gemm.interface.grouped_gemm"
+
+
+def _unsloth_native_fn():
+    """Unsloth's OWN Triton grouped GEMM (fwd + dX/dW autograd Function).
+
+    Imported by explicit module path, not getattr off the package: both
+    ``unsloth/kernels/moe/__init__.py`` and ``.../grouped_gemm/__init__.py`` are
+    empty upstream, which is exactly what made the older ``unsloth`` backend's
+    probe dead."""
+    import importlib
+
+    if importlib.util.find_spec("unsloth") is None:
+        raise ImportError("unsloth not installed")
+    mod = importlib.import_module("unsloth.kernels.moe.grouped_gemm.interface")
+    return mod.grouped_gemm, mod
+
+
+def _unsloth_native_call(a_cat, w_stack, sizes):
+    """One call into unsloth's kernel.
+
+    ``w_stack`` is [G, N, K] — unsloth's documented expert-stack layout, which
+    is also the layout gnf4's fused stack already holds, so NEITHER side pays a
+    transpose to meet the other. (``_grouped_inputs`` builds [G, K, N] for the
+    torch/tgale96 grouped backends; that transpose is their API's requirement,
+    not unsloth's.)
+
+    Two upstream contract details, both asserted/executed unconditionally in
+    ``interface.py`` and neither documented in the signature:
+      * ``m_sizes`` must be a CUDA tensor (``assert m_sizes.device.type ==
+        "cuda"``), not the CPU tensor tgale96's ``gmm`` takes.
+      * ``gather_indices`` is ``.view(-1)``'d unconditionally, so it must be a
+        real tensor even when both permutes are off, where it is otherwise
+        unused. Passing the documented default of None is an AttributeError.
+
+    ``autotune=True`` hands unsloth's OWN autotuner the choice of config per
+    shape — deliberately their strongest setting, against gnf4's shipped
+    default. It also makes ``kernel_config_fwd`` unnecessary, which the
+    non-autotune path asserts on. ``topk`` is inert here: with both permutes
+    off, upstream sets ``total_tokens = X.shape[0]`` and uses topk only for a
+    ``num_tokens`` it does not consult."""
+    gg, _ = _unsloth_native_fn()
+    m_sizes = torch.tensor(sizes, device=a_cat.device, dtype=torch.int32)
+    gather_indices = torch.arange(
+        a_cat.shape[0], device=a_cat.device, dtype=torch.int32
+    )
+    return gg(
+        X=a_cat,
+        W=w_stack,
+        m_sizes=m_sizes,
+        topk=1,
+        gather_indices=gather_indices,
+        permute_x=False,
+        permute_y=False,
+        autotune=True,
+    )
+
+
+def bk_unsloth_native(stack, groups):  # pragma: no cover - optional dependency
+    """Unsloth's own kernel in the 4-BIT-STORAGE regime — the apples-to-apples
+    cell against the fused kernel.
+
+    The dequant sits INSIDE the timed region because 4-bit storage genuinely
+    requires it once per forward per layer: unsloth's GEMM consumes bf16
+    weights, so a 4-bit checkpoint must be materialized before it can run. That
+    is a real cost of serving this regime with a bf16 kernel, not a handicap
+    imposed by the harness — and it is the same cost ``bk_dequant_grouped`` and
+    ``bk_unsloth`` already pay."""
+    a_cat = torch.cat([a for _, a in groups])
+    w_stack = torch.stack([stack.dequant_bf16(e) for e, _ in groups])
+    sizes = [a.shape[0] for _, a in groups]
+    out = _unsloth_native_call(a_cat, w_stack, sizes)
+    IMPL_NOTE["unsloth_native"] = f"{_UNSLOTH_NATIVE_ENTRY} (4-bit storage, dequant timed in)"
+    return _split(out, sizes)
+
+
+def bk_unsloth_native_bf16(stack, groups):  # pragma: no cover - optional dependency
+    """Unsloth's own kernel in ITS OWN regime: bf16-RESIDENT weights, nothing to
+    dequantize, nothing in the timed path but their kernel.
+
+    gnf4 does not compete here at all — with no 4-bit storage there is no
+    round-trip to skip, and this is the job unsloth's kernel is built for. The
+    arm exists so the 4-bit cell above cannot be misread as a claim about the
+    regime they actually target: this is their CEILING, and it belongs in the
+    same table.
+
+    Strongest-self treatment, symmetric with the fused op's cached assembly
+    (see ``bk_fused_nf4``): the resident stack is materialized once per groups
+    object and cached, so the arm is charged only its genuine kernel launch."""
+    cache = getattr(stack, "_unsloth_resident", None)
+    if cache is None or cache[0] != id(groups):
+        a_cat = torch.cat([a for _, a in groups])
+        w_stack = torch.stack([stack.dequant_bf16(e) for e, _ in groups])
+        sizes = [a.shape[0] for _, a in groups]
+        stack._unsloth_resident = (id(groups), a_cat, w_stack, sizes)
+    _, a_cat, w_stack, sizes = stack._unsloth_resident
+    out = _unsloth_native_call(a_cat, w_stack, sizes)
+    IMPL_NOTE["unsloth_native_bf16"] = f"{_UNSLOTH_NATIVE_ENTRY} (bf16-resident, cached stack)"
+    return _split(out, sizes)
+
+
+def unsloth_native_fingerprint():
+    """Provenance for the receipt: which unsloth is installed, and whether its
+    TMA path is actually live on this device.
+
+    TMA gates on ``torch.cuda.get_device_capability()[0] >= 9`` AND a triton
+    carrying the TMA API. On sm_86/sm_89 it is OFF, so a comparison run only on
+    Ampere/Ada would benchmark unsloth's kernel with its fast path compiled
+    out. Recorded per-run so no reader has to take that on trust."""
+    import importlib
+
+    _, mod = _unsloth_native_fn()
+    unsloth = importlib.import_module("unsloth")
+    return {
+        "entry": _UNSLOTH_NATIVE_ENTRY,
+        "unsloth_version": getattr(unsloth, "__version__", "unknown"),
+        "supports_tma": bool(mod.supports_tma()),
+        "device_capability": list(torch.cuda.get_device_capability()),
+    }
 
 
 def bk_marlin(stack, groups):  # pragma: no cover - optional dependency
@@ -563,6 +707,15 @@ BACKENDS = {
     "gemv_4bit": bk_gemv4bit,
     "dequant_grouped_mm": bk_dequant_grouped_mm,
     "unsloth": bk_unsloth,
+    "unsloth_native": bk_unsloth_native,
+    "unsloth_native_bf16": bk_unsloth_native_bf16,
+    # Q2's self-pair validator: the SAME function under a second key, so the
+    # backend loop times the fused kernel twice within one cell. Its ratio
+    # against `fused_nf4` must read ~1.000x; anything outside [0.97, 1.03] means
+    # the box drifted mid-cell and every ratio measured beside it is noise. An
+    # unpaired sweep on a shared box once reported the default config as 1.283x
+    # faster than itself, which is what this key exists to catch.
+    "fused_nf4_selfpair": bk_fused_nf4,
     "marlin": bk_marlin,
     "fused_nf4": bk_fused_nf4,
     "fused_nf4_v1cfg": bk_fused_nf4_v1cfg,
@@ -703,6 +856,14 @@ def main():
         ],
     )
     ap.add_argument("--iters", type=int, default=100)
+    ap.add_argument(
+        "--paired-base",
+        default=None,
+        help="backend re-timed immediately before EVERY backend (including "
+        "itself, giving an adjacent self-pair). Writes base_ms_paired + "
+        "paired_ratio per cell. Roughly doubles timing cost; without it, "
+        "ratios are not paired in any meaningful sense.",
+    )
     ap.add_argument("--no-energy", action="store_true")
     ap.add_argument("--out", default=None)
     ap.add_argument(
@@ -780,6 +941,14 @@ def main():
     except Exception as e:  # pragma: no cover
         env["bitsandbytes"] = f"unavailable: {e}"
 
+    # Recorded unconditionally, not only when an unsloth backend is selected:
+    # whether their TMA path was live is a property of the RUN, and a reader
+    # comparing two receipts needs it present in both to see that it differed.
+    try:
+        env["unsloth_native"] = unsloth_native_fingerprint()
+    except Exception as e:  # pragma: no cover - optional dependency
+        env["unsloth_native"] = f"unavailable: {e}"
+
     cells = []
     for spec in specs:
         print(
@@ -848,9 +1017,31 @@ def main():
                     cell["fidelity_ref"] = ref
                     if name in IMPL_NOTE:
                         cell["impl"] = IMPL_NOTE[name]
+                    # TRUE PAIRING: re-time the base immediately before every
+                    # comparator and take the ratio per pair, so box drift
+                    # cancels inside each pair instead of accumulating across a
+                    # cell. Timing all backends once and dividing against one
+                    # shared base timing is NOT pairing — it silently charges
+                    # every comparator whatever the box did since the base ran.
+                    #
+                    # Applied uniformly, including when `name` IS the base: that
+                    # row becomes a genuine ADJACENT base-vs-base self-pair,
+                    # which is what a [0.97,1.03] validity band assumes. The
+                    # previous bracketing self-pair spanned a whole cell and
+                    # systematically read ~4% on sub-0.2 ms shapes.
+                    if args.paired_base:
+                        cell["base_ms_paired"] = time_backend(
+                            BACKENDS[args.paired_base], stack, groups,
+                            args.iters, device,
+                        )
                     cell["ms_median"] = time_backend(
                         fn, stack, groups, args.iters, device
                     )
+                    if cell.get("base_ms_paired"):
+                        # >1 == the base (fused) is faster than this backend.
+                        cell["paired_ratio"] = (
+                            cell["ms_median"] / cell["base_ms_paired"]
+                        )
                     cell["tok_per_s"] = tokens / (cell["ms_median"] / 1e3)
                     if not args.no_energy:
                         watts, j_call, method, n = energy_window(

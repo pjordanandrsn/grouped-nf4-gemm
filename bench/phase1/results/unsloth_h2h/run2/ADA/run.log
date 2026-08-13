@@ -1,0 +1,287 @@
++ PY=
++ for c in python3.12 python3.11 python3 python
++ command -v python3.12
++ python3.12 -c 'import torch'
++ PY=python3.12
++ break
++ '[' -z python3.12 ']'
++ echo PY=python3.12
+PY=python3.12
++ python3.12 -c 'import torch;print('\''TORCH'\'',torch.__version__,torch.version.cuda)'
+TORCH 2.8.0+cu128 12.8
++ python3.12 -c 'import torch;print('\''GPU'\'',torch.cuda.get_device_name(0),torch.cuda.get_device_capability())'
+GPU NVIDIA RTX A5000 (8, 6)
++ command -v gcc
++ cd /root
++ rm -rf h2h
++ mkdir h2h
++ tar xzf /root/gnf4-h2h.tgz -C h2h
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+++ python3.12 -
++ TV=0.23.0
++ '[' -n 0.23.0 ']'
++ python3.12 -m pip install -q --no-cache-dir --index-url https://download.pytorch.org/whl/cu128 torchvision==0.23.0
++ tail -3
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+++ python3.12 -c 'import torch;v=torch.__version__.split('\''+'\'')[0].replace('\''.'\'','\'''\'');print(v[:3])'
++ TORCH_TAG=280
++ tail -8
++ python3.12 -m pip install -q --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu128 'unsloth[cu128-torch280]'
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+
+[notice] A new release of pip is available: 26.1.2 -> 26.2.1
+[notice] To update, run: python3.12 -m pip install --upgrade pip
++ python3.12 -m pip install -q --no-cache-dir bitsandbytes
++ tail -2
+[notice] A new release of pip is available: 26.1.2 -> 26.2.1
+[notice] To update, run: python3.12 -m pip install --upgrade pip
++ python3.12 -m pip install -q --no-cache-dir grouped_gemm
++ tail -2
+[notice] A new release of pip is available: 26.1.2 -> 26.2.1
+[notice] To update, run: python3.12 -m pip install --upgrade pip
++ python3.12 -c 'import grouped_gemm;print('\''PROXY_PKG ok'\'')'
++ tail -1
+PROXY_PKG ok
++ python3.12 -c 'import unsloth;print('\''UNSLOTH'\'',unsloth.__version__)'
++ tail -2
+🦥 Unsloth Zoo will now patch everything to make training faster!
+UNSLOTH 2026.8.15
++ python3.12 -
++ tail -3
+🦥 Unsloth: Will patch your computer to enable 2x faster free finetuning.
+🦥 Unsloth Zoo will now patch everything to make training faster!
+TMA_LIVE False
++ cd /root/h2h
++ python3.12 bench/phase1/validate_unsloth_native.py --models OLMoE --out /root/h2h-out/wiring_gate.json
++ tail -25
+  "b_rel_unsloth_4bit": 0.0022461272750481623,
+  "b_rel_unsloth_bf16": 0.0022461272750481623,
+  "b_rel_fused": 0.0016658579946689663,
+  "b_rel_dequant": 0.002246157148263326,
+  "G2_PASS": true,
+  "max_abs_delta_4bit_vs_bf16": 0.0,
+  "G3_PASS": true
+}
+{
+  "model": "allenai/OLMoE-1B-7B-0924",
+  "proj": "down",
+  "N": 2048,
+  "K": 1024,
+  "regime": "prefill_s2048",
+  "b_rel_unsloth_4bit": 0.002226872534972607,
+  "b_rel_unsloth_bf16": 0.002226872534972607,
+  "b_rel_fused": 0.0016980610545275117,
+  "b_rel_dequant": 0.002226872534972607,
+  "G2_PASS": true,
+  "max_abs_delta_4bit_vs_bf16": 0.0,
+  "G3_PASS": true
+}
+
+VERDICT: PASS
+wrote /root/h2h-out/wiring_gate.json
++ grep -q '"VERDICT": "PASS"' /root/h2h-out/wiring_gate.json
++ python3.12 -m pip install -q --no-cache-dir pytest
++ tail -2
+[notice] A new release of pip is available: 26.1.2 -> 26.2.1
+[notice] To update, run: python3.12 -m pip install --upgrade pip
++ python3.12 -m pytest -q kernel/test_nf4_grouped.py
++ tail -5
++ cat /root/h2h-out/suite.txt
+.................................................                        [100%]
+49 passed in 126.64s (0:02:06)
++ BACKENDS='fused_nf4 unsloth_native unsloth_native_bf16 unsloth dequant_grouped fused_nf4_selfpair'
++ REGIMES='decode_bs1 decode_m8 prefill_s2048'
++ for rep in 1 2 3
++ python3.12 bench/phase1/harness.py --regimes decode_bs1 decode_m8 prefill_s2048 --backends fused_nf4 unsloth_native unsloth_native_bf16 unsloth dequant_grouped fused_nf4_selfpair --paired-base fused_nf4 --iters 200 --out /root/h2h-out/h2h_rep1.json
++ tail -40
+    prefill_s2048 fused_nf4_selfpair    3.076 ms  5326619.7 tok/s  err 1.70e-03
+== openai/gpt-oss-120b gate_up N=5760 K=2880 E=128 k=4
+       decode_bs1 fused_nf4           0.357 ms    11206.7 tok/s  err 1.68e-03
+       decode_bs1 unsloth_native      1.166 ms     3431.0 tok/s  err 2.27e-03
+       decode_bs1 unsloth_native_bf16    0.373 ms    10715.4 tok/s  err 2.27e-03
+       decode_bs1 unsloth             2.385 ms     1677.0 tok/s  err 2.27e-03
+       decode_bs1 dequant_grouped     0.535 ms     7473.8 tok/s  err 2.27e-03
+       decode_bs1 fused_nf4_selfpair    0.338 ms    11847.8 tok/s  err 1.68e-03
+        decode_m8 fused_nf4           0.528 ms    60613.4 tok/s  err 1.70e-03
+        decode_m8 unsloth_native      1.062 ms    30121.8 tok/s  err 2.22e-03
+        decode_m8 unsloth_native_bf16    0.373 ms    85825.9 tok/s  err 2.22e-03
+        decode_m8 unsloth             2.421 ms    13218.1 tok/s  err 2.22e-03
+        decode_m8 dequant_grouped     0.542 ms    59082.5 tok/s  err 2.22e-03
+        decode_m8 fused_nf4_selfpair    0.525 ms    60979.3 tok/s  err 1.70e-03
+    prefill_s2048 fused_nf4          13.856 ms   591208.3 tok/s  err 1.70e-03
+    prefill_s2048 unsloth_native     28.869 ms   283768.9 tok/s  err 2.23e-03
+    prefill_s2048 unsloth_native_bf16    6.748 ms  1213980.7 tok/s  err 2.23e-03
+    prefill_s2048 unsloth            76.802 ms   106664.6 tok/s  err 2.23e-03
+    prefill_s2048 dequant_grouped    16.879 ms   485325.1 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4_selfpair   13.859 ms   591110.0 tok/s  err 1.70e-03
+== openai/gpt-oss-120b down N=2880 K=2880 E=128 k=4
+       decode_bs1 fused_nf4           0.261 ms    15336.5 tok/s  err 1.68e-03
+       decode_bs1 unsloth_native      0.761 ms     5256.0 tok/s  err 2.22e-03
+       decode_bs1 unsloth_native_bf16    0.250 ms    16003.1 tok/s  err 2.22e-03
+       decode_bs1 unsloth             1.232 ms     3246.8 tok/s  err 2.22e-03
+       decode_bs1 dequant_grouped     0.283 ms    14121.1 tok/s  err 2.22e-03
+       decode_bs1 fused_nf4_selfpair    0.258 ms    15528.9 tok/s  err 1.68e-03
+        decode_m8 fused_nf4           0.428 ms    74741.2 tok/s  err 1.70e-03
+        decode_m8 unsloth_native      0.637 ms    50227.3 tok/s  err 2.22e-03
+        decode_m8 unsloth_native_bf16    0.251 ms   127510.4 tok/s  err 2.22e-03
+        decode_m8 unsloth             1.248 ms    25642.7 tok/s  err 2.22e-03
+        decode_m8 dequant_grouped     0.286 ms   112082.5 tok/s  err 2.22e-03
+        decode_m8 fused_nf4_selfpair    0.432 ms    74002.8 tok/s  err 1.70e-03
+    prefill_s2048 fused_nf4           7.092 ms  1155101.7 tok/s  err 1.70e-03
+    prefill_s2048 unsloth_native     14.822 ms   552704.5 tok/s  err 2.23e-03
+    prefill_s2048 unsloth_native_bf16    3.512 ms  2332552.8 tok/s  err 2.23e-03
+    prefill_s2048 unsloth            39.299 ms   208454.9 tok/s  err 2.52e-03
+    prefill_s2048 dequant_grouped     9.272 ms   883477.6 tok/s  err 2.52e-03
+    prefill_s2048 fused_nf4_selfpair    7.147 ms  1146165.2 tok/s  err 1.70e-03
+receipts -> /root/h2h-out/h2h_rep1.json (144 cells)
++ echo 'REP1_DONE rc=0'
+REP1_DONE rc=0
++ sync
++ for rep in 1 2 3
++ python3.12 bench/phase1/harness.py --regimes decode_bs1 decode_m8 prefill_s2048 --backends fused_nf4 unsloth_native unsloth_native_bf16 unsloth dequant_grouped fused_nf4_selfpair --paired-base fused_nf4 --iters 200 --out /root/h2h-out/h2h_rep2.json
++ tail -40
+    prefill_s2048 fused_nf4_selfpair    3.080 ms  5318900.3 tok/s  err 1.70e-03
+== openai/gpt-oss-120b gate_up N=5760 K=2880 E=128 k=4
+       decode_bs1 fused_nf4           0.344 ms    11630.6 tok/s  err 1.68e-03
+       decode_bs1 unsloth_native      1.058 ms     3781.2 tok/s  err 2.27e-03
+       decode_bs1 unsloth_native_bf16    0.347 ms    11519.1 tok/s  err 2.27e-03
+       decode_bs1 unsloth             2.369 ms     1688.6 tok/s  err 2.27e-03
+       decode_bs1 dequant_grouped     0.533 ms     7507.3 tok/s  err 2.27e-03
+       decode_bs1 fused_nf4_selfpair    0.333 ms    12015.2 tok/s  err 1.68e-03
+        decode_m8 fused_nf4           0.526 ms    60890.2 tok/s  err 1.70e-03
+        decode_m8 unsloth_native      1.064 ms    30081.1 tok/s  err 2.22e-03
+        decode_m8 unsloth_native_bf16    0.348 ms    91890.6 tok/s  err 2.22e-03
+        decode_m8 unsloth             2.392 ms    13377.4 tok/s  err 2.22e-03
+        decode_m8 dequant_grouped     0.544 ms    58778.6 tok/s  err 2.22e-03
+        decode_m8 fused_nf4_selfpair    0.527 ms    60712.8 tok/s  err 1.70e-03
+    prefill_s2048 fused_nf4          13.740 ms   596214.7 tok/s  err 1.70e-03
+    prefill_s2048 unsloth_native     28.856 ms   283894.6 tok/s  err 2.23e-03
+    prefill_s2048 unsloth_native_bf16    6.762 ms  1211421.4 tok/s  err 2.23e-03
+    prefill_s2048 unsloth            76.794 ms   106675.6 tok/s  err 2.23e-03
+    prefill_s2048 dequant_grouped    16.885 ms   485178.4 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4_selfpair   13.918 ms   588570.7 tok/s  err 1.70e-03
+== openai/gpt-oss-120b down N=2880 K=2880 E=128 k=4
+       decode_bs1 fused_nf4           0.292 ms    13718.9 tok/s  err 1.68e-03
+       decode_bs1 unsloth_native      0.665 ms     6013.5 tok/s  err 2.22e-03
+       decode_bs1 unsloth_native_bf16    0.253 ms    15835.8 tok/s  err 2.22e-03
+       decode_bs1 unsloth             1.240 ms     3224.8 tok/s  err 2.22e-03
+       decode_bs1 dequant_grouped     0.283 ms    14156.3 tok/s  err 2.22e-03
+       decode_bs1 fused_nf4_selfpair    0.270 ms    14825.4 tok/s  err 1.68e-03
+        decode_m8 fused_nf4           0.445 ms    71981.3 tok/s  err 1.70e-03
+        decode_m8 unsloth_native      0.645 ms    49598.3 tok/s  err 2.22e-03
+        decode_m8 unsloth_native_bf16    0.257 ms   124672.7 tok/s  err 2.22e-03
+        decode_m8 unsloth             1.258 ms    25444.0 tok/s  err 2.22e-03
+        decode_m8 dequant_grouped     0.281 ms   113901.7 tok/s  err 2.22e-03
+        decode_m8 fused_nf4_selfpair    0.448 ms    71446.4 tok/s  err 1.70e-03
+    prefill_s2048 fused_nf4           7.105 ms  1152932.4 tok/s  err 1.70e-03
+    prefill_s2048 unsloth_native     14.776 ms   554430.0 tok/s  err 2.23e-03
+    prefill_s2048 unsloth_native_bf16    3.479 ms  2354564.3 tok/s  err 2.23e-03
+    prefill_s2048 unsloth            39.325 ms   208314.3 tok/s  err 2.52e-03
+    prefill_s2048 dequant_grouped     9.263 ms   884350.4 tok/s  err 2.52e-03
+    prefill_s2048 fused_nf4_selfpair    7.155 ms  1144899.1 tok/s  err 1.70e-03
+receipts -> /root/h2h-out/h2h_rep2.json (144 cells)
++ echo 'REP2_DONE rc=0'
+REP2_DONE rc=0
++ sync
++ for rep in 1 2 3
++ python3.12 bench/phase1/harness.py --regimes decode_bs1 decode_m8 prefill_s2048 --backends fused_nf4 unsloth_native unsloth_native_bf16 unsloth dequant_grouped fused_nf4_selfpair --paired-base fused_nf4 --iters 200 --out /root/h2h-out/h2h_rep3.json
++ tail -40
+    prefill_s2048 fused_nf4_selfpair    3.072 ms  5333361.2 tok/s  err 1.70e-03
+== openai/gpt-oss-120b gate_up N=5760 K=2880 E=128 k=4
+       decode_bs1 fused_nf4           0.346 ms    11572.5 tok/s  err 1.68e-03
+       decode_bs1 unsloth_native      1.056 ms     3787.2 tok/s  err 2.27e-03
+       decode_bs1 unsloth_native_bf16    0.345 ms    11581.0 tok/s  err 2.27e-03
+       decode_bs1 unsloth             2.391 ms     1672.8 tok/s  err 2.27e-03
+       decode_bs1 dequant_grouped     0.540 ms     7409.2 tok/s  err 2.27e-03
+       decode_bs1 fused_nf4_selfpair    0.333 ms    12025.6 tok/s  err 1.68e-03
+        decode_m8 fused_nf4           0.576 ms    55574.1 tok/s  err 1.70e-03
+        decode_m8 unsloth_native      1.108 ms    28876.7 tok/s  err 2.22e-03
+        decode_m8 unsloth_native_bf16    0.349 ms    91675.8 tok/s  err 2.22e-03
+        decode_m8 unsloth             2.397 ms    13352.6 tok/s  err 2.22e-03
+        decode_m8 dequant_grouped     0.544 ms    58780.3 tok/s  err 2.22e-03
+        decode_m8 fused_nf4_selfpair    0.541 ms    59120.9 tok/s  err 1.70e-03
+    prefill_s2048 fused_nf4          13.839 ms   591956.1 tok/s  err 1.70e-03
+    prefill_s2048 unsloth_native     28.857 ms   283882.4 tok/s  err 2.23e-03
+    prefill_s2048 unsloth_native_bf16    6.746 ms  1214357.9 tok/s  err 2.23e-03
+    prefill_s2048 unsloth            76.797 ms   106670.7 tok/s  err 2.23e-03
+    prefill_s2048 dequant_grouped    16.879 ms   485346.3 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4_selfpair   13.863 ms   590943.6 tok/s  err 1.70e-03
+== openai/gpt-oss-120b down N=2880 K=2880 E=128 k=4
+       decode_bs1 fused_nf4           0.278 ms    14380.2 tok/s  err 1.68e-03
+       decode_bs1 unsloth_native      0.650 ms     6155.4 tok/s  err 2.22e-03
+       decode_bs1 unsloth_native_bf16    0.254 ms    15719.3 tok/s  err 2.22e-03
+       decode_bs1 unsloth             1.247 ms     3208.4 tok/s  err 2.22e-03
+       decode_bs1 dequant_grouped     0.287 ms    13945.4 tok/s  err 2.22e-03
+       decode_bs1 fused_nf4_selfpair    0.272 ms    14728.4 tok/s  err 1.68e-03
+        decode_m8 fused_nf4           0.445 ms    71875.2 tok/s  err 1.70e-03
+        decode_m8 unsloth_native      0.644 ms    49727.7 tok/s  err 2.22e-03
+        decode_m8 unsloth_native_bf16    0.255 ms   125533.5 tok/s  err 2.22e-03
+        decode_m8 unsloth             1.247 ms    25666.4 tok/s  err 2.22e-03
+        decode_m8 dequant_grouped     0.283 ms   112905.1 tok/s  err 2.22e-03
+        decode_m8 fused_nf4_selfpair    0.444 ms    72048.7 tok/s  err 1.70e-03
+    prefill_s2048 fused_nf4           7.116 ms  1151198.2 tok/s  err 1.70e-03
+    prefill_s2048 unsloth_native     14.770 ms   554645.6 tok/s  err 2.23e-03
+    prefill_s2048 unsloth_native_bf16    3.482 ms  2352962.8 tok/s  err 2.23e-03
+    prefill_s2048 unsloth            39.309 ms   208400.6 tok/s  err 2.52e-03
+    prefill_s2048 dequant_grouped     9.304 ms   880507.2 tok/s  err 2.52e-03
+    prefill_s2048 fused_nf4_selfpair    7.161 ms  1144044.6 tok/s  err 1.70e-03
+receipts -> /root/h2h-out/h2h_rep3.json (144 cells)
++ echo 'REP3_DONE rc=0'
+REP3_DONE rc=0
++ sync
++ echo OK
++ echo H2H_ALL_DONE
+H2H_ALL_DONE

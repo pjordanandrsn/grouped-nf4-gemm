@@ -1,0 +1,34 @@
+{
+  "registered_utc": "2026-08-12T23:20:00Z",
+  "amends": "kernel/prereg_unsloth_head_to_head.json + amendment 1",
+  "status": "REGISTERED PRE-DATA for run 4. Runs 1-3 are complete and reported.",
+
+  "NOT_BLIND_DISCLOSURE": "Run 4 is NOT blind. Run 3 measured the training axis at u_4bit/g median 0.301 (H100) and 0.350 (RTX 4090) — i.e. unsloth ~2.9-3.3x faster. Run 4 exists because that comparison was unfair in TWO directions at once, both of which are corrected here. Effect sizes are known to the author.",
+
+  "why": {
+    "D1_wrong_gnf4_path": "Run 3 timed gnf4's backward at dgrad_kernel=False, the DEFAULT. That default is a deliberately-EXACT reference path — a per-expert python loop decoding through `dequant_ref`, the same oracle the reference uses, so its gradient is exact and a test pins it (nf4_qlora.py). It is not a performance path. `dgrad_4bit_grouped` (single-launch, fp32 accumulate, ~2.9e-3 relative, opt-in) is the performance path and was never timed. Run 3 therefore measured unsloth's TUNED backward against gnf4's REFERENCE backward and the resulting ratio is not a kernel-vs-kernel result.",
+    "D2_unfair_to_unsloth_arm": "The gnf4 arm computed dX + LoRA dA/dB; the unsloth arm computed dX ONLY, with no LoRA anywhere. Part of the measured gap is work unsloth was simply not doing. Both directions of unfairness are corrected together so neither can be cherry-picked."
+  },
+
+  "run4_arms": {
+    "G_ref": "fused_grouped_lora(dgrad_kernel=False) — run 3's arm, retained so run 4 is comparable to run 3 within one run rather than across runs.",
+    "G_kernel": "fused_grouped_lora(dgrad_kernel=True) — the single-launch dgrad over packed bytes. THE ARM RUN 4 EXISTS TO MEASURE.",
+    "U_4bit_lora": "unsloth grouped_gemm, dequant timed in, PLUS an equivalent low-rank delta on the SAME lora_A/lora_B via plain torch bmm, so both arms compute dX and LoRA adapter gradients. This is what a real unsloth LoRA MoE step does — their LoRA is applied outside the grouped GEMM.",
+    "U_bf16_lora": "same, bf16-resident. Their ceiling, reported not barred.",
+    "pairing": "G_kernel re-timed immediately before each U arm (amendment 1's rule). The G self-pair must hold [0.97,1.03] or the leg is VOID."
+  },
+
+  "predictions_registered_before_data": {
+    "T1": "G_kernel beats G_ref by >= 1.5x median. Rationale: the reference path materializes the full weight stack per expert through dequant_ref, which is precisely the round-trip the fused forward beats by 1.70-2.80x. If T1 FAILS, the default's cost is NOT the materialization and the diagnosis in the run-3 write-up is wrong and gets retracted.",
+    "T2": "With LoRA on both arms and dgrad_kernel=True, U_4bit_lora/G_kernel >= 1.0 on at least half the cells — i.e. gnf4 at least reaches parity in the 4-BIT-STORAGE training regime. Rationale: same structural argument that wins the forward (unsloth must materialize bf16 to compute dX; gnf4 reads packed bytes). PREDICTED BAND 1.0-2.0x.",
+    "T3": "U_bf16_lora still BEATS G_kernel on a majority of cells. Registered as an expected LOSS: in training the frozen weights are consumed by both the forward and the backward of one step, so a trainer with spare VRAM dequantizes once and amortizes across both. That is a memory-for-compute trade that favours materializing whenever VRAM allows. gnf4's constituency is where it does not."
+  },
+
+  "tier": "EXPLORATORY still. These arms cannot change H2H_CONFIRMED, which is a FORWARD-pass verdict. A training claim needs its own confirmatory protocol with its own blind run; this is scoping, not evidence for a product claim.",
+
+  "also_in_run4": {
+    "second_device_settle": "One more SECURE RTX 4090 rep set of the FORWARD matrix, unchanged. Run 2's A5000 failed Q2 at 0.908 and run 3's SECURE 4090 at 0.958 against a [0.97,1.03] band. The two-card rule for H2H_CONFIRMED is currently UNMET. The band is NOT being widened; if the 4090 misses again the forward verdict stands as single-device and says so."
+  },
+
+  "bill_cap": "$35 standing cap. Runs 1-3 spent ~$7.30 total. Run 4 estimated ~$3-4."
+}

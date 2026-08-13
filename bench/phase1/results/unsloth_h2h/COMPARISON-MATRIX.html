@@ -1,0 +1,274 @@
+<title>gnf4 vs Unsloth — full comparison matrix</title>
+<style>
+  :root{
+    --ground:#F6F7F9; --panel:#FFFFFF; --ink:#171A1F; --ink-2:#5A626E;
+    --ink-3:#858D9A; --rule:#DDE2E8; --rule-2:#EBEEF2;
+    --accent:#0E7C86; --accent-soft:#E4F1F2;
+    --win:#1B7F5A; --win-bg:#E7F3ED; --loss:#B2432F; --loss-bg:#FBEAE5;
+    --neutral-bg:#F0F2F5;
+    --serif:ui-serif,Georgia,'Iowan Old Style','Times New Roman',serif;
+    --sans:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;
+    --mono:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ground:#101317; --panel:#171B21; --ink:#E7EAEF; --ink-2:#A2ABB8;
+      --ink-3:#727C8A; --rule:#272D36; --rule-2:#1F242B;
+      --accent:#4FB3BC; --accent-soft:#132A2D;
+      --win:#5FC79A; --win-bg:#13291F; --loss:#E08A73; --loss-bg:#2B1A15;
+      --neutral-bg:#1C2128;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#101317; --panel:#171B21; --ink:#E7EAEF; --ink-2:#A2ABB8;
+    --ink-3:#727C8A; --rule:#272D36; --rule-2:#1F242B;
+    --accent:#4FB3BC; --accent-soft:#132A2D;
+    --win:#5FC79A; --win-bg:#13291F; --loss:#E08A73; --loss-bg:#2B1A15;
+    --neutral-bg:#1C2128;
+  }
+  *{box-sizing:border-box}
+  body{
+    background:var(--ground); color:var(--ink);
+    font-family:var(--sans); line-height:1.55;
+    margin:0; padding:clamp(1.1rem,3vw,3rem);
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px; margin:0 auto; display:flex; flex-direction:column; gap:2.4rem}
+  header{display:flex; flex-direction:column; gap:.55rem; border-bottom:2px solid var(--ink); padding-bottom:1.1rem}
+  .eyebrow{font-family:var(--mono); font-size:.7rem; letter-spacing:.13em; text-transform:uppercase; color:var(--accent)}
+  h1{font-family:var(--serif); font-weight:600; font-size:clamp(1.7rem,3.6vw,2.5rem); line-height:1.15; margin:0; text-wrap:balance; letter-spacing:-.01em}
+  .sub{color:var(--ink-2); max-width:64ch; font-size:.94rem}
+  h2{font-family:var(--serif); font-weight:600; font-size:1.28rem; margin:0 0 .2rem; letter-spacing:-.005em}
+  .sec{display:flex; flex-direction:column; gap:.85rem}
+  .note{color:var(--ink-2); font-size:.88rem; max-width:72ch}
+
+  .verdicts{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:1rem}
+  .card{background:var(--panel); border:1px solid var(--rule); border-radius:3px; padding:1.05rem 1.15rem; display:flex; flex-direction:column; gap:.55rem}
+  .card h3{margin:0; font-family:var(--sans); font-size:.95rem; font-weight:650; letter-spacing:-.005em}
+  .chip{font-family:var(--mono); font-size:.66rem; letter-spacing:.09em; text-transform:uppercase; padding:.16rem .45rem; border-radius:2px; background:var(--win-bg); color:var(--win); border:1px solid color-mix(in srgb,var(--win) 30%,transparent); align-self:flex-start}
+  .chip.off{background:var(--neutral-bg); color:var(--ink-2); border-color:var(--rule)}
+  .metrics{display:flex; gap:1.4rem; flex-wrap:wrap; margin-top:.15rem}
+  .metric{display:flex; flex-direction:column; gap:.1rem}
+  .metric .v{font-family:var(--mono); font-size:1.45rem; font-weight:600; font-variant-numeric:tabular-nums; letter-spacing:-.02em}
+  .metric .l{font-size:.72rem; color:var(--ink-3); text-transform:uppercase; letter-spacing:.07em}
+
+  .scroll{overflow-x:auto; border:1px solid var(--rule); border-radius:3px; background:var(--panel)}
+  table{border-collapse:collapse; width:100%; font-size:.855rem; min-width:760px}
+  caption{text-align:left; padding:.8rem 1rem .1rem; color:var(--ink-2); font-size:.85rem}
+  th,td{padding:.44rem .7rem; text-align:right; border-bottom:1px solid var(--rule-2); white-space:nowrap}
+  th{font-size:.68rem; text-transform:uppercase; letter-spacing:.07em; color:var(--ink-3); font-weight:600; border-bottom:1px solid var(--rule); position:sticky; top:0; background:var(--panel)}
+  th.l,td.l{text-align:left}
+  td.num{font-family:var(--mono); font-variant-numeric:tabular-nums}
+  td.shape{font-family:var(--mono); font-size:.79rem; color:var(--ink-2)}
+  .grp td{background:var(--accent-soft); font-family:var(--mono); font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); padding:.42rem .7rem; border-bottom:1px solid var(--rule)}
+  .w{background:var(--win-bg); color:var(--win); font-weight:600}
+  .l0{background:var(--loss-bg); color:var(--loss); font-weight:600}
+  .dim{color:var(--ink-3)}
+  tbody tr:hover td:not(.grp){background:var(--neutral-bg)}
+  .grp:hover td{background:var(--accent-soft)}
+
+  .bars{display:flex; flex-direction:column; gap:.5rem; background:var(--panel); border:1px solid var(--rule); border-radius:3px; padding:1rem 1.15rem}
+  .bar{display:grid; grid-template-columns:104px 1fr 56px; align-items:center; gap:.7rem}
+  .bar .k{font-family:var(--mono); font-size:.73rem; color:var(--ink-2)}
+  .track{height:15px; background:var(--neutral-bg); border-radius:2px; overflow:hidden; position:relative}
+  .track::after{content:""; position:absolute; left:calc(100% / 5); top:0; bottom:0; width:1px; background:var(--ink-3); opacity:.55}
+  .fill{height:100%; background:var(--accent); opacity:.85}
+  .fill.alt{background:var(--ink-2)}
+  .bar .n{font-family:var(--mono); font-size:.79rem; font-variant-numeric:tabular-nums; text-align:right}
+  .legend{display:flex; gap:1.1rem; flex-wrap:wrap; font-size:.76rem; color:var(--ink-2); margin-top:.2rem}
+  .sw{display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:.35rem; vertical-align:-1px}
+
+  .caveats{display:flex; flex-direction:column; gap:.7rem}
+  .cav{display:grid; grid-template-columns:auto 1fr; gap:.7rem; align-items:baseline; border-left:2px solid var(--rule); padding-left:.85rem}
+  .cav .tag{font-family:var(--mono); font-size:.66rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3)}
+  .cav.warn{border-left-color:var(--loss)}
+  .cav.warn .tag{color:var(--loss)}
+  footer{border-top:1px solid var(--rule); padding-top:1rem; color:var(--ink-3); font-size:.79rem; display:flex; flex-direction:column; gap:.3rem}
+  code{font-family:var(--mono); font-size:.86em; background:var(--neutral-bg); padding:.08em .3em; border-radius:2px}
+  a{color:var(--accent)}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">Private · gnf4 · confirmatory runs 2 &amp; 4 · 2026-08-12</div>
+  <h1>gnf4 fused NF4 GEMM vs Unsloth&rsquo;s MoE grouped GEMM</h1>
+  <p class="sub">Same pod, same process, interleaved. Every arm timed against a base re-timed
+  immediately before it. Unsloth runs with <code>autotune=True</code> — their autotuner, their
+  best config per shape — against gnf4&rsquo;s shipped default.</p>
+</header>
+
+<section class="sec">
+  <h2>Verdict</h2>
+  <div class="verdicts">
+    <div class="card">
+      <h3>H100 80GB HBM3 · sm_90</h3>
+      <span class="chip">H2H_CONFIRMED · TMA live</span>
+      <div class="metrics">
+        <div class="metric"><span class="v">1.70&times;</span><span class="l">decode</span></div>
+        <div class="metric"><span class="v">1.67&times;</span><span class="l">prefill</span></div>
+        <div class="metric"><span class="v">2.51&times;</span><span class="l">J/token</span></div>
+      </div>
+      <div class="note" style="font-size:.8rem">Self-pair [0.984, 1.007] · 22/24 cells won · energy better in 23/24</div>
+    </div>
+    <div class="card">
+      <h3>RTX 4090 · sm_89</h3>
+      <span class="chip">H2H_CONFIRMED · TMA unavailable</span>
+      <div class="metrics">
+        <div class="metric"><span class="v">2.79&times;</span><span class="l">decode</span></div>
+        <div class="metric"><span class="v">2.79&times;</span><span class="l">prefill</span></div>
+        <div class="metric"><span class="v">3.32&times;</span><span class="l">J/token</span></div>
+      </div>
+      <div class="note" style="font-size:.8rem">Self-pair [0.983, 1.001] · 24/24 cells won · energy better in 24/24</div>
+    </div>
+  </div>
+  <p class="note"><strong>The H100 is the load-bearing device.</strong> With Unsloth&rsquo;s TMA path
+  live the decode margin falls from 2.79&times; to 1.70&times; — 40% of the advantage. Benchmarking only
+  on consumer silicon overstates the result by that much.</p>
+</section>
+
+<section class="sec">
+  <h2>The M-axis is the finding</h2>
+  <div class="bars">
+    <div class="bar"><span class="k">decode_bs1</span><span class="track"><span class="fill" style="width:46.4%"></span></span><span class="n">2.32</span></div>
+    <div class="bar"><span class="k">decode_m8</span><span class="track"><span class="fill" style="width:29.6%"></span></span><span class="n">1.48</span></div>
+    <div class="bar"><span class="k">prefill_2048</span><span class="track"><span class="fill" style="width:33.5%"></span></span><span class="n">1.68</span></div>
+    <div class="bar" style="margin-top:.35rem"><span class="k dim">decode_bs1</span><span class="track"><span class="fill alt" style="width:73.7%"></span></span><span class="n">3.68</span></div>
+    <div class="bar"><span class="k dim">decode_m8</span><span class="track"><span class="fill alt" style="width:44.4%"></span></span><span class="n">2.22</span></div>
+    <div class="bar"><span class="k dim">prefill_2048</span><span class="track"><span class="fill alt" style="width:55.9%"></span></span><span class="n">2.79</span></div>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--accent)"></span>H100 (TMA live)</span>
+      <span><span class="sw" style="background:var(--ink-2)"></span>RTX 4090</span>
+      <span>Vertical rule marks parity (1.0&times;)</span>
+    </div>
+  </div>
+  <p class="note">Median <code>unsloth / fused</code> per regime. The advantage is largest at
+  <code>decode_bs1</code> and smallest at <code>decode_m8</code> — it tracks how
+  <em>memory-bound</em> the cell is, not how large it is. That is what the project&rsquo;s roofline
+  registered before any of this was measured: the 4-bit advantage is a bandwidth-regime
+  advantage, and it decays as the problem becomes compute-bound.</p>
+</section>
+
+<section class="sec">
+  <h2>Full matrix — 24 cells &times; 2 devices</h2>
+  <div class="scroll">
+  <table>
+    <caption>Ratios are <strong>time relative to the fused kernel</strong>. For
+    <em>u/f</em> and <em>J/tok</em>, &gt;1 means gnf4 is faster / more efficient.
+    For <em>bf16/f</em>, &lt;1 means Unsloth is faster.</caption>
+    <thead>
+      <tr>
+        <th class="l">Shape</th><th class="l">Proj</th>
+        <th>H100 u/f</th><th>H100 bf16/f</th><th>H100 J/tok</th>
+        <th>4090 u/f</th><th>4090 bf16/f</th><th>4090 J/tok</th>
+        <th>proxy/real</th>
+      </tr>
+    </thead>
+    <tbody id="tb"></tbody>
+  </table>
+  </div>
+  <div class="legend">
+    <span><span class="sw" style="background:var(--win-bg);border:1px solid var(--win)"></span>gnf4 ahead</span>
+    <span><span class="sw" style="background:var(--loss-bg);border:1px solid var(--loss)"></span>Unsloth ahead</span>
+    <span><code>bf16/f</code> = Unsloth with weights already bf16 — their design point, where gnf4 does not compete</span>
+  </div>
+</section>
+
+<section class="sec">
+  <h2>What the matrix says that the headline doesn&rsquo;t</h2>
+  <div class="caveats">
+    <div class="cav"><span class="tag">bf16</span><span>Unsloth&rsquo;s <strong>bf16-resident</strong> column is
+    almost entirely theirs: 2.6–5.3&times; faster at prefill on the H100. gnf4&rsquo;s advantage is the
+    <strong>4-bit-storage</strong> regime specifically — where a bf16 GEMM must first materialize
+    the weights — and is not a general claim.</span></div>
+    <div class="cav warn"><span class="tag">loss</span><span>Two H100 cells go to Unsloth:
+    <code>OLMoE gate_up prefill</code> (0.890) and <code>gpt-oss-120b down decode_m8</code> (0.997).
+    OLMoE gate_up is the smallest-expert census shape and a known loser class in this repo&rsquo;s
+    published history; it wins on the 4090, so the loss is SM-count-dependent.</span></div>
+    <div class="cav warn"><span class="tag">miss</span><span>P1&rsquo;s <strong>predicted band
+    (2.0–6.0&times;) misses on the H100</strong> at 1.70. The bar (&ge;1.0 on &ge;7/8 cells) passes; the
+    prediction does not. Amendment 1 registered that miss pre-data and it reproduced.</span></div>
+    <div class="cav"><span class="tag">proxy</span><span>The <code>proxy/real</code> column is the
+    correction this repo owed: tgale96&rsquo;s <code>grouped_gemm.ops.gmm</code> — what every prior
+    &ldquo;unsloth&rdquo; receipt actually ran — is <strong>1.33&times; slower at median</strong> than
+    Unsloth&rsquo;s real kernel, up to 3.40&times;. The published 4.67&times; was measured against a weaker
+    opponent. Superseded, not rescaled.</span></div>
+  </div>
+</section>
+
+<section class="sec">
+  <h2>Training axis <span style="font-family:var(--mono);font-size:.66rem;letter-spacing:.08em;color:var(--loss);border:1px solid var(--loss);padding:.1rem .4rem;border-radius:2px;vertical-align:middle">EXPLORATORY</span></h2>
+  <p class="note">Cannot change any verdict, and does not. Registered as exploratory before data.
+  H100, 16/16 cells, fwd+bwd with LoRA on <em>both</em> arms, frozen 4-bit base.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th class="l">Measure</th><th>Median</th><th>Range</th><th class="l">Reading</th></tr></thead>
+    <tbody>
+      <tr><td class="l">dgrad kernel vs reference default</td><td class="num w">1.84&times;</td><td class="num dim">1.12 – 5.41</td><td class="l">The flag was costing this on every backward</td></tr>
+      <tr><td class="l">Unsloth / gnf4 — 4-bit regime</td><td class="num w">1.11&times;</td><td class="num dim">0.48 – 1.65</td><td class="l">gnf4 ahead on 9/16 cells</td></tr>
+      <tr><td class="l">Unsloth / gnf4 — bf16-resident</td><td class="num l0">0.72&times;</td><td class="num dim">0.40 – 1.13</td><td class="l">Expected loss; their design point</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note">Run 3 first reported Unsloth <strong>3.3&times; ahead</strong> here. That was wrong in
+  two compounding ways — gnf4 was timed on its <em>exact reference</em> backward
+  (<code>dgrad_kernel=False</code>, then the default), and only gnf4&rsquo;s arm carried LoRA. Corrected
+  together, gnf4 edges ahead. The default is now <code>True</code>. Per-cell self-pair ran
+  0.618–1.088, so individual cells are VOID under the amendment&rsquo;s own rule: <strong>no training
+  claim is licensed by this table.</strong></p>
+</section>
+
+<footer>
+  <div>Protocol <code>prereg_unsloth_head_to_head.json</code> + amendments 1–2, OTS-stamped pre-data
+  (upgrades pending Bitcoin confirmation ⇒ <em>measured</em>, not <em>confirmed</em>).</div>
+  <div>11 pods across 4 runs, all torn down and 404-verified · ~$10.10 against a $35 cap ·
+  n=3 fresh-process reps per device · receipts in <code>bench/phase1/results/unsloth_h2h/</code></div>
+</footer>
+</div>
+
+<script>
+const ROWS = [
+ ["decode_bs1",[
+  ["Qwen3-30B-A3B","down",2.847,1.207,3.71,3.861,1.672,6.56,0.986],
+  ["Qwen3-30B-A3B","gate_up",2.346,0.950,5.48,3.507,1.320,8.02,1.013],
+  ["OLMoE-1B-7B","down",3.531,1.502,6.92,4.447,1.929,11.50,0.986],
+  ["OLMoE-1B-7B","gate_up",2.964,1.148,7.00,4.694,1.659,17.05,1.154],
+  ["gemma-4-26B-A4B","down",2.298,0.978,2.94,3.347,1.465,5.28,0.975],
+  ["gemma-4-26B-A4B","gate_up",1.706,0.681,3.83,3.075,1.112,7.05,1.219],
+  ["gpt-oss-120b","down",1.395,0.667,2.80,2.894,1.135,5.66,1.429],
+  ["gpt-oss-120b","gate_up",1.626,0.661,3.95,4.566,1.597,9.36,2.067]]],
+ ["decode_m8",[
+  ["Qwen3-30B-A3B","down",1.701,0.736,2.12,2.303,1.005,2.64,1.006],
+  ["Qwen3-30B-A3B","gate_up",1.478,0.608,2.48,2.137,0.841,3.11,1.028],
+  ["OLMoE-1B-7B","down",2.026,0.859,2.82,2.416,1.043,2.94,0.998],
+  ["OLMoE-1B-7B","gate_up",1.854,0.723,2.72,2.694,0.944,3.89,1.202],
+  ["gemma-4-26B-A4B","down",1.482,0.637,1.84,2.119,0.934,2.53,0.989],
+  ["gemma-4-26B-A4B","gate_up",1.188,0.464,2.19,2.028,0.733,3.47,1.222],
+  ["gpt-oss-120b","down",0.997,0.466,1.83,1.844,0.747,3.11,1.429],
+  ["gpt-oss-120b","gate_up",1.043,0.430,2.46,2.583,0.928,4.75,2.068]]],
+ ["prefill_s2048",[
+  ["Qwen3-30B-A3B","down",2.768,0.363,2.54,3.437,0.527,3.05,1.681],
+  ["Qwen3-30B-A3B","gate_up",1.896,0.282,1.92,2.246,0.442,2.08,1.870],
+  ["OLMoE-1B-7B","down",1.335,0.242,1.24,1.635,0.382,1.56,1.524],
+  ["OLMoE-1B-7B","gate_up",0.890,0.191,0.97,1.198,0.335,1.15,2.007],
+  ["gemma-4-26B-A4B","down",3.067,0.392,2.64,3.397,0.582,3.23,1.634],
+  ["gemma-4-26B-A4B","gate_up",1.573,0.257,1.75,2.068,0.450,1.97,2.146],
+  ["gpt-oss-120b","down",1.731,0.356,2.21,3.342,0.832,3.30,3.061],
+  ["gpt-oss-120b","gate_up",1.619,0.356,2.21,3.484,0.846,3.34,3.403]]]
+];
+const tb = document.getElementById("tb");
+const cell = (v, higherIsBetter) => {
+  const cls = higherIsBetter ? (v >= 1 ? "w" : "l0") : "dim";
+  return `<td class="num ${cls}">${v.toFixed(v < 10 ? 3 : 2)}</td>`;
+};
+ROWS.forEach(([regime, rows]) => {
+  tb.insertAdjacentHTML("beforeend", `<tr class="grp"><td colspan="9">${regime}</td></tr>`);
+  rows.forEach(r => {
+    const [m, p, hu, hb, hj, au, ab, aj, px] = r;
+    tb.insertAdjacentHTML("beforeend",
+      `<tr><td class="l shape">${m}</td><td class="l shape">${p}</td>` +
+      cell(hu, true) + cell(hb, false) + cell(hj, true) +
+      cell(au, true) + cell(ab, false) + cell(aj, true) +
+      `<td class="num dim">${px.toFixed(3)}</td></tr>`);
+  });
+});
+</script>

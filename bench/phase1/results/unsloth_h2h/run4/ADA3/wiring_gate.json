@@ -1,0 +1,86 @@
+{
+  "gpu": "NVIDIA GeForce RTX 4090",
+  "capability": "8.9",
+  "torch": "2.8.0+cu128",
+  "NOTE": "correctness/wiring only \u2014 this box is not a timing testbed",
+  "G1": {
+    "unsloth.kernels.moe.__init__ bytes": 0,
+    "getattr(moe,'grouped_gemm')": "<module 'unsloth.kernels.moe.grouped_gemm' from '/usr/local/lib/python3.12/dist-packages/unsloth/kernels/moe/grouped_gemm/__init__.py'>",
+    "attr_is_callable": false,
+    "old_probe_expectation_unsatisfiable": true,
+    "old_backend_impl_actually_used": "grouped_gemm.ops.gmm",
+    "old_backend_error": null,
+    "old_backend_ran_unsloths_kernel": false,
+    "new_entry_resolves": true,
+    "new_entry": "unsloth.kernels.moe.grouped_gemm.interface.grouped_gemm",
+    "fingerprint": {
+      "entry": "unsloth.kernels.moe.grouped_gemm.interface.grouped_gemm",
+      "unsloth_version": "2026.8.15",
+      "supports_tma": false,
+      "device_capability": [
+        8,
+        9
+      ]
+    },
+    "PASS": true
+  },
+  "cells": [
+    {
+      "model": "allenai/OLMoE-1B-7B-0924",
+      "proj": "gate_up",
+      "N": 2048,
+      "K": 2048,
+      "regime": "decode_bs1",
+      "b_rel_unsloth_4bit": 0.0022320090804863607,
+      "b_rel_unsloth_bf16": 0.0022320090804863607,
+      "b_rel_fused": 0.0016565437999831911,
+      "b_rel_dequant": 0.002232343280639039,
+      "G2_PASS": true,
+      "max_abs_delta_4bit_vs_bf16": 0.0,
+      "G3_PASS": true
+    },
+    {
+      "model": "allenai/OLMoE-1B-7B-0924",
+      "proj": "gate_up",
+      "N": 2048,
+      "K": 2048,
+      "regime": "prefill_s2048",
+      "b_rel_unsloth_4bit": 0.0022269392541832043,
+      "b_rel_unsloth_bf16": 0.0022269392541832043,
+      "b_rel_fused": 0.0016981546433229727,
+      "b_rel_dequant": 0.002226943634395978,
+      "G2_PASS": true,
+      "max_abs_delta_4bit_vs_bf16": 0.0,
+      "G3_PASS": true
+    },
+    {
+      "model": "allenai/OLMoE-1B-7B-0924",
+      "proj": "down",
+      "N": 2048,
+      "K": 1024,
+      "regime": "decode_bs1",
+      "b_rel_unsloth_4bit": 0.0022461272750481623,
+      "b_rel_unsloth_bf16": 0.0022461272750481623,
+      "b_rel_fused": 0.0016658579946689663,
+      "b_rel_dequant": 0.0022461262863873715,
+      "G2_PASS": true,
+      "max_abs_delta_4bit_vs_bf16": 0.0,
+      "G3_PASS": true
+    },
+    {
+      "model": "allenai/OLMoE-1B-7B-0924",
+      "proj": "down",
+      "N": 2048,
+      "K": 1024,
+      "regime": "prefill_s2048",
+      "b_rel_unsloth_4bit": 0.002226872534972607,
+      "b_rel_unsloth_bf16": 0.002226872534972607,
+      "b_rel_fused": 0.0016980610545275117,
+      "b_rel_dequant": 0.002226872534972607,
+      "G2_PASS": true,
+      "max_abs_delta_4bit_vs_bf16": 0.0,
+      "G3_PASS": true
+    }
+  ],
+  "VERDICT": "PASS"
+}
