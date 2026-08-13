@@ -1,0 +1,109 @@
+{
+ "registered_utc": "2026-08-13T05:25:00Z",
+ "purpose": "TRAINING AXIS vs the DEQUANT-ON-FORWARD pattern. The training axis in this repo has only ever been measured against Unsloth's grouped GEMM (exploratory leg, u_4bit/g median 1.11x, range 0.48-1.65, 9/16 cells, ONE device, per-cell self-pair 0.618-1.088 so individual cells were VOID). That is a real comparator but it is not the thing practitioners with this problem are running. The pattern in the field is: per ROUTED expert, call bitsandbytes.functional.dequantize_4bit on the packed weight INSIDE the forward, then F.linear on the result. It is published at 743B by GenON (mncai/nf4moe, github.com/genonai/nf4moe, class QuantizedNaiveMoe) and re-derived by every hand-rolled fused-MoE QLoRA path. It has never been measured on this repo's training axis. This protocol measures it.",
+ "baseline_provenance": {
+  "read_before_writing": "github.com/genonai/nf4moe @ nf4moe/quant_moe.py (119 lines, Apache-2.0, pushed 2026-07-24), plus the writeup at huggingface.co/mncai/nf4moe. The arm was written from that source, not from a description of it.",
+  "reproduced_from_the_published_module": [
+   "bnbF.dequantize_4bit per HIT expert inside forward, quant_type nf4, blocksize 64 - identical to the harness's own quantization convention",
+   "F.linear on the dequantized weight; the dequant is constant w.r.t. activations so the projection stays differentiable in x",
+   "one dequant call per hit expert per forward: the fixed per-step tax their writeup measures at ~2.5 s/step at 743B, and the reason they batch to a token budget",
+   "the weight is materialized and dropped inside the loop body, so the arm's residency does not grow with total expert count - only with HIT expert count, via autograd's saved weight"
+  ],
+  "reproduced_in_the_PROBE_only": "The published module's routing plumbing - one-hot hit mask under no_grad, ONE .tolist() host sync for the hit list (their audit-#18 fix), per-expert torch.where, the gather hidden_states[token_idx], and index_add_ accumulation. This is measured as D_routed, a probe, NOT as the headline comparator.",
+  "deliberately_NOT_charged_to_the_baseline": "That same routing plumbing. Rows reach every arm in this harness pre-assembled and group-sorted (KERNEL_CONTRACT op boundary; the Gate-2 op-boundary correction and the h2h's amendment 2 both exist because charging one arm for assembly no other arm pays produces a fake result). Hoisting it makes the baseline FASTER than what GenON published. That is the conservative direction for a claim of the form 'fused beats dequant-on-forward', and it is why the probe exists: so the size of the hoist is measured rather than assumed.",
+  "structural_deviations_declared": [
+   "A cell is ONE projection (gate_up or down), as on every other axis in this repo. GenON's loop body does both projections plus the SwiGLU per hit expert; the per-expert dequant here is therefore one call, not two.",
+   "No arm applies routing weights. The cell ends at the projection boundary.",
+   "No arm uses gradient checkpointing. A cell is one projection's forward and backward, so checkpointing would only insert a recompute of that same projection. OFF everywhere IS the 'configured identically' condition, and it is stated rather than left implicit.",
+   "Synthetic weights (per-expert randn * 0.02, seeded), as in every phase-1 cell. NF4 error is data-dependent; the SPEED comparison is not, and both arms consume identical bytes.",
+   "LoRA is attached identically in both arms: the same lora_delta_grouped call, same lora_A/lora_B ([E,r,K] / [E,N,r], r=16, lora_B zero-init), same scaling, applied pre-activation. Its cost is added to BOTH arms and therefore COMPRESSES every ratio toward 1.0; it is measured per cell as lora_floor and reported, and is NEVER subtracted from a ratio."
+  ]
+ },
+ "frozen_commit": "the commit carrying this file. No change to the arm, the harness, the regimes or the reducer between this stamp and reported results.",
+ "prior_work_disclosure": "TWO pre-stamp validations ran, both correctness-only, both disclosed here rather than presented later as if fresh. (1) CPU, no CUDA/bnb/triton (bench/phase1/test_train_dequant_forward.py + test_reduce_dequant_forward.py, 20/20): the routed probe reproduces the sliced arm per-row, gradients are finite in both arms, the dequant counter counts every hit expert AND rejects a hoisted dequant, the lora_A positive control fires, the fidelity subsample honours its caps, and the REDUCER was exercised against this very file - every registered criterion shown able to both pass and fail, including the self-pair voiding cells and a met bar with a missed predicted band. (2) QNAP RTX A2000 12GB (sm_86), container gnf4-h2h, torch 2.8.0+cu128 / bnb 0.50.0 / triton 3.4.0, run with --gate-only which emits the wiring gate and b_rel and NOTHING else - no timing, no memory, no energy. Six cells: OLMoE and Qwen3-30B x {gate_up, down} at decode_m8, plus Qwen3-30B x {gate_up, down} at tokbudget_2048. All gates PASS (deq_calls 8/8 per forward, routed probe max relative difference 0.0, lora_A positive control non-zero in all three arms). Two tokbudget_11800 cells recorded NOT-RUN with a CUDA OOM reason on a card with ~5 GB free - the exclusion path working, not a defect. The A2000 is a CORRECTNESS-ONLY testbed by operator instruction (2026-07-27) and no timing claim in this protocol may cite it; --gate-only exists specifically so it cannot. FIDELITY OBSERVED PRE-STAMP, stated in full because it bears on registered criterion F1: b_rel G/D = 0.6764 (OLMoE gate_up), 0.7613 (OLMoE down), 0.7638 (Qwen3-30B gate_up), 0.7613 (Qwen3-30B down) at decode_m8, and 0.7622 / 0.7625 (Qwen3-30B gate_up / down) at tokbudget_2048. Numeric agreement is not contention-sensitive so these ARE citable, and they sit inside F1's predicted band [0.5, 0.9] - which is why that band is registered where it is. Those six cells are therefore EXPLORATORY with respect to F1 and do not discharge it: F1 is re-measured on both rented devices, over all 24 cells, and is graded there. The TIMING and MEMORY registration windows are fully intact: no arm has been timed, and no peak-memory figure has been taken, on any device.",
+ "arms": {
+  "G": "gnf4: fused_grouped_lora(..., dgrad_kernel=True) - the single-launch grouped NF4 GEMM over packed bytes, recompute-decode backward, holding NO dequantized weight across the forward-to-backward window. dgrad_kernel=True is the shipped default since PR #49; dgrad_kernel=False is a deliberately EXACT reference and timing it would repeat run 3's error.",
+  "D": "dequant_forward: per-routed-expert bitsandbytes dequantize_4bit + F.linear, inside the forward. THE BASELINE. F.linear saves its weight for backward, so this arm holds every hit expert's materialized bf16 weight across the forward-to-backward window - it buys backward compute with memory, and that is the trade this protocol is built to measure on both axes.",
+  "D_routed": "PROBE, never the headline: D wearing GenON's published routing plumbing, on rows placed in a fixed pseudo-random token order (on group-sorted rows a verbatim torch.where returns a contiguous range and the gather costs nothing, which would understate the pattern). The un-permute back to group order is harness bookkeeping and is charged TO the probe.",
+  "U": "OPTIONAL, import-guarded, recorded skipped-with-reason when absent: unsloth's own kernel in the 4-bit-storage regime, dequant timed in. Present only so both comparators can be read off ONE instance. Reported in its own column and NEVER divided into, conflated with, or used to adjust the dequant_forward result."
+ },
+ "protocol": {
+  "devices": "TWO rented cards, both required for any verdict. Single-device is the standing caveat on this whole arm and it is cheap to remove. D1 = H100 80GB (sm_90). D2 = RTX 4090 (sm_89) - the consumer class this repo's constituency actually runs. The QNAP A2000 is EXCLUDED from timing entirely (operator instruction 2026-07-27, correctness-only testbed).",
+  "shapes": "The 8 census cells (OLMoE, Qwen3-30B, Gemma-4-26B, GPT-OSS-120B x {gate_up, down}), unchanged from every prior result-set in this repo.",
+  "regimes": [
+   "decode_m8 - top_k experts x 8 rows: the batched-decode band",
+   "tokbudget_2048 - 2048 tokens x top_k spread over E; identical by construction to prefill_s2048, renamed so the M axis reads as one family",
+   "tokbudget_11800 - GenON's own regime. Their SFT rows are ~438 tokens median and they pack ~27 per step; 438*27 = 11826. This is the batch size at which their fixed dequant tax is amortized and their measured 5.5x lives. A comparison against their pattern that never visits their token budget is not a comparison against their pattern."
+  ],
+  "pairing": "PAIRED, INTERLEAVED, ADJACENT. Per cell the order is fixed: G, G, D, D, G, D_routed, [G, U], G. The opening G/G is the self-pair; every comparator is preceded by an immediately-adjacent G re-time and the ratio is taken against THAT timing. Run 4's self-pair BRACKETED the cell (base first, twin last, four backends and two energy windows between) and read ~4% on sub-0.2 ms cells purely from placement - reproducibly, 1.0518/1.0394 across reps. Adjacent placement is the correction and it is registered here, not chosen after seeing data.",
+  "iterations": "Chosen per cell by a pilot so each timed block spans >= 250 ms wall, floor 20 iterations, ceiling 200. The h2h self-pair failed partly on sub-0.2 ms cells read off too few launches.",
+  "reps": "n=1 full matrix per device for this leg, with the per-cell self-pair as the instrument check. Registered honestly: this is a SINGLE-REP leg and no cell may be quoted as replicated. Cross-device agreement is the replication that is claimed.",
+  "reduction": "Mechanical. bench/phase1/reduce_dequant_forward.py reads THIS file and grades. The agent does not print verdicts."
+ },
+ "frozen_verdict_criteria_params": {
+  "selfpair_band": [
+   0.97,
+   1.03
+  ],
+  "drift_band": [
+   0.95,
+   1.05
+  ],
+  "void_cell_fraction_that_voids_the_leg": 0.25,
+  "s1_regime": "decode_m8",
+  "s1_min_cells": 6,
+  "s1_total_cells": 8,
+  "s1_bar": 1.0,
+  "s1_predicted_median_band": [
+   1.3,
+   3.0
+  ],
+  "m1_regime": "tokbudget_11800",
+  "m1_min_cells": 7,
+  "m1_total_cells": 8,
+  "m1_bar": 1.0,
+  "m1_predicted_median_band": [
+   1.5,
+   20.0
+  ],
+  "f1_bar": 1.0,
+  "f1_predicted_ratio_band": [
+   0.5,
+   0.9
+  ]
+ },
+ "frozen_verdict_criteria": {
+  "S1_speed_small_batch": "PRIMARY. At decode_m8, paired d_over_g >= 1.0 (fused at least as fast) on at least 6 of 8 census cells, ON BOTH DEVICES. Predicted median 1.3-3.0x. Reasoning registered pre-data: at M=8 both paths are memory-bound and the byte counts differ ~6.5x (dequant pays packed-read + bf16-write + bf16-read-forward + bf16-read-backward; fused pays packed-read twice, once per decode). The predicted band is far below the byte ratio because launch overhead and the shared LoRA floor compress it, exactly as they do on the decode axis where the same pattern measures 1.3-3.5x forward-only. A median outside the band is a MISS of the prediction even if the bar is met, and is reported as such.",
+  "S2_M_axis": "PREDICTION, REPORT-ONLY, NOT IN THE VERDICT - and reported as prominently as any win whichever way it lands. Predicted: median d_over_g is MONOTONE NON-INCREASING across decode_m8 -> tokbudget_2048 -> tokbudget_11800 on both devices, i.e. THE FUSED ADVANTAGE DECAYS WITH TOKEN BUDGET. The mechanism is GenON's own: their dequant tax is roughly fixed per step while the GEMM grows linearly in T, so at their token budget the tax is amortized and the pattern is at its strongest. If the advantage instead holds or grows with T, the registered reasoning is wrong and the doc says so.",
+  "M1_memory": "PRIMARY. At tokbudget_11800, transient bytes (peak allocated during one fwd+bwd, minus resident-before) for D strictly greater than for G on at least 7 of 8 cells, on BOTH devices. Predicted ratio band 1.5-20x. This is the axis the trade actually lives on: F.linear saves its weight, so D holds every hit expert's materialized bf16 weight from forward to backward, while gnf4's autograd Function re-decodes one expert at a time and stores none. A speed-only table would hide it, and the honest claim about this kernel has always been 'competitive at equal VRAM, wins when VRAM binds'.",
+  "F1_fidelity": "GATE. b_rel for G <= b_rel for D on every cell (bar 1.0 on the G/D ratio, the fused-over-baseline orientation every fidelity claim in this repo already uses), measured against the fp64 exact GEMM on identical dequantized values per TOLERANCE_CONTRACT.md, subsampled to 16 rows x 32 groups with the caps recorded per cell. Predicted ratio 0.5-0.9 - the standing fp32-accumulation claim, which measured 0.75x against Unsloth's path. A speed claim on the training path with no fidelity column invites the obvious objection; a FAILED fidelity gate voids the speed table rather than narrowing it.",
+  "Q1_self_pair": "GATE, PER CELL. g_selfpair and d_selfpair must both land in [0.97, 1.03]. A cell outside the band is VOID - its ratio is not a measurement and is reported as VOID, never as a number. If more than 25% of cells on a device are void, that DEVICE's leg is void: the instrument, not the kernel, is what was measured. The band is NOT widened after seeing data; the h2h failed by 0.009 and was reported as failed.",
+  "Q2_wiring": "GATE, POSITIVE-CONTROLLED. Per cell: dequant call count >= number of non-empty groups (an arm that hoisted the dequant out of the forward is the cheat this counts); the routed probe reproduces D on every row at 1e-2 relative (a dropped or double-counted expert is O(1) wrong, not a rounding step); gradients present, finite and non-zero for the activations and BOTH adapters in every arm. Any failure voids the leg. The CPU suite proves each of these gates can FAIL - a gate whose control is uninstrumented is not a gate.",
+  "Q3_drift": "GATE, PER CELL. The closing G timing over the opening G timing must land in [0.95, 1.05]. Outside it the box drifted across the cell and every ratio inside it is noise.",
+  "E1_energy": "REPORT ONLY. Joules per fwd+bwd step per arm per cell via the harness's NVML sampler. The decode-side energy result is the strongest number in the program and there is no training equivalent; this creates one. No bar, because none was earned in advance.",
+  "P1_plumbing": "REPORT ONLY. dr_over_d: what GenON's published routing plumbing costs on top of the same compute. No bar. Whatever it shows is published, including if it shows the hoist was worth more than the kernel.",
+  "U1_unsloth": "REPORT ONLY, SEPARATE COLUMN. Present only if unsloth imports. The 1.11x Unsloth training comparison is NOT superseded by this leg and is NOT divided into it: they measure different things.",
+  "verdict_key": "DQF_CONFIRMED = S1 AND M1 AND F1 AND Q1 AND Q2 AND Q3, on BOTH devices. S2, E1, P1 and U1 are reported and never enter the verdict."
+ },
+ "exclusions_and_stop_rules": {
+  "not_run": "A cell that does not fit a device is recorded NOT-RUN with the reason. Never silently dropped, never backfilled from the other device.",
+  "cross_run": "Only WITHIN-RUN ratios transfer. No number measured on one device may be divided by a number from the other.",
+  "no_tune_clause": "Failures are reported at full volume and the claim is narrowed. No re-tuning, no re-running for a better number, no post-hoc arm changes, no band widening. If the dequant-on-forward baseline wins a cell, that cell is published as a loss, and if it wins the median at the large token budget, that is the headline.",
+  "self_pair_clause": "Self-pair ships or the result does not. A leg reported without its self-pair column is not reportable.",
+  "per_cell_clause": "Per-cell results are published, not only the median. The 9/16 split was the useful statistic in the Unsloth leg, not the 1.11x.",
+  "bill_cap": "Hard $35/job standing cap; expected spend ~$5. Session-independent detached watcher on the mini, evidence-first, receipts written after EVERY cell and pulled continuously, teardown verified by re-query (204 then 404).",
+  "baseline_fidelity_stop_rule": "If the baseline cannot be matched faithfully to the published implementation, that is reported and the leg STOPS. A baseline worse than what GenON published would make any result meaningless."
+ },
+ "what_would_falsify_the_claim": "If D beats G at decode_m8 on either device, the fused training path does not beat the pattern practitioners actually run, in the regime this repo's roofline is strongest, and the README says so. If D beats G at tokbudget_11800 - which the registered S2 prediction says is the likeliest place for it to happen - then the honest statement is that gnf4's training advantage is a small-batch and memory-bound-regime advantage, and the token budget at which it disappears is a number this repo owes its readers.",
+ "what_this_does_and_does_not_license": [
+  "LICENSED, if confirmed: a statement about gnf4's fused training path versus the dequant-on-forward pattern as published, at the stated token budgets, on the stated two devices, on synthetic weights.",
+  "NOT LICENSED: any statement about a tuned grouped GEMM. This baseline is not Unsloth's kernel, not torch._grouped_mm, not marlin, and not a grouped GEMM of any kind.",
+  "NOT LICENSED: superseding, replacing or adjusting the Unsloth training comparison (1.11x median, 0.48-1.65, 9/16 cells, EXPLORATORY, per-cell self-pair 0.618-1.088). The two comparisons measure different things and must not be conflated or divided.",
+  "NOT LICENSED: any end-to-end training-throughput claim. A cell is one projection's forward and backward, not a training step. GenON's 5.5x is an end-to-end pipeline number and nothing here is comparable to it.",
+  "NOT LICENSED: any claim about real-checkpoint numerics. Weights are synthetic."
+ ],
+ "defects_found_and_fixed_before_this_stamp": [
+  "The gate originally required a NON-ZERO gradient for lora_A in every arm. That is wrong: the delta is B(Ax) with B zero-initialised, so dL/dA is exactly zero at LoRA init and the gate would have voided every cell for a mathematical fact rather than a wiring failure. Caught by the A2000 gate run, which reported nonzero=false in all three arms. Fixed by keeping zero-init (standard LoRA, matches the arm run 4 was measured with, and makes the delta exactly zero so b_rel measures the base projection alone) and adding a separate POSITIVE CONTROL that re-runs each arm's backward at a non-zero B and requires dL/dA non-zero there. The reducer now grades the control, not the init-time zero.",
+  "The fidelity ratio was first emitted as baseline-over-fused (D/G). Every fidelity claim in this repo is stated fused-over-baseline ('fused <= 0.755x the dequant path's error'), and the F1 predicted band [0.5, 0.9] was written in that orientation. Caught by the reducer's own tests, which failed a clean receipt. The receipt now emits b_rel_G_over_D and the gate reads <= 1.0."
+ ]
+}

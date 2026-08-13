@@ -189,6 +189,16 @@ def make_activations(
     if regime == "prefill_s2048":
         m = max(1, round(2048 * spec.top_k / spec.E))  # uniform routing, census note
         return [(e, act(m)) for e in range(spec.E)]
+    if regime.startswith("tokbudget_"):
+        # A step's TOKEN budget, uniformly routed: T tokens x top_k experts
+        # spread over E, so the cell holds ~T*top_k rows. `tokbudget_2048` is
+        # `prefill_s2048` by construction and is kept distinct only so an
+        # M-axis sweep reads as one family. The axis exists because the
+        # dequant-on-forward pattern pays a per-step tax that is roughly
+        # independent of T (nf4moe's writeup measures ~2.5 s/step at 743B),
+        # so any comparison against it is a function of T and must state T.
+        m = max(1, round(int(regime[len("tokbudget_"):]) * spec.top_k / spec.E))
+        return [(e, act(m)) for e in range(spec.E)]
     if regime == "prefill_measured":
         if routing is None:
             raise RuntimeError("prefill_measured needs --routing <histogram.json>")
