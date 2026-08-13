@@ -288,6 +288,36 @@ def segment_geometry(index: dict, suffix: str):
             tuple(geo["shape_per_expert"]), geo["seg_off"], geo["length"])
 
 
+_WIDENING = None
+
+
+def widening_casts():
+    """``{(segment_dtype, destination_dtype)}`` a staging copy may convert.
+
+    Deliberately a whitelist of WIDENING casts only, and only ones that are
+    value-preserving in that direction: every bf16 and fp16 value is exactly a
+    float32. So a segment stored narrower than the consumer wants costs a
+    conversion and nothing else — which is what lets an arena store absmax as
+    bf16 (bitwise lossless for a bf16 checkpoint, -5.6% of every row) while the
+    kernel keeps being handed the fp32 absmax its contract specifies.
+
+    NARROWING is not here and must not be added: it would silently round values
+    on a staging path whose whole promise is that the bytes it serves are the
+    bytes that were baked.
+
+    Exported so consumers (e4b's ``check_arena_geometry``) test the same table
+    rather than growing a second, drifting copy of the policy.
+    """
+    global _WIDENING
+    if _WIDENING is None:
+        import torch
+        _WIDENING = frozenset({
+            (torch.bfloat16, torch.float32),
+            (torch.float16, torch.float32),
+        })
+    return _WIDENING
+
+
 def segment_into(tier: "ColdTier", index: dict, layer: int, experts,
                  suffix: str, out, *, rows=None, non_blocking: bool = False):
     """Fill ``out`` with one segment's bytes for ``experts``, into storage the
@@ -324,8 +354,11 @@ def segment_into(tier: "ColdTier", index: dict, layer: int, experts,
     dst_rows = list(range(len(experts))) if rows is None else [int(r) for r in rows]
     if len(dst_rows) != len(experts):
         raise ValueError(f"rows has {len(dst_rows)} entries for {len(experts)} experts")
-    if out.dtype != dt:
-        raise TypeError(f"out has dtype {out.dtype} but segment {suffix!r} is {dt}")
+    widen = out.dtype != dt and (dt, out.dtype) in widening_casts()
+    if out.dtype != dt and not widen:
+        raise TypeError(
+            f"out has dtype {out.dtype} but segment {suffix!r} is {dt}. "
+            f"Widening is allowed only for {sorted(str(a) + '->' + str(b) for a, b in widening_casts())}.")
     if tuple(out.shape[1:]) != shape:
         raise ValueError(f"out is {tuple(out.shape)}; segment {suffix!r} needs "
                          f"[R, {', '.join(str(s) for s in shape)}]")
@@ -335,6 +368,21 @@ def segment_into(tier: "ColdTier", index: dict, layer: int, experts,
     slots = tier.ensure(layer, experts)
     pinned = tier.pinned_tensor() if tier.pinned else None
     for r, e, slot in zip(dst_rows, experts, slots):
+        if widen:
+            # A narrower segment feeding a wider destination: the bytes cannot
+            # be memcpy'd, they have to be READ at the segment's dtype and
+            # converted. torch does the conversion inside copy_, so this stays
+            # one H2D and the destination keeps whatever dtype the kernel wants
+            # -- which is the point: bf16 absmax on disk, fp32 absmax in VRAM,
+            # kernel contract untouched.
+            dst = out[r].reshape(-1)
+            if pinned is not None:
+                src = pinned[slot, off:off + ln].view(dt)
+            else:
+                mv = tier.row(layer, e)[off:off + ln]
+                src = torch.frombuffer(bytearray(mv), dtype=torch.uint8).view(dt)
+            dst.copy_(src, non_blocking=non_blocking)
+            continue
         # Reinterpret the destination row as bytes. `out` is contiguous, so each
         # row is a flat byte run of exactly `ln` bytes and the copy is a memcpy
         # (or one H2D) regardless of the segment's logical dtype.

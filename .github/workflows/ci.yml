@@ -82,7 +82,7 @@ jobs:
       # comparisons. These shipped with the arena format but nothing in CI ran
       # them — a green check that was green about other code.
       - name: NVMe arena + bake contracts
-        run: cd kernel && python -m pytest test_nvme_arena.py test_nvme_bake_nf4.py test_nvme_bake_experts.py test_nvme_segment_into.py test_nvme_qd.py -q
+        run: cd kernel && python -m pytest test_nvme_arena.py test_nvme_bake_nf4.py test_nvme_bake_experts.py test_nvme_segment_into.py test_nvme_qd.py test_nvme_absmax_bf16.py -q
 
       # GGUF k-quant lane: oracle adjudication vs gguf-py (installed here so
       # the oracle arm RUNS in CI — importorskip must never silently green

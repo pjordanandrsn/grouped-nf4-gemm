@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+### `bake_nf4 --absmax-dtype bf16`: 5.6% off every arena row, bitwise lossless
+
+absmax is **11.1% of a Qwen3-30B row** (294,912 of 2,654,208 B) and shipped as fp32.
+For a bf16 checkpoint it can be stored bf16 with **no change to any computed value**:
+absmax is `|w|.amax()` over a block, so it *is* one of the source magnitudes, and the
+maximum of a set of bf16 values is a bf16 value. Measured on the real Qwen3-30B —
+**80/80 expert tensors bitwise identical** after a bf16 round-trip, with an fp32-source
+control correctly *not* identical.
+
+Against ground truth (the original bf16 weights), where the NF4 quantization floor is
+12.0766% relative RMSE:
+
+| absmax storage | rel. RMSE | vs the floor | row |
+|---|---|---|---|
+| fp32 | 12.0766% | — | — |
+| **bf16** | **12.0766%** | **+0.00%** | **−5.6%** |
+| int8 (per-256 linear) | 12.0852% | +0.07% | −8.3% |
+
+int8 was the obvious candidate and is the worse trade: 2.7 more points of row for a
+numerics change, a re-bake accepted as a different quantization config, and a kernel
+contract that excludes nested absmax.
+
+- **`--absmax-dtype {f32,bf16,auto}`**, default **`f32`** — unchanged behaviour. The index
+  is self-describing, but *older readers are not*: one predating this refuses the segment,
+  so flipping the default would break them on a library upgrade alone.
+- **`auto`** decides from the **source dtype** (a proof) rather than by sampling values (a
+  guess that can pass on the experts it looked at).
+- **`cast_absmax` refuses an inexact cast** instead of rounding quietly, and is applied in
+  `bake_nf4` after the quantizer — so an *injected* `quantize_fn` cannot return a width the
+  row geometry did not budget for, which would write a short row and shift every later
+  offset.
+- **`segment_into` widens** bf16/fp16 segments into an fp32 destination via a converting
+  `copy_` instead of a memcpy. VRAM and the kernel contract are untouched: bf16 on disk,
+  fp32 absmax in VRAM. `widening_casts()` is exported so consumers test the same table;
+  **narrowing is not in it and must not be added.**
+
 ### The arena reader's queue depth scales with the host's CPU budget
 
 `ArenaReader(qd=...)` and `ColdTier(qd=...)` now default to `None`, which resolves to
