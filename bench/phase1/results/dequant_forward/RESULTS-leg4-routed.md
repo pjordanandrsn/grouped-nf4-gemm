@@ -140,35 +140,107 @@ host-to-device copy `gemm_4bit_grouped` performs when handed a list. That is a
 change to shipped code and a **separate experiment with its own registration**;
 the stop rule here explicitly bars adding it after the fact to even this race.
 
-## ⚠️ CAVEAT ON THE ADVERSARIAL RESULT ITSELF — it is an UPPER BOUND on what graphing buys the baseline
+## RESOLVED — the graphed race was an artifact of the static fixture
 
-Added after the fact, and it cuts toward gnf4, so it is stated as a limit on
-what was shown rather than as a reason to discount it. **The result stands
-exactly as measured: under the static shapes this fixture provides, the
-baseline captures and the fused path does not.**
+This replaces the caveat that stood here, per the stop rule in
+`kernel/prereg_dequant_forward_dynamic.json` (OTS-stamped pre-data), which
+required the measured answer be written in **either** direction. Both rented
+devices, 8 gradeable cells each; the other 8 are `NOT-RUN` for want of measured
+routing, as everywhere else in this program.
 
-But **CUDA graphs require static shapes, and MoE routing does not provide
-them.** Per-expert group sizes change every step with the router, so a graph
-captured at one routing draw is invalid at the next. A real trainer can only
-use graphs by:
+**CUDA graphs need static shapes and MoE routing does not provide them.** Once
+the baseline is charged for obtaining them, the advantage it gained from
+graphing is more than spent. `d/g` > 1 means the fused path is faster.
 
-- **padding to a fixed expert capacity** — every expert gets `C` rows whether it
-  was routed `C` tokens or none. At training shape the measured draws give
-  ~1–17 rows per hit expert over 64 experts, so a capacity that drops no tokens
-  costs roughly **4× the rows** of faithful routing. That tax is paid on every
-  step, by whichever arm is graphed.
-- **re-capturing per step**, whose cost is the capture time itself; or
-- **bucketing** to a few discrete shapes, which is padding with extra steps.
+| cell | pad tax | H100 ungraphed | H100 graphed+padded | **H100 best** | 4090 ungraphed | 4090 graphed+padded | **4090 best** |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| OLMoE gate_up T=32 | 6.75× | 5.843 | 0.968 | **0.968** | 7.664 | 1.493 | **1.493** |
+| OLMoE down T=32 | 6.75× | 8.275 | 1.128 | **1.128** | 7.344 | 1.617 | **1.617** |
+| Qwen gate_up T=32 | 11.00× | 6.698 | 2.522 | **2.522** | 6.111 | 4.202 | **4.202** |
+| Qwen down T=32 | 11.00× | 10.627 | 2.931 | **2.931** | 6.880 | 2.871 | **2.871** |
+| OLMoE gate_up T=2048 | 4.95× | 1.177 | 3.379 | **1.177** | 1.966 | 9.551 | **1.966** |
+| OLMoE down T=2048 | 4.95× | 1.993 | 3.425 | **1.993** | 2.064 | 8.471 | **2.064** |
+| Qwen gate_up T=2048 | 8.12× | 2.188 | 11.864 | **2.188** | 3.370 | 33.652 | **3.370** |
+| Qwen down T=2048 | 8.12× | 3.610 | 8.763 | **3.610** | 3.416 | 21.241 | **3.416** |
 
-So the 8.6–12.5× the baseline gained here is what graphing is worth **when the
-shapes happen to be static**, which this fixture makes them and real training
-does not. Whether any of it is collectable in situ is **unestablished**, and
-the write-up above should not be read as saying it is.
+**Read the `best` columns, not the race.** The baseline is not obliged to pad —
+it picks whichever configuration is faster for it, and at T=2048 that is plainly
+*not* graphing. Quoting the graphed-and-padded race alone (median 3.16 on the
+H100, 6.34 on the 4090; 6.09 and 15.40 if restricted to T=2048) would flatter
+gnf4 by assuming an opponent's mistake.
+Against the baseline's **best available like-for-like configuration** the margin
+is **2.09× median on the H100 and 2.47× on the 4090** — smaller than the race,
+larger than the ungraphed comparison, and the number that should be quoted.
 
-The test that decides which of this leg's two results is the real one is
-registered in `kernel/prereg_dequant_forward_dynamic.json`: measure the
-capacity-padding tax and race `D_base` graphed-at-padded-shapes against
-`G_base` at faithful shapes. If padding is cheap, the graphed race is the real
-world and gnf4's case is memory. If padding costs ~4×, the ungraphed comparison
-is the relevant one after all and leg 4's speed numbers return.
+**The cell that loses: H100 OLMoE `gate_up` T=32, at 0.968.** A graphed, padded
+baseline beats the fused path there by 3%. It is the only cell of 16 below 1,
+and it is on the device and regime where earlier legs already found the
+comparison is ~90% host time. Its sibling `down` at the same shape reads 1.128.
+
+Padding is not uniformly a penalty, which is worth stating because it argues
+against us: on 2 of 16 cells `d_padded_plain / d_faithful` came in **below 1**
+(H100 OLMoE gate_up T=32 at 0.73, down at 0.90) — 64 uniform groups can beat 58
+ragged ones when the GPU is idle enough that the extra rows are free. The tax is
+a row ratio, and it converts to time only when the device is saturated. That is
+the whole mechanism: at T=32 padding is nearly free and graphing pays, at T=2048
+padding is fully priced and graphing does not.
+
+**Prereg grades.** P1 **confirmed** (tax > 3× at T=32: measured 6.75× and
+11.00×). P2 **REFUTED** — predicted < 1.5× at T=2048, measured 4.95× and 8.12×.
+The prediction reasoned from occupancy, which does saturate; the tax is set by
+**skew**, which does not. Capacity must cover the *hottest* expert, and the
+measured routing runs 31–795 against a uniform 256 (OLMoE cv 0.506; Qwen cv
+1.607 with ~20% of experts empty). Skew persists at every token count, so the
+tax never collapses. That refutation is worth more than P1 — it corrects the
+quantity, not just the number. P3 registered **no direction** and reads above 1
+in **15 of 16 cells**.
+
+**Re-capturing per step is closed, not merely expensive.** Capture cost is
+median 324 ms (H100) and 473 ms (4090), max 2583 ms, against a step of ~1–3 ms
+— two to three orders of magnitude underwater. Bucketing is padding with extra
+steps and inherits the tax above.
+
+**What this does not license.** It restores the *comparison*, not a claim that
+gnf4 is 2× faster in general: the T=32 cells remain host-dominated, the two
+`NOT-RUN` models are still unmeasured, and routing fidelity is still one
+2048-token capture per model. The Unsloth 1.11× comparison is untouched by any
+of this.
+
+### Amendment 1 — the capacity_factor arm (report-only, NOT a speed result)
+
+The no-drop capacity above is the honest like-for-like bound, but it is not what
+trainers run: real MoE training sets `capacity_factor` 1.0–2.0 and **discards**
+the overflow. Leaving that unpriced would imply 5–11× is the baseline's only
+option, which is false. At `cf` the row tax is ~`cf` by construction, so the
+currency is **discarded routed work**, computed directly from the measured
+per-layer histograms (median across all layers, sampling model removed):
+
+| cf | row tax | OLMoE drops | Qwen drops |
+|---:|---:|---:|---:|
+| 1.00 | 1.00× | 22.6% | 54.5% |
+| **1.25** | **1.25×** | **12.5%** (6.3–22.4) | **47.0%** (24.9–60.2) |
+| 1.50 | 1.50× | 7.2% | 40.7% |
+| 2.00 | 2.00× | 3.1% | 28.0% |
+| no-drop | 4.95× / 8.12× | 0% | 0% |
+
+A sampled cross-check agrees (14.1% / 45.9% at cf=1.25), so the skew is in the
+measurement, not the simulation. **There is no good capacity setting for a
+skewed router:** pad and pay 5–8× the rows, or clip and lose 12–47% of the
+computation. Qwen is punished on both. This is MegaBlocks' dropless-MoE
+motivation arrived at from the kernel side, and it is the sturdiest thing in
+this section because it is a property of the routing, not of a device.
+
+Two binding constraints, both registered in amendment 1 (which is **not blind**
+— it was written after the no-drop partials, and the drop curve is a
+deterministic function of histograms already in this repo, so it is not dressed
+up as a prediction). **No timing from this arm may be quoted without its drop
+rate in the same sentence**, and the arm may not be reported as a speed result:
+the baseline is simultaneously given a graph the fused path cannot have *and*
+excused work the fused path still performs in full. And the drop rates are a
+**ceiling** — each histogram is one 2048-token inference capture, with no batch
+mixing and no load-balancing auxiliary loss, both of which would flatten the
+router. That bias makes the baseline look worse than it is.
+
+The quality cost of discarding 12–47% of routed work is **not measured here and
+cannot be** — that needs a training run and an eval, not a timer.
 
