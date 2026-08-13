@@ -90,7 +90,7 @@ on the 4090 in run 2 (7 of 8).
 
 Most of what is being measured there is not either kernel. **The shared LoRA
 floor — the identical `lora_delta_grouped` call both arms make — is 54–66% of
-the fused arm's time at `decode_m8`**, against cells that are themselves only
+the fused arm's time at `decode_m8`** (0.18–0.68 across all live cells), against cells that are themselves only
 1.2–1.6 ms. It is added to both arms and therefore compresses every ratio toward
 1.0, and it is largest exactly where the ratios are smallest. It is measured per
 cell and reported. It is **not subtracted from anything**: arithmetic on ratios
@@ -160,15 +160,17 @@ accurate. F1's gate passes everywhere (fused never worse) and its predicted band
 same precision and the speed ratio there is partly a trade the baseline made,
 not purely a kernel comparison.
 
-**6. GenON's published routing plumbing costs 1.07–2.24× on top of the same
-compute** (median 1.56 at `decode_m8`, 1.19 at 11 800 on the H100). That is the
+**6. GenON's published routing plumbing costs 1.04–2.33× on top of the same
+compute** across live cells (per-regime medians on the H100: 1.56 at
+`decode_m8`, 1.19 at 11 800). That is the
 one-hot mask, the `.tolist()` sync, the gather and the `index_add_` — the part
 this leg deliberately did *not* charge to the baseline. The headline comparison
 therefore runs against a baseline meaningfully faster than the published module.
 
 **7. Energy tracks speed and adds no independent axis here.** J/step D over G
 follows `d/g` closely in every regime on both devices (H100 1.14/1.72/1.48;
-4090 1.21/1.82/2.45), with watts stable at 378–506 W. There is now a training
+4090 1.21/1.82/2.45). Draw ranged 67–506 W across the four legs (the 4090's
+smallest cells idle far lower than the H100's). There is now a training
 energy number where there was none; it does not tell a different story from the
 timing.
 
