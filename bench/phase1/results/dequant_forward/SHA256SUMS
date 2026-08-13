@@ -1,5 +1,5 @@
-c048d68e035ebcd665fafa9c465c092cc9d7f2eade54a44895b564855e522186  ./RESULTS-dequant-forward.md
-232c7b17215b301b44479bceca411dfaf809f09f8d1d886ddfb2bde8e5ad5131  ./RESULTS-floorfree.md
+898a125ef8a6d9b779ce042b2e92c9b275206a5908ec888a1c2b105258da789f  ./RESULTS-dequant-forward.md
+6a1a47ef8e4b358a65a9baf86fd7ce6a98788738d1fa130fa629a7ee2641ec07  ./RESULTS-floorfree.md
 b99ebd51621b65ba6a23005e2bc9124a674ae6a9507ef002c4ca6aa26833164e  ./bf16_redprec/A2000-error-only.txt
 6e2e3de9c2209a18127bdcacd201f2c0947674a8712d53fb91564860a2a71ffd  ./bf16_redprec/ADA-4090.txt
 6fe0d1b2f499334d12896bb8298c4a4f262a38c4f3529e5449f47bbf0657eca1  ./bf16_redprec/H100.txt

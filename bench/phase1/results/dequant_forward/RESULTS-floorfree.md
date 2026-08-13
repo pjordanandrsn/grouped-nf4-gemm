@@ -153,18 +153,30 @@ training shape touches a median 57 of 64 experts (89%), max 63 (98%).** Neither
 fixture family in these legs models that, and the two families are wrong in
 *opposite* directions.
 
-**The decode band (`decode_bs1`, `decode_m8`, `decode_m32`) UNDER-charges the
-baseline.** `make_activations` builds `experts = list(range(top_k))` — exactly
-`top_k` groups of M rows. At 32 tokens real routing spreads the same total rows
-over ~57 distinct experts averaging ~4.5 rows each. The dequant-on-forward arm
-pays one `dequantize_4bit` per **hit** expert, so reality charges it roughly
-**7× more dequant calls** than the fixture does, while the fused arm is
-single-launch and far less sensitive to group count. **Every decode-band ratio
-in these legs, F1's 1.588 included, is therefore CONSERVATIVE** — the
-routing-faithful number should be larger. Byte-count bound for OLMoE `gate_up`
-on the H100: 57 dequants rather than 8 adds ~0.14 ms to a ~0.45 ms baseline,
-which would move `decode_m32` from 1.564 toward ~2. That is an estimate from
-traffic, not a measurement, and it is not claimed.
+**The decode band (`decode_bs1`, `decode_m8`, `decode_m32`) does not model
+routing at all, and BOTH arms are affected.** `make_activations` builds
+`experts = list(range(top_k))` — exactly `top_k` groups of M rows.
+
+TESTED, by sampling the measured per-expert distribution rather than deriving
+it: at T=32 a routing-faithful draw hits **58 of 64 experts** (sampled median
+59, closed form agreeing to ~0.5 experts; the operator's 57 sits just below,
+consistent with real routing being correlated), spreading the **same 256 rows**
+over groups of **1–17 rows, mean 4.4**, against the fixture's 8 groups of 32.
+
+- the dequant-on-forward arm pays one `dequantize_4bit` per **hit** expert, so
+  it takes **8 → 58 calls, 7.25×** more. Tested.
+- the fused arm takes **8 → 58 groups** of ~4 rows each. This repo's own phase-1
+  routing work found `n_groups` is the grouped path's cost knob, with cost near
+  linear in it — and the fused single-launch design's claim was *insensitivity*
+  to exactly that, which is a thing to re-measure, not to assume.
+
+**So the net direction of `d/g` under faithful routing is NOT established, and
+is not claimed here.** An earlier draft of this section asserted the decode-band
+numbers were conservative on the strength of the baseline's dequant count alone;
+that ignored the fused arm's group count and is withdrawn. Both arms move, the
+byte-count bound offered for one of them is not a measurement, and the honest
+statement is that these cells model a routing pattern that does not occur and
+the correction must be measured on both arms together.
 
 **The token-budget regimes are correct on occupancy and wrong on skew.**
 Deriving expected occupancy from this repo's own measured OLMoE histogram
