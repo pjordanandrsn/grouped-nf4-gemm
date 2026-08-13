@@ -90,8 +90,9 @@ on the 4090 in run 2 (7 of 8).
 
 Most of what is being measured there is not either kernel. **The shared LoRA
 floor — the identical `lora_delta_grouped` call both arms make — is 54–66% of
-the fused arm's time at `decode_m8`** (0.18–0.68 across all live cells), against cells that are themselves only
-1.2–1.6 ms. It is added to both arms and therefore compresses every ratio toward
+the fused arm's time at `decode_m8`**, against cells that are themselves only
+1.2–1.6 ms. Across all live cells it spans 0.18–0.68 of the fused arm, tracking
+cell size. It is added to both arms and therefore compresses every ratio toward
 1.0, and it is largest exactly where the ratios are smallest. It is measured per
 cell and reported. It is **not subtracted from anything**: arithmetic on ratios
 after the fact is how instruments get talked into saying what you wanted. A
