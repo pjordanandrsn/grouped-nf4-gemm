@@ -1,0 +1,17 @@
+{
+ "registered_utc": "2026-08-13T15:40:00Z",
+ "purpose": "ADVERSARIAL TEST OF LEG 4'S HEADLINE. Leg 4 found the fused path's wall advantage is mostly eliminated launches -- ~59 python-mediated launches for the baseline against one, at 6% GPU-busy on an H100. But a user can erase the baseline's launch overhead TODAY: it CUDA-graphs cleanly (4/4 attempts, both devices), while the fused path fails capture 8/8. So the race actually available to someone choosing between these implementations is D_base GRAPHED against G_base AS IT SHIPS. This is registered before the data because it can falsify leg 4's headline, and it should be run before leg 4 is published anywhere.",
+ "also_measured": "Peak transient memory under FAITHFUL routing, both fixtures. F.linear saves its weight for backward, so the baseline holds every HIT expert's materialised bf16 weight across the fwd->bwd window: the old fiction gave it top_k hit experts, real routing gives ~59. Leg 1 measured this axis on the fixture now known to understate it, and memory is where this kernel's claim has always been strongest.",
+ "handicaps_registered_in_the_BASELINE's_favour": [
+  "A replayed graph reuses its input buffers; a real training loop would copy fresh activations in each step and the graph does not pay for that here.",
+  "The fused arm gets no equivalent optimisation, because none exists for it today.",
+  "Both make this test HARDER on gnf4, which is the direction an adversarial test should lean."
+ ],
+ "frozen_predictions": {
+  "P1_graphing_helps_the_baseline_a_lot": "PREDICTED: graphing gives the baseline >2x at training shape, because that is where it is 6-13% GPU-busy and makes ~59 launches. If graphing gives it little, then its host cost is not launch overhead and leg 4's mechanism is wrong.",
+  "P2_the_headline_survives_or_it_does_not": "NO DIRECTION PREDICTED, and this is the point of the test. Leg 4's faithful d/g at training shape was 10.05 (4090) and 11.37 (H100). If d/g_GRAPHED stays above ~2 the advantage is real against an optimised baseline. If it collapses toward or below 1, leg 4's headline is an artifact of comparing an optimisable path against an already-optimal one, and every results doc in this leg must say so in those words.",
+  "P3_memory_favours_the_fused_arm_more_under_faithful_routing": "PREDICTED: the baseline's transient memory rises materially from fiction to faithful (it holds ~59 materialised weights instead of top_k), so memory D/G under faithful routing exceeds leg 1's figure. If it does not rise, the saved-weight mechanism is not what drives that axis and leg 1's memory story needs revisiting."
+ },
+ "no_bars": "Report-only. This probe cannot 'pass'; it can only tell us whether a published claim survives the strongest cheap attack available.",
+ "stop_rule": "Whatever it shows is written into RESULTS-leg4-routed.md verbatim, including if it removes the headline. No re-running for a better number, no adding optimisations to the fused arm afterwards to even the race -- that would be a different, later experiment with its own registration."
+}
