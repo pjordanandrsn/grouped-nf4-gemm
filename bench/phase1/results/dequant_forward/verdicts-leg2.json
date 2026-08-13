@@ -1,0 +1,385 @@
+{
+ "prereg": "kernel/prereg_dequant_forward_floorfree.json",
+ "prereg_verdict_key": "FLOORFREE_CONFIRMED = F1 AND B1 AND Q1 AND Q2 AND Q4, on BOTH devices. F2, E1 and L1 are reported and never enter the verdict.",
+ "devices": {
+  "H100": {
+   "device": "H100",
+   "gpu": "NVIDIA H100 80GB HBM3",
+   "capability": "9.0",
+   "eids_form": "list",
+   "cells_ok": 32,
+   "cells_skipped": 0,
+   "skipped": [],
+   "void_cells": [],
+   "void_fraction": 0.0,
+   "Q1_self_pair": true,
+   "Q2_wiring": true,
+   "Q2_failures": [],
+   "Q4_fidelity": true,
+   "Q4_detail": {
+    "median_b_rel_G_over_D": 0.7623938318596779,
+    "failures": []
+   },
+   "F1_floorfree_small_batch": true,
+   "F1_detail": {
+    "regime": "decode_m8",
+    "cells_at_or_above_bar": 7,
+    "of": 8,
+    "median": 1.5875236309366485,
+    "predicted_band": [
+     1.3,
+     3.0
+    ],
+    "median_in_predicted_band": true,
+    "per_cell": [
+     {
+      "cell": "OLMoE-1B-7B-0924/gate_up",
+      "dbase_over_gbase": 1.5525681831295814
+     },
+     {
+      "cell": "OLMoE-1B-7B-0924/down",
+      "dbase_over_gbase": 1.7293765280692888
+     },
+     {
+      "cell": "Qwen3-30B-A3B/gate_up",
+      "dbase_over_gbase": 1.6224790787437156
+     },
+     {
+      "cell": "Qwen3-30B-A3B/down",
+      "dbase_over_gbase": 1.7073477017904224
+     },
+     {
+      "cell": "gemma-4-26B-A4B/gate_up",
+      "dbase_over_gbase": 1.4592147000889215
+     },
+     {
+      "cell": "gemma-4-26B-A4B/down",
+      "dbase_over_gbase": 1.8137003191142178
+     },
+     {
+      "cell": "gpt-oss-120b/gate_up",
+      "dbase_over_gbase": 0.7272505311441403
+     },
+     {
+      "cell": "gpt-oss-120b/down",
+      "dbase_over_gbase": 1.0833040295116487
+     }
+    ]
+   },
+   "B1_leg1_replication": true,
+   "B1_detail": {
+    "comparable_cells": 7,
+    "outside_band": [],
+    "band": [
+     0.85,
+     1.15
+    ],
+    "pairs": [
+     {
+      "cell": "OLMoE-1B-7B-0924/gate_up",
+      "leg2_full": 1.1042887968479176,
+      "leg1": 1.0704329511281598,
+      "ratio": 1.0316281796856834
+     },
+     {
+      "cell": "OLMoE-1B-7B-0924/down",
+      "leg2_full": 1.2226188719112794,
+      "leg1": 1.145788871866758,
+      "ratio": 1.0670542382902946
+     },
+     {
+      "cell": "Qwen3-30B-A3B/gate_up",
+      "leg2_full": 1.1411207485495283,
+      "leg1": 1.0877991960607736,
+      "ratio": 1.049017826710892
+     },
+     {
+      "cell": "gemma-4-26B-A4B/gate_up",
+      "leg2_full": 1.096930420034388,
+      "leg1": 1.0703732774361323,
+      "ratio": 1.0248111039000039
+     },
+     {
+      "cell": "gemma-4-26B-A4B/down",
+      "leg2_full": 1.2529296434855377,
+      "leg1": 1.17516716258589,
+      "ratio": 1.0661714208628292
+     },
+     {
+      "cell": "gpt-oss-120b/gate_up",
+      "leg2_full": 0.7868222673871327,
+      "leg1": 0.7994654616078335,
+      "ratio": 0.9841854403625222
+     },
+     {
+      "cell": "gpt-oss-120b/down",
+      "leg2_full": 0.9509148231768053,
+      "leg1": 0.9324777467249902,
+      "ratio": 1.0197721355995562
+     }
+    ]
+   },
+   "F2_small_batch_band_report_only": [
+    {
+     "regime": "decode_bs1",
+     "n": 8,
+     "median_dbase_over_gbase": 1.8552355052777803,
+     "min": 0.898502918756729,
+     "max": 2.1123994634989325,
+     "median_dfull_over_gfull": 1.2076694684548133
+    },
+    {
+     "regime": "decode_m8",
+     "n": 8,
+     "median_dbase_over_gbase": 1.5875236309366485,
+     "min": 0.7272505311441403,
+     "max": 1.8137003191142178,
+     "median_dfull_over_gfull": 1.122704772698723
+    },
+    {
+     "regime": "decode_m32",
+     "n": 8,
+     "median_dbase_over_gbase": 1.563801294005711,
+     "min": 0.7590466243653576,
+     "max": 1.7625940553137018,
+     "median_dfull_over_gfull": 1.1324905170016137
+    },
+    {
+     "regime": "tokbudget_2048",
+     "n": 8,
+     "median_dbase_over_gbase": 2.4862540507423363,
+     "min": 1.066452038291441,
+     "max": 2.97965287987649,
+     "median_dfull_over_gfull": 2.194681290530798
+    }
+   ],
+   "L1_floor_report_only": {
+    "median_lora_floor_frac_of_gbase_at_decode_m8": 1.537102727754395,
+    "expectation": "> 0.5",
+    "met": true
+   },
+   "E1_energy_report_only": {
+    "median_j_ratio": 1.7364414119743876
+   },
+   "DEVICE_CONFIRMED": true
+  },
+  "ADA": {
+   "device": "ADA",
+   "gpu": "NVIDIA GeForce RTX 4090",
+   "capability": "8.9",
+   "eids_form": "list",
+   "cells_ok": 32,
+   "cells_skipped": 0,
+   "skipped": [],
+   "void_cells": [
+    {
+     "cell": "OLMoE-1B-7B-0924/gate_up",
+     "regime": "decode_bs1",
+     "why": "db_selfpair=1.2433; gb_drift=0.9263"
+    },
+    {
+     "cell": "OLMoE-1B-7B-0924/gate_up",
+     "regime": "decode_m8",
+     "why": "gb_selfpair=0.7929"
+    },
+    {
+     "cell": "OLMoE-1B-7B-0924/gate_up",
+     "regime": "decode_m32",
+     "why": "gb_selfpair=1.0326; db_selfpair=0.8581"
+    },
+    {
+     "cell": "OLMoE-1B-7B-0924/down",
+     "regime": "decode_m8",
+     "why": "gb_selfpair=1.0389; db_selfpair=0.9441"
+    },
+    {
+     "cell": "OLMoE-1B-7B-0924/down",
+     "regime": "decode_m32",
+     "why": "gb_selfpair=1.0364; gb_drift=0.7159"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/gate_up",
+     "regime": "decode_bs1",
+     "why": "gb_drift=1.3051"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/gate_up",
+     "regime": "decode_m8",
+     "why": "gb_selfpair=1.0545"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/gate_up",
+     "regime": "decode_m32",
+     "why": "db_selfpair=0.9205; gb_drift=0.9052"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/down",
+     "regime": "decode_bs1",
+     "why": "gb_selfpair=0.9467; db_selfpair=0.9089; gb_drift=1.3499"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/down",
+     "regime": "decode_m8",
+     "why": "gb_selfpair=0.6778; db_selfpair=1.0320; gb_drift=0.5574"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/down",
+     "regime": "decode_m32",
+     "why": "gb_selfpair=1.0501; gb_drift=1.0552"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/down",
+     "regime": "tokbudget_2048",
+     "why": "db_selfpair=1.0802"
+    },
+    {
+     "cell": "gemma-4-26B-A4B/gate_up",
+     "regime": "decode_bs1",
+     "why": "gb_selfpair=1.1034; gb_drift=0.9417"
+    },
+    {
+     "cell": "gemma-4-26B-A4B/down",
+     "regime": "decode_bs1",
+     "why": "gb_drift=1.1972"
+    },
+    {
+     "cell": "gemma-4-26B-A4B/down",
+     "regime": "decode_m8",
+     "why": "gb_selfpair=0.6684; db_selfpair=1.2264; gb_drift=0.4632"
+    },
+    {
+     "cell": "gemma-4-26B-A4B/down",
+     "regime": "decode_m32",
+     "why": "gb_selfpair=0.9331; db_selfpair=1.1136; gb_drift=1.2417"
+    },
+    {
+     "cell": "gemma-4-26B-A4B/down",
+     "regime": "tokbudget_2048",
+     "why": "db_selfpair=1.0409"
+    },
+    {
+     "cell": "gpt-oss-120b/gate_up",
+     "regime": "decode_bs1",
+     "why": "gb_selfpair=1.3407; db_selfpair=1.0762; gb_drift=0.8874"
+    },
+    {
+     "cell": "gpt-oss-120b/gate_up",
+     "regime": "decode_m8",
+     "why": "gb_selfpair=1.1160; db_selfpair=0.5575; gb_drift=1.3010"
+    },
+    {
+     "cell": "gpt-oss-120b/gate_up",
+     "regime": "decode_m32",
+     "why": "gb_drift=0.9384"
+    },
+    {
+     "cell": "gpt-oss-120b/down",
+     "regime": "decode_bs1",
+     "why": "gb_selfpair=1.0735; db_selfpair=0.9101; gb_drift=1.1556"
+    },
+    {
+     "cell": "gpt-oss-120b/down",
+     "regime": "decode_m8",
+     "why": "gb_selfpair=1.1722; gb_drift=0.9359"
+    }
+   ],
+   "void_fraction": 0.6875,
+   "Q1_self_pair": false,
+   "Q2_wiring": true,
+   "Q2_failures": [],
+   "Q4_fidelity": true,
+   "Q4_detail": {
+    "median_b_rel_G_over_D": 0.7580958293278001,
+    "failures": []
+   },
+   "F1_floorfree_small_batch": false,
+   "F1_detail": {
+    "regime": "decode_m8",
+    "cells_at_or_above_bar": 1,
+    "of": 1,
+    "median": 2.285443980377377,
+    "predicted_band": [
+     1.3,
+     3.0
+    ],
+    "median_in_predicted_band": true,
+    "per_cell": [
+     {
+      "cell": "gemma-4-26B-A4B/gate_up",
+      "dbase_over_gbase": 2.285443980377377
+     }
+    ]
+   },
+   "B1_leg1_replication": false,
+   "B1_detail": {
+    "comparable_cells": 1,
+    "outside_band": [
+     {
+      "cell": "gemma-4-26B-A4B/gate_up",
+      "leg2_full": 1.4822352974825943,
+      "leg1": 1.0755096046096948,
+      "ratio": 1.378170209851823
+     }
+    ],
+    "band": [
+     0.85,
+     1.15
+    ],
+    "pairs": [
+     {
+      "cell": "gemma-4-26B-A4B/gate_up",
+      "leg2_full": 1.4822352974825943,
+      "leg1": 1.0755096046096948,
+      "ratio": 1.378170209851823
+     }
+    ]
+   },
+   "F2_small_batch_band_report_only": [
+    {
+     "regime": "decode_bs1",
+     "n": 1,
+     "median_dbase_over_gbase": 2.6379111147502714,
+     "min": 2.6379111147502714,
+     "max": 2.6379111147502714,
+     "median_dfull_over_gfull": 1.6231206416493407
+    },
+    {
+     "regime": "decode_m8",
+     "n": 1,
+     "median_dbase_over_gbase": 2.285443980377377,
+     "min": 2.285443980377377,
+     "max": 2.285443980377377,
+     "median_dfull_over_gfull": 1.4822352974825943
+    },
+    {
+     "regime": "decode_m32",
+     "n": 2,
+     "median_dbase_over_gbase": 1.972219973664394,
+     "min": 1.5724667991519472,
+     "max": 2.3719731481768407,
+     "median_dfull_over_gfull": 1.3112136364371214
+    },
+    {
+     "regime": "tokbudget_2048",
+     "n": 6,
+     "median_dbase_over_gbase": 3.0597962914317183,
+     "min": 1.8202290151159375,
+     "max": 6.433824030417002,
+     "median_dfull_over_gfull": 2.6689057780962853
+    }
+   ],
+   "L1_floor_report_only": {
+    "median_lora_floor_frac_of_gbase_at_decode_m8": 1.7369573901487632,
+    "expectation": "> 0.5",
+    "met": true
+   },
+   "E1_energy_report_only": {
+    "median_j_ratio": 2.900814447615224
+   },
+   "DEVICE_CONFIRMED": false
+  }
+ },
+ "two_device_rule_met": true,
+ "FLOORFREE_CONFIRMED": false,
+ "note": "NOT CONFIRMED means the registered criteria were not all met, not that the numbers are wrong. Report at full volume."
+}
