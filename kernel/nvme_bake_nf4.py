@@ -211,6 +211,39 @@ class _Shards:
                                   hashlib.sha256(raw).hexdigest())
 
 
+def _explain_no_experts(sh, prefix, marker, gate_key, unindexed):
+    """Say what was searched for and what the checkpoint actually has.
+
+    Discovery matching nothing used to surface as ``max() arg is an empty
+    sequence`` one line later, which names none of the three things that decide
+    the match. That has now cost a diagnosis twice: Kimi K3 spelling its weights
+    ``.weight_packed``, and Gemma-4 nesting its stack under
+    ``model.language_model.layers`` with a FUSED expert tensor and no per-expert
+    index. Both were minutes of reading this function to learn what it wanted.
+    """
+    near = sorted({n for n in sh.wm if "expert" in n.lower()})
+    lines = [
+        "found no per-expert tensors to bake.",
+        f"  searched: names starting {prefix + '.'!r}, containing {marker!r}, ending {gate_key!r}",
+    ]
+    if unindexed:
+        lines += [
+            f"  but {len(unindexed)} key(s) matched with NO per-expert index after 'experts', e.g.",
+            f"    {unindexed[0]}",
+            "  that is a FUSED expert layout (one 3-D tensor per layer). This bake path",
+            "  reads per-expert 2-D tensors and does not support it.",
+        ]
+    elif near:
+        lines += [
+            f"  the checkpoint has {len(near)} key(s) containing 'expert', e.g.",
+            *[f"    {n}" for n in near[:3]],
+            "  adjust prefix=/moe=/proj= to match, or the source= suffix if it is not bf16.",
+        ]
+    else:
+        lines.append("  the checkpoint has NO keys containing 'expert' at all.")
+    raise ValueError("\n".join(lines))
+
+
 def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
              align=4096, limit_experts=0, quantize_fn=None, log=print,
              proj=PROJ, source="bf16", moe="mlp",
@@ -232,11 +265,21 @@ def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
     marker = f".{moe}.experts."
     depth = len(prefix.split("."))          # `model.layers` -> 2, `layers` -> 1
     lays, es = set(), set()
+    unindexed = []
     for name in sh.wm:
         if marker in name and name.endswith(gate_key) and name.startswith(prefix + "."):
             parts = name.split(".")
+            after = parts[parts.index("experts") + 1]
+            if not after.isdigit():
+                # A FUSED layout: one 3-D tensor for the whole layer, no per-expert
+                # index to parse. Collect rather than crash on int(), so the error
+                # below can say which shape the checkpoint actually uses.
+                unindexed.append(name)
+                continue
             lays.add(int(parts[depth]))
-            es.add(int(parts[parts.index("experts") + 1]))
+            es.add(int(after))
+    if not es:
+        _explain_no_experts(sh, prefix, marker, gate_key, unindexed)
     if layers is None:
         layers = sorted(lays)
     E = max(es) + 1
@@ -370,6 +413,14 @@ def main():
     ap.add_argument("--layers", default=None, help="e.g. 0-93")
     ap.add_argument("--align", type=int, default=4096)
     ap.add_argument("--limit-experts", type=int, default=0)
+    # bake_nf4() has always taken these; the CLI did not expose them, so a
+    # checkpoint that nests its stack (Gemma-4: model.language_model.layers) or
+    # names its MoE block differently (Mixtral: block_sparse_moe) could only be
+    # baked by importing the function.
+    ap.add_argument("--prefix", default="model.layers",
+                    help="layer-stack prefix, e.g. model.language_model.layers")
+    ap.add_argument("--moe", default="mlp",
+                    help="MoE block attribute between the layer and 'experts'")
     args = ap.parse_args()
     layers = None
     if args.layers:
@@ -379,7 +430,7 @@ def main():
         else:
             layers = [int(x) for x in args.layers.split(",")]
     bake_nf4(args.snapshot, args.out, layers=layers, align=args.align,
-             limit_experts=args.limit_experts)
+             limit_experts=args.limit_experts, prefix=args.prefix, moe=args.moe)
     return 0
 
 

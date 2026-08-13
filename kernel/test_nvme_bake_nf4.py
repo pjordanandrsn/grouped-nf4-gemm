@@ -342,3 +342,42 @@ def test_mxfp4_reader_accepts_both_dtype_SPELLINGS(tmp_path):
     would reject whichever family it was not written against."""
     from nvme_bake_nf4 import _MXFP4_BYTE_DTYPES
     assert {"U8", "I8", "F8_E8M0"} <= set(_MXFP4_BYTE_DTYPES)
+
+
+# ------------------------------------------------- discovery diagnostics --
+def _wm(names):
+    """Minimal stand-in for _Shards: discovery only reads `.wm`."""
+    class S:
+        wm = {n: "shard0" for n in names}
+    return S()
+
+
+def test_no_experts_names_what_it_searched_for():
+    """`max() arg is an empty sequence` names none of the three things that
+    decide the match. This exact miss has cost a diagnosis twice -- Kimi K3
+    spelling weights `.weight_packed`, Gemma-4 nesting under
+    `model.language_model.layers` -- so the error has to be self-explaining."""
+    from nvme_bake_nf4 import _explain_no_experts
+    sh = _wm(["model.layers.0.mlp.experts.0.gate_proj.weight_packed"])
+    with pytest.raises(ValueError) as ei:
+        _explain_no_experts(sh, "model.layers", ".mlp.experts.", "gate_proj.weight", [])
+    msg = str(ei.value)
+    assert "model.layers." in msg and ".mlp.experts." in msg and "gate_proj.weight" in msg
+    assert "weight_packed" in msg, "must show a near-miss key from the checkpoint"
+
+
+def test_fused_expert_layout_is_named_as_such():
+    """Gemma-4 stores one 3-D tensor per layer with no per-expert index. That is
+    unsupported here, and the error must say so rather than blame the prefix."""
+    from nvme_bake_nf4 import _explain_no_experts
+    fused = "model.language_model.layers.0.experts.gate_up_proj"
+    with pytest.raises(ValueError, match="FUSED"):
+        _explain_no_experts(_wm([fused]), "model.language_model.layers",
+                            ".experts.", "gate_up_proj", [fused])
+
+
+def test_no_expert_keys_at_all_is_distinguished():
+    from nvme_bake_nf4 import _explain_no_experts
+    with pytest.raises(ValueError, match="NO keys containing 'expert'"):
+        _explain_no_experts(_wm(["model.layers.0.self_attn.q_proj.weight"]),
+                            "model.layers", ".mlp.experts.", "gate_proj.weight", [])
