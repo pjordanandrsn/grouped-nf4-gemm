@@ -1,0 +1,6 @@
+    import pynvml  # type: ignore[import]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+49 passed, 1 warning in 130.94s (0:02:10)
+.....                                                                    [100%]
+5 passed in 0.02s
