@@ -21,6 +21,24 @@ into the GEMM deletes it. The measured side effect worth stating plainly:
 materialize-to-bf16 baseline — the fused path has never measured less
 accurate than the baseline.**
 
+## See it on your own hardware first
+
+Every number below this section is one **I** measured. This one you measure:
+
+```bash
+pip install grouped-nf4-gemm bitsandbytes
+python examples/dequant_tax.py          # ~1 min, one GPU, no model download
+```
+
+[`examples/dequant_tax.py`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.9.0/examples/dequant_tax.py)
+is one file under 150 lines. It times the dequantize-then-GEMM round trip against
+computing on the packed bytes, at a census shape, across three points on the M axis
+— so the decay is visible rather than asserted. It prints a **self-pair** (the fused
+arm timed against itself) beside every ratio, because a ratio inside the instrument's
+own spread is not a measurement, and it prints what the run does *not* show. Without
+`bitsandbytes` it falls back to the reference decode and labels the ratio an upper
+bound. No GPU? It names what it needs and exits clean.
+
 ## Install
 
 ```bash
