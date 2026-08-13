@@ -1,0 +1,36 @@
+torch 2.8.0+cu128  cuda 12.8
+gpu   NVIDIA RTX A2000 12GB  sm_86
+flags at start: {'allow_bf16_reduced_precision_reduction': True, 'allow_bf16_reduced_precision_reduction_split_k': 'unavailable'}
+  mode default                  settable=True  flags={'allow_bf16_reduced_precision_reduction': True, 'allow_bf16_reduced_precision_reduction_split_k': 'unavailable'}
+  mode redprec_on_splitk_off    settable=False  flags={'allow_bf16_reduced_precision_reduction': True, 'allow_bf16_reduced_precision_reduction_split_k': 'unavailable'}
+  mode redprec_off              settable=True  flags={'allow_bf16_reduced_precision_reduction': False, 'allow_bf16_reduced_precision_reduction_split_k': 'unavailable'}
+
+shape                 M     K     N |      default err       ms |  redprec_off err       ms
+A qwen3-gate_up     128  2048  1536 |       1.6564e-03    0.067 |       1.6564e-03    0.066
+A qwen3-gate_up     738  2048  1536 |       2.0286e-03    0.203 |       1.6561e-03    0.165
+A gemma4-gate_up    128  2816  1408 |       1.6621e-03    0.067 |       1.6621e-03    0.074
+A gemma4-gate_up    738  2816  1408 |       2.3586e-03    0.216 |       1.6626e-03    0.237
+A gptoss-down        64  2880  2880 |       1.6613e-03    0.100 |       1.6613e-03    0.100
+A gptoss-down       369  2880  2880 |       2.3493e-03    0.257 |       1.6643e-03    0.274
+A gptoss-gate_up    369  2880  5760 |       1.6625e-03    0.526 |       1.6625e-03    0.541
+C gptoss-gate_up     64  2880  5760 |       1.6635e-03    0.223 |       1.6635e-03    0.212
+C olmoe-gate_up     256  2048  2048 |       2.3641e-03    0.106 |       1.6580e-03    0.157
+C qwen3-down        128   768  2048 |       1.6625e-03    0.055 |       1.6625e-03    0.054
+
+default vs redprec_off  (err>1 = default less accurate; ms<1 = default faster, which is the trade being paid for)
+  A qwen3-gate_up     128  2048  1536  err  1.000  ms  1.018   
+  A qwen3-gate_up     738  2048  1536  err  1.225  ms  1.230   costs accuracy, buys NO speed
+  A gemma4-gate_up    128  2816  1408  err  1.000  ms  0.902   
+  A gemma4-gate_up    738  2816  1408  err  1.419  ms  0.911   
+  A gptoss-down        64  2880  2880  err  1.000  ms  1.003   
+  A gptoss-down       369  2880  2880  err  1.412  ms  0.938   
+  A gptoss-gate_up    369  2880  5760  err  1.000  ms  0.972   
+  C gptoss-gate_up     64  2880  5760  err  1.000  ms  1.049   
+  C olmoe-gate_up     256  2048  2048  err  1.426  ms  0.679   
+  C qwen3-down        128   768  2048  err  1.000  ms  1.025   
+PROBE_DONE
+
+NOTE ON THIS FILE: the A2000 is a CORRECTNESS-ONLY testbed by operator
+instruction (2026-07-27). Only the ERROR columns above are citable. Every
+millisecond figure in this file is on a shared, contended home card and no
+timing claim anywhere may rest on it.

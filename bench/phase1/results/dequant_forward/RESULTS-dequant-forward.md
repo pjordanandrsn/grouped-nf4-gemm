@@ -154,12 +154,31 @@ sm_90 and sm_89. The baseline sits at 2.2192e-3 – 2.2395e-3 in **82 of 96**, b
 on the 4090 **seven large-M shapes jump to 2.5232e-3 – 3.0170e-3** — 14 of the
 96 device-cells, because each recurs in both 4090 runs, and it does so
 **bit-identically across two runs on two different 4090 instances** (e.g.
-gemma-4 gate_up at 11 800 reads 3.0170e-3 in both). cuBLAS selects a different
-`F.linear` kernel for those shapes on Ada — one that is both slower and less
-accurate. F1's gate passes everywhere (fused never worse) and its predicted band
-0.5–0.9 holds, but in those seven cells the two arms are not computing to the
-same precision and the speed ratio there is partly a trade the baseline made,
-not purely a kernel comparison.
+gemma-4 gate_up at 11 800 reads 3.0170e-3 in both). F1's gate passes everywhere
+(fused never worse) and its predicted band 0.5–0.9 holds, but in those seven
+cells the two arms are not computing to the same precision.
+
+**Mechanism, established after the fact and not a defect:** the jump is
+`torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction`, which is
+**documented behaviour and defaults to allowed** — cuBLAS may accumulate
+split-K partials in bf16, trading accuracy for speed. A standalone torch-only
+probe (`repro_bf16_linear.py`) run on the A2000 shows the flag fully accounts
+for it: with reduced precision **off**, every shape collapses to a uniform
+1.656e-3 – 1.664e-3; with it on (the default), the same subset jumps. Which
+shapes trigger is heuristic- and architecture-dependent — the A2000 triggers on
+a shape the 4090 did not and vice versa. **This leg measured at torch's default,
+which is what a practitioner running the published module actually gets**, so
+the numbers stand as the honest ones; but the baseline's fidelity column is
+flag-dependent and that is now stated rather than implied.
+
+Two things this does **not** overturn. The 2.2192e-3 – 2.2395e-3 baseline
+figure in the other 82 cells is *not* reduced-precision reduction — it is the
+baseline materializing the NF4 weight to bf16 before the GEMM, a rounding step
+the fused kernel does not pay because it decodes to fp32 in registers. The
+probe's fp64 reference uses the bf16 weight and so isolates GEMM error alone
+(~1.66e-3); the leg's reference is the exact NF4-decoded values, and so
+correctly includes that materialization. And no timing claim is made from the
+A2000, which is a correctness-only testbed by operator instruction.
 
 **6. GenON's published routing plumbing costs 1.04–2.33× on top of the same
 compute** across live cells (per-regime medians on the H100: 1.56 at
