@@ -287,8 +287,8 @@ no user will ever have — and the error is **against** this kernel. Measured in
 a real QLoRA finetune (OLMoE-1B-7B, 16 layers / 64 experts, seq 512, LoRA r=8,
 grad checkpointing, e4b 0.17.5 + published wheels), fused vs the per-expert
 dequant-and-project loop, on two architectures
-([receipts](bench/phase1/results/dequant_forward/leg-e2e/),
-[write-up](bench/phase1/results/dequant_forward/RESULTS-e2e-training.md),
+([receipts](https://github.com/pjordanandrsn/grouped-nf4-gemm/tree/v0.10.0/bench/phase1/results/dequant_forward/leg-e2e),
+[write-up](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.10.0/bench/phase1/results/dequant_forward/RESULTS-e2e-training.md),
 prereg stamped pre-data):
 
 | experts resident | RTX 4090 (sm_89) | H100 (sm_90) |
