@@ -1,0 +1,684 @@
+{
+ "probe": "GPU busy fraction of the training step",
+ "tier": "EXPLORATORY / report-only",
+ "prediction": "if the host-bound reading is right: gpu_busy ~ leg2's number, wall ~ leg3's, busy_fraction << 1 on H100 and ~1 on the 4090",
+ "gpu": "NVIDIA H100 80GB HBM3",
+ "capability": "9.0",
+ "torch": "2.8.0+cu128",
+ "steps": 200,
+ "prof_steps": 50,
+ "rows": [
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "gate_up",
+   "regime": "decode_bs1",
+   "groups": 8,
+   "rows": 8,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 1.1110910680145025,
+     "gpu_busy_per_step_ms": 0.2205807799999992,
+     "busy_fraction": 0.19852628317332496,
+     "leg2_sync_per_iter_ms": 1.3294079899787903,
+     "leg3_interleaved_percall_ms": 1.3341760039329529,
+     "leg3_over_leg2": 1.0035865693527528,
+     "wall_over_busy": 5.03711641610165
+    },
+    "D_base": {
+     "wall_per_step_ms": 3.2883097510784864,
+     "gpu_busy_per_step_ms": 0.1860255400000009,
+     "busy_fraction": 0.056571781274251616,
+     "leg2_sync_per_iter_ms": 3.340335965156555,
+     "leg3_interleaved_percall_ms": 3.333359956741333,
+     "leg3_over_leg2": 0.9979115847962631,
+     "wall_over_busy": 17.676657469068335
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "gate_up",
+   "regime": "decode_m8",
+   "groups": 8,
+   "rows": 64,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 1.5930999256670475,
+     "gpu_busy_per_step_ms": 0.2444187799999985,
+     "busy_fraction": 0.15342338296680155,
+     "leg2_sync_per_iter_ms": 1.6597599983215332,
+     "leg3_interleaved_percall_ms": 1.7051519751548767,
+     "leg3_over_leg2": 1.027348518387747,
+     "wall_over_busy": 6.51791129006968
+    },
+    "D_base": {
+     "wall_per_step_ms": 3.3032421115785837,
+     "gpu_busy_per_step_ms": 0.1927286799999858,
+     "busy_fraction": 0.058345308484785224,
+     "leg2_sync_per_iter_ms": 3.370927929878235,
+     "leg3_interleaved_percall_ms": 3.371456027030945,
+     "leg3_over_leg2": 1.0001566622495928,
+     "wall_over_busy": 17.13933863698349
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "gate_up",
+   "regime": "decode_m32",
+   "groups": 8,
+   "rows": 256,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 1.5255601797252893,
+     "gpu_busy_per_step_ms": 0.2553884400000012,
+     "busy_fraction": 0.16740633597685378,
+     "leg2_sync_per_iter_ms": 1.5718079805374146,
+     "leg3_interleaved_percall_ms": 1.5727039575576782,
+     "leg3_over_leg2": 1.0005700295655435,
+     "wall_over_busy": 5.973489558592715
+    },
+    "D_base": {
+     "wall_per_step_ms": 3.355353092774749,
+     "gpu_busy_per_step_ms": 0.20412708000001697,
+     "busy_fraction": 0.0608362441614786,
+     "leg2_sync_per_iter_ms": 3.3811360597610474,
+     "leg3_interleaved_percall_ms": 3.3602240085601807,
+     "leg3_over_leg2": 0.9938150814308417,
+     "wall_over_busy": 16.43756963933678
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "gate_up",
+   "regime": "tokbudget_2048",
+   "groups": 64,
+   "rows": 16384,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 9.3458894174546,
+     "gpu_busy_per_step_ms": 8.632140520000029,
+     "busy_fraction": 0.9236296444807535,
+     "leg2_sync_per_iter_ms": 9.402751922607422,
+     "leg3_interleaved_percall_ms": 9.369951725006104,
+     "leg3_over_leg2": 0.9965116385212232,
+     "wall_over_busy": 1.0826850415375964
+    },
+    "D_base": {
+     "wall_per_step_ms": 18.591627962887287,
+     "gpu_busy_per_step_ms": 7.914475540000102,
+     "busy_fraction": 0.4257010497305036,
+     "leg2_sync_per_iter_ms": 12.759103775024414,
+     "leg3_interleaved_percall_ms": 21.408016204833984,
+     "leg3_over_leg2": 1.6778620647901283,
+     "wall_over_busy": 2.3490663239685805
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "down",
+   "regime": "decode_bs1",
+   "groups": 8,
+   "rows": 8,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 1.2995120696723461,
+     "gpu_busy_per_step_ms": 0.13940080000000235,
+     "busy_fraction": 0.10727164699220557,
+     "leg2_sync_per_iter_ms": 1.3159520030021667,
+     "leg3_interleaved_percall_ms": 1.3380480408668518,
+     "leg3_over_leg2": 1.0167909147250629,
+     "wall_over_busy": 9.322127775969179
+    },
+    "D_base": {
+     "wall_per_step_ms": 3.2272842060774565,
+     "gpu_busy_per_step_ms": 0.1429662800000178,
+     "busy_fraction": 0.04429925314008323,
+     "leg2_sync_per_iter_ms": 3.3475840091705322,
+     "leg3_interleaved_percall_ms": 3.3288320302963257,
+     "leg3_over_leg2": 0.9943983545079567,
+     "wall_over_busy": 22.573744005069273
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "down",
+   "regime": "decode_m8",
+   "groups": 8,
+   "rows": 64,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 1.5192441083490849,
+     "gpu_busy_per_step_ms": 0.15480577999999914,
+     "busy_fraction": 0.10189658077280402,
+     "leg2_sync_per_iter_ms": 1.6030559539794922,
+     "leg3_interleaved_percall_ms": 1.5743520259857178,
+     "leg3_over_leg2": 0.9820942444819105,
+     "wall_over_busy": 9.813871990755729
+    },
+    "D_base": {
+     "wall_per_step_ms": 3.252498237416148,
+     "gpu_busy_per_step_ms": 0.15022961999998638,
+     "busy_fraction": 0.04618899351635987,
+     "leg2_sync_per_iter_ms": 3.3737599849700928,
+     "leg3_interleaved_percall_ms": 3.346943974494934,
+     "leg3_over_leg2": 0.9920515950765252,
+     "wall_over_busy": 21.650179488016033
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "down",
+   "regime": "decode_m32",
+   "groups": 8,
+   "rows": 256,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 1.52984868735075,
+     "gpu_busy_per_step_ms": 0.16141194000000067,
+     "busy_fraction": 0.10550843448414424,
+     "leg2_sync_per_iter_ms": 1.5506559610366821,
+     "leg3_interleaved_percall_ms": 1.599456012248993,
+     "leg3_over_leg2": 1.0314705856350532,
+     "wall_over_busy": 9.477915248095918
+    },
+    "D_base": {
+     "wall_per_step_ms": 3.2760185562074184,
+     "gpu_busy_per_step_ms": 0.15897267999999684,
+     "busy_fraction": 0.04852618423017614,
+     "leg2_sync_per_iter_ms": 2.529968023300171,
+     "leg3_interleaved_percall_ms": 3.3392800092697144,
+     "leg3_over_leg2": 1.3198902035583244,
+     "wall_over_busy": 20.607431139787565
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "down",
+   "regime": "tokbudget_2048",
+   "groups": 64,
+   "rows": 16384,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 5.453982129693031,
+     "gpu_busy_per_step_ms": 4.651473800000016,
+     "busy_fraction": 0.8528582766481886,
+     "leg2_sync_per_iter_ms": 5.441136121749878,
+     "leg3_interleaved_percall_ms": 5.415104150772095,
+     "leg3_over_leg2": 0.9952157103966347,
+     "wall_over_busy": 1.1725277544706396
+    },
+    "D_base": {
+     "wall_per_step_ms": 19.258679719641805,
+     "gpu_busy_per_step_ms": 4.713845379999728,
+     "busy_fraction": 0.24476472160197496,
+     "leg2_sync_per_iter_ms": 16.456480026245117,
+     "leg3_interleaved_percall_ms": 14.020304203033447,
+     "leg3_over_leg2": 0.8519625205799534,
+     "wall_over_busy": 4.085556094256727
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "gate_up",
+   "regime": "decode_bs1",
+   "groups": 8,
+   "rows": 8,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 1.2806644476950169,
+     "gpu_busy_per_step_ms": 0.19149272000000084,
+     "busy_fraction": 0.14952606855344186,
+     "leg2_sync_per_iter_ms": 1.3328959941864014,
+     "leg3_interleaved_percall_ms": 1.349232017993927,
+     "leg3_over_leg2": 1.0122560378895107,
+     "wall_over_busy": 6.687797048864371
+    },
+    "D_base": {
+     "wall_per_step_ms": 3.266649469733238,
+     "gpu_busy_per_step_ms": 0.16731876000000892,
+     "busy_fraction": 0.05122029821389821,
+     "leg2_sync_per_iter_ms": 3.3519519567489624,
+     "leg3_interleaved_percall_ms": 3.384544014930725,
+     "leg3_over_leg2": 1.0097233070766842,
+     "wall_over_busy": 19.523509914447512
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "gate_up",
+   "regime": "decode_m8",
+   "groups": 8,
+   "rows": 64,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 0.6544716749340296,
+     "gpu_busy_per_step_ms": 0.2178002799999981,
+     "busy_fraction": 0.33278793925184347,
+     "leg2_sync_per_iter_ms": 0.7567520141601562,
+     "leg3_interleaved_percall_ms": 0.7509920001029968,
+     "leg3_over_leg2": 0.9923885051517809,
+     "wall_over_busy": 3.0049165911725884
+    },
+    "D_base": {
+     "wall_per_step_ms": 3.2675173692405224,
+     "gpu_busy_per_step_ms": 0.1808361600000001,
+     "busy_fraction": 0.055343595630842,
+     "leg2_sync_per_iter_ms": 1.3462719917297363,
+     "leg3_interleaved_percall_ms": 1.323087990283966,
+     "leg3_over_leg2": 0.9827791103222888,
+     "wall_over_busy": 18.068938033413897
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "gate_up",
+   "regime": "decode_m32",
+   "groups": 8,
+   "rows": 256,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 0.694498997181654,
+     "gpu_busy_per_step_ms": 0.22230425999999912,
+     "busy_fraction": 0.3200929891938389,
+     "leg2_sync_per_iter_ms": 1.5490400195121765,
+     "leg3_interleaved_percall_ms": 1.5430240035057068,
+     "leg3_over_leg2": 0.9961162940074562,
+     "wall_over_busy": 3.1240921662124546
+    },
+    "D_base": {
+     "wall_per_step_ms": 2.783903181552887,
+     "gpu_busy_per_step_ms": 0.18639465999999325,
+     "busy_fraction": 0.06695443334204625,
+     "leg2_sync_per_iter_ms": 2.1071680784225464,
+     "leg3_interleaved_percall_ms": 3.3263520002365112,
+     "leg3_over_leg2": 1.5785888341316663,
+     "wall_over_busy": 14.935530779438574
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "gate_up",
+   "regime": "tokbudget_2048",
+   "groups": 128,
+   "rows": 16384,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 7.193294418975711,
+     "gpu_busy_per_step_ms": 6.410938700000003,
+     "busy_fraction": 0.8912381902634382,
+     "leg2_sync_per_iter_ms": 7.204639911651611,
+     "leg3_interleaved_percall_ms": 7.165151834487915,
+     "leg3_over_leg2": 0.9945190769215496,
+     "wall_over_busy": 1.122034503149392
+    },
+    "D_base": {
+     "wall_per_step_ms": 18.971122102811933,
+     "gpu_busy_per_step_ms": 14.514907420000155,
+     "busy_fraction": 0.7651053712763111,
+     "leg2_sync_per_iter_ms": 19.734975814819336,
+     "leg3_interleaved_percall_ms": 18.418031692504883,
+     "leg3_over_leg2": 0.9332685210931175,
+     "wall_over_busy": 1.3070095146918774
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "down",
+   "regime": "decode_bs1",
+   "groups": 8,
+   "rows": 8,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 1.2939193099737167,
+     "gpu_busy_per_step_ms": 0.12921393999999922,
+     "busy_fraction": 0.09986244041958377,
+     "leg2_sync_per_iter_ms": 0.9151680171489716,
+     "leg3_interleaved_percall_ms": 0.6041280031204224,
+     "leg3_over_leg2": 0.6601279675424694,
+     "wall_over_busy": 10.013774906745546
+    },
+    "D_base": {
+     "wall_per_step_ms": 1.3270109705626965,
+     "gpu_busy_per_step_ms": 0.13146812000000166,
+     "busy_fraction": 0.09907086144454016,
+     "leg2_sync_per_iter_ms": 2.562191963195801,
+     "leg3_interleaved_percall_ms": 3.3931519985198975,
+     "leg3_over_leg2": 1.3243160728236956,
+     "wall_over_busy": 10.09378525046741
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "down",
+   "regime": "decode_m8",
+   "groups": 8,
+   "rows": 64,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 1.4459981117397547,
+     "gpu_busy_per_step_ms": 0.14193016000000092,
+     "busy_fraction": 0.09815376579519695,
+     "leg2_sync_per_iter_ms": 1.3887199759483337,
+     "leg3_interleaved_percall_ms": 1.3955680131912231,
+     "leg3_over_leg2": 1.004931186532557,
+     "wall_over_busy": 10.188096115298858
+    },
+    "D_base": {
+     "wall_per_step_ms": 3.125356789678335,
+     "gpu_busy_per_step_ms": 0.13977379999999207,
+     "busy_fraction": 0.04472250991042137,
+     "leg2_sync_per_iter_ms": 3.3870080709457397,
+     "leg3_interleaved_percall_ms": 3.378480076789856,
+     "leg3_over_leg2": 0.9974821453101815,
+     "wall_over_busy": 22.36010460958
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "down",
+   "regime": "decode_m32",
+   "groups": 8,
+   "rows": 256,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 1.6004659328609705,
+     "gpu_busy_per_step_ms": 0.14719221999999693,
+     "busy_fraction": 0.09196835557560303,
+     "leg2_sync_per_iter_ms": 1.5411840081214905,
+     "leg3_interleaved_percall_ms": 1.5146560072898865,
+     "leg3_over_leg2": 0.9827872592164135,
+     "wall_over_busy": 10.873305211790433
+    },
+    "D_base": {
+     "wall_per_step_ms": 3.270002407953143,
+     "gpu_busy_per_step_ms": 0.14808106000001459,
+     "busy_fraction": 0.04528469448213828,
+     "leg2_sync_per_iter_ms": 3.3861119747161865,
+     "leg3_interleaved_percall_ms": 3.3706719875335693,
+     "leg3_over_leg2": 0.9954402018309181,
+     "wall_over_busy": 22.082516210734994
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "down",
+   "regime": "tokbudget_2048",
+   "groups": 128,
+   "rows": 16384,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 4.591826498508453,
+     "gpu_busy_per_step_ms": 3.710383740000006,
+     "busy_fraction": 0.8080409268959174,
+     "leg2_sync_per_iter_ms": 4.6147520542144775,
+     "leg3_interleaved_percall_ms": 4.577903985977173,
+     "leg3_over_leg2": 0.9920151575199684,
+     "wall_over_busy": 1.2375610773101453
+    },
+    "D_base": {
+     "wall_per_step_ms": 24.37534460797906,
+     "gpu_busy_per_step_ms": 6.570011160000031,
+     "busy_fraction": 0.2695351087610632,
+     "leg2_sync_per_iter_ms": 19.773056030273438,
+     "leg3_interleaved_percall_ms": 20.274847984313965,
+     "leg3_over_leg2": 1.025377561934395,
+     "wall_over_busy": 3.7100918117738697
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "gate_up",
+   "regime": "decode_bs1",
+   "groups": 4,
+   "rows": 4,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 1.3208397384732962,
+     "gpu_busy_per_step_ms": 0.31131450000000443,
+     "busy_fraction": 0.23569437754790748,
+     "leg2_sync_per_iter_ms": 1.432864010334015,
+     "leg3_interleaved_percall_ms": 1.4183200001716614,
+     "leg3_over_leg2": 0.9898496926034431,
+     "wall_over_busy": 4.242782583121818
+    },
+    "D_base": {
+     "wall_per_step_ms": 2.032513376325369,
+     "gpu_busy_per_step_ms": 0.21478471999999704,
+     "busy_fraction": 0.10567444352484982,
+     "leg2_sync_per_iter_ms": 2.1395360231399536,
+     "leg3_interleaved_percall_ms": 2.122591972351074,
+     "leg3_over_leg2": 0.9920805022184144,
+     "wall_over_busy": 9.463025937438179
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "gate_up",
+   "regime": "decode_m8",
+   "groups": 4,
+   "rows": 32,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 1.554122418165207,
+     "gpu_busy_per_step_ms": 0.38764564000000357,
+     "busy_fraction": 0.24943056960574383,
+     "leg2_sync_per_iter_ms": 1.6332640051841736,
+     "leg3_interleaved_percall_ms": 1.6629599928855896,
+     "leg3_over_leg2": 1.018181988709209,
+     "wall_over_busy": 4.009131685745756
+    },
+    "D_base": {
+     "wall_per_step_ms": 2.0323558803647757,
+     "gpu_busy_per_step_ms": 0.21632277999999847,
+     "busy_fraction": 0.10643941943926276,
+     "leg2_sync_per_iter_ms": 2.152992010116577,
+     "leg3_interleaved_percall_ms": 2.1399840116500854,
+     "leg3_over_leg2": 0.9939581761542221,
+     "wall_over_busy": 9.395015542814262
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "gate_up",
+   "regime": "decode_m32",
+   "groups": 4,
+   "rows": 128,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 1.5449662785977125,
+     "gpu_busy_per_step_ms": 0.40400866000000024,
+     "busy_fraction": 0.2614999858551595,
+     "leg2_sync_per_iter_ms": 1.6555999517440796,
+     "leg3_interleaved_percall_ms": 1.6714079976081848,
+     "leg3_over_leg2": 1.009548228029031,
+     "wall_over_busy": 3.82409198505228
+    },
+    "D_base": {
+     "wall_per_step_ms": 2.038393123075366,
+     "gpu_busy_per_step_ms": 0.23219522000000112,
+     "busy_fraction": 0.11391091216481508,
+     "leg2_sync_per_iter_ms": 2.166735887527466,
+     "leg3_interleaved_percall_ms": 2.159248113632202,
+     "leg3_over_leg2": 0.9965442147617686,
+     "wall_over_busy": 8.77879020539422
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "gate_up",
+   "regime": "tokbudget_2048",
+   "groups": 128,
+   "rows": 8192,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 12.683729827404022,
+     "gpu_busy_per_step_ms": 11.510609620000007,
+     "busy_fraction": 0.9075098395056151,
+     "leg2_sync_per_iter_ms": 12.720704078674316,
+     "leg3_interleaved_percall_ms": 12.633327960968018,
+     "leg3_over_leg2": 0.9931311885595404,
+     "wall_over_busy": 1.1019164272034458
+    },
+    "D_base": {
+     "wall_per_step_ms": 26.57534198835492,
+     "gpu_busy_per_step_ms": 15.767295259999544,
+     "busy_fraction": 0.5933054508539771,
+     "leg2_sync_per_iter_ms": 19.905439376831055,
+     "leg3_interleaved_percall_ms": 23.84131145477295,
+     "leg3_over_leg2": 1.1977284702654218,
+     "wall_over_busy": 1.6854724637379366
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "down",
+   "regime": "decode_bs1",
+   "groups": 4,
+   "rows": 4,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 1.3229681644588709,
+     "gpu_busy_per_step_ms": 0.17517070000000343,
+     "busy_fraction": 0.1324073433555772,
+     "leg2_sync_per_iter_ms": 1.3857759833335876,
+     "leg3_interleaved_percall_ms": 1.3945279717445374,
+     "leg3_over_leg2": 1.0063155867298956,
+     "wall_over_busy": 7.552451205931386
+    },
+    "D_base": {
+     "wall_per_step_ms": 2.072332100942731,
+     "gpu_busy_per_step_ms": 0.14714257999999736,
+     "busy_fraction": 0.07100337823897061,
+     "leg2_sync_per_iter_ms": 2.20689594745636,
+     "leg3_interleaved_percall_ms": 2.1945120096206665,
+     "leg3_over_leg2": 0.9943885266317305,
+     "wall_over_busy": 14.08383692159515
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "down",
+   "regime": "decode_m8",
+   "groups": 4,
+   "rows": 32,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 1.526785846799612,
+     "gpu_busy_per_step_ms": 0.20042148000000426,
+     "busy_fraction": 0.1312701977295112,
+     "leg2_sync_per_iter_ms": 1.5845600366592407,
+     "leg3_interleaved_percall_ms": 1.584160029888153,
+     "leg3_over_leg2": 0.9997475597252024,
+     "wall_over_busy": 7.6178753235410674
+    },
+    "D_base": {
+     "wall_per_step_ms": 2.101255627349019,
+     "gpu_busy_per_step_ms": 0.154464399999996,
+     "busy_fraction": 0.0735105229414048,
+     "leg2_sync_per_iter_ms": 2.165104031562805,
+     "leg3_interleaved_percall_ms": 2.1604479551315308,
+     "leg3_over_leg2": 0.9978494906649296,
+     "wall_over_busy": 13.603494574472004
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "down",
+   "regime": "decode_m32",
+   "groups": 4,
+   "rows": 128,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 1.5275242738425732,
+     "gpu_busy_per_step_ms": 0.21578339999999963,
+     "busy_fraction": 0.14126348346477294,
+     "leg2_sync_per_iter_ms": 1.6131200194358826,
+     "leg3_interleaved_percall_ms": 1.6079359650611877,
+     "leg3_over_leg2": 0.9967863182452427,
+     "wall_over_busy": 7.078970272238624
+    },
+    "D_base": {
+     "wall_per_step_ms": 2.029174230992794,
+     "gpu_busy_per_step_ms": 0.15162778000000152,
+     "busy_fraction": 0.07472388407269301,
+     "leg2_sync_per_iter_ms": 2.163312077522278,
+     "leg3_interleaved_percall_ms": 2.139840006828308,
+     "leg3_over_leg2": 0.989149937756159,
+     "wall_over_busy": 13.382601994125178
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "down",
+   "regime": "tokbudget_2048",
+   "groups": 128,
+   "rows": 8192,
+   "arms": {
+    "G_base": {
+     "wall_per_step_ms": 6.9725460559129715,
+     "gpu_busy_per_step_ms": 5.80141250000001,
+     "busy_fraction": 0.8320364546147676,
+     "leg2_sync_per_iter_ms": 7.1238720417022705,
+     "leg3_interleaved_percall_ms": 7.001952171325684,
+     "leg3_over_leg2": 0.982885729886376,
+     "wall_over_busy": 1.2018704161982894
+    },
+    "D_base": {
+     "wall_per_step_ms": 31.45250397734344,
+     "gpu_busy_per_step_ms": 12.74465665999961,
+     "busy_fraction": 0.40520324452323797,
+     "leg2_sync_per_iter_ms": 19.078655242919922,
+     "leg3_interleaved_percall_ms": 38.33001708984375,
+     "leg3_over_leg2": 2.0090523468140136,
+     "wall_over_busy": 2.46789731700347
+    }
+   },
+   "status": "ok"
+  }
+ ]
+}

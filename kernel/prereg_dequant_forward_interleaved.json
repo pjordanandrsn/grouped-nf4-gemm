@@ -1,0 +1,58 @@
+{
+ "registered_utc": "2026-08-13T12:20:00Z",
+ "purpose": "LEG 3. Legs 1 and 2 both failed on the instrument rather than on the kernels, and in the same way: each timed a whole block of one arm, then a whole block of the other, and divided, which exposes every ratio to drift on any timescale longer than a block. Leg 1 lost a device to a fixture build leaving the GPU cold. Leg 2's amendment 2 then LENGTHENED blocks to meet the registered 250 ms target and made the instrument WORSE. This leg pairs at the ITERATION -- one call of each arm, ratio, repeat, order alternating -- so drift slower than a single pair cancels inside the pair instead of accumulating across a cell. Same question, same arms, same shapes, same bands.",
+ "the_evidence_that_block_length_was_never_the_problem": "Leg-2 H100 run 1 vs run 2, same code, same device class, only the iteration ceiling changed (200 -> 2000): median block 89 ms -> 258 ms and 0 cells clamped, so the registered target was finally met; live cells 32/32 -> 26/32; median |1 - self-pair| 0.0012 -> 0.0027. The gate got WORSE as the blocks got longer. Meanwhile the ratios themselves were unchanged: run2/run1 median 0.999 over the 26 cells live in both, range 0.975-1.120. Longer blocks put the two paired blocks further apart in time, which is the wrong direction when the noise is between-block drift. Amendment 2 registered this branch in advance and it is the branch that happened.",
+ "what_changes": {
+  "pairing": "Iteration-level. `interleave.interleaved_pairs` runs one call of A and one of B per pair, ORDER ALTERNATING (A,B then B,A), records CUDA events on the stream around each call, and synchronises ONCE at the end. The statistic is the MEDIAN OF PER-PAIR RATIOS, not the ratio of medians -- for paired data those differ and only the former cancels drift.",
+  "why_order_alternates": "If A always ran first it would always eat whatever the first call of a pair costs (cache state, clock ramp, launch-queue position) and every pair would carry the same bias.",
+  "why_no_per_call_sync": "Synchronising per call injects a stall into every measurement. Events recorded on the stream measure device time and leave the pipeline alone.",
+  "drift_gate_is_REFRAMED_not_dropped": "Legs 1-2 gated on whole-cell drift of a raw timing, because block pairing left ratios exposed to it. After interleaving, a drifting box no longer threatens the ratio and only a drifting RATIO does, so the gate now compares the median of the first half of the pairs to the second half. This is stricter where it matters and does not void cells whose ratios are provably unaffected. The test suite proves both halves of that: the check is blind to a 0.3%/pair box drift and fires on a 30% jump in the ratio."
+ },
+ "what_does_NOT_change": "Arms (leg 2's, unchanged: G_base/D_base primary, G_full/D_full bridge, delta alone as the floor). The documented list form for expert_ids. Amendment 1's warm-up. The 8 census shapes. The four regimes. The self-pair band [0.97,1.03]. The 25% void ceiling. The fidelity gate. AND F1's predicted median band of 1.3-3.0x, which is now registered for the THIRD time unchanged, from leg 1.",
+ "prior_work_disclosure": "`interleave.py` has a CPU test suite (5/5) that injects drift into synthetic timings and shows the interleaved statistic is exact where the block statistic is badly biased, that the halves check is blind to box drift and fires on ratio drift, that the order control detects a first-call penalty, and that the collector alternates and calls each arm once per pair. Those are arithmetic on synthetic numbers -- no GPU, no timing data. A 2-cell smoke ran on the QNAP A2000 (correctness-only testbed, EXCLUDED from timing) purely to confirm the code path executes; its cells read halves_ratio 0.8996 and order_bias 0.8429 on a contended shared card, i.e. VOID under this protocol's own gate, and are not measurements.",
+ "frozen_commit": "the commit carrying this file.",
+ "protocol": {
+  "devices": "TWO rented cards, both required for any verdict. D1 = H100 80GB (sm_90), D2 = RTX 4090 (sm_89). QNAP A2000 EXCLUDED from timing.",
+  "shapes": "The 8 census cells.",
+  "regimes": ["decode_bs1", "decode_m8", "decode_m32", "tokbudget_2048"],
+  "pairs_per_cell": "Chosen by pilot so one interleaved collection spans ~500 ms of device work, floor 30 pairs, ceiling 600. Unlike leg 2's block ceiling this does NOT trade against pairing quality: more pairs is more independent ratios, never a longer gap inside one. There is no contradiction to walk into here.",
+  "reps": "n=1 matrix per device. SINGLE-REP; cross-device agreement is the only replication claimed.",
+  "reduction": "Mechanical, bench/phase1/reduce_dequant_forward_interleaved.py reading THIS file."
+ },
+ "frozen_verdict_criteria_params": {
+  "selfpair_band": [0.97, 1.03],
+  "halves_band": [0.97, 1.03],
+  "void_cell_fraction_that_voids_the_leg": 0.25,
+  "f1_regime": "decode_m8",
+  "f1_min_cells": 7,
+  "f1_total_cells": 8,
+  "f1_bar": 1.0,
+  "f1_predicted_median_band": [1.3, 3.0],
+  "q4_fidelity_bar": 1.0,
+  "p1_predicted_h100_agreement": [0.97, 1.03],
+  "p1_predicted_4090_divergence_min_cells": 2
+ },
+ "frozen_verdict_criteria": {
+  "F1_small_batch": "PRIMARY. At decode_m8, interleaved D_base/G_base >= 1.0 on at least 7 of 8 census cells, ON BOTH DEVICES. Predicted median 1.3-3.0x -- leg 1's band, unchanged, for the third time.",
+  "P1_pairing_dividend": "REPORT ONLY, but PREDICTED so it is falsifiable, and it is the claim this redesign rests on. Every cell reports BOTH the interleaved statistic and the block statistic computed from the SAME per-call timings. Predicted: on the H100 (locked clocks, quiet) the two agree within [0.97,1.03] on most cells, because there is little drift to cancel; on the RTX 4090 they DIVERGE outside that band on at least 2 cells, because there is. If the two statistics agree everywhere on both devices, the redesign bought nothing measurable and this leg says so plainly -- the instrument would then be no better than leg 2's, merely more complicated.",
+  "Q1_self_pair": "GATE, PER CELL. The interleaved G_base-vs-G_base ratio_median must land in [0.97,1.03] -- the instrument floor measured by exactly the machinery that measures the primary. More than 25% void on a device voids that DEVICE. Band NOT widened; it is the same band legs 1 and 2 used.",
+  "Q3_ratio_stability": "GATE, PER CELL. The primary's halves_ratio (median of the first half of pairs over the second half) must land in [0.97,1.03]. This replaces the whole-cell drift gate and is the reframing described above.",
+  "Q2_wiring": "GATE, POSITIVE-CONTROLLED, unchanged from leg 2: dequant calls >= non-empty groups; base arms agree per row at 1e-2; activation gradients finite and non-zero in all four arms; lora_A gradient non-zero at non-zero B.",
+  "Q4_fidelity": "GATE. b_rel G_base <= b_rel D_base every cell. Expected to reproduce ~0.76x again.",
+  "Q5_order_bias": "REPORT ONLY, with a stated expectation so it is not unfalsifiable: the a-first median over the b-first median should read ~1.0. A large systematic value is NOT automatically an instrument failure -- the two arms have very different CPU-side costs (D_base builds a python list and cats; G_base is one launch), so whichever runs second may get more or less CPU run-ahead. It is reported because alternation averages it away in the median and a reader is entitled to see how much was averaged. If it is large, that is a finding about the arms, and the median remains the average over both orders, which is the fairest single number available.",
+  "verdict_key": "INTERLEAVED_CONFIRMED = F1 AND Q1 AND Q2 AND Q3 AND Q4, on BOTH devices. P1 and Q5 are reported and never enter the verdict."
+ },
+ "relation_to_legs_1_and_2": "Leg 3 SUPERSEDES NEITHER. Legs 1 and 2 stand as published with their receipts and their NOT CONFIRMED verdicts. This leg re-measures the same quantity on a better instrument and says what the instrument was worth. If leg 3's numbers differ materially from leg 2's H100 (which graded 32/32 live and passed F1 at 1.588), that difference is itself reported, because leg 2's H100 is the cleanest prior measurement of the same thing and a disagreement would mean one of the two instruments is wrong.",
+ "exclusions_and_stop_rules": {
+  "no_tune_clause": "No re-tuning, no re-running for a better number, no post-hoc arm change, no band widening. If D_base beats G_base, that cell is published as a loss.",
+  "no_more_knobs": "Amendment 2 registered that if block length was not the binding constraint the next step would be this redesign and NOT a third knob. This is that redesign. If leg 3's instrument also fails to certify on the consumer card, the conclusion to report is that the small-batch training axis is not measurable to a 3% self-pair on rented consumer hardware, and the remaining honest options are a different reduction rule registered in advance (n>=3 reps, worst-rep), locked clocks, or accepting a datacenter-only scope. Not another instrument tweak.",
+  "cross_run": "Only WITHIN-run ratios transfer.",
+  "bill_cap": "Hard $35/job standing cap; expected ~$1.50."
+ },
+ "what_this_does_and_does_not_license": [
+  "LICENSED if confirmed: the same statement leg 2 would have licensed -- fused NF4 projection versus dequant-on-forward at the projection, small batch, two devices, synthetic weights, adapters outside the timed path -- now on an instrument whose pairing is drift-immune by construction rather than by hope.",
+  "NOT LICENSED: a QLoRA training-step claim, a tuned-grouped-GEMM claim, or any restatement of the Unsloth comparison.",
+  "NOT LICENSED: treating the interleaved number as more TRUE than leg 2's where the two agree. Where they agree, the pairing bought nothing on that cell and both are the measurement.",
+  "NOT LICENSED: any claim about routing fidelity. These fixtures still model exactly top_k groups at decode and uniform counts at token budget, which the routing-fidelity disclosure in the results docs describes; that limit is orthogonal to pairing and is NOT fixed here."
+ ]
+}

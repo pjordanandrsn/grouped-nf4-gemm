@@ -1,0 +1,35 @@
+{
+ "registered_utc": "2026-08-13T16:00:00Z",
+ "purpose": "DECIDES WHICH OF LEG 4'S TWO RESULTS IS THE REAL ONE. The adversarial race removed this leg's small-batch speed headline by graphing the baseline (8.6-12.5x gain) against a fused path that cannot be captured. But that race used a STATIC fixture, and CUDA graphs require static shapes -- MoE routing does not provide them, since per-expert group sizes change every step. A real trainer can only use graphs by padding every expert to a fixed capacity C, re-capturing per step, or bucketing. This measures the price of each so the graphed race can be read as either the real world or an artifact of the fixture.",
+ "what_is_measured": {
+  "capacity_tax": "C set so NO token is dropped across 64 independent routing draws; padded problem is E groups x C rows against faithful routing's smaller skewed total. rows_padded/rows_faithful is the compute a graphed arm pays EVERY step to have static shapes.",
+  "capture_cost": "wall time to capture once -- what a re-capture-per-step strategy would pay.",
+  "the_real_race": "D_base graphed AT PADDED SHAPES against G_base at FAITHFUL shapes. That is what each side actually gets: the baseline may graph but must pad; the fused path cannot graph but need not pad."
+ },
+ "not_measured": "Token-dropping (a smaller C, discarding overflow) is the other standard MoE option and is deliberately excluded: it changes what the model computes, so it is not a like-for-like comparison and would need a quality metric to adjudicate.",
+ "frozen_predictions": {
+  "P1_padding_is_expensive_at_training_shape": "PREDICTED: capacity tax > 3x at T=32. Measured draws give ~1-17 rows per hit expert over 64 experts, so a no-drop capacity multiplies rows several-fold. If the tax is near 1, routing is far more uniform than measured and the faithful fixture is wrong.",
+  "P2_padding_is_cheap_at_token_budget": "PREDICTED: capacity tax < 1.5x at T=2048, where occupancy is ~1.0 and counts are closer to even.",
+  "P3_the_real_race": "NO DIRECTION PREDICTED -- this is the point. If d_graphed_padded/g_faithful stays well above 1, the graphed race was an artifact of the static fixture and leg 4's speed numbers substantially return. If it stays below 1, graphing really is available to the baseline in situ and gnf4's case is memory alone."
+ },
+ "no_bars": "Report-only. Whatever it shows is written into RESULTS-leg4-routed.md verbatim, replacing the caveat currently there with a measured answer, in EITHER direction. No optimisation may be added to the fused arm to influence this race.",
+ "amendment_1": {
+  "registered_utc": "2026-08-13T16:12:00Z",
+  "amends": "the 'not_measured' clause above, which excluded token-dropping",
+  "why": "Excluding token-dropping left the baseline's CHEAPEST and most commonly deployed configuration unpriced. Real MoE training sets capacity_factor 1.0-2.0 and discards the overflow. Reporting only the no-drop capacity (measured 4.95-11x) would imply that multiple is the baseline's only option, which is false. The exclusion was right about like-for-like and wrong about completeness: the fix is to measure it and label it, not to keep omitting it.",
+  "BLIND": false,
+  "known_at_authoring_time": [
+   "Partial no-drop results from the H100 (8 of 8 gradeable cells): capacity tax 4.95-11x, real race 0.968-11.864.",
+   "The full capacity_factor drop-rate curve, computed locally on CPU before this amendment was written. It is a DETERMINISTIC function of routing histograms already committed to this repo, so it is not something a prereg can protect and is not presented as a prediction -- any reader can recompute it from bench/phase1/results/routing_*.json."
+  ],
+  "still_pre_data": "The GPU timings of the cf arm on both rented devices. Stated expectation, so no later 'confirmation' can be claimed: the graphed cf=1.25 arm is EXPECTED TO WIN on time, particularly at T=32, because its row tax is ~1.25x by construction while a CUDA graph removes the host-bound overhead that dominates that regime. A win there is not evidence for anything and will not be reported as such.",
+  "what_the_cf_arm_reports": {
+   "primary": "drop_rate_measured -- fraction of routed (token,expert) assignments discarded, computed DIRECTLY from the measured per-layer histograms with the sampling model removed, median and range across ALL layers.",
+   "secondary": "drop_rate_sampled, from the same draws as the no-drop capacity, as a cross-check on the sampling model. Agreement so far: 12.5 vs 14.1 percent (OLMoE) and 47.0 vs 45.9 percent (Qwen) at cf=1.25, so the skew is in the measurement, not in the simulation.",
+   "row_tax": "reported but explicitly NOT the finding -- it is ~cf by construction."
+  },
+  "binding_reporting_rule": "No timing number from the cf arm may be quoted anywhere without its drop rate attached in the same sentence, and the arm may not be reported as a speed result: it is not like-for-like, because the baseline is simultaneously given a CUDA graph the fused path cannot have AND excused a measured fraction of the work the fused path still performs in full.",
+  "stated_upper_bound": "Drop rates are a CEILING, not an estimate. Both histograms are ONE 2048-token sequence captured from a trained model at inference; a real training batch mixes documents (spreading load) and applies a load-balancing auxiliary loss (flattening the router), neither of which is present here. This bias makes the baseline look worse than it is and is disclosed for that reason.",
+  "what_this_cannot_settle": "The quality cost of discarding that work. That needs a training run and an eval, not a timer. No claim about accuracy, loss, or convergence may be derived from this arm."
+ }
+}

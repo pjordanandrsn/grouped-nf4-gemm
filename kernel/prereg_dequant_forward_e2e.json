@@ -1,0 +1,34 @@
+{
+ "registered_utc": "2026-08-13T17:05:00Z",
+ "purpose": "Every number in legs 1-4 is a microbenchmark: synthetic activations, routing histograms captured offline, one op at a time. This runs the same two arms inside experts4bit_qlora's REAL QLoRA training pipeline and reports what a user pays -- seconds per step and peak VRAM. It exists to find out whether the fixture results survive contact with a real finetune, in either direction.",
+ "BLIND": false,
+ "known_at_authoring_time": {
+  "prior_run": "experts4bit-qlora/bench/dgrad-gate/RESULTS-dgrad-gate.md, 2026-08-06, e4b 0.11.0 / gnf4 0.7.0, RTX A5000 (16L OLMoE) + RTX A6000 (48L Qwen3-30B), both sm_86. Measured fast_train_dgrad at 1.99x (OLMoE) and 2.52x (Qwen). Peak VRAM: OLMoE 2.64 -> 2.41/2.62 GB, Qwen 23.13 -> 24.31/25.51 GB.",
+  "why_rerun_anyway": "Four gaps, none of which the prior run claims to close: (a) it states it had NO pre-registered protocol; (b) both its cards are sm_86, so it is effectively ONE architecture, and this program has already had two results reverse between devices; (c) e4b 0.11.0 is seven releases behind current 0.17.4, gnf4 0.7.0 behind 0.9.0; (d) its cost table is ONE training step, averaged including the first, so steady state is unmeasured.",
+  "this_is_a_replication": "Predictions below are therefore predictions that the prior result SURVIVES new hardware and new versions. They are not discoveries and will not be reported as such."
+ },
+ "arms": {
+  "reference": "ExpertsLoRA.forward's per-expert Python loop -- dequantize-and-project one hit expert at a time plus the low-rank delta. Same FAMILY as GenON's QuantizedNaiveMoE and as the arm legs 1-4 measured, but it is e4b's code, NOT GenON's. No result here is a measurement of GenON's implementation.",
+  "fast_train": "enable_fast_train(model) -- gnf4 grouped kernel.",
+  "fast_train_dgrad": "enable_fast_train(model, dgrad=True).",
+  "batched": "enable_batched_train -- kernel-free whole-stack dequant, carried because it beat the fused lane at toy width and lost at real width, and that reversal is worth re-testing on new architectures."
+ },
+ "frozen_predictions": {
+  "P1_speed_replicates": "PREDICTED: fast_train_dgrad >= 1.5x over reference on OLMoE, on BOTH cards (prior sm_86 result: 1.99x). Failure on either card means the speed result is architecture-bound and every speed claim in this program needs that qualifier.",
+  "P2_memory_does_NOT_improve": "PREDICTED: peak VRAM of the fused arms is NOT lower than reference by more than 10 percent, on both cards. This is registered AGAINST an earlier claim of mine that memory was the durable axis: legs 1-4 measured 18.7-48.6x TRANSIENT bytes per op against a plain F.linear baseline that saves its weight for backward, which is a different quantity from peak VRAM in a finetune and does not imply it.",
+  "P3_text_vs_random_routing": "NO DIRECTION PREDICTED. The driver this adapts feeds RANDOM TOKEN IDS, arguing arm-vs-arm on identical inputs makes content irrelevant -- true for a dense model, not obviously true for MoE, where routing is a function of token content and leg 4 established that per-expert SKEW sets this comparison. Both real prose and random ids are run. If the speedups differ materially, the prior cost table was measuring a routing distribution no user will ever have, and that is the finding regardless of which way it points."
+ },
+ "gates_not_predictions": {
+  "G1_self_pair": "`reference` runs FIRST and LAST, bracketing the whole sweep. reference_selfpair/reference must land within 1.00 +/- 0.05. Outside that, the cell is VOID and is reported as VOID, not quietly requoted. Legs 1-3 of this program died three times on instruments that were never self-paired.",
+  "G2_frozen_storage": "frozen_changed must be 0 for every arm. Any nonzero value means an arm mutated quantized base bytes and the run STOPS.",
+  "G3_speedup_exceeds_noise": "A speedup smaller than the self-pair's own deviation from 1.000 is not a speedup and is reported as within-noise."
+ },
+ "reporting_rules": {
+  "steady_state": "Median of per-step times after dropping --warmup steps is primary. The mean-over-all-steps the prior driver reported is ALSO recorded, so the difference between the two is visible rather than assumed.",
+  "peak_decomposed": "max_memory_allocated is absolute and includes the resident model. Resident is captured before each arm and subtracted, so transient is reported separately from total. A claim about one may not be quoted as a claim about the other.",
+  "routing_measured": "Occupancy and cv are captured off the LIVE router during the run, closing the open item that asked for occupancy on the real model rather than derived from offline histograms.",
+  "losing_cells": "Every cell is reported including the ones where an arm loses, per the standing rail.",
+  "no_post_hoc_tuning": "No optimisation may be added to either arm after data is seen. If an arm underperforms, that is the result."
+ },
+ "no_bars": "Report-only. Whatever it shows is written up in either direction, including a result that contradicts legs 1-4 or the prior run."
+}

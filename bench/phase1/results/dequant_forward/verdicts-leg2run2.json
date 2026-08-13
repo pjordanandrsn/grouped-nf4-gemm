@@ -1,0 +1,390 @@
+{
+ "prereg": "kernel/prereg_dequant_forward_floorfree.json",
+ "prereg_verdict_key": "FLOORFREE_CONFIRMED = F1 AND B1 AND Q1 AND Q2 AND Q4, on BOTH devices. F2, E1 and L1 are reported and never enter the verdict.",
+ "devices": {
+  "H100": {
+   "device": "H100",
+   "gpu": "NVIDIA H100 80GB HBM3",
+   "capability": "9.0",
+   "eids_form": "list",
+   "cells_ok": 32,
+   "cells_skipped": 0,
+   "skipped": [],
+   "void_cells": [
+    {
+     "cell": "OLMoE-1B-7B-0924/gate_up",
+     "regime": "decode_bs1",
+     "why": "db_selfpair=0.9376; gb_drift=0.8940"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/down",
+     "regime": "decode_m8",
+     "why": "gb_drift=0.8748"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/down",
+     "regime": "decode_m32",
+     "why": "gb_drift=1.1818"
+    },
+    {
+     "cell": "gemma-4-26B-A4B/gate_up",
+     "regime": "decode_m32",
+     "why": "db_selfpair=1.0546"
+    },
+    {
+     "cell": "gemma-4-26B-A4B/down",
+     "regime": "decode_bs1",
+     "why": "gb_drift=1.1541"
+    },
+    {
+     "cell": "gemma-4-26B-A4B/down",
+     "regime": "decode_m8",
+     "why": "db_selfpair=0.8681; gb_drift=0.8617"
+    }
+   ],
+   "void_fraction": 0.1875,
+   "Q1_self_pair": true,
+   "Q2_wiring": true,
+   "Q2_failures": [],
+   "Q4_fidelity": true,
+   "Q4_detail": {
+    "median_b_rel_G_over_D": 0.7623938318596779,
+    "failures": []
+   },
+   "F1_floorfree_small_batch": false,
+   "F1_detail": {
+    "regime": "decode_m8",
+    "cells_at_or_above_bar": 5,
+    "of": 6,
+    "median": 1.5215329474445594,
+    "predicted_band": [
+     1.3,
+     3.0
+    ],
+    "median_in_predicted_band": true,
+    "per_cell": [
+     {
+      "cell": "OLMoE-1B-7B-0924/gate_up",
+      "dbase_over_gbase": 1.51430898628126
+     },
+     {
+      "cell": "OLMoE-1B-7B-0924/down",
+      "dbase_over_gbase": 1.7259443719542487
+     },
+     {
+      "cell": "Qwen3-30B-A3B/gate_up",
+      "dbase_over_gbase": 1.6145801561121134
+     },
+     {
+      "cell": "gemma-4-26B-A4B/gate_up",
+      "dbase_over_gbase": 1.528756908607859
+     },
+     {
+      "cell": "gpt-oss-120b/gate_up",
+      "dbase_over_gbase": 0.7124441110017083
+     },
+     {
+      "cell": "gpt-oss-120b/down",
+      "dbase_over_gbase": 1.0645943103069175
+     }
+    ]
+   },
+   "B1_leg1_replication": true,
+   "B1_detail": {
+    "comparable_cells": 6,
+    "outside_band": [],
+    "band": [
+     0.85,
+     1.15
+    ],
+    "pairs": [
+     {
+      "cell": "OLMoE-1B-7B-0924/gate_up",
+      "leg2_full": 1.1010426298569447,
+      "leg1": 1.0704329511281598,
+      "ratio": 1.0285956058214805
+     },
+     {
+      "cell": "OLMoE-1B-7B-0924/down",
+      "leg2_full": 1.2200993721118414,
+      "leg1": 1.145788871866758,
+      "ratio": 1.0648553167775265
+     },
+     {
+      "cell": "Qwen3-30B-A3B/gate_up",
+      "leg2_full": 1.142970324241482,
+      "leg1": 1.0877991960607736,
+      "ratio": 1.0507181181788867
+     },
+     {
+      "cell": "gemma-4-26B-A4B/gate_up",
+      "leg2_full": 1.0671847990062515,
+      "leg1": 1.0703732774361323,
+      "ratio": 0.99702115280987
+     },
+     {
+      "cell": "gpt-oss-120b/gate_up",
+      "leg2_full": 0.7883351896304135,
+      "leg1": 0.7994654616078335,
+      "ratio": 0.9860778576287267
+     },
+     {
+      "cell": "gpt-oss-120b/down",
+      "leg2_full": 0.9291530417820395,
+      "leg1": 0.9324777467249902,
+      "ratio": 0.9964345476826363
+     }
+    ]
+   },
+   "F2_small_batch_band_report_only": [
+    {
+     "regime": "decode_bs1",
+     "n": 6,
+     "median_dbase_over_gbase": 1.8603151991772844,
+     "min": 0.9270945598781778,
+     "max": 1.9900932100470672,
+     "median_dfull_over_gfull": 1.1957312926128942
+    },
+    {
+     "regime": "decode_m8",
+     "n": 6,
+     "median_dbase_over_gbase": 1.5215329474445594,
+     "min": 0.7124441110017083,
+     "max": 1.7259443719542487,
+     "median_dfull_over_gfull": 1.0841137144315982
+    },
+    {
+     "regime": "decode_m32",
+     "n": 6,
+     "median_dbase_over_gbase": 1.5809157291885931,
+     "min": 0.7866565100595422,
+     "max": 1.9739284299939521,
+     "median_dfull_over_gfull": 1.1221177827067286
+    },
+    {
+     "regime": "tokbudget_2048",
+     "n": 8,
+     "median_dbase_over_gbase": 2.467725390425633,
+     "min": 1.0644451970854485,
+     "max": 3.014124711270377,
+     "median_dfull_over_gfull": 2.168073532387879
+    }
+   ],
+   "L1_floor_report_only": {
+    "median_lora_floor_frac_of_gbase_at_decode_m8": 1.4408390627029077,
+    "expectation": "> 0.5",
+    "met": true
+   },
+   "E1_energy_report_only": {
+    "median_j_ratio": 1.6771506120482793
+   },
+   "DEVICE_CONFIRMED": false
+  },
+  "ADA": {
+   "device": "ADA",
+   "gpu": "NVIDIA GeForce RTX 4090",
+   "capability": "8.9",
+   "eids_form": "list",
+   "cells_ok": 32,
+   "cells_skipped": 0,
+   "skipped": [],
+   "void_cells": [
+    {
+     "cell": "OLMoE-1B-7B-0924/gate_up",
+     "regime": "decode_bs1",
+     "why": "db_selfpair=1.0560; gb_drift=1.0809"
+    },
+    {
+     "cell": "OLMoE-1B-7B-0924/gate_up",
+     "regime": "decode_m8",
+     "why": "gb_selfpair=1.0364"
+    },
+    {
+     "cell": "OLMoE-1B-7B-0924/gate_up",
+     "regime": "decode_m32",
+     "why": "db_selfpair=0.9517"
+    },
+    {
+     "cell": "OLMoE-1B-7B-0924/down",
+     "regime": "decode_m8",
+     "why": "gb_drift=1.0738"
+    },
+    {
+     "cell": "OLMoE-1B-7B-0924/down",
+     "regime": "decode_m32",
+     "why": "gb_selfpair=0.9162; gb_drift=0.9340"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/gate_up",
+     "regime": "decode_bs1",
+     "why": "gb_selfpair=0.9592"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/gate_up",
+     "regime": "decode_m32",
+     "why": "db_selfpair=0.9606; gb_drift=1.0549"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/down",
+     "regime": "decode_m8",
+     "why": "gb_drift=1.0725"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/down",
+     "regime": "decode_m32",
+     "why": "gb_drift=1.0911"
+    },
+    {
+     "cell": "gemma-4-26B-A4B/gate_up",
+     "regime": "decode_bs1",
+     "why": "db_selfpair=0.9665; gb_drift=1.0923"
+    },
+    {
+     "cell": "gemma-4-26B-A4B/down",
+     "regime": "decode_m32",
+     "why": "gb_selfpair=1.0548; db_selfpair=0.9382; gb_drift=1.0634"
+    },
+    {
+     "cell": "gpt-oss-120b/gate_up",
+     "regime": "decode_bs1",
+     "why": "db_selfpair=1.0415"
+    },
+    {
+     "cell": "gpt-oss-120b/gate_up",
+     "regime": "decode_m8",
+     "why": "gb_selfpair=0.9607"
+    },
+    {
+     "cell": "gpt-oss-120b/down",
+     "regime": "decode_bs1",
+     "why": "gb_selfpair=0.9478; db_selfpair=0.8886; gb_drift=0.9342"
+    },
+    {
+     "cell": "gpt-oss-120b/down",
+     "regime": "decode_m32",
+     "why": "gb_drift=0.9474"
+    }
+   ],
+   "void_fraction": 0.46875,
+   "Q1_self_pair": false,
+   "Q2_wiring": true,
+   "Q2_failures": [],
+   "Q4_fidelity": true,
+   "Q4_detail": {
+    "median_b_rel_G_over_D": 0.7580958293278001,
+    "failures": []
+   },
+   "F1_floorfree_small_batch": false,
+   "F1_detail": {
+    "regime": "decode_m8",
+    "cells_at_or_above_bar": 4,
+    "of": 4,
+    "median": 1.605536473379353,
+    "predicted_band": [
+     1.3,
+     3.0
+    ],
+    "median_in_predicted_band": true,
+    "per_cell": [
+     {
+      "cell": "Qwen3-30B-A3B/gate_up",
+      "dbase_over_gbase": 1.6294118518159635
+     },
+     {
+      "cell": "gemma-4-26B-A4B/gate_up",
+      "dbase_over_gbase": 1.5816610949427423
+     },
+     {
+      "cell": "gemma-4-26B-A4B/down",
+      "dbase_over_gbase": 1.6857923366909293
+     },
+     {
+      "cell": "gpt-oss-120b/down",
+      "dbase_over_gbase": 1.0698924558726872
+     }
+    ]
+   },
+   "B1_leg1_replication": true,
+   "B1_detail": {
+    "comparable_cells": 4,
+    "outside_band": [],
+    "band": [
+     0.85,
+     1.15
+    ],
+    "pairs": [
+     {
+      "cell": "Qwen3-30B-A3B/gate_up",
+      "leg2_full": 1.2111651054674797,
+      "leg1": 1.1187942337047054,
+      "ratio": 1.0825628779448595
+     },
+     {
+      "cell": "gemma-4-26B-A4B/gate_up",
+      "leg2_full": 1.1431792958697367,
+      "leg1": 1.0755096046096948,
+      "ratio": 1.0629187233382256
+     },
+     {
+      "cell": "gemma-4-26B-A4B/down",
+      "leg2_full": 1.2994986847111383,
+      "leg1": 1.214441884304006,
+      "ratio": 1.0700377692061225
+     },
+     {
+      "cell": "gpt-oss-120b/down",
+      "leg2_full": 0.9750000173237088,
+      "leg1": 0.9548282011971191,
+      "ratio": 1.021126121014544
+     }
+    ]
+   },
+   "F2_small_batch_band_report_only": [
+    {
+     "regime": "decode_bs1",
+     "n": 3,
+     "median_dbase_over_gbase": 1.7603483680861702,
+     "min": 1.734957935660716,
+     "max": 1.771568729409573,
+     "median_dfull_over_gfull": 1.3018868146548062
+    },
+    {
+     "regime": "decode_m8",
+     "n": 4,
+     "median_dbase_over_gbase": 1.605536473379353,
+     "min": 1.0698924558726872,
+     "max": 1.6857923366909293,
+     "median_dfull_over_gfull": 1.177172200668608
+    },
+    {
+     "regime": "decode_m32",
+     "n": 2,
+     "median_dbase_over_gbase": 1.2628814114716853,
+     "min": 0.953531796300988,
+     "max": 1.5722310266423825,
+     "median_dfull_over_gfull": 1.0484002661432466
+    },
+    {
+     "regime": "tokbudget_2048",
+     "n": 8,
+     "median_dbase_over_gbase": 2.1376620947236527,
+     "min": 1.4788403851972634,
+     "max": 6.158683821883862,
+     "median_dfull_over_gfull": 1.919409321705968
+    }
+   ],
+   "L1_floor_report_only": {
+    "median_lora_floor_frac_of_gbase_at_decode_m8": 1.44482991757264,
+    "expectation": "> 0.5",
+    "met": true
+   },
+   "E1_energy_report_only": {
+    "median_j_ratio": 1.9423801747190412
+   },
+   "DEVICE_CONFIRMED": false
+  }
+ },
+ "two_device_rule_met": true,
+ "FLOORFREE_CONFIRMED": false,
+ "note": "NOT CONFIRMED means the registered criteria were not all met, not that the numbers are wrong. Report at full volume."
+}

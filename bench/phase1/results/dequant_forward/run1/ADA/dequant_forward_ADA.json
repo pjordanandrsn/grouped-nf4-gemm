@@ -1,0 +1,3269 @@
+{
+ "leg": "training axis vs dequant-on-forward",
+ "TIER": "see PREREG-dequant-forward.md",
+ "baseline_source": {
+  "module": "QuantizedNaiveMoe",
+  "repo": "https://github.com/genonai/nf4moe",
+  "writeup": "https://huggingface.co/mncai/nf4moe",
+  "quant": {
+   "quant_type": "nf4",
+   "blocksize": 64
+  }
+ },
+ "gpu": "NVIDIA GeForce RTX 4090",
+ "capability": "8.9",
+ "torch": "2.8.0+cu128",
+ "rank": 16,
+ "scaling": 1.0,
+ "grad_checkpointing": "OFF in every arm (single-projection cell)",
+ "routing_weights": "not applied by any arm (projection boundary)",
+ "regimes": [
+  "decode_m8",
+  "tokbudget_2048",
+  "tokbudget_11800"
+ ],
+ "block_ms": 250.0,
+ "rows": [
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "gate_up",
+   "regime": "decode_m8",
+   "N": 2048,
+   "K": 2048,
+   "E": 64,
+   "top_k": 8,
+   "groups": 8,
+   "rows": 64,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 8,
+    "nonempty_groups": 8,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0016979448143038564,
+   "b_rel_D": 0.002230362406081972,
+   "b_rel_G_over_D": 0.7612865109606104,
+   "mem_transient_d_over_g": 7.734073160706946,
+   "mem": {
+    "G": {
+     "peak_bytes": 351050752,
+     "resident_before_bytes": 341085184,
+     "transient_bytes": 9965568
+    },
+    "D": {
+     "peak_bytes": 418159616,
+     "resident_before_bytes": 341085184,
+     "transient_bytes": 77074432
+    },
+    "D_routed": {
+     "peak_bytes": 418425856,
+     "resident_before_bytes": 341085184,
+     "transient_bytes": 77340672
+    }
+   },
+   "iters": 148,
+   "g_selfpair": 0.9338513014397619,
+   "d_over_g": 1.5145563195691585,
+   "d_selfpair": 1.0137221316621596,
+   "dr_over_g": 2.3452318759738726,
+   "dr_over_d": 1.6702700351531672,
+   "g_drift": 1.0073810979086402,
+   "lora_floor_frac_of_g": 0.6908080238867199,
+   "ms": {
+    "g_a": 1.649616003036499,
+    "g_b": 1.540496051311493,
+    "d_a": 2.3331680297851562,
+    "d_b": 2.3651840686798096,
+    "g_c": 1.6844799518585205,
+    "dr_a": 3.9504960775375366,
+    "g_end": 1.661791980266571,
+    "lora_floor": 1.1395679712295532
+   },
+   "j_ratio_d_over_g": 1.5573380046793182,
+   "energy": {
+    "G": {
+     "watts": 75.83797333333334,
+     "j_per_step": 0.12465194713448566,
+     "method": "pynvml",
+     "samples": 75
+    },
+    "D": {
+     "watts": 80.63665333333333,
+     "j_per_step": 0.19412521462981175,
+     "method": "pynvml",
+     "samples": 75
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "gate_up",
+   "regime": "tokbudget_2048",
+   "N": 2048,
+   "K": 2048,
+   "E": 64,
+   "top_k": 8,
+   "groups": 64,
+   "rows": 16384,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 64,
+    "nonempty_groups": 64,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0016981538760022972,
+   "b_rel_D": 0.002225398639964784,
+   "b_rel_G_over_D": 0.7630785089493763,
+   "mem_transient_d_over_g": 1.7183429642087669,
+   "mem": {
+    "G": {
+     "peak_bytes": 1356368384,
+     "resident_before_bytes": 608994304,
+     "transient_bytes": 747374080
+    },
+    "D": {
+     "peak_bytes": 1893239296,
+     "resident_before_bytes": 608994304,
+     "transient_bytes": 1284244992
+    },
+    "D_routed": {
+     "peak_bytes": 1960479232,
+     "resident_before_bytes": 608994304,
+     "transient_bytes": 1351484928
+    }
+   },
+   "iters": 20,
+   "g_selfpair": 1.0136256432374575,
+   "d_over_g": 1.9691576442086043,
+   "d_selfpair": 1.0184137896518604,
+   "dr_over_g": 2.502442811939073,
+   "dr_over_d": 1.2448175172958507,
+   "g_drift": 0.9942328318564663,
+   "lora_floor_frac_of_g": 0.3278684748236149,
+   "ms": {
+    "g_a": 14.024159908294678,
+    "g_b": 14.215248107910156,
+    "d_a": 27.992064476013184,
+    "d_b": 28.5075044631958,
+    "g_c": 14.180799961090088,
+    "dr_a": 35.48664093017578,
+    "g_end": 13.943280220031738,
+    "lora_floor": 4.5980799198150635
+   },
+   "j_ratio_d_over_g": 2.0117045955201256,
+   "energy": {
+    "G": {
+     "watts": 257.0879605263158,
+     "j_per_step": 3.6086367130916917,
+     "method": "pynvml",
+     "samples": 76
+    },
+    "D": {
+     "watts": 254.41432467532468,
+     "j_per_step": 7.2595110592891965,
+     "method": "pynvml",
+     "samples": 77
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "gate_up",
+   "regime": "tokbudget_11800",
+   "N": 2048,
+   "K": 2048,
+   "E": 64,
+   "top_k": 8,
+   "groups": 64,
+   "rows": 94400,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 64,
+    "nonempty_groups": 64,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0016980294125019202,
+   "b_rel_D": 0.0022258672156520495,
+   "b_rel_G_over_D": 0.7628619535619947,
+   "mem_transient_d_over_g": 1.125738532931335,
+   "mem": {
+    "G": {
+     "peak_bytes": 6161272320,
+     "resident_before_bytes": 1891531776,
+     "transient_bytes": 4269740544
+    },
+    "D": {
+     "peak_bytes": 6698143232,
+     "resident_before_bytes": 1891531776,
+     "transient_bytes": 4806611456
+    },
+    "D_routed": {
+     "peak_bytes": 7088598528,
+     "resident_before_bytes": 1891531776,
+     "transient_bytes": 5197066752
+    }
+   },
+   "iters": 20,
+   "g_selfpair": 0.9995857720078897,
+   "d_over_g": 1.9075144964368542,
+   "d_selfpair": 0.9985988379345266,
+   "dr_over_g": 2.0810125099512775,
+   "dr_over_d": 1.0942921953883122,
+   "g_drift": 1.0041066138419796,
+   "lora_floor_frac_of_g": 0.30969835144934765,
+   "ms": {
+    "g_a": 74.54825592041016,
+    "g_b": 74.51737594604492,
+    "d_a": 142.14297485351562,
+    "d_b": 141.94380950927734,
+    "g_c": 74.64059066772461,
+    "dr_a": 155.3280029296875,
+    "g_end": 74.85439682006836,
+    "lora_floor": 23.087471961975098
+   },
+   "j_ratio_d_over_g": 1.8951330361673637,
+   "energy": {
+    "G": {
+     "watts": 278.5309487179487,
+     "j_per_step": 20.794376571060827,
+     "method": "pynvml",
+     "samples": 78
+    },
+    "D": {
+     "watts": 277.3673647058824,
+     "j_per_step": 39.408110006322,
+     "method": "pynvml",
+     "samples": 85
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "down",
+   "regime": "decode_m8",
+   "N": 2048,
+   "K": 1024,
+   "E": 64,
+   "top_k": 8,
+   "groups": 8,
+   "rows": 64,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 8,
+    "nonempty_groups": 8,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0016969621584603384,
+   "b_rel_D": 0.002229052537374347,
+   "b_rel_G_over_D": 0.7612930292164535,
+   "mem_transient_d_over_g": 5.651902328222601,
+   "mem": {
+    "G": {
+     "peak_bytes": 190487552,
+     "resident_before_bytes": 183274496,
+     "transient_bytes": 7213056
+    },
+    "D": {
+     "peak_bytes": 224041984,
+     "resident_before_bytes": 183274496,
+     "transient_bytes": 40767488
+    },
+    "D_routed": {
+     "peak_bytes": 224308224,
+     "resident_before_bytes": 183274496,
+     "transient_bytes": 41033728
+    }
+   },
+   "iters": 120,
+   "g_selfpair": 1.2306452238953582,
+   "d_over_g": 1.789587115788561,
+   "d_selfpair": 0.9343076136420123,
+   "dr_over_g": 2.0490072458183644,
+   "dr_over_d": 1.4960866428303534,
+   "g_drift": 1.1200081259398096,
+   "lora_floor_frac_of_g": 0.6596129194992393,
+   "ms": {
+    "g_a": 1.9839999675750732,
+    "g_b": 2.4416000843048096,
+    "d_a": 4.369456052780151,
+    "d_b": 4.08241605758667,
+    "g_c": 2.980784058570862,
+    "dr_a": 6.107648134231567,
+    "g_end": 2.222096085548401,
+    "lora_floor": 1.30867201089859
+   },
+   "j_ratio_d_over_g": 1.5983703724252387,
+   "energy": {
+    "G": {
+     "watts": 68.84022666666667,
+     "j_per_step": 0.16062877638714643,
+     "method": "pynvml",
+     "samples": 75
+    },
+    "D": {
+     "watts": 69.98265333333333,
+     "j_per_step": 0.2567442771361336,
+     "method": "pynvml",
+     "samples": 75
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "down",
+   "regime": "tokbudget_2048",
+   "N": 2048,
+   "K": 1024,
+   "E": 64,
+   "top_k": 8,
+   "groups": 64,
+   "rows": 16384,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 64,
+    "nonempty_groups": 64,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0016972723603562287,
+   "b_rel_D": 0.002225620795111134,
+   "b_rel_G_over_D": 0.7626062643216259,
+   "mem_transient_d_over_g": 1.3771630902615168,
+   "mem": {
+    "G": {
+     "peak_bytes": 1029212672,
+     "resident_before_bytes": 317490176,
+     "transient_bytes": 711722496
+    },
+    "D": {
+     "peak_bytes": 1297648128,
+     "resident_before_bytes": 317490176,
+     "transient_bytes": 980157952
+    },
+    "D_routed": {
+     "peak_bytes": 1364888064,
+     "resident_before_bytes": 317490176,
+     "transient_bytes": 1047397888
+    }
+   },
+   "iters": 27,
+   "g_selfpair": 0.9996359486048668,
+   "d_over_g": 1.527341746084642,
+   "d_selfpair": 0.9974994699790276,
+   "dr_over_g": 2.7346929499777257,
+   "dr_over_d": 1.7948152794313095,
+   "g_drift": 0.9961787786430618,
+   "lora_floor_frac_of_g": 0.44533971116223153,
+   "ms": {
+    "g_a": 9.40441608428955,
+    "g_b": 9.400992393493652,
+    "d_a": 14.358528137207031,
+    "d_b": 14.322624206542969,
+    "g_c": 9.400128364562988,
+    "dr_a": 25.706464767456055,
+    "g_end": 9.36847972869873,
+    "lora_floor": 4.188159942626953
+   },
+   "j_ratio_d_over_g": 1.6287307512232994,
+   "energy": {
+    "G": {
+     "watts": 225.2661052631579,
+     "j_per_step": 2.0974752869954085,
+     "method": "pynvml",
+     "samples": 76
+    },
+    "D": {
+     "watts": 237.21681578947369,
+     "j_per_step": 3.416222499860337,
+     "method": "pynvml",
+     "samples": 76
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "down",
+   "regime": "tokbudget_11800",
+   "N": 2048,
+   "K": 1024,
+   "E": 64,
+   "top_k": 8,
+   "groups": 64,
+   "rows": 94400,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 64,
+    "nonempty_groups": 64,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0016957227644087919,
+   "b_rel_D": 0.0022239725389553307,
+   "b_rel_G_over_D": 0.7624746864929033,
+   "mem_transient_d_over_g": 1.0683159245743483,
+   "mem": {
+    "G": {
+     "peak_bytes": 5035957760,
+     "resident_before_bytes": 962556928,
+     "transient_bytes": 4073400832
+    },
+    "D": {
+     "peak_bytes": 5314235904,
+     "resident_before_bytes": 962556928,
+     "transient_bytes": 4351678976
+    },
+    "D_routed": {
+     "peak_bytes": 5703259648,
+     "resident_before_bytes": 962556928,
+     "transient_bytes": 4740702720
+    }
+   },
+   "iters": 20,
+   "g_selfpair": 0.9964065961576336,
+   "d_over_g": 1.743910006743016,
+   "d_selfpair": 0.9930655940912303,
+   "dr_over_g": 2.003543677288719,
+   "dr_over_d": 1.1473673619292635,
+   "g_drift": 0.9877834085257275,
+   "lora_floor_frac_of_g": 0.43701747009920494,
+   "ms": {
+    "g_a": 48.57804870605469,
+    "g_b": 48.40348815917969,
+    "d_a": 84.41132736206055,
+    "d_b": 83.82598495483398,
+    "g_c": 48.00454330444336,
+    "dr_a": 96.17919921875,
+    "g_end": 47.98459053039551,
+    "lora_floor": 21.229455947875977
+   },
+   "j_ratio_d_over_g": 1.7444552450234283,
+   "energy": {
+    "G": {
+     "watts": 271.218961038961,
+     "j_per_step": 13.01569523557985,
+     "method": "pynvml",
+     "samples": 77
+    },
+    "D": {
+     "watts": 268.08353086419754,
+     "j_per_step": 22.705297821333716,
+     "method": "pynvml",
+     "samples": 81
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "gate_up",
+   "regime": "decode_m8",
+   "N": 1536,
+   "K": 2048,
+   "E": 128,
+   "top_k": 8,
+   "groups": 8,
+   "rows": 64,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 8,
+    "nonempty_groups": 8,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0016953714866982281,
+   "b_rel_D": 0.0022195557432803234,
+   "b_rel_G_over_D": 0.7638337049343967,
+   "mem_transient_d_over_g": 4.108525170756388,
+   "mem": {
+    "G": {
+     "peak_bytes": 531110912,
+     "resident_before_bytes": 514919424,
+     "transient_bytes": 16191488
+    },
+    "D": {
+     "peak_bytes": 581442560,
+     "resident_before_bytes": 514919424,
+     "transient_bytes": 66523136
+    },
+    "D_routed": {
+     "peak_bytes": 581643264,
+     "resident_before_bytes": 514919424,
+     "transient_bytes": 66723840
+    }
+   },
+   "iters": 143,
+   "g_selfpair": 0.9947319145847391,
+   "d_over_g": 1.4503410266318129,
+   "d_selfpair": 0.9472025849599198,
+   "dr_over_g": 2.8093852642178643,
+   "dr_over_d": 1.8123546406971818,
+   "g_drift": 1.0032114062655422,
+   "lora_floor_frac_of_g": 0.6616150855846289,
+   "ms": {
+    "g_a": 1.773695945739746,
+    "g_b": 1.7643519639968872,
+    "d_a": 2.5589120388031006,
+    "d_b": 2.4238080978393555,
+    "g_c": 1.5636160373687744,
+    "dr_a": 4.3927998542785645,
+    "g_end": 1.7793920040130615,
+    "lora_floor": 1.1735039949417114
+   },
+   "j_ratio_d_over_g": 1.6575671248268988,
+   "energy": {
+    "G": {
+     "watts": 73.70557333333333,
+     "j_per_step": 0.14581640744055258,
+     "method": "pynvml",
+     "samples": 75
+    },
+    "D": {
+     "watts": 75.14881333333334,
+     "j_per_step": 0.24170048323382434,
+     "method": "pynvml",
+     "samples": 75
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "gate_up",
+   "regime": "tokbudget_2048",
+   "N": 1536,
+   "K": 2048,
+   "E": 128,
+   "top_k": 8,
+   "groups": 128,
+   "rows": 16384,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 128,
+    "nonempty_groups": 128,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.001696151091722892,
+   "b_rel_D": 0.002787405914695916,
+   "b_rel_G_over_D": 0.60850523520107,
+   "mem_transient_d_over_g": 2.3744930408634626,
+   "mem": {
+    "G": {
+     "peak_bytes": 1368721920,
+     "resident_before_bytes": 782828544,
+     "transient_bytes": 585893376
+    },
+    "D": {
+     "peak_bytes": 2174028288,
+     "resident_before_bytes": 782828544,
+     "transient_bytes": 1391199744
+    },
+    "D_routed": {
+     "peak_bytes": 2224491008,
+     "resident_before_bytes": 782828544,
+     "transient_bytes": 1441662464
+    }
+   },
+   "iters": 20,
+   "g_selfpair": 1.0026044181328162,
+   "d_over_g": 4.101042677087291,
+   "d_selfpair": 1.0093513448362184,
+   "dr_over_g": 5.395348358063566,
+   "dr_over_d": 1.3085538639530676,
+   "g_drift": 1.020177550120029,
+   "lora_floor_frac_of_g": 0.352185203948264,
+   "ms": {
+    "g_a": 12.508191585540771,
+    "g_b": 12.540768146514893,
+    "d_a": 51.43022537231445,
+    "d_b": 51.91116714477539,
+    "g_c": 12.590208053588867,
+    "dr_a": 67.92855834960938,
+    "g_end": 12.760576248168945,
+    "lora_floor": 4.405200004577637
+   },
+   "j_ratio_d_over_g": 4.195025754684129,
+   "energy": {
+    "G": {
+     "watts": 231.4708947368421,
+     "j_per_step": 2.919587873120736,
+     "method": "pynvml",
+     "samples": 76
+    },
+    "D": {
+     "watts": 234.83971794871795,
+     "j_per_step": 12.247746320804946,
+     "method": "pynvml",
+     "samples": 78
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "gate_up",
+   "regime": "tokbudget_11800",
+   "N": 1536,
+   "K": 2048,
+   "E": 128,
+   "top_k": 8,
+   "groups": 128,
+   "rows": 94464,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 128,
+    "nonempty_groups": 128,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.001697830819666252,
+   "b_rel_D": 0.0027952719899720134,
+   "b_rel_G_over_D": 0.6073937798386664,
+   "mem_transient_d_over_g": 1.2434976626602772,
+   "mem": {
+    "G": {
+     "peak_bytes": 5381708288,
+     "resident_before_bytes": 2069963776,
+     "transient_bytes": 3311744512
+    },
+    "D": {
+     "peak_bytes": 6188110336,
+     "resident_before_bytes": 2069963776,
+     "transient_bytes": 4118146560
+    },
+    "D_routed": {
+     "peak_bytes": 6560522752,
+     "resident_before_bytes": 2069963776,
+     "transient_bytes": 4490558976
+    }
+   },
+   "iters": 20,
+   "g_selfpair": 0.9967149382707247,
+   "d_over_g": 4.114940133869709,
+   "d_selfpair": 0.9960584427694931,
+   "dr_over_g": 4.437301306643519,
+   "dr_over_d": 1.0754984773200091,
+   "g_drift": 0.9934724388813948,
+   "lora_floor_frac_of_g": 0.3182530976959355,
+   "ms": {
+    "g_a": 60.452816009521484,
+    "g_b": 60.25422477722168,
+    "d_a": 247.9425277709961,
+    "d_b": 246.96524810791016,
+    "g_c": 59.85862350463867,
+    "dr_a": 265.6107482910156,
+    "g_end": 60.05820655822754,
+    "lora_floor": 19.239295959472656
+   },
+   "j_ratio_d_over_g": 3.9587590613748342,
+   "energy": {
+    "G": {
+     "watts": 277.02915384615386,
+     "j_per_step": 16.678258200923928,
+     "method": "pynvml",
+     "samples": 78
+    },
+    "D": {
+     "watts": 267.1580114942529,
+     "j_per_step": 66.02520578085674,
+     "method": "pynvml",
+     "samples": 87
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "down",
+   "regime": "decode_m8",
+   "N": 2048,
+   "K": 768,
+   "E": 128,
+   "top_k": 8,
+   "groups": 8,
+   "rows": 64,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 8,
+    "nonempty_groups": 8,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.00170484591614601,
+   "b_rel_D": 0.002239531626349624,
+   "b_rel_G_over_D": 0.7612511009388435,
+   "mem_transient_d_over_g": 3.1966011329556814,
+   "mem": {
+    "G": {
+     "peak_bytes": 282500096,
+     "resident_before_bytes": 270208000,
+     "transient_bytes": 12292096
+    },
+    "D": {
+     "peak_bytes": 309500928,
+     "resident_before_bytes": 270208000,
+     "transient_bytes": 39292928
+    },
+    "D_routed": {
+     "peak_bytes": 309767168,
+     "resident_before_bytes": 270208000,
+     "transient_bytes": 39559168
+    }
+   },
+   "iters": 109,
+   "g_selfpair": 1.1797491546031924,
+   "d_over_g": 1.748688259354185,
+   "d_selfpair": 0.7246254639785593,
+   "dr_over_g": 2.2986336940487857,
+   "dr_over_d": 2.1633572035589324,
+   "g_drift": 1.3830330941061983,
+   "lora_floor_frac_of_g": 0.9416525940350963,
+   "ms": {
+    "g_a": 2.3522560596466064,
+    "g_b": 2.7750720977783203,
+    "d_a": 4.852735996246338,
+    "d_b": 3.516416072845459,
+    "g_c": 3.30947208404541,
+    "dr_a": 7.607264041900635,
+    "g_end": 3.2532479763031006,
+    "lora_floor": 2.215008020401001
+   },
+   "j_ratio_d_over_g": 1.6550446271188195,
+   "energy": {
+    "G": {
+     "watts": 67.75385333333332,
+     "j_per_step": 0.19339594162348592,
+     "method": "pynvml",
+     "samples": 75
+    },
+    "D": {
+     "watts": 67.31597333333333,
+     "j_per_step": 0.32007891409053524,
+     "method": "pynvml",
+     "samples": 75
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "down",
+   "regime": "tokbudget_2048",
+   "N": 2048,
+   "K": 768,
+   "E": 128,
+   "top_k": 8,
+   "groups": 128,
+   "rows": 16384,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 128,
+    "nonempty_groups": 128,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0017025840417675788,
+   "b_rel_D": 0.002232770909371379,
+   "b_rel_G_over_D": 0.7625430959448184,
+   "mem_transient_d_over_g": 1.5691044587596312,
+   "mem": {
+    "G": {
+     "peak_bytes": 1080363520,
+     "resident_before_bytes": 371000320,
+     "transient_bytes": 709363200
+    },
+    "D": {
+     "peak_bytes": 1484065280,
+     "resident_before_bytes": 371000320,
+     "transient_bytes": 1113064960
+    },
+    "D_routed": {
+     "peak_bytes": 1550256640,
+     "resident_before_bytes": 371000320,
+     "transient_bytes": 1179256320
+    }
+   },
+   "iters": 25,
+   "g_selfpair": 0.9986627016173244,
+   "d_over_g": 2.3026576327317456,
+   "d_selfpair": 0.95594288081152,
+   "dr_over_g": 4.649245948946822,
+   "dr_over_d": 2.115610582713721,
+   "g_drift": 0.9879837647819334,
+   "lora_floor_frac_of_g": 0.4911957693851536,
+   "ms": {
+    "g_a": 10.002431869506836,
+    "g_b": 9.989055633544922,
+    "d_a": 23.001375198364258,
+    "d_b": 21.988000869750977,
+    "g_c": 10.00550365447998,
+    "dr_a": 46.51804733276367,
+    "g_end": 9.882240295410156,
+    "lora_floor": 4.91315221786499
+   },
+   "j_ratio_d_over_g": 2.625966312611734,
+   "energy": {
+    "G": {
+     "watts": 199.87966666666668,
+     "j_per_step": 1.971100911600261,
+     "method": "pynvml",
+     "samples": 75
+    },
+    "D": {
+     "watts": 194.4598552631579,
+     "j_per_step": 5.176044592620564,
+     "method": "pynvml",
+     "samples": 76
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "down",
+   "regime": "tokbudget_11800",
+   "N": 2048,
+   "K": 768,
+   "E": 128,
+   "top_k": 8,
+   "groups": 128,
+   "rows": 94464,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 128,
+    "nonempty_groups": 128,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0017027404801442769,
+   "b_rel_D": 0.0022315386346455305,
+   "b_rel_G_over_D": 0.763034282135451,
+   "mem_transient_d_over_g": 1.099870187759642,
+   "mem": {
+    "G": {
+     "peak_bytes": 4885310976,
+     "resident_before_bytes": 854775808,
+     "transient_bytes": 4030535168
+    },
+    "D": {
+     "peak_bytes": 5287841280,
+     "resident_before_bytes": 854775808,
+     "transient_bytes": 4433065472
+    },
+    "D_routed": {
+     "peak_bytes": 5675748864,
+     "resident_before_bytes": 854775808,
+     "transient_bytes": 4820973056
+    }
+   },
+   "iters": 20,
+   "g_selfpair": 0.9986400202563156,
+   "d_over_g": 2.6431780718807696,
+   "d_selfpair": 1.0011290507071624,
+   "dr_over_g": 3.0621309526699667,
+   "dr_over_d": 1.160721537408091,
+   "g_drift": 0.9958681997199503,
+   "lora_floor_frac_of_g": 0.49491147231774874,
+   "ms": {
+    "g_a": 43.76588821411133,
+    "g_b": 43.70636749267578,
+    "d_a": 115.52371215820312,
+    "d_b": 115.65414428710938,
+    "g_c": 43.8394889831543,
+    "dr_a": 134.24225616455078,
+    "g_end": 43.58505630493164,
+    "lora_floor": 21.660240173339844
+   },
+   "j_ratio_d_over_g": 2.6118819382695486,
+   "energy": {
+    "G": {
+     "watts": 257.37113157894737,
+     "j_per_step": 11.244979356908939,
+     "method": "pynvml",
+     "samples": 76
+    },
+    "D": {
+     "watts": 255.09048148148148,
+     "j_per_step": 29.370558478524384,
+     "method": "pynvml",
+     "samples": 81
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "google/gemma-4-26B-A4B",
+   "proj": "gate_up",
+   "regime": "decode_m8",
+   "N": 1408,
+   "K": 2816,
+   "E": 128,
+   "top_k": 8,
+   "groups": 8,
+   "rows": 64,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 8,
+    "nonempty_groups": 8,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0016956413926359425,
+   "b_rel_D": 0.0022202119155361505,
+   "b_rel_G_over_D": 0.7637295254432812,
+   "mem_transient_d_over_g": 4.289021023571884,
+   "mem": {
+    "G": {
+     "peak_bytes": 655973376,
+     "resident_before_bytes": 636685312,
+     "transient_bytes": 19288064
+    },
+    "D": {
+     "peak_bytes": 719412224,
+     "resident_before_bytes": 636685312,
+     "transient_bytes": 82726912
+    },
+    "D_routed": {
+     "peak_bytes": 719596544,
+     "resident_before_bytes": 636685312,
+     "transient_bytes": 82911232
+    }
+   },
+   "iters": 101,
+   "g_selfpair": 0.9814914237022629,
+   "d_over_g": 1.4298330578470337,
+   "d_selfpair": 0.6196788957617269,
+   "dr_over_g": 2.361435633007182,
+   "dr_over_d": 1.6974118669365723,
+   "g_drift": 0.6261298093411755,
+   "lora_floor_frac_of_g": 0.40800198161228635,
+   "ms": {
+    "g_a": 2.6729280948638916,
+    "g_b": 2.6234560012817383,
+    "d_a": 3.7511041164398193,
+    "d_b": 2.3244800567626953,
+    "g_c": 1.67084801197052,
+    "dr_a": 3.9456000328063965,
+    "g_end": 1.6735999584197998,
+    "lora_floor": 1.090559959411621
+   },
+   "j_ratio_d_over_g": 1.4884680186336923,
+   "energy": {
+    "G": {
+     "watts": 79.319,
+     "j_per_step": 0.1320947434359192,
+     "method": "pynvml",
+     "samples": 75
+    },
+    "D": {
+     "watts": 83.36090666666666,
+     "j_per_step": 0.1966188010339886,
+     "method": "pynvml",
+     "samples": 75
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "google/gemma-4-26B-A4B",
+   "proj": "gate_up",
+   "regime": "tokbudget_2048",
+   "N": 1408,
+   "K": 2816,
+   "E": 128,
+   "top_k": 8,
+   "groups": 128,
+   "rows": 16384,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 128,
+    "nonempty_groups": 128,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.001698695240532944,
+   "b_rel_D": 0.002793872334965784,
+   "b_rel_G_over_D": 0.6080074666524616,
+   "mem_transient_d_over_g": 2.7771616629726643,
+   "mem": {
+    "G": {
+     "peak_bytes": 1576274432,
+     "resident_before_bytes": 1004536832,
+     "transient_bytes": 571737600
+    },
+    "D": {
+     "peak_bytes": 2592344576,
+     "resident_before_bytes": 1004536832,
+     "transient_bytes": 1587807744
+    },
+    "D_routed": {
+     "peak_bytes": 2639137280,
+     "resident_before_bytes": 1004536832,
+     "transient_bytes": 1634600448
+    }
+   },
+   "iters": 20,
+   "g_selfpair": 1.0100471645146174,
+   "d_over_g": 4.644675334826557,
+   "d_selfpair": 0.9967850666353741,
+   "dr_over_g": 5.726578778489573,
+   "dr_over_d": 1.2205243473634877,
+   "g_drift": 0.9950608687093865,
+   "lora_floor_frac_of_g": 0.2990100499650994,
+   "ms": {
+    "g_a": 14.302127838134766,
+    "g_b": 14.445823669433594,
+    "d_a": 67.09616088867188,
+    "d_b": 66.88045120239258,
+    "g_c": 14.254447937011719,
+    "dr_a": 81.62921905517578,
+    "g_end": 14.23148775100708,
+    "lora_floor": 4.276479959487915
+   },
+   "j_ratio_d_over_g": 4.571521315401832,
+   "energy": {
+    "G": {
+     "watts": 249.64327631578945,
+     "j_per_step": 3.5604910302092057,
+     "method": "pynvml",
+     "samples": 76
+    },
+    "D": {
+     "watts": 243.0227375,
+     "j_per_step": 16.276860637898412,
+     "method": "pynvml",
+     "samples": 80
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "google/gemma-4-26B-A4B",
+   "proj": "gate_up",
+   "regime": "tokbudget_11800",
+   "N": 1408,
+   "K": 2816,
+   "E": 128,
+   "top_k": 8,
+   "groups": 128,
+   "rows": 94464,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 128,
+    "nonempty_groups": 128,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.001701288855745185,
+   "b_rel_D": 0.0030170336313005562,
+   "b_rel_G_over_D": 0.5638945612322552,
+   "mem_transient_d_over_g": 1.315178574127245,
+   "mem": {
+    "G": {
+     "peak_bytes": 5989946880,
+     "resident_before_bytes": 2771434496,
+     "transient_bytes": 3218512384
+    },
+    "D": {
+     "peak_bytes": 7004353024,
+     "resident_before_bytes": 2771434496,
+     "transient_bytes": 4232918528
+    },
+    "D_routed": {
+     "peak_bytes": 7319002112,
+     "resident_before_bytes": 2771434496,
+     "transient_bytes": 4547567616
+    }
+   },
+   "iters": 20,
+   "g_selfpair": 0.995589500435507,
+   "d_over_g": 4.6780866784483495,
+   "d_selfpair": 1.0001042291318936,
+   "dr_over_g": 4.9357462663731715,
+   "dr_over_d": 1.0572213150253784,
+   "g_drift": 0.9932201540218615,
+   "lora_floor_frac_of_g": 0.27160590760864356,
+   "ms": {
+    "g_a": 70.47222518920898,
+    "g_b": 70.16140747070312,
+    "d_a": 328.2211456298828,
+    "d_b": 328.25535583496094,
+    "g_c": 70.31126403808594,
+    "dr_a": 347.03855895996094,
+    "g_end": 69.99443435668945,
+    "lora_floor": 19.14067268371582
+   },
+   "j_ratio_d_over_g": 4.366525802710226,
+   "energy": {
+    "G": {
+     "watts": 286.0454805194805,
+     "j_per_step": 20.077287785056548,
+     "method": "pynvml",
+     "samples": 77
+    },
+    "D": {
+     "watts": 266.98317346938774,
+     "j_per_step": 87.66799516188826,
+     "method": "pynvml",
+     "samples": 98
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "google/gemma-4-26B-A4B",
+   "proj": "down",
+   "regime": "decode_m8",
+   "N": 2816,
+   "K": 704,
+   "E": 128,
+   "top_k": 8,
+   "groups": 8,
+   "rows": 64,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 8,
+    "nonempty_groups": 8,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0016973142452530695,
+   "b_rel_D": 0.002219925131974506,
+   "b_rel_G_over_D": 0.7645817513419464,
+   "mem_transient_d_over_g": 3.1984404409787577,
+   "mem": {
+    "G": {
+     "peak_bytes": 353041408,
+     "resident_before_bytes": 337808384,
+     "transient_bytes": 15233024
+    },
+    "D": {
+     "peak_bytes": 386530304,
+     "resident_before_bytes": 337808384,
+     "transient_bytes": 48721920
+    },
+    "D_routed": {
+     "peak_bytes": 386894848,
+     "resident_before_bytes": 337808384,
+     "transient_bytes": 49086464
+    }
+   },
+   "iters": 95,
+   "g_selfpair": 0.9993064756722806,
+   "d_over_g": 1.2161985341250487,
+   "d_selfpair": 1.0051020797328676,
+   "dr_over_g": 1.5703234930201684,
+   "dr_over_d": 1.0355329535595874,
+   "g_drift": 0.5032839634486008,
+   "lora_floor_frac_of_g": 0.3561375459268952,
+   "ms": {
+    "g_a": 3.1376640796661377,
+    "g_b": 3.1354880332946777,
+    "d_a": 3.813375949859619,
+    "d_b": 3.832832098007202,
+    "g_c": 2.527519941329956,
+    "dr_a": 3.9690239429473877,
+    "g_end": 1.5791360139846802,
+    "lora_floor": 1.1174399852752686
+   },
+   "j_ratio_d_over_g": 1.9774727283823788,
+   "energy": {
+    "G": {
+     "watts": 72.79220000000001,
+     "j_per_step": 0.11210549541893229,
+     "method": "pynvml",
+     "samples": 75
+    },
+    "D": {
+     "watts": 74.07748,
+     "j_per_step": 0.2216855598927343,
+     "method": "pynvml",
+     "samples": 75
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "google/gemma-4-26B-A4B",
+   "proj": "down",
+   "regime": "tokbudget_2048",
+   "N": 2816,
+   "K": 704,
+   "E": 128,
+   "top_k": 8,
+   "groups": 128,
+   "rows": 16384,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 128,
+    "nonempty_groups": 128,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0017003989469532806,
+   "b_rel_D": 0.0022294914211426556,
+   "b_rel_G_over_D": 0.7626846781414367,
+   "mem_transient_d_over_g": 1.5271789948393943,
+   "mem": {
+    "G": {
+     "peak_bytes": 1391266304,
+     "resident_before_bytes": 429196288,
+     "transient_bytes": 962070016
+    },
+    "D": {
+     "peak_bytes": 1898449408,
+     "resident_before_bytes": 429196288,
+     "transient_bytes": 1469253120
+    },
+    "D_routed": {
+     "peak_bytes": 1992067584,
+     "resident_before_bytes": 429196288,
+     "transient_bytes": 1562871296
+    }
+   },
+   "iters": 23,
+   "g_selfpair": 0.9960785061922527,
+   "d_over_g": 2.4031502230477013,
+   "d_selfpair": 1.0042081638690463,
+   "dr_over_g": 3.696833654519215,
+   "dr_over_d": 1.5160648405742658,
+   "g_drift": 0.9625536431175303,
+   "lora_floor_frac_of_g": 0.5452120078942791,
+   "ms": {
+    "g_a": 10.746879577636719,
+    "g_b": 10.70473575592041,
+    "d_a": 25.725088119506836,
+    "d_b": 25.833343505859375,
+    "g_c": 10.594207763671875,
+    "dr_a": 39.16502380371094,
+    "g_end": 10.34444808959961,
+    "lora_floor": 5.859327793121338
+   },
+   "j_ratio_d_over_g": 2.2467766317459206,
+   "energy": {
+    "G": {
+     "watts": 222.14417333333333,
+     "j_per_step": 2.3364690385564466,
+     "method": "pynvml",
+     "samples": 75
+    },
+    "D": {
+     "watts": 220.1424,
+     "j_per_step": 5.249524036626482,
+     "method": "pynvml",
+     "samples": 75
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "google/gemma-4-26B-A4B",
+   "proj": "down",
+   "regime": "tokbudget_11800",
+   "N": 2816,
+   "K": 704,
+   "E": 128,
+   "top_k": 8,
+   "groups": 128,
+   "rows": 94464,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 128,
+    "nonempty_groups": 128,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0017005621525313665,
+   "b_rel_D": 0.0022288592182797638,
+   "b_rel_G_over_D": 0.7629742329997237,
+   "mem_transient_d_over_g": 1.093108099067772,
+   "mem": {
+    "G": {
+     "peak_bytes": 6345349632,
+     "resident_before_bytes": 873178112,
+     "transient_bytes": 5472171520
+    },
+    "D": {
+     "peak_bytes": 6854853120,
+     "resident_before_bytes": 873178112,
+     "transient_bytes": 5981675008
+    },
+    "D_routed": {
+     "peak_bytes": 7390582272,
+     "resident_before_bytes": 873178112,
+     "transient_bytes": 6517404160
+    }
+   },
+   "iters": 20,
+   "g_selfpair": 1.000418770006427,
+   "d_over_g": 2.3719452974911057,
+   "d_selfpair": 1.0105997861300475,
+   "dr_over_g": 2.787271787607289,
+   "dr_over_d": 1.231481471844463,
+   "g_drift": 1.0184458087120385,
+   "lora_floor_frac_of_g": 0.5799539111199855,
+   "ms": {
+    "g_a": 48.90777587890625,
+    "g_b": 48.92825698852539,
+    "d_a": 116.05514907836914,
+    "d_b": 117.28530883789062,
+    "g_c": 51.81937599182129,
+    "dr_a": 144.43468475341797,
+    "g_end": 49.809919357299805,
+    "lora_floor": 28.364255905151367
+   },
+   "j_ratio_d_over_g": 2.384435529578571,
+   "energy": {
+    "G": {
+     "watts": 266.00146753246753,
+     "j_per_step": 13.117298877752368,
+     "method": "pynvml",
+     "samples": 77
+    },
+    "D": {
+     "watts": 267.20463414634145,
+     "j_per_step": 31.277353496213866,
+     "method": "pynvml",
+     "samples": 82
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "gate_up",
+   "regime": "decode_m8",
+   "N": 5760,
+   "K": 2880,
+   "E": 128,
+   "top_k": 4,
+   "groups": 4,
+   "rows": 32,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 4,
+    "nonempty_groups": 4,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0016975614005022334,
+   "b_rel_D": 0.002224332294717001,
+   "b_rel_G_over_D": 0.7631779678486447,
+   "mem_transient_d_over_g": 4.581985133362483,
+   "mem": {
+    "G": {
+     "peak_bytes": 2527464448,
+     "resident_before_bytes": 2489994240,
+     "transient_bytes": 37470208
+    },
+    "D": {
+     "peak_bytes": 2661682176,
+     "resident_before_bytes": 2489994240,
+     "transient_bytes": 171687936
+    },
+    "D_routed": {
+     "peak_bytes": 2662052864,
+     "resident_before_bytes": 2489994240,
+     "transient_bytes": 172058624
+    }
+   },
+   "iters": 86,
+   "g_selfpair": 1.0358444257059314,
+   "d_over_g": 0.8592375526753744,
+   "d_selfpair": 0.6931313926117512,
+   "dr_over_g": 1.7169362509799848,
+   "dr_over_d": 1.7891534250653895,
+   "g_drift": 0.6020798452793711,
+   "lora_floor_frac_of_g": 0.3859640679091727,
+   "ms": {
+    "g_a": 3.371008038520813,
+    "g_b": 3.49183988571167,
+    "d_a": 3.0003199577331543,
+    "d_b": 2.0796159505844116,
+    "g_c": 2.167088031768799,
+    "dr_a": 3.720752000808716,
+    "g_end": 2.0296159982681274,
+    "lora_floor": 1.3010879755020142
+   },
+   "j_ratio_d_over_g": 1.4233727787334345,
+   "energy": {
+    "G": {
+     "watts": 91.01084,
+     "j_per_step": 0.20090672296923134,
+     "method": "pynvml",
+     "samples": 75
+    },
+    "D": {
+     "watts": 94.81521333333333,
+     "j_per_step": 0.28596516053894316,
+     "method": "pynvml",
+     "samples": 75
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "gate_up",
+   "regime": "tokbudget_2048",
+   "N": 5760,
+   "K": 2880,
+   "E": 128,
+   "top_k": 4,
+   "groups": 128,
+   "rows": 8192,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 128,
+    "nonempty_groups": 128,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0017024047777264735,
+   "b_rel_D": 0.0022289829628650447,
+   "b_rel_G_over_D": 0.7637585419398052,
+   "mem_transient_d_over_g": 5.18140571928402,
+   "mem": {
+    "G": {
+     "peak_bytes": 3707046400,
+     "resident_before_bytes": 2680357888,
+     "transient_bytes": 1026688512
+    },
+    "D": {
+     "peak_bytes": 8000047616,
+     "resident_before_bytes": 2680357888,
+     "transient_bytes": 5319689728
+    },
+    "D_routed": {
+     "peak_bytes": 8095615488,
+     "resident_before_bytes": 2680357888,
+     "transient_bytes": 5415257600
+    }
+   },
+   "iters": 20,
+   "g_selfpair": 0.9860123102331043,
+   "d_over_g": 1.78995149573846,
+   "d_selfpair": 0.9984206415763813,
+   "dr_over_g": 2.475475555229986,
+   "dr_over_d": 1.4056246216137,
+   "g_drift": 0.9906588897786355,
+   "lora_floor_frac_of_g": 0.2782817868598038,
+   "ms": {
+    "g_a": 24.04515266418457,
+    "g_b": 23.708816528320312,
+    "d_a": 42.437631607055664,
+    "d_b": 42.37060737609863,
+    "g_c": 24.058879852294922,
+    "dr_a": 59.55716896057129,
+    "g_end": 23.820544242858887,
+    "lora_floor": 6.691328048706055
+   },
+   "j_ratio_d_over_g": 1.7462955997885177,
+   "energy": {
+    "G": {
+     "watts": 293.920025974026,
+     "j_per_step": 7.038458085487984,
+     "method": "pynvml",
+     "samples": 77
+    },
+    "D": {
+     "watts": 290.0470263157895,
+     "j_per_step": 12.291228383983581,
+     "method": "pynvml",
+     "samples": 76
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "gate_up",
+   "regime": "tokbudget_11800",
+   "N": 5760,
+   "K": 2880,
+   "E": 128,
+   "top_k": 4,
+   "groups": 128,
+   "rows": 47232,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 128,
+    "nonempty_groups": 128,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0017007783121300362,
+   "b_rel_D": 0.0025231583903766956,
+   "b_rel_G_over_D": 0.6740672003060887,
+   "mem_transient_d_over_g": 1.7429618060935428,
+   "mem": {
+    "G": {
+     "peak_bytes": 9340789248,
+     "resident_before_bytes": 3587658752,
+     "transient_bytes": 5753130496
+    },
+    "D": {
+     "peak_bytes": 13615145472,
+     "resident_before_bytes": 3587658752,
+     "transient_bytes": 10027486720
+    },
+    "D_routed": {
+     "peak_bytes": 14166215680,
+     "resident_before_bytes": 3587658752,
+     "transient_bytes": 10578556928
+    }
+   },
+   "iters": 20,
+   "g_selfpair": 0.999018213032813,
+   "d_over_g": 1.9121906953022605,
+   "d_selfpair": 1.0005722388038134,
+   "dr_over_g": 2.1158264318998463,
+   "dr_over_d": 1.1094769612062385,
+   "g_drift": 0.9996755986684691,
+   "lora_floor_frac_of_g": 0.27805206213974065,
+   "ms": {
+    "g_a": 108.89011001586914,
+    "g_b": 108.783203125,
+    "d_a": 208.01422882080078,
+    "d_b": 208.13326263427734,
+    "g_c": 109.13894271850586,
+    "dr_a": 230.91905975341797,
+    "g_end": 108.85478591918945,
+    "lora_floor": 30.277119636535645
+   },
+   "j_ratio_d_over_g": 1.9574261816198826,
+   "energy": {
+    "G": {
+     "watts": 296.05130120481925,
+     "j_per_step": 32.55129982877689,
+     "method": "pynvml",
+     "samples": 83
+    },
+    "D": {
+     "watts": 305.95389361702127,
+     "j_per_step": 63.716766530606684,
+     "method": "pynvml",
+     "samples": 94
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "down",
+   "regime": "decode_m8",
+   "N": 2880,
+   "K": 2880,
+   "E": 128,
+   "top_k": 4,
+   "groups": 4,
+   "rows": 32,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 4,
+    "nonempty_groups": 4,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0016978117684540456,
+   "b_rel_D": 0.0022192031265971025,
+   "b_rel_G_over_D": 0.7650546937798561,
+   "mem_transient_d_over_g": 3.5540140296180827,
+   "mem": {
+    "G": {
+     "peak_bytes": 1305744384,
+     "resident_before_bytes": 1279468544,
+     "transient_bytes": 26275840
+    },
+    "D": {
+     "peak_bytes": 1372853248,
+     "resident_before_bytes": 1279468544,
+     "transient_bytes": 93384704
+    },
+    "D_routed": {
+     "peak_bytes": 1373039616,
+     "resident_before_bytes": 1279468544,
+     "transient_bytes": 93571072
+    }
+   },
+   "iters": 102,
+   "g_selfpair": 0.8469674979968386,
+   "d_over_g": 1.0639656452918314,
+   "d_selfpair": 1.006996503895485,
+   "dr_over_g": 2.1687658659784446,
+   "dr_over_d": 1.5026320221754537,
+   "g_drift": 0.9129187776050101,
+   "lora_floor_frac_of_g": 0.6659298943398515,
+   "ms": {
+    "g_a": 3.1417120695114136,
+    "g_b": 2.6609280109405518,
+    "d_a": 2.8311359882354736,
+    "d_b": 2.8509440422058105,
+    "g_c": 1.975279986858368,
+    "dr_a": 4.283919811248779,
+    "g_end": 2.868127942085266,
+    "lora_floor": 2.0921599864959717
+   },
+   "j_ratio_d_over_g": 0.8872502976039894,
+   "energy": {
+    "G": {
+     "watts": 73.73090666666667,
+     "j_per_step": 0.26898427927856833,
+     "method": "pynvml",
+     "samples": 75
+    },
+    "D": {
+     "watts": 74.88808,
+     "j_per_step": 0.23865638184070437,
+     "method": "pynvml",
+     "samples": 75
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "down",
+   "regime": "tokbudget_2048",
+   "N": 2880,
+   "K": 2880,
+   "E": 128,
+   "top_k": 4,
+   "groups": 128,
+   "rows": 8192,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 128,
+    "nonempty_groups": 128,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0017024003663220848,
+   "b_rel_D": 0.002866228926560925,
+   "b_rel_G_over_D": 0.5939512892868358,
+   "mem_transient_d_over_g": 4.946357203957243,
+   "mem": {
+    "G": {
+     "peak_bytes": 2014700032,
+     "resident_before_bytes": 1470618624,
+     "transient_bytes": 544081408
+    },
+    "D": {
+     "peak_bytes": 4161839616,
+     "resident_before_bytes": 1470618624,
+     "transient_bytes": 2691220992
+    },
+    "D_routed": {
+     "peak_bytes": 4210254336,
+     "resident_before_bytes": 1470618624,
+     "transient_bytes": 2739635712
+    }
+   },
+   "iters": 20,
+   "g_selfpair": 0.9834683936916452,
+   "d_over_g": 2.892083594081102,
+   "d_selfpair": 0.9991203915601624,
+   "dr_over_g": 3.9664728264876574,
+   "dr_over_d": 1.3867818658458302,
+   "g_drift": 1.0021965611081145,
+   "lora_floor_frac_of_g": 0.29783983828801414,
+   "ms": {
+    "g_a": 13.096864223480225,
+    "g_b": 12.880352020263672,
+    "d_a": 37.251054763793945,
+    "d_b": 37.21828842163086,
+    "g_c": 13.012479782104492,
+    "dr_a": 51.6136474609375,
+    "g_end": 13.125632286071777,
+    "lora_floor": 3.9007679224014282
+   },
+   "j_ratio_d_over_g": 2.934324897367019,
+   "energy": {
+    "G": {
+     "watts": 263.4258289473684,
+     "j_per_step": 3.4311915202558962,
+     "method": "pynvml",
+     "samples": 76
+    },
+    "D": {
+     "watts": 267.161051948052,
+     "j_per_step": 10.068230705521469,
+     "method": "pynvml",
+     "samples": 77
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "down",
+   "regime": "tokbudget_11800",
+   "N": 2880,
+   "K": 2880,
+   "E": 128,
+   "top_k": 4,
+   "groups": 128,
+   "rows": 47232,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 128,
+    "nonempty_groups": 128,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0017005601989182788,
+   "b_rel_D": 0.0027759362311102665,
+   "b_rel_G_over_D": 0.6126078041202412,
+   "mem_transient_d_over_g": 1.7072684222780192,
+   "mem": {
+    "G": {
+     "peak_bytes": 5387465216,
+     "resident_before_bytes": 2368115712,
+     "transient_bytes": 3019349504
+    },
+    "D": {
+     "peak_bytes": 7522955776,
+     "resident_before_bytes": 2368115712,
+     "transient_bytes": 5154840064
+    },
+    "D_routed": {
+     "peak_bytes": 7804183040,
+     "resident_before_bytes": 2368115712,
+     "transient_bytes": 5436067328
+    }
+   },
+   "iters": 20,
+   "g_selfpair": 0.999307246983512,
+   "d_over_g": 3.1477313561835083,
+   "d_selfpair": 0.9960539372887002,
+   "dr_over_g": 3.4597384339465833,
+   "dr_over_d": 1.104308356180345,
+   "g_drift": 0.9988939136022863,
+   "lora_floor_frac_of_g": 0.29446641690767983,
+   "ms": {
+    "g_a": 58.411006927490234,
+    "g_b": 58.37054252624512,
+    "d_a": 183.7347869873047,
+    "d_b": 183.00975799560547,
+    "g_c": 58.41459083557129,
+    "dr_a": 202.09920501708984,
+    "g_end": 58.34639930725098,
+    "lora_floor": 17.200079917907715
+   },
+   "j_ratio_d_over_g": 2.9454067233641155,
+   "energy": {
+    "G": {
+     "watts": 307.1441392405063,
+     "j_per_step": 17.84054860981589,
+     "method": "pynvml",
+     "samples": 79
+    },
+    "D": {
+     "watts": 286.6354347826087,
+     "j_per_step": 52.54767182385605,
+     "method": "pynvml",
+     "samples": 92
+    }
+   },
+   "status": "ok"
+  }
+ ],
+ "bitsandbytes": "0.50.0"
+}

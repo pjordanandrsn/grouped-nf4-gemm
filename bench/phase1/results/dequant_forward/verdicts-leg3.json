@@ -1,0 +1,814 @@
+{
+ "prereg": "kernel/prereg_dequant_forward_interleaved.json",
+ "devices": {
+  "H100": {
+   "device": "H100",
+   "gpu": "NVIDIA H100 80GB HBM3",
+   "capability": "9.0",
+   "cells_ok": 32,
+   "cells_skipped": 0,
+   "void_cells": [
+    {
+     "cell": "OLMoE-1B-7B-0924/gate_up",
+     "regime": "decode_m8",
+     "why": "halves=1.0953580503367824"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/gate_up",
+     "regime": "decode_bs1",
+     "why": "halves=1.0313309669316417"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/gate_up",
+     "regime": "decode_m8",
+     "why": "halves=1.064230799692965"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/gate_up",
+     "regime": "tokbudget_2048",
+     "why": "halves=1.4334664765317597"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/down",
+     "regime": "decode_bs1",
+     "why": "halves=1.079287466323954"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/down",
+     "regime": "decode_m8",
+     "why": "halves=1.046940915687987"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/down",
+     "regime": "decode_m32",
+     "why": "halves=1.0709267374426517"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/down",
+     "regime": "tokbudget_2048",
+     "why": "halves=0.9345984737285294"
+    },
+    {
+     "cell": "gemma-4-26B-A4B/gate_up",
+     "regime": "decode_bs1",
+     "why": "halves=1.0527298443882174"
+    },
+    {
+     "cell": "gemma-4-26B-A4B/gate_up",
+     "regime": "tokbudget_2048",
+     "why": "halves=0.7666622926814549"
+    },
+    {
+     "cell": "gemma-4-26B-A4B/down",
+     "regime": "decode_bs1",
+     "why": "halves=0.9687847733109733"
+    },
+    {
+     "cell": "gemma-4-26B-A4B/down",
+     "regime": "decode_m8",
+     "why": "halves=1.075134558994427"
+    },
+    {
+     "cell": "gpt-oss-120b/gate_up",
+     "regime": "decode_m8",
+     "why": "halves=0.9160613427172888"
+    },
+    {
+     "cell": "gpt-oss-120b/gate_up",
+     "regime": "tokbudget_2048",
+     "why": "halves=0.9507943818781575"
+    },
+    {
+     "cell": "gpt-oss-120b/down",
+     "regime": "decode_bs1",
+     "why": "halves=1.136817587058747"
+    },
+    {
+     "cell": "gpt-oss-120b/down",
+     "regime": "decode_m8",
+     "why": "halves=1.0481024200378979"
+    },
+    {
+     "cell": "gpt-oss-120b/down",
+     "regime": "decode_m32",
+     "why": "halves=1.0538607141549863"
+    }
+   ],
+   "void_fraction": 0.53125,
+   "Q1_self_pair": false,
+   "Q2_wiring": true,
+   "Q2_failures": [],
+   "Q3_ratio_stability": "folded into Q1 per-cell voiding",
+   "Q4_fidelity": true,
+   "Q4_detail": {
+    "median": 0.7623938318596779,
+    "failures": []
+   },
+   "F1_small_batch": false,
+   "F1_detail": {
+    "regime": "decode_m8",
+    "at_bar": 2,
+    "of": 2,
+    "median": 1.8530749036313279,
+    "predicted_band": [
+     1.3,
+     3.0
+    ],
+    "median_in_predicted_band": true,
+    "per_cell": [
+     {
+      "cell": "OLMoE-1B-7B-0924/down",
+      "d/g": 1.8066590082030078
+     },
+     {
+      "cell": "gemma-4-26B-A4B/gate_up",
+      "d/g": 1.899490799059648
+     }
+    ]
+   },
+   "by_regime": [
+    {
+     "regime": "decode_bs1",
+     "n": 3,
+     "median": 2.017986470961799,
+     "at_bar": 3
+    },
+    {
+     "regime": "decode_m8",
+     "n": 2,
+     "median": 1.8530749036313279,
+     "at_bar": 2
+    },
+    {
+     "regime": "decode_m32",
+     "n": 6,
+     "median": 1.8551080364990686,
+     "at_bar": 6
+    },
+    {
+     "regime": "tokbudget_2048",
+     "n": 4,
+     "median": 3.6142500840252856,
+     "at_bar": 4
+    }
+   ],
+   "P1_pairing_dividend_report_only": {
+    "cells": 32,
+    "diverged_outside_band": 10,
+    "median_block_over_interleaved": 1.0125208626160846,
+    "max_divergence": {
+     "cell": "gpt-oss-120b/gate_up",
+     "regime": "decode_m32",
+     "interleaved": 1.1599208455694363,
+     "block": 1.2393496631907595,
+     "block_over_interleaved": 1.0684777913292258,
+     "void": false
+    },
+    "detail": [
+     {
+      "cell": "OLMoE-1B-7B-0924/gate_up",
+      "regime": "decode_bs1",
+      "interleaved": 2.017986470961799,
+      "block": 2.0988848475489306,
+      "block_over_interleaved": 1.0400886615203988,
+      "void": false
+     },
+     {
+      "cell": "OLMoE-1B-7B-0924/gate_up",
+      "regime": "decode_m8",
+      "interleaved": 1.7602224942254872,
+      "block": 1.8443710431993132,
+      "block_over_interleaved": 1.0478056321004192,
+      "void": true
+     },
+     {
+      "cell": "OLMoE-1B-7B-0924/gate_up",
+      "regime": "decode_m32",
+      "interleaved": 1.8531316970954628,
+      "block": 1.8307659731301702,
+      "block_over_interleaved": 0.9879308502464516,
+      "void": false
+     },
+     {
+      "cell": "OLMoE-1B-7B-0924/gate_up",
+      "regime": "tokbudget_2048",
+      "interleaved": 1.2756003670485123,
+      "block": 1.264584767486041,
+      "block_over_interleaved": 0.9913643803756821,
+      "void": false
+     },
+     {
+      "cell": "OLMoE-1B-7B-0924/down",
+      "regime": "decode_bs1",
+      "interleaved": 2.137587980025009,
+      "block": 2.125296500118206,
+      "block_over_interleaved": 0.9942498367217338,
+      "void": false
+     },
+     {
+      "cell": "OLMoE-1B-7B-0924/down",
+      "regime": "decode_m8",
+      "interleaved": 1.8066590082030078,
+      "block": 1.8587097993382495,
+      "block_over_interleaved": 1.028810523125232,
+      "void": false
+     },
+     {
+      "cell": "OLMoE-1B-7B-0924/down",
+      "regime": "decode_m32",
+      "interleaved": 1.8570843759026743,
+      "block": 1.862685415926271,
+      "block_over_interleaved": 1.0030160396028716,
+      "void": false
+     },
+     {
+      "cell": "OLMoE-1B-7B-0924/down",
+      "regime": "tokbudget_2048",
+      "interleaved": 2.657931368352598,
+      "block": 2.6571160616007847,
+      "block_over_interleaved": 0.9996932551526647,
+      "void": false
+     },
+     {
+      "cell": "Qwen3-30B-A3B/gate_up",
+      "regime": "decode_bs1",
+      "interleaved": 2.074852704795284,
+      "block": 2.152866527071674,
+      "block_over_interleaved": 1.0375996918220214,
+      "void": true
+     },
+     {
+      "cell": "Qwen3-30B-A3B/gate_up",
+      "regime": "decode_m8",
+      "interleaved": 1.782428619619417,
+      "block": 1.851684463606777,
+      "block_over_interleaved": 1.0388547643507584,
+      "void": true
+     },
+     {
+      "cell": "Qwen3-30B-A3B/gate_up",
+      "regime": "decode_m32",
+      "interleaved": 1.8205601653643817,
+      "block": 1.8360299508977365,
+      "block_over_interleaved": 1.0084972668454812,
+      "void": false
+     },
+     {
+      "cell": "Qwen3-30B-A3B/gate_up",
+      "regime": "tokbudget_2048",
+      "interleaved": 3.6667730288640055,
+      "block": 3.725697305575827,
+      "block_over_interleaved": 1.016069791134598,
+      "void": true
+     },
+     {
+      "cell": "Qwen3-30B-A3B/down",
+      "regime": "decode_bs1",
+      "interleaved": 2.157629924663746,
+      "block": 2.121116866886631,
+      "block_over_interleaved": 0.9830772379638713,
+      "void": true
+     },
+     {
+      "cell": "Qwen3-30B-A3B/down",
+      "regime": "decode_m8",
+      "interleaved": 1.816640346982045,
+      "block": 1.886011424073334,
+      "block_over_interleaved": 1.0381864672369159,
+      "void": true
+     },
+     {
+      "cell": "Qwen3-30B-A3B/down",
+      "regime": "decode_m32",
+      "interleaved": 1.8387788080104743,
+      "block": 1.8826564158345787,
+      "block_over_interleaved": 1.023862363234205,
+      "void": true
+     },
+     {
+      "cell": "Qwen3-30B-A3B/down",
+      "regime": "tokbudget_2048",
+      "interleaved": 6.3082401329033315,
+      "block": 6.528116699760103,
+      "block_over_interleaved": 1.0348554529035618,
+      "void": true
+     },
+     {
+      "cell": "gemma-4-26B-A4B/gate_up",
+      "regime": "decode_bs1",
+      "interleaved": 2.0954023746187467,
+      "block": 2.197470423401286,
+      "block_over_interleaved": 1.0487104768128892,
+      "void": true
+     },
+     {
+      "cell": "gemma-4-26B-A4B/gate_up",
+      "regime": "decode_m8",
+      "interleaved": 1.899490799059648,
+      "block": 1.8881967506721553,
+      "block_over_interleaved": 0.9940541705213398,
+      "void": false
+     },
+     {
+      "cell": "gemma-4-26B-A4B/gate_up",
+      "regime": "decode_m32",
+      "interleaved": 1.9135494673217524,
+      "block": 1.9610008560701053,
+      "block_over_interleaved": 1.0247975762104373,
+      "void": false
+     },
+     {
+      "cell": "gemma-4-26B-A4B/gate_up",
+      "regime": "tokbudget_2048",
+      "interleaved": 2.5270960309143327,
+      "block": 2.4955080706598687,
+      "block_over_interleaved": 0.9875002928784486,
+      "void": true
+     },
+     {
+      "cell": "gemma-4-26B-A4B/down",
+      "regime": "decode_bs1",
+      "interleaved": 2.1628357546264185,
+      "block": 2.179476505643512,
+      "block_over_interleaved": 1.0076939503989142,
+      "void": true
+     },
+     {
+      "cell": "gemma-4-26B-A4B/down",
+      "regime": "decode_m8",
+      "interleaved": 1.8655844373628714,
+      "block": 1.883550581328983,
+      "block_over_interleaved": 1.0096303033013654,
+      "void": true
+     },
+     {
+      "cell": "gemma-4-26B-A4B/down",
+      "regime": "decode_m32",
+      "interleaved": 1.9418916915772189,
+      "block": 1.9063500478831037,
+      "block_over_interleaved": 0.9816974119368892,
+      "void": false
+     },
+     {
+      "cell": "gemma-4-26B-A4B/down",
+      "regime": "tokbudget_2048",
+      "interleaved": 7.593530800610505,
+      "block": 7.613386142627275,
+      "block_over_interleaved": 1.0026147707223592,
+      "void": false
+     },
+     {
+      "cell": "gpt-oss-120b/gate_up",
+      "regime": "decode_bs1",
+      "interleaved": 1.3930538972648938,
+      "block": 1.396293079734784,
+      "block_over_interleaved": 1.0023252384392662,
+      "void": false
+     },
+     {
+      "cell": "gpt-oss-120b/gate_up",
+      "regime": "decode_m8",
+      "interleaved": 1.2213965587983928,
+      "block": 1.2143688012385152,
+      "block_over_interleaved": 0.9942461295561603,
+      "void": true
+     },
+     {
+      "cell": "gpt-oss-120b/gate_up",
+      "regime": "decode_m32",
+      "interleaved": 1.1599208455694363,
+      "block": 1.2393496631907595,
+      "block_over_interleaved": 1.0684777913292258,
+      "void": false
+     },
+     {
+      "cell": "gpt-oss-120b/gate_up",
+      "regime": "tokbudget_2048",
+      "interleaved": 2.532111332691546,
+      "block": 2.571134768815425,
+      "block_over_interleaved": 1.0154114219308037,
+      "void": true
+     },
+     {
+      "cell": "gpt-oss-120b/down",
+      "regime": "decode_bs1",
+      "interleaved": 1.3674062908790485,
+      "block": 1.4592874128961455,
+      "block_over_interleaved": 1.06719372481315,
+      "void": true
+     },
+     {
+      "cell": "gpt-oss-120b/down",
+      "regime": "decode_m8",
+      "interleaved": 1.2241979295510834,
+      "block": 1.2937008002196009,
+      "block_over_interleaved": 1.0567742102733373,
+      "void": true
+     },
+     {
+      "cell": "gpt-oss-120b/down",
+      "regime": "decode_m32",
+      "interleaved": 1.1886926477244106,
+      "block": 1.2197482265221389,
+      "block_over_interleaved": 1.0261258272751832,
+      "void": true
+     },
+     {
+      "cell": "gpt-oss-120b/down",
+      "regime": "tokbudget_2048",
+      "interleaved": 4.570568799697973,
+      "block": 4.547615465704098,
+      "block_over_interleaved": 0.9949780136784305,
+      "void": false
+     }
+    ]
+   },
+   "Q5_order_bias_report_only": {
+    "median": 1.2181216800941066
+   },
+   "instrument": {
+    "median_selfpair": 0.9999595382859419,
+    "median_pairs": 104
+   },
+   "DEVICE_CONFIRMED": false
+  },
+  "ADA": {
+   "device": "ADA",
+   "gpu": "NVIDIA GeForce RTX 4090",
+   "capability": "8.9",
+   "cells_ok": 32,
+   "cells_skipped": 0,
+   "void_cells": [
+    {
+     "cell": "OLMoE-1B-7B-0924/down",
+     "regime": "decode_m8",
+     "why": "halves=1.0344326312009076"
+    },
+    {
+     "cell": "gemma-4-26B-A4B/down",
+     "regime": "decode_m32",
+     "why": "halves=1.0363029714171688"
+    }
+   ],
+   "void_fraction": 0.0625,
+   "Q1_self_pair": true,
+   "Q2_wiring": true,
+   "Q2_failures": [],
+   "Q3_ratio_stability": "folded into Q1 per-cell voiding",
+   "Q4_fidelity": true,
+   "Q4_detail": {
+    "median": 0.7580958293278001,
+    "failures": []
+   },
+   "F1_small_batch": true,
+   "F1_detail": {
+    "regime": "decode_m8",
+    "at_bar": 7,
+    "of": 7,
+    "median": 1.5394363857050675,
+    "predicted_band": [
+     1.3,
+     3.0
+    ],
+    "median_in_predicted_band": true,
+    "per_cell": [
+     {
+      "cell": "OLMoE-1B-7B-0924/gate_up",
+      "d/g": 1.5198512635834043
+     },
+     {
+      "cell": "Qwen3-30B-A3B/gate_up",
+      "d/g": 1.642449867225527
+     },
+     {
+      "cell": "Qwen3-30B-A3B/down",
+      "d/g": 1.6758038801271038
+     },
+     {
+      "cell": "gemma-4-26B-A4B/gate_up",
+      "d/g": 1.5394363857050675
+     },
+     {
+      "cell": "gemma-4-26B-A4B/down",
+      "d/g": 1.7130176434646576
+     },
+     {
+      "cell": "gpt-oss-120b/gate_up",
+      "d/g": 1.0890648226753545
+     },
+     {
+      "cell": "gpt-oss-120b/down",
+      "d/g": 1.0441677733031636
+     }
+    ]
+   },
+   "by_regime": [
+    {
+     "regime": "decode_bs1",
+     "n": 8,
+     "median": 1.713389111922023,
+     "at_bar": 7
+    },
+    {
+     "regime": "decode_m8",
+     "n": 7,
+     "median": 1.5394363857050675,
+     "at_bar": 7
+    },
+    {
+     "regime": "decode_m32",
+     "n": 7,
+     "median": 1.5548894225177696,
+     "at_bar": 6
+    },
+    {
+     "regime": "tokbudget_2048",
+     "n": 8,
+     "median": 2.071697460693123,
+     "at_bar": 8
+    }
+   ],
+   "P1_pairing_dividend_report_only": {
+    "cells": 32,
+    "diverged_outside_band": 4,
+    "median_block_over_interleaved": 0.9857783145885997,
+    "max_divergence": {
+     "cell": "gpt-oss-120b/gate_up",
+     "regime": "decode_m8",
+     "interleaved": 1.0890648226753545,
+     "block": 1.0344129833725213,
+     "block_over_interleaved": 0.9498176433900622,
+     "void": false
+    },
+    "detail": [
+     {
+      "cell": "OLMoE-1B-7B-0924/gate_up",
+      "regime": "decode_bs1",
+      "interleaved": 1.6477612811662938,
+      "block": 1.678362519850386,
+      "block_over_interleaved": 1.0185714029294537,
+      "void": false
+     },
+     {
+      "cell": "OLMoE-1B-7B-0924/gate_up",
+      "regime": "decode_m8",
+      "interleaved": 1.5198512635834043,
+      "block": 1.4974874180778368,
+      "block_over_interleaved": 0.9852855038901376,
+      "void": false
+     },
+     {
+      "cell": "OLMoE-1B-7B-0924/gate_up",
+      "regime": "decode_m32",
+      "interleaved": 1.5548894225177696,
+      "block": 1.5248756299947548,
+      "block_over_interleaved": 0.9806971530654478,
+      "void": false
+     },
+     {
+      "cell": "OLMoE-1B-7B-0924/gate_up",
+      "regime": "tokbudget_2048",
+      "interleaved": 2.1647628001353203,
+      "block": 2.1646156906081457,
+      "block_over_interleaved": 0.9999320435813266,
+      "void": false
+     },
+     {
+      "cell": "OLMoE-1B-7B-0924/down",
+      "regime": "decode_bs1",
+      "interleaved": 1.8287670222516716,
+      "block": 1.802083401030351,
+      "block_over_interleaved": 0.9854089553799661,
+      "void": false
+     },
+     {
+      "cell": "OLMoE-1B-7B-0924/down",
+      "regime": "decode_m8",
+      "interleaved": 1.6532182872972874,
+      "block": 1.661971877173308,
+      "block_over_interleaved": 1.0052948784460467,
+      "void": true
+     },
+     {
+      "cell": "OLMoE-1B-7B-0924/down",
+      "regime": "decode_m32",
+      "interleaved": 1.7548931667492718,
+      "block": 1.7273562469193906,
+      "block_over_interleaved": 0.9843084921910716,
+      "void": false
+     },
+     {
+      "cell": "OLMoE-1B-7B-0924/down",
+      "regime": "tokbudget_2048",
+      "interleaved": 1.3386962519016692,
+      "block": 1.3386962519016692,
+      "block_over_interleaved": 1.0,
+      "void": false
+     },
+     {
+      "cell": "Qwen3-30B-A3B/gate_up",
+      "regime": "decode_bs1",
+      "interleaved": 1.742401749560202,
+      "block": 1.7155424096144716,
+      "block_over_interleaved": 0.9845848754728868,
+      "void": false
+     },
+     {
+      "cell": "Qwen3-30B-A3B/gate_up",
+      "regime": "decode_m8",
+      "interleaved": 1.642449867225527,
+      "block": 1.6236558744398197,
+      "block_over_interleaved": 0.9885573415903071,
+      "void": false
+     },
+     {
+      "cell": "Qwen3-30B-A3B/gate_up",
+      "regime": "decode_m32",
+      "interleaved": 1.7227101785588235,
+      "block": 1.686440746942433,
+      "block_over_interleaved": 0.9789462951645571,
+      "void": false
+     },
+     {
+      "cell": "Qwen3-30B-A3B/gate_up",
+      "regime": "tokbudget_2048",
+      "interleaved": 5.045313494182988,
+      "block": 5.04364800453186,
+      "block_over_interleaved": 0.9996698937235421,
+      "void": false
+     },
+     {
+      "cell": "Qwen3-30B-A3B/down",
+      "regime": "decode_bs1",
+      "interleaved": 1.751262018049462,
+      "block": 1.7270029653089254,
+      "block_over_interleaved": 0.9861476737972333,
+      "void": false
+     },
+     {
+      "cell": "Qwen3-30B-A3B/down",
+      "regime": "decode_m8",
+      "interleaved": 1.6758038801271038,
+      "block": 1.6811988621116027,
+      "block_over_interleaved": 1.0032193397141973,
+      "void": false
+     },
+     {
+      "cell": "Qwen3-30B-A3B/down",
+      "regime": "decode_m32",
+      "interleaved": 1.7449274555407366,
+      "block": 1.7040071168633986,
+      "block_over_interleaved": 0.9765489742582696,
+      "void": false
+     },
+     {
+      "cell": "Qwen3-30B-A3B/down",
+      "regime": "tokbudget_2048",
+      "interleaved": 1.737640206800749,
+      "block": 1.7356433939739067,
+      "block_over_interleaved": 0.9988508479378946,
+      "void": false
+     },
+     {
+      "cell": "gemma-4-26B-A4B/gate_up",
+      "regime": "decode_bs1",
+      "interleaved": 1.684376474283844,
+      "block": 1.6407184533005092,
+      "block_over_interleaved": 0.974080603920868,
+      "void": false
+     },
+     {
+      "cell": "gemma-4-26B-A4B/gate_up",
+      "regime": "decode_m8",
+      "interleaved": 1.5394363857050675,
+      "block": 1.4742268319624279,
+      "block_over_interleaved": 0.9576406311113834,
+      "void": false
+     },
+     {
+      "cell": "gemma-4-26B-A4B/gate_up",
+      "regime": "decode_m32",
+      "interleaved": 1.5403225345868112,
+      "block": 1.4666666283406347,
+      "block_over_interleaved": 0.9521815044626776,
+      "void": false
+     },
+     {
+      "cell": "gemma-4-26B-A4B/gate_up",
+      "regime": "tokbudget_2048",
+      "interleaved": 5.901570315975496,
+      "block": 5.889308559556767,
+      "block_over_interleaved": 0.9979222891938546,
+      "void": false
+     },
+     {
+      "cell": "gemma-4-26B-A4B/down",
+      "regime": "decode_bs1",
+      "interleaved": 1.7646419095820438,
+      "block": 1.7312501296029983,
+      "block_over_interleaved": 0.981077305374123,
+      "void": false
+     },
+     {
+      "cell": "gemma-4-26B-A4B/down",
+      "regime": "decode_m8",
+      "interleaved": 1.7130176434646576,
+      "block": 1.686440746942433,
+      "block_over_interleaved": 0.9844853340398342,
+      "void": false
+     },
+     {
+      "cell": "gemma-4-26B-A4B/down",
+      "regime": "decode_m32",
+      "interleaved": 1.723887161167288,
+      "block": 1.7065442338703112,
+      "block_over_interleaved": 0.989939638923215,
+      "void": true
+     },
+     {
+      "cell": "gemma-4-26B-A4B/down",
+      "regime": "tokbudget_2048",
+      "interleaved": 1.696969769037869,
+      "block": 1.6959862542835071,
+      "block_over_interleaved": 0.9994204288300791,
+      "void": false
+     },
+     {
+      "cell": "gpt-oss-120b/gate_up",
+      "regime": "decode_bs1",
+      "interleaved": 0.8778054985918028,
+      "block": 0.8585365756703481,
+      "block_over_interleaved": 0.978048755729639,
+      "void": false
+     },
+     {
+      "cell": "gpt-oss-120b/gate_up",
+      "regime": "decode_m8",
+      "interleaved": 1.0890648226753545,
+      "block": 1.0344129833725213,
+      "block_over_interleaved": 0.9498176433900622,
+      "void": false
+     },
+     {
+      "cell": "gpt-oss-120b/gate_up",
+      "regime": "decode_m32",
+      "interleaved": 0.8813516379639987,
+      "block": 0.8599999301508102,
+      "block_over_interleaved": 0.9757739057903009,
+      "void": false
+     },
+     {
+      "cell": "gpt-oss-120b/gate_up",
+      "regime": "tokbudget_2048",
+      "interleaved": 1.9786321212509257,
+      "block": 1.9776849969391803,
+      "block_over_interleaved": 0.9995213236955102,
+      "void": false
+     },
+     {
+      "cell": "gpt-oss-120b/down",
+      "regime": "decode_bs1",
+      "interleaved": 1.1339716552726817,
+      "block": 1.1674746823387792,
+      "block_over_interleaved": 1.029544854062548,
+      "void": false
+     },
+     {
+      "cell": "gpt-oss-120b/down",
+      "regime": "decode_m8",
+      "interleaved": 1.0441677733031636,
+      "block": 1.040919310890025,
+      "block_over_interleaved": 0.9968889459182768,
+      "void": false
+     },
+     {
+      "cell": "gpt-oss-120b/down",
+      "regime": "decode_m32",
+      "interleaved": 1.0537618180683839,
+      "block": 1.0157480754041308,
+      "block_over_interleaved": 0.9639256784479677,
+      "void": false
+     },
+     {
+      "cell": "gpt-oss-120b/down",
+      "regime": "tokbudget_2048",
+      "interleaved": 3.10688291499509,
+      "block": 3.10582248263654,
+      "block_over_interleaved": 0.9996586828703997,
+      "void": false
+     }
+    ]
+   },
+   "Q5_order_bias_report_only": {
+    "median": 1.0498989959680247
+   },
+   "instrument": {
+    "median_selfpair": 1.0,
+    "median_pairs": 514.0
+   },
+   "DEVICE_CONFIRMED": true
+  }
+ },
+ "two_device_rule_met": true,
+ "INTERLEAVED_CONFIRMED": false
+}

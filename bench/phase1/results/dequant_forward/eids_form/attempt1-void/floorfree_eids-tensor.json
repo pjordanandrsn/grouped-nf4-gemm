@@ -1,0 +1,522 @@
+{
+ "leg": "small-batch training axis, floor-free",
+ "prereg": "kernel/prereg_dequant_forward_floorfree.json",
+ "gpu": "NVIDIA GeForce RTX 4090",
+ "capability": "8.9",
+ "torch": "2.8.0+cu128",
+ "rank": 16,
+ "scaling": 1.0,
+ "eids_form": "tensor",
+ "regimes": [
+  "decode_m8"
+ ],
+ "block_ms": 250.0,
+ "warm_s": 1.5,
+ "rows": [
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "gate_up",
+   "regime": "decode_m8",
+   "N": 2048,
+   "K": 2048,
+   "E": 64,
+   "top_k": 8,
+   "groups": 8,
+   "rows": 64,
+   "rank": 16,
+   "eids_form": "tensor",
+   "gate": {
+    "deq_calls_D": 8,
+    "nonempty_groups": 8,
+    "deq_calls_ok": true,
+    "base_max_rel": 0.00396728515625,
+    "base_rows_differing": 0,
+    "base_arms_agree": true,
+    "grad_G_base": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_D_base": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_G_full": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_D_full": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "gradA_at_nonzero_B": true
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0016979448143038564,
+   "b_rel_D": 0.002230362406081972,
+   "b_rel_G_over_D": 0.7612865109606104,
+   "warm_s": 1.5,
+   "iters": 118,
+   "gb_selfpair": 0.8820848979798054,
+   "dbase_over_gbase": 2.535121936159331,
+   "db_selfpair": 0.9830016319519901,
+   "dfull_over_gfull": 1.4761972915980137,
+   "lora_floor_frac_of_gbase": 1.6982693798651949,
+   "lora_floor_frac_of_gfull": 0.6948737777775388,
+   "gb_drift": 0.9306992636375125,
+   "ms": {
+    "gb_a": 1.6327680349349976,
+    "gb_b": 1.4402400255203247,
+    "db_a": 3.65118408203125,
+    "db_b": 3.5891199111938477,
+    "gf_a": 3.990480065345764,
+    "df_a": 5.890735864639282,
+    "lora": 2.772879958152771,
+    "gb_end": 1.5196160078048706
+   },
+   "status": "ok"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "down",
+   "regime": "decode_m8",
+   "N": 2048,
+   "K": 1024,
+   "E": 64,
+   "top_k": 8,
+   "groups": 8,
+   "rows": 64,
+   "rank": 16,
+   "eids_form": "tensor",
+   "gate": {
+    "deq_calls_D": 8,
+    "nonempty_groups": 8,
+    "deq_calls_ok": true,
+    "base_max_rel": 0.005096435546875,
+    "base_rows_differing": 0,
+    "base_arms_agree": true,
+    "grad_G_base": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_D_base": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_G_full": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_D_full": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "gradA_at_nonzero_B": true
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0016969621584603384,
+   "b_rel_D": 0.002229052537374347,
+   "b_rel_G_over_D": 0.7612930292164535,
+   "warm_s": 1.5,
+   "iters": 172,
+   "gb_selfpair": 0.9994878488922101,
+   "dbase_over_gbase": 2.4017012918573397,
+   "db_selfpair": 1.0106926771990035,
+   "dfull_over_gfull": 1.151074171753079,
+   "lora_floor_frac_of_gbase": 1.5025949392245868,
+   "lora_floor_frac_of_gfull": 0.5631077811623638,
+   "gb_drift": 0.8513896542677934,
+   "ms": {
+    "gb_a": 1.8744319677352905,
+    "gb_b": 1.873471975326538,
+    "db_a": 4.4995200634002686,
+    "db_b": 4.5476319789886475,
+    "gf_a": 5.001728057861328,
+    "df_a": 5.757359981536865,
+    "lora": 2.8165119886398315,
+    "gb_end": 1.5958719849586487
+   },
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "gate_up",
+   "regime": "decode_m8",
+   "N": 1536,
+   "K": 2048,
+   "E": 128,
+   "top_k": 8,
+   "groups": 8,
+   "rows": 64,
+   "rank": 16,
+   "eids_form": "tensor",
+   "gate": {
+    "deq_calls_D": 8,
+    "nonempty_groups": 8,
+    "deq_calls_ok": true,
+    "base_max_rel": 0.0036468505859375,
+    "base_rows_differing": 0,
+    "base_arms_agree": true,
+    "grad_G_base": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_D_base": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_G_full": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_D_full": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "gradA_at_nonzero_B": true
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0016953714866982281,
+   "b_rel_D": 0.0022195557432803234,
+   "b_rel_G_over_D": 0.7638337049343967,
+   "warm_s": 1.5,
+   "iters": 139,
+   "gb_selfpair": 1.0207939627761453,
+   "dbase_over_gbase": 2.146932808381673,
+   "db_selfpair": 1.00631649554861,
+   "dfull_over_gfull": 1.4726186759110593,
+   "lora_floor_frac_of_gbase": 1.6597353946450124,
+   "lora_floor_frac_of_gfull": 0.6755199448355489,
+   "gb_drift": 0.9262760168442044,
+   "ms": {
+    "gb_a": 1.6250879764556885,
+    "gb_b": 1.6588799953460693,
+    "db_a": 3.5615038871765137,
+    "db_b": 3.5840001106262207,
+    "gf_a": 3.992799997329712,
+    "df_a": 5.879871845245361,
+    "lora": 2.697216033935547,
+    "gb_end": 1.5052800178527832
+   },
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "down",
+   "regime": "decode_m8",
+   "N": 2048,
+   "K": 768,
+   "E": 128,
+   "top_k": 8,
+   "groups": 8,
+   "rows": 64,
+   "rank": 16,
+   "eids_form": "tensor",
+   "gate": {
+    "deq_calls_D": 8,
+    "nonempty_groups": 8,
+    "deq_calls_ok": true,
+    "base_max_rel": 0.006011962890625,
+    "base_rows_differing": 0,
+    "base_arms_agree": true,
+    "grad_G_base": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_D_base": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_G_full": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_D_full": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "gradA_at_nonzero_B": true
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.00170484591614601,
+   "b_rel_D": 0.002239531626349624,
+   "b_rel_G_over_D": 0.7612511009388435,
+   "warm_s": 1.5,
+   "iters": 161,
+   "gb_selfpair": 0.9919033410668108,
+   "dbase_over_gbase": 2.2115882149896224,
+   "db_selfpair": 1.0249383515657657,
+   "dfull_over_gfull": 1.4994279198527032,
+   "lora_floor_frac_of_gbase": 1.719423873960868,
+   "lora_floor_frac_of_gfull": 0.6964930649428793,
+   "gb_drift": 1.0166308549299325,
+   "ms": {
+    "gb_a": 1.6085760593414307,
+    "gb_b": 1.5955519676208496,
+    "db_a": 3.5287039279937744,
+    "db_b": 3.616703987121582,
+    "gf_a": 3.97107195854187,
+    "df_a": 5.954336166381836,
+    "lora": 2.76582407951355,
+    "gb_end": 1.6353280544281006
+   },
+   "status": "ok"
+  },
+  {
+   "model": "google/gemma-4-26B-A4B",
+   "proj": "gate_up",
+   "regime": "decode_m8",
+   "N": 1408,
+   "K": 2816,
+   "E": 128,
+   "top_k": 8,
+   "groups": 8,
+   "rows": 64,
+   "rank": 16,
+   "eids_form": "tensor",
+   "gate": {
+    "deq_calls_D": 8,
+    "nonempty_groups": 8,
+    "deq_calls_ok": true,
+    "base_max_rel": 0.003082275390625,
+    "base_rows_differing": 0,
+    "base_arms_agree": true,
+    "grad_G_base": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_D_base": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_G_full": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_D_full": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "gradA_at_nonzero_B": true
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0016956413926359425,
+   "b_rel_D": 0.0022202119155361505,
+   "b_rel_G_over_D": 0.7637295254432812,
+   "warm_s": 1.5,
+   "iters": 147,
+   "gb_selfpair": 1.0399573685474872,
+   "dbase_over_gbase": 2.1853720989022314,
+   "db_selfpair": 0.7028635011238814,
+   "dfull_over_gfull": 1.6093159648125428,
+   "lora_floor_frac_of_gbase": 2.342854800469642,
+   "lora_floor_frac_of_gfull": 0.964112228892247,
+   "gb_drift": 1.2747018802098016,
+   "ms": {
+    "gb_a": 1.5616639852523804,
+    "gb_b": 1.6240639686584473,
+    "db_a": 3.5491840839385986,
+    "db_b": 2.4945919513702393,
+    "gf_a": 3.7949440479278564,
+    "df_a": 6.107264041900635,
+    "lora": 3.658751964569092,
+    "gb_end": 1.9906560182571411
+   },
+   "status": "ok"
+  },
+  {
+   "model": "google/gemma-4-26B-A4B",
+   "proj": "down",
+   "regime": "decode_m8",
+   "N": 2816,
+   "K": 704,
+   "E": 128,
+   "top_k": 8,
+   "groups": 8,
+   "rows": 64,
+   "rank": 16,
+   "eids_form": "tensor",
+   "gate": {
+    "deq_calls_D": 8,
+    "nonempty_groups": 8,
+    "deq_calls_ok": true,
+    "base_max_rel": 0.00640869140625,
+    "base_rows_differing": 0,
+    "base_arms_agree": true,
+    "grad_G_base": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_D_base": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_G_full": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_D_full": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "gradA_at_nonzero_B": true
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0016973142452530695,
+   "b_rel_D": 0.002219925131974506,
+   "b_rel_G_over_D": 0.7645817513419464,
+   "warm_s": 1.5,
+   "iters": 150,
+   "gb_selfpair": 0.9861361855048587,
+   "dbase_over_gbase": 2.199302994348689,
+   "db_selfpair": 1.0114014640281328,
+   "dfull_over_gfull": 1.4758690722950072,
+   "lora_floor_frac_of_gbase": 1.672045194199409,
+   "lora_floor_frac_of_gfull": 0.6855150495306602,
+   "gb_drift": 0.9118463341088658,
+   "ms": {
+    "gb_a": 1.648032009601593,
+    "gb_b": 1.6251839995384216,
+    "db_a": 3.574272036552429,
+    "db_b": 3.615023970603943,
+    "gf_a": 4.019727945327759,
+    "df_a": 5.932592153549194,
+    "lora": 2.7555840015411377,
+    "gb_end": 1.5027519464492798
+   },
+   "status": "ok"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "gate_up",
+   "regime": "decode_m8",
+   "N": 5760,
+   "K": 2880,
+   "E": 128,
+   "top_k": 4,
+   "groups": 4,
+   "rows": 32,
+   "rank": 16,
+   "eids_form": "tensor",
+   "gate": {
+    "deq_calls_D": 4,
+    "nonempty_groups": 4,
+    "deq_calls_ok": true,
+    "base_max_rel": 0.00665283203125,
+    "base_rows_differing": 0,
+    "base_arms_agree": true,
+    "grad_G_base": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_D_base": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_G_full": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_D_full": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "gradA_at_nonzero_B": true
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0016975614005022334,
+   "b_rel_D": 0.002224332294717001,
+   "b_rel_G_over_D": 0.7631779678486447,
+   "warm_s": 1.5,
+   "iters": 151,
+   "gb_selfpair": 0.9782747443177423,
+   "dbase_over_gbase": 1.3323399631516235,
+   "db_selfpair": 1.0094065377549044,
+   "dfull_over_gfull": 0.9065320988816772,
+   "lora_floor_frac_of_gbase": 1.647284346759057,
+   "lora_floor_frac_of_gfull": 0.6845459496463862,
+   "gb_drift": 1.0127795009063285,
+   "ms": {
+    "gb_a": 1.602560043334961,
+    "gb_b": 1.5677440166473389,
+    "db_a": 2.0887680053710938,
+    "db_b": 2.1084160804748535,
+    "gf_a": 3.856384038925171,
+    "df_a": 3.4959359169006348,
+    "lora": 2.6398720741271973,
+    "gb_end": 1.623039960861206
+   },
+   "status": "ok"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "down",
+   "regime": "decode_m8",
+   "N": 2880,
+   "K": 2880,
+   "E": 128,
+   "top_k": 4,
+   "groups": 4,
+   "rows": 32,
+   "rank": 16,
+   "eids_form": "tensor",
+   "gate": {
+    "deq_calls_D": 4,
+    "nonempty_groups": 4,
+    "deq_calls_ok": true,
+    "base_max_rel": 0.0032196044921875,
+    "base_rows_differing": 0,
+    "base_arms_agree": true,
+    "grad_G_base": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_D_base": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_G_full": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "grad_D_full": {
+     "act_finite": true,
+     "act_nonzero": true
+    },
+    "gradA_at_nonzero_B": true
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0016978117684540456,
+   "b_rel_D": 0.0022192031265971025,
+   "b_rel_G_over_D": 0.7650546937798561,
+   "warm_s": 1.5,
+   "iters": 136,
+   "gb_selfpair": 0.9925624291713036,
+   "dbase_over_gbase": 1.3546810978714348,
+   "db_selfpair": 1.0159954926219457,
+   "dfull_over_gfull": 1.1416251553669237,
+   "lora_floor_frac_of_gbase": 1.748148171477038,
+   "lora_floor_frac_of_gfull": 0.7253774910241346,
+   "gb_drift": 0.9633051769464211,
+   "ms": {
+    "gb_a": 1.5897599458694458,
+    "gb_b": 1.5779359936714172,
+    "db_a": 2.137600064277649,
+    "db_b": 2.1717920303344727,
+    "gf_a": 3.8312960863113403,
+    "df_a": 4.37390398979187,
+    "lora": 2.7791359424591064,
+    "gb_end": 1.5314239859580994
+   },
+   "status": "ok"
+  }
+ ],
+ "bitsandbytes": "0.50.0"
+}

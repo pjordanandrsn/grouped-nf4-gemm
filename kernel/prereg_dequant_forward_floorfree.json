@@ -1,0 +1,91 @@
+{
+ "registered_utc": "2026-08-13T07:05:00Z",
+ "purpose": "LEG 2. Leg 1 (prereg_dequant_forward.json) measured the fused training path against the dequant-on-forward pattern and reported its own small-batch criterion as untrustworthy: at decode_m8 the identical lora_delta_grouped call BOTH arms make was 54-66% of the fused arm's measured time, against cells only 1.2-1.6 ms long. A cost added equally to both arms pins every ratio near 1.0, so S1 was measuring the harness as much as either kernel. Leg 1 reported that floor per cell and refused to subtract it. This leg removes it BY CONSTRUCTION and re-asks leg 1's question on the quantity the two kernels actually differ in.",
+ "two_changes_from_leg_1": {
+  "1_expert_ids_list_form": "gemm_4bit_grouped's documented contract is 'expert_ids [G] int32/list' and it builds the device tensor itself. Leg 1 handed it a CUDA tensor, which made FusedGroupedNf4.forward's [int(e) for e in expert_ids] and lora_delta_grouped's enumerate(expert_ids) perform one device sync per group. That was the HARNESS's choice, not the shipped path's. Using the documented list form is a correction, not an arm change. --eids-tensor reproduces leg 1's form so the cost of the difference is MEASURED, not asserted.",
+  "2_base_only_primary": "The primary comparison is the frozen 4-bit projection's forward and backward with NO adapter delta on either side. The full arms (base + the identical delta) are still timed so this leg can be laid beside leg 1, and the delta alone is still timed so the floor stays visible. Nothing is subtracted from anything."
+ },
+ "arms": {
+  "G_base": "gemm_4bit_grouped_train(..., dgrad_kernel=True) \u2014 single launch over packed bytes, recompute-decode backward, holds no dequantized weight across the fwd->bwd window.",
+  "D_base": "THE BASELINE, GenON's core with nothing else in the timed path: per routed expert, bitsandbytes dequantize_4bit on the packed weight inside the forward, then F.linear. quant_type nf4, blocksize 64, same as the harness quantizes with. Rows arrive group-sorted so the published module's gather degenerates to a contiguous slice \u2014 the same KERNEL_CONTRACT op boundary every arm in this repo is measured at, and the same conservative hoist leg 1 declared.",
+  "G_full / D_full": "each base arm plus the IDENTICAL lora_delta_grouped (r=16, lora_B zero-init, pre-activation). Reported so leg 1 can be replicated within this leg.",
+  "L": "the delta alone. The floor. Reported, never subtracted."
+ },
+ "inherits_from_leg_1": "Amendment 1's warm-up (1.5 s of GPU-busy work before the pilot and first timed block of every cell \u2014 without it the cell after a per-spec stack build measures the GPU clocking back up, which voided an entire device in leg 1). The adjacent self-pair placement. The per-cell iteration pilot at 250 ms/block, floor 20, ceiling 200. The wiring gate with its positive controls. The fp64 fidelity subsample with recorded caps. The same 8 census shapes.",
+ "prior_work_disclosure": "A --gate-only-equivalent smoke ran on the QNAP A2000 BEFORE this stamp: 2 cells (OLMoE gate_up and down at decode_m8). It confirmed the arms wire up (deq calls 8/8 per forward, base arms agree per-row, gradients finite and non-zero, lora_A positive control fires) and that the code path runs. The A2000 is a CORRECTNESS-ONLY testbed by operator instruction (2026-07-27) and its self-pairs in that smoke were 0.733 and 0.965 with drift 0.728 and 0.924 \u2014 i.e. the box was drifting and, by this protocol's own Q1 rule, BOTH cells are VOID and neither number is a measurement. Disclosed in full anyway: the smoke read dbase/gbase 1.671 and 1.827 against dfull/gfull 0.988 and 1.112. Those VOID figures are what motivated registering the band below where it is registered; they are not evidence for it, and F1 is adjudicated only on the rented devices.",
+ "frozen_commit": "the commit carrying this file. No change to arms, harness, regimes or reducer between this stamp and reported results.",
+ "protocol": {
+  "devices": "TWO rented cards, both required for any verdict. D1 = H100 80GB (sm_90). D2 = RTX 4090 (sm_89). QNAP A2000 EXCLUDED from timing entirely.",
+  "shapes": "The 8 census cells, unchanged.",
+  "regimes": [
+   "decode_bs1 (M=1)",
+   "decode_m8",
+   "decode_m32",
+   "tokbudget_2048 (the bridge regime leg 1 also ran)"
+  ],
+  "pairing": "PAIRED, INTERLEAVED, ADJACENT: G_base, G_base, D_base, D_base, G_full, D_full, L, G_base. The opening pair is the self-pair; the primary ratio is taken against the immediately-preceding G_base timing.",
+  "reps": "n=1 full matrix per device. SINGLE-REP: no cell is replicated within a device and none may be quoted as replicated. Cross-device agreement is the replication claimed.",
+  "reduction": "Mechanical, by bench/phase1/reduce_dequant_forward_floorfree.py reading THIS file."
+ },
+ "frozen_verdict_criteria_params": {
+  "selfpair_band": [
+   0.97,
+   1.03
+  ],
+  "drift_band": [
+   0.95,
+   1.05
+  ],
+  "void_cell_fraction_that_voids_the_leg": 0.25,
+  "f1_regime": "decode_m8",
+  "f1_min_cells": 7,
+  "f1_total_cells": 8,
+  "f1_bar": 1.0,
+  "f1_predicted_median_band": [
+   1.3,
+   3.0
+  ],
+  "b1_leg1_replication_band": [
+   0.85,
+   1.15
+  ],
+  "q4_fidelity_bar": 1.0
+ },
+ "frozen_verdict_criteria": {
+  "F1_floorfree_small_batch": "PRIMARY. At decode_m8, paired D_base/G_base >= 1.0 on at least 7 of 8 census cells, ON BOTH DEVICES. Predicted median 1.3-3.0x. THE BAND IS DELIBERATELY LEG 1'S OWN S1 BAND, UNCHANGED. Leg 1 registered 1.3-3.0x, measured 1.07-1.11x, and reported the miss; if that miss was the shared floor rather than the kernels, the same band should now be met on the same shapes at the same batch. If it is NOT met, the floor was not the explanation and leg 1's narrowed claim stands as it is. Either outcome is informative and neither is adjustable after the fact.",
+  "F2_small_batch_band": "REPORT ONLY. D_base/G_base across decode_bs1, decode_m8 and decode_m32, per cell and as a median. No bar: leg 1 measured nothing trustworthy here, so no bar has been earned.",
+  "B1_leg1_replication": "GATE ON THE COMPARISON, not on the kernel. D_full/G_full at decode_m8 must land within [0.85, 1.15] of leg 1's per-cell figure on the SAME device class. This leg changed the expert_ids form, so if the full arms do NOT reproduce leg 1, the two legs are not measuring the same thing and F1 may not be described as 'leg 1 with the floor removed'. Failure narrows the description, not the number.",
+  "E1_eids_form_cost": "REPORT ONLY. A --eids-tensor pass on one device quantifies what leg 1's CUDA-tensor form cost both arms. No bar. Published whichever way it lands, including if it shows the form made no difference and the floor is entirely lora_delta_grouped's own work.",
+  "Q1_self_pair": "GATE, PER CELL. G_base and D_base self-pairs must both land in [0.97, 1.03]; drift in [0.95, 1.05]. A cell outside is VOID and its ratio is withheld. More than 25% void on a device voids that DEVICE's leg. Bands are NOT widened after seeing data \u2014 leg 1 lost a whole device to this rule and reported it.",
+  "Q2_wiring": "GATE, POSITIVE-CONTROLLED. Per cell: dequant call count >= non-empty groups; the two base arms agree per row at 1e-2 relative (they compute the same projection by different routes); activation gradients finite and non-zero in all four arms; lora_A gradient non-zero at non-zero B.",
+  "Q4_fidelity": "GATE. b_rel for G_base <= b_rel for D_base on every cell, against the fp64 exact GEMM on identical dequantized values. Expected to reproduce leg 1's ~0.76x; a departure would mean the arms changed more than intended.",
+  "L1_floor_size": "REPORT ONLY, with a stated expectation so it is not unfalsifiable: the delta alone is expected to exceed HALF the fused base arm's time at decode_m8. Reported per cell whichever way it lands.",
+  "verdict_key": "FLOORFREE_CONFIRMED = F1 AND B1 AND Q1 AND Q2 AND Q4, on BOTH devices. F2, E1 and L1 are reported and never enter the verdict."
+ },
+ "exclusions_and_stop_rules": {
+  "no_tune_clause": "No re-tuning, no re-running for a better number, no post-hoc arm changes, no band widening. If D_base beats G_base, that cell is published as a loss.",
+  "cross_run": "Only WITHIN-RUN ratios transfer. Leg 1's numbers may be compared to this leg's ONLY through B1, which is registered for exactly that purpose.",
+  "self_pair_clause": "Self-pair ships or the result does not.",
+  "per_cell_clause": "Per-cell results are published, not only medians.",
+  "bill_cap": "Hard $35/job standing cap; expected spend ~$1.50. Session-independent detached watcher, evidence-first, receipts written after every cell, teardown verified by re-query."
+ },
+ "what_this_does_and_does_not_license": [
+  "LICENSED if confirmed: a statement about the fused NF4 projection versus the dequant-on-forward pattern AT THE PROJECTION, at small batch, on two devices, on synthetic weights, with adapters excluded from the timed path.",
+  "NOT LICENSED: a QLoRA training-step claim. Removing the adapter delta from the timed path is what makes this measurement clean AND is what makes it not a training-step number. The full-arm column is the one that speaks to a step, and it is leg 1's story.",
+  "NOT LICENSED: any statement about a tuned grouped GEMM, or any restatement of the Unsloth comparison.",
+  "NOT LICENSED: superseding leg 1. Leg 1 stands as published; this leg explains and bounds its small-batch row and does not replace its token-budget results.",
+  "NOT LICENSED: claiming the shared floor is a defect in either kernel. It is a property of how this harness attached LoRA, and lora_delta_grouped's cost is real work that a real trainer also pays \u2014 just not work that distinguishes the two arms."
+ ],
+ "amendment_2": {
+  "registered_utc": "2026-08-13T09:55:00Z",
+  "status": "PRE-DATA for leg-2 run 2. Leg-2 run 1 is measured, published in full, and NOT withdrawn.",
+  "what_run_1_showed": "H100 CONFIRMED with 32 of 32 cells live: F1 passed 7 of 8 at bar with median 1.588, inside the registered 1.3-3.0 band, answering the question leg 1 left open. The RTX 4090 went VOID at 22 of 32, and the failures tracked CELL SIZE sharply: 20 of 24 sub-millisecond cells void against 2 of 8 at ~9 ms.",
+  "the_defect": "This protocol contradicted itself, and the contradiction is arithmetic rather than a judgement call. It registered BOTH 'each timed block spans >= 250 ms' AND 'ceiling 200 iterations'. Those cannot both hold below 1.25 ms per step. Measured in run 1: 22 of 24 sub-3 ms cells pinned at the 200 ceiling, running a MEDIAN BLOCK OF 151 ms against the registered 250 ms target. The self-pair was therefore being asked to certify blocks 40% shorter than the protocol specified, on exactly the cells where it failed. The H100 was clamped too (0.35-0.45 ms cells, 70-90 ms blocks); its locked clocks simply absorbed it. Neither device ran the small regimes as written.",
+  "the_fix": "The iteration ceiling is raised to 2000 and passed explicitly from the leg-2 script, so the registered 250 ms block target is actually delivered. Leg 1's `train_dequant_forward.py` is STAMPED and is NOT edited; its `_pilot_iters` keeps its hi=200 default and the ceiling is supplied by the caller. Receipts now record `iters_ceiling` and `iters_clamped` so a future reader can check whether the target was met rather than assume it.",
+  "what_does_NOT_change": "No criterion. No band. No bar. No arm. No regime. No shape. No reduction rule. The 250 ms block target itself is unchanged -- this makes the protocol MEET its existing target rather than move it. Self-pair stays [0.97,1.03], drift stays [0.95,1.05], the 25% void ceiling stays, F1 stays at leg 1's 1.3-3.0 band.",
+  "why_both_devices_are_re-run": "The same reason as leg 1's amendment 1: the H100 was clamped as well, so re-running only the consumer card would leave the two devices measured by two different instruments and make the cross-device comparison worthless.",
+  "honest_limit_of_this_fix": "This is registered because the target violation is CERTAIN, not because the noise model is established. Longer blocks reduce within-block variance but also put the two paired blocks FURTHER APART in time, which would make matters worse if the dominant term is drift between blocks rather than variance within them. Run 1's data is confounded on this point -- its long blocks are mostly the 2048-token cells -- so this amendment may not be sufficient. If the 4090 still voids at a similar rate, the conclusion is that block length was not the binding constraint, that is reported, and the next step is a genuine redesign (iteration-level interleaving: A,B,A,B with the median over per-pair ratios, immune to drift on timescales longer than one pair) under its own registration. Reaching for a third knob after that would be knob-hunting and is barred.",
+  "not_re-run": "E1 (report-only) is NOT re-run. Its usable cells were the 2048-token ones, which were never clamped, and its published figures stand.",
+  "no_tune_clause_still_binds": "No re-running for a better number, no post-hoc arm change, no band widening. If run 2 fails the same criteria, it is reported as failing them."
+ }
+}

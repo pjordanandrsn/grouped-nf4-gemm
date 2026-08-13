@@ -1,0 +1,351 @@
+{
+ "prereg": "kernel/prereg_dequant_forward.json",
+ "prereg_verdict_key": "DQF_CONFIRMED = S1 AND M1 AND F1 AND Q1 AND Q2 AND Q3, on BOTH devices. S2, E1, P1 and U1 are reported and never enter the verdict.",
+ "devices": {
+  "H100": {
+   "device": "H100",
+   "gpu": "NVIDIA H100 80GB HBM3",
+   "capability": "9.0",
+   "cells_ok": 24,
+   "cells_skipped": 0,
+   "skipped": [],
+   "void_cells": [
+    {
+     "cell": "OLMoE-1B-7B-0924/gate_up",
+     "regime": "decode_m8",
+     "why": "g_selfpair=1.0370; d_selfpair=1.0427"
+    },
+    {
+     "cell": "OLMoE-1B-7B-0924/gate_up",
+     "regime": "tokbudget_2048",
+     "why": "g_drift=1.0530"
+    },
+    {
+     "cell": "OLMoE-1B-7B-0924/down",
+     "regime": "decode_m8",
+     "why": "d_selfpair=1.1919; g_drift=1.1869"
+    },
+    {
+     "cell": "OLMoE-1B-7B-0924/down",
+     "regime": "tokbudget_2048",
+     "why": "g_drift=1.1781"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/gate_up",
+     "regime": "decode_m8",
+     "why": "d_selfpair=0.9571; g_drift=0.9320"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/gate_up",
+     "regime": "tokbudget_2048",
+     "why": "g_drift=1.0852"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/down",
+     "regime": "decode_m8",
+     "why": "d_selfpair=1.0517"
+    },
+    {
+     "cell": "Qwen3-30B-A3B/down",
+     "regime": "tokbudget_2048",
+     "why": "g_drift=1.1066"
+    },
+    {
+     "cell": "gemma-4-26B-A4B/down",
+     "regime": "decode_m8",
+     "why": "g_selfpair=1.1311"
+    },
+    {
+     "cell": "gemma-4-26B-A4B/down",
+     "regime": "tokbudget_2048",
+     "why": "g_drift=1.1187"
+    },
+    {
+     "cell": "gpt-oss-120b/down",
+     "regime": "tokbudget_2048",
+     "why": "d_selfpair=1.0999; g_drift=1.1215"
+    }
+   ],
+   "void_fraction": 0.4583333333333333,
+   "Q1_self_pair": false,
+   "Q2_wiring": true,
+   "Q2_failures": [],
+   "Q3_drift": "folded into Q1 per-cell voiding",
+   "S1_speed_small_batch": false,
+   "S1_detail": {
+    "regime": "decode_m8",
+    "cells_at_or_above_bar": 3,
+    "of": 3,
+    "median": 1.1316036693705671,
+    "predicted_band": [
+     1.3,
+     3.0
+    ],
+    "median_in_predicted_band": false,
+    "per_cell": [
+     {
+      "cell": "gemma-4-26B-A4B/gate_up",
+      "d_over_g": 1.3705582705450727
+     },
+     {
+      "cell": "gpt-oss-120b/gate_up",
+      "d_over_g": 1.0654047226051604
+     },
+     {
+      "cell": "gpt-oss-120b/down",
+      "d_over_g": 1.1316036693705671
+     }
+    ]
+   },
+   "M1_memory": true,
+   "M1_detail": {
+    "regime": "tokbudget_11800",
+    "cells_above_bar": 8,
+    "of": 8,
+    "median": 1.1847032719163988,
+    "predicted_band": [
+     1.5,
+     20.0
+    ],
+    "median_in_predicted_band": false,
+    "per_cell": [
+     {
+      "cell": "OLMoE-1B-7B-0924/gate_up",
+      "mem_ratio": 1.1259942210889833
+     },
+     {
+      "cell": "OLMoE-1B-7B-0924/down",
+      "mem_ratio": 1.0661318743502433
+     },
+     {
+      "cell": "Qwen3-30B-A3B/gate_up",
+      "mem_ratio": 1.2434123227438143
+     },
+     {
+      "cell": "Qwen3-30B-A3B/down",
+      "mem_ratio": 1.0999321764672032
+     },
+     {
+      "cell": "gemma-4-26B-A4B/gate_up",
+      "mem_ratio": 1.3151819148010462
+     },
+     {
+      "cell": "gemma-4-26B-A4B/down",
+      "mem_ratio": 1.0940003284107587
+     },
+     {
+      "cell": "gpt-oss-120b/gate_up",
+      "mem_ratio": 1.7429618060935428
+     },
+     {
+      "cell": "gpt-oss-120b/down",
+      "mem_ratio": 1.7070012444840563
+     }
+    ]
+   },
+   "F1_fidelity": true,
+   "F1_detail": {
+    "median_b_rel_G_over_D": 0.7629884902753058,
+    "failures": [],
+    "predicted_band": [
+     0.5,
+     0.9
+    ],
+    "median_in_predicted_band": true
+   },
+   "S2_M_axis_report_only": {
+    "per_regime": [
+     {
+      "regime": "decode_m8",
+      "median_d_over_g": 1.1316036693705671,
+      "n": 3
+     },
+     {
+      "regime": "tokbudget_2048",
+      "median_d_over_g": 1.8734031672048306,
+      "n": 2
+     },
+     {
+      "regime": "tokbudget_11800",
+      "median_d_over_g": 1.5205309065388568,
+      "n": 8
+     }
+    ],
+    "predicted_monotone_decay": true,
+    "observed_monotone_decay": false
+   },
+   "E1_energy_report_only": {
+    "median_j_ratio_d_over_g": 1.4694418690555322
+   },
+   "P1_plumbing_report_only": {
+    "median_dr_over_d": 1.3916748441204878,
+    "median_dr_over_g": 2.044375916776044
+   },
+   "U1_unsloth_report_only": {
+    "median_u_over_g": null,
+    "note": "separate comparator; never divided into the dequant_forward result"
+   },
+   "shared_floor_report_only": {
+    "median_lora_floor_frac_of_g": 0.26073520777232834,
+    "note": "identical in both arms; compresses every ratio toward 1.0"
+   },
+   "DEVICE_CONFIRMED": false
+  },
+  "ADA": {
+   "device": "ADA",
+   "gpu": "NVIDIA GeForce RTX 4090",
+   "capability": "8.9",
+   "cells_ok": 24,
+   "cells_skipped": 0,
+   "skipped": [],
+   "void_cells": [],
+   "void_fraction": 0.0,
+   "Q1_self_pair": true,
+   "Q2_wiring": true,
+   "Q2_failures": [],
+   "Q3_drift": "folded into Q1 per-cell voiding",
+   "S1_speed_small_batch": true,
+   "S1_detail": {
+    "regime": "decode_m8",
+    "cells_at_or_above_bar": 7,
+    "of": 8,
+    "median": 1.1120864545188236,
+    "predicted_band": [
+     1.3,
+     3.0
+    ],
+    "median_in_predicted_band": false,
+    "per_cell": [
+     {
+      "cell": "OLMoE-1B-7B-0924/gate_up",
+      "d_over_g": 1.1053786753329418
+     },
+     {
+      "cell": "OLMoE-1B-7B-0924/down",
+      "d_over_g": 1.1684430736488565
+     },
+     {
+      "cell": "Qwen3-30B-A3B/gate_up",
+      "d_over_g": 1.1187942337047054
+     },
+     {
+      "cell": "Qwen3-30B-A3B/down",
+      "d_over_g": 1.2035133456393747
+     },
+     {
+      "cell": "gemma-4-26B-A4B/gate_up",
+      "d_over_g": 1.0755096046096948
+     },
+     {
+      "cell": "gemma-4-26B-A4B/down",
+      "d_over_g": 1.214441884304006
+     },
+     {
+      "cell": "gpt-oss-120b/gate_up",
+      "d_over_g": 1.0422915153032044
+     },
+     {
+      "cell": "gpt-oss-120b/down",
+      "d_over_g": 0.9548282011971191
+     }
+    ]
+   },
+   "M1_memory": true,
+   "M1_detail": {
+    "regime": "tokbudget_11800",
+    "cells_above_bar": 8,
+    "of": 8,
+    "median": 1.184618097795806,
+    "predicted_band": [
+     1.5,
+     20.0
+    ],
+    "median_in_predicted_band": false,
+    "per_cell": [
+     {
+      "cell": "OLMoE-1B-7B-0924/gate_up",
+      "mem_ratio": 1.125738532931335
+     },
+     {
+      "cell": "OLMoE-1B-7B-0924/down",
+      "mem_ratio": 1.0683159245743483
+     },
+     {
+      "cell": "Qwen3-30B-A3B/gate_up",
+      "mem_ratio": 1.2434976626602772
+     },
+     {
+      "cell": "Qwen3-30B-A3B/down",
+      "mem_ratio": 1.099870187759642
+     },
+     {
+      "cell": "gemma-4-26B-A4B/gate_up",
+      "mem_ratio": 1.315178574127245
+     },
+     {
+      "cell": "gemma-4-26B-A4B/down",
+      "mem_ratio": 1.093108099067772
+     },
+     {
+      "cell": "gpt-oss-120b/gate_up",
+      "mem_ratio": 1.7429618060935428
+     },
+     {
+      "cell": "gpt-oss-120b/down",
+      "mem_ratio": 1.7072684222780192
+     }
+    ]
+   },
+   "F1_fidelity": true,
+   "F1_detail": {
+    "median_b_rel_G_over_D": 0.7625746801332222,
+    "failures": [],
+    "predicted_band": [
+     0.5,
+     0.9
+    ],
+    "median_in_predicted_band": true
+   },
+   "S2_M_axis_report_only": {
+    "per_regime": [
+     {
+      "regime": "decode_m8",
+      "median_d_over_g": 1.1120864545188236,
+      "n": 8
+     },
+     {
+      "regime": "tokbudget_2048",
+      "median_d_over_g": 1.827008052666172,
+      "n": 8
+     },
+     {
+      "regime": "tokbudget_11800",
+      "median_d_over_g": 2.441433464396056,
+      "n": 8
+     }
+    ],
+    "predicted_monotone_decay": true,
+    "observed_monotone_decay": false
+   },
+   "E1_energy_report_only": {
+    "median_j_ratio_d_over_g": 1.7493480157027075
+   },
+   "P1_plumbing_report_only": {
+    "median_dr_over_d": 1.249116059440766,
+    "median_dr_over_g": 2.1266070146318548
+   },
+   "U1_unsloth_report_only": {
+    "median_u_over_g": null,
+    "note": "separate comparator; never divided into the dequant_forward result"
+   },
+   "shared_floor_report_only": {
+    "median_lora_floor_frac_of_g": 0.4774014321006405,
+    "note": "identical in both arms; compresses every ratio toward 1.0"
+   },
+   "DEVICE_CONFIRMED": true
+  }
+ },
+ "two_device_rule_met": true,
+ "DQF_CONFIRMED": false,
+ "note": "NOT CONFIRMED does not mean the numbers are wrong; it means the registered criteria were not all met. Report at full volume and narrow the claim."
+}

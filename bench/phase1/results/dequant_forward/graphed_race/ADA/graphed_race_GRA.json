@@ -1,0 +1,413 @@
+{
+ "probe": "graphed baseline vs shipped fused, plus memory under faithful routing",
+ "prereg": "kernel/prereg_dequant_forward_graphed.json",
+ "gpu": "NVIDIA GeForce RTX 4090",
+ "capability": "8.9",
+ "torch": "2.8.0+cu128",
+ "tokens": [
+  32,
+  2048
+ ],
+ "rows": [
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "gate_up",
+   "tokens": 32,
+   "E": 64,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 59,
+    "of": 64,
+    "occupancy": 0.921875,
+    "total_rows": 256,
+    "min_rows": 1,
+    "max_rows": 19,
+    "mean_rows": 4.338983050847458,
+    "cv": 0.7095410392134658
+   },
+   "fiction_regime": "decode_m32",
+   "memory": {
+    "fiction": {
+     "G": 10486784,
+     "D": 77595648,
+     "groups": 8,
+     "D_over_G": 7.399375061029196
+    },
+    "faithful": {
+     "G": 10486784,
+     "D": 505414656,
+     "groups": 59,
+     "D_over_G": 48.19539107509032
+    }
+   },
+   "memory_fixture_effect_D": 6.513440753790728,
+   "g_wall_ms": 1.8096713349223137,
+   "d_wall_ms": 19.471503514796495,
+   "d_graphed_wall_ms": 2.211681784441074,
+   "d_capture": "captured",
+   "d_over_g_ungraphed": 10.759690524485418,
+   "d_over_g_GRAPHED": 1.2221455585668641,
+   "graph_speedup_for_baseline": 8.803935381561795,
+   "status": "ok"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "gate_up",
+   "tokens": 2048,
+   "E": 64,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 64,
+    "of": 64,
+    "occupancy": 1.0,
+    "total_rows": 16384,
+    "min_rows": 23,
+    "max_rows": 1231,
+    "mean_rows": 256.0,
+    "cv": 0.6802877647518686
+   },
+   "fiction_regime": "tokbudget_2048",
+   "memory": {
+    "fiction": {
+     "G": 671089664,
+     "D": 1207960576,
+     "groups": 64,
+     "D_over_G": 1.7999987792987377
+    },
+    "faithful": {
+     "G": 671089664,
+     "D": 1207960576,
+     "groups": 64,
+     "D_over_G": 1.7999987792987377
+    }
+   },
+   "memory_fixture_effect_D": 1.0,
+   "g_wall_ms": 12.441933682809273,
+   "d_wall_ms": 23.095466755330563,
+   "d_graphed_wall_ms": 22.892268591870863,
+   "d_capture": "captured",
+   "d_over_g_ungraphed": 1.8562602360789806,
+   "d_over_g_GRAPHED": 1.839928517180619,
+   "graph_speedup_for_baseline": 1.0088762790216368,
+   "status": "ok"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "down",
+   "tokens": 32,
+   "E": 64,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 59,
+    "of": 64,
+    "occupancy": 0.921875,
+    "total_rows": 256,
+    "min_rows": 1,
+    "max_rows": 19,
+    "mean_rows": 4.338983050847458,
+    "cv": 0.7095410392134658
+   },
+   "fiction_regime": "decode_m32",
+   "memory": {
+    "fiction": {
+     "G": 10486784,
+     "D": 44041216,
+     "groups": 8,
+     "D_over_G": 4.199687530514598
+    },
+    "faithful": {
+     "G": 10486784,
+     "D": 257950720,
+     "groups": 59,
+     "D_over_G": 24.59769553754516
+    }
+   },
+   "memory_fixture_effect_D": 5.857029923969402,
+   "g_wall_ms": 1.5766183845698833,
+   "d_wall_ms": 19.022849885125954,
+   "d_graphed_wall_ms": 1.351631215463082,
+   "d_capture": "captured",
+   "d_over_g_ungraphed": 12.065601968935285,
+   "d_over_g_GRAPHED": 0.8572976369496161,
+   "graph_speedup_for_baseline": 14.073994198638376,
+   "status": "ok"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "down",
+   "tokens": 2048,
+   "E": 64,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 64,
+    "of": 64,
+    "occupancy": 1.0,
+    "total_rows": 16384,
+    "min_rows": 23,
+    "max_rows": 1231,
+    "mean_rows": 256.0,
+    "cv": 0.6802877647518686
+   },
+   "fiction_regime": "tokbudget_2048",
+   "memory": {
+    "fiction": {
+     "G": 671089664,
+     "D": 939525120,
+     "groups": 64,
+     "D_over_G": 1.3999993896493688
+    },
+    "faithful": {
+     "G": 671089664,
+     "D": 939525120,
+     "groups": 64,
+     "D_over_G": 1.3999993896493688
+    }
+   },
+   "memory_fixture_effect_D": 1.0,
+   "g_wall_ms": 7.55821643397212,
+   "d_wall_ms": 20.33232683315873,
+   "d_graphed_wall_ms": 8.245992412169775,
+   "d_capture": "captured",
+   "d_over_g_ungraphed": 2.690095872588468,
+   "d_over_g_GRAPHED": 1.0909971266642073,
+   "graph_speedup_for_baseline": 2.4657222341305394,
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "gate_up",
+   "tokens": 32,
+   "E": 128,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 59,
+    "of": 128,
+    "occupancy": 0.4609375,
+    "total_rows": 256,
+    "min_rows": 1,
+    "max_rows": 18,
+    "mean_rows": 4.338983050847458,
+    "cv": 0.7899901725061206
+   },
+   "fiction_regime": "decode_m32",
+   "memory": {
+    "fiction": {
+     "G": 7865344,
+     "D": 59245568,
+     "groups": 8,
+     "D_over_G": 7.532482749641973
+    },
+    "faithful": {
+     "G": 7865344,
+     "D": 382206976,
+     "groups": 59,
+     "D_over_G": 48.59380289024867
+    }
+   },
+   "memory_fixture_effect_D": 6.4512332129215135,
+   "g_wall_ms": 1.761945274968942,
+   "d_wall_ms": 19.996286028375227,
+   "d_graphed_wall_ms": 1.8349303243060906,
+   "d_capture": "captured",
+   "d_over_g_ungraphed": 11.348982464127726,
+   "d_over_g_GRAPHED": 1.041422994444839,
+   "graph_speedup_for_baseline": 10.897572383810898,
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "gate_up",
+   "tokens": 2048,
+   "E": 128,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 99,
+    "of": 128,
+    "occupancy": 0.7734375,
+    "total_rows": 16384,
+    "min_rows": 1,
+    "max_rows": 1004,
+    "mean_rows": 165.4949494949495,
+    "cv": 1.2043729632478681
+   },
+   "fiction_regime": "tokbudget_2048",
+   "memory": {
+    "fiction": {
+     "G": 503317504,
+     "D": 1308623872,
+     "groups": 128,
+     "D_over_G": 2.5999967447982892
+    },
+    "faithful": {
+     "G": 503317504,
+     "D": 1126171648,
+     "groups": 99,
+     "D_over_G": 2.237497482304927
+    }
+   },
+   "memory_fixture_effect_D": 0.8605770321756747,
+   "g_wall_ms": 10.272413088629643,
+   "d_wall_ms": 32.785043523957334,
+   "d_graphed_wall_ms": 32.32263174528877,
+   "d_capture": "captured",
+   "d_over_g_ungraphed": 3.19156202550368,
+   "d_over_g_GRAPHED": 3.1465471127778275,
+   "graph_speedup_for_baseline": 1.0143061302158964,
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "down",
+   "tokens": 32,
+   "E": 128,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 59,
+    "of": 128,
+    "occupancy": 0.4609375,
+    "total_rows": 256,
+    "min_rows": 1,
+    "max_rows": 18,
+    "mean_rows": 4.338983050847458,
+    "cv": 0.7899901725061206
+   },
+   "fiction_regime": "decode_m32",
+   "memory": {
+    "fiction": {
+     "G": 10486784,
+     "D": 37487616,
+     "groups": 8,
+     "D_over_G": 3.5747485597109656
+    },
+    "faithful": {
+     "G": 10486784,
+     "D": 196084736,
+     "groups": 59,
+     "D_over_G": 18.698271653158873
+    }
+   },
+   "memory_fixture_effect_D": 5.2306536643994646,
+   "g_wall_ms": 1.3692342986663182,
+   "d_wall_ms": 20.483611896634102,
+   "d_graphed_wall_ms": 1.1008765238026779,
+   "d_capture": "captured",
+   "d_over_g_ungraphed": 14.959902711015822,
+   "d_over_g_GRAPHED": 0.8040088718745725,
+   "graph_speedup_for_baseline": 18.6066388498131,
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "down",
+   "tokens": 2048,
+   "E": 128,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 99,
+    "of": 128,
+    "occupancy": 0.7734375,
+    "total_rows": 16384,
+    "min_rows": 1,
+    "max_rows": 1004,
+    "mean_rows": 165.4949494949495,
+    "cv": 1.2043729632478681
+   },
+   "fiction_regime": "tokbudget_2048",
+   "memory": {
+    "fiction": {
+     "G": 671089664,
+     "D": 1074769920,
+     "groups": 128,
+     "D_over_G": 1.601529538681734
+    },
+    "faithful": {
+     "G": 671089664,
+     "D": 983897088,
+     "groups": 99,
+     "D_over_G": 1.4661186735249732
+    }
+   },
+   "memory_fixture_effect_D": 0.9154490367575602,
+   "g_wall_ms": 6.839025517304738,
+   "d_wall_ms": 31.91017123560111,
+   "d_graphed_wall_ms": 7.776465297987063,
+   "d_capture": "captured",
+   "d_over_g_ungraphed": 4.66589445453289,
+   "d_over_g_GRAPHED": 1.1370721279384508,
+   "graph_speedup_for_baseline": 4.103428744658714,
+   "status": "ok"
+  },
+  {
+   "model": "google/gemma-4-26B-A4B",
+   "proj": "gate_up",
+   "tokens": 32,
+   "E": 128,
+   "top_k": 8,
+   "status": "not_run",
+   "reason": "no measured routing for google/gemma-4-26B-A4B"
+  },
+  {
+   "model": "google/gemma-4-26B-A4B",
+   "proj": "gate_up",
+   "tokens": 2048,
+   "E": 128,
+   "top_k": 8,
+   "status": "not_run",
+   "reason": "no measured routing for google/gemma-4-26B-A4B"
+  },
+  {
+   "model": "google/gemma-4-26B-A4B",
+   "proj": "down",
+   "tokens": 32,
+   "E": 128,
+   "top_k": 8,
+   "status": "not_run",
+   "reason": "no measured routing for google/gemma-4-26B-A4B"
+  },
+  {
+   "model": "google/gemma-4-26B-A4B",
+   "proj": "down",
+   "tokens": 2048,
+   "E": 128,
+   "top_k": 8,
+   "status": "not_run",
+   "reason": "no measured routing for google/gemma-4-26B-A4B"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "gate_up",
+   "tokens": 32,
+   "E": 128,
+   "top_k": 4,
+   "status": "not_run",
+   "reason": "no measured routing for openai/gpt-oss-120b"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "gate_up",
+   "tokens": 2048,
+   "E": 128,
+   "top_k": 4,
+   "status": "not_run",
+   "reason": "no measured routing for openai/gpt-oss-120b"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "down",
+   "tokens": 32,
+   "E": 128,
+   "top_k": 4,
+   "status": "not_run",
+   "reason": "no measured routing for openai/gpt-oss-120b"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "down",
+   "tokens": 2048,
+   "E": 128,
+   "top_k": 4,
+   "status": "not_run",
+   "reason": "no measured routing for openai/gpt-oss-120b"
+  }
+ ]
+}

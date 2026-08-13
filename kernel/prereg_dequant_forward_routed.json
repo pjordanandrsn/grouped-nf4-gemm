@@ -1,0 +1,27 @@
+{
+ "registered_utc": "2026-08-13T13:05:00Z",
+ "purpose": "LEG 4. Re-measure the dequant-on-forward comparison on a ROUTING-FAITHFUL fixture, and split the result into a kernel ratio and a step ratio, because legs 1-3 conflated them. Legs 1-3 used two fictions: decode_m* builds exactly top_k groups, tokbudget_* builds all E with equal counts. Measured OLMoE routing at 32 tokens hits ~58 of 64 experts with 1-17 rows each; at 2048 it hits all 64 but with counts 31-795 (cv 0.506). Both fictions move BOTH arms -- the baseline's dequant-call count and the fused arm's group count move together -- so the net effect must be measured, not reasoned about.",
+ "why_the_quantity_is_split": "A follow-up to leg 3 measured that at decode band the GPU is busy only 4-33% of the step, so those cells compared one kernel launch against a per-expert python loop with ~90% host time. Every cell here therefore reports wall_ms (what a training loop pays), gpu_ms (summed CUDA kernel self-time), and gap_ms = wall - gpu (launch gaps plus host stalls). Summed kernel time does NOT count the gaps between launches, so a single-launch design can show an EQUAL gpu_ms and still be much faster in wall terms; that is a launch-count advantage, not a kernel-efficiency one, and the split is what makes the difference statable.",
+ "matched_pairs_in_one_process": "Each token count runs on BOTH the fictional fixture and the faithful one, on the same box back to back, at IDENTICAL total rows (T x top_k). Comparing against legs 1-3's numbers instead would be a cross-run comparison -- the error that produced, and then required retracting, a 3.76x that did not exist. T=32 pairs decode_m32 against routed_32; T=2048 pairs tokbudget_2048 against routed_2048.",
+ "routing_provenance": "bench/phase1/results/routing_olmoe.json and routing_qwen.json, measured on the real models with the gate hooked and a per-expert bincount. Assignments are drawn per token, top_k DISTINCT experts per token, weighted by the measured per-expert frequency of the median-occupancy layer, seeded. Gemma-4 (gated) and GPT-OSS-120B (needed an 80 GB card) have NO measured routing and are recorded NOT-RUN -- the fixture raises rather than substituting another model's routing, and a test pins that behaviour.",
+ "prior_work_disclosure": "routing_fixture.py has a 7/7 CPU suite checking it against the operator's datum (median 57 of 64 experts at training shape; the fixture lands 0.82-0.97 occupancy at T=30), that total rows are exactly T x top_k so the correction changes the DISTRIBUTION of work and not its amount, that the drawn skew matches the measured cv rather than being uniform, that occupancy saturates at T>=512 as measured, that it is seeded, and that it refuses models without measured routing. A 2-cell smoke ran on the correctness-only QNAP A2000 to confirm the path executes; its numbers are not measurements and no timing claim may cite that box.",
+ "frozen_commit": "the commit carrying this file.",
+ "protocol": {
+  "devices": "TWO rented cards: H100 80GB (sm_90) and RTX 4090 (sm_89).",
+  "cells": "OLMoE and Qwen3-30B x {gate_up, down} x T in {32, 2048}, each on both fixtures. The other two census models are NOT-RUN for want of measured routing.",
+  "reps": "n=1 per device; wall is the median of 3 x 150-step runs, gpu is summed kernel time over 40 steps.",
+  "reduction": "Descriptive. This leg reports; it does not gate."
+ },
+ "frozen_predictions": {
+  "P1_fixture_moves_the_wall_ratio": "PREDICTED: the faithful fixture changes d/g_wall by more than 10% on a majority of cells, because the baseline goes from top_k dequant calls to ~58 while the fused arm goes from top_k groups to ~58 groups and those do not cost the same. Direction NOT predicted -- both arms move and the A2000 smoke, which is not a measurement, went one way at T=32 on two cells.",
+  "P2_fixture_barely_moves_the_kernel_ratio": "PREDICTED: d/g_gpu shifts less than d/g_wall on a majority of cells, because redistributing the same total rows changes launch counts far more than it changes total kernel work.",
+  "P3_the_advantage_is_in_the_gap": "PREDICTED and the substantive claim: d/g_gap > d/g_gpu on a majority of cells -- i.e. the fused arm's advantage lives in eliminated launch gaps rather than in less kernel work. If instead d/g_gpu is large and d/g_gap is near 1, the advantage IS kernel efficiency and this prediction is wrong, which is the outcome that would matter most.",
+  "no_bars": "This leg sets no pass/fail bar. Legs 1-3 set bars on a quantity now known to be mislabelled; the honest move is to characterise first and register bars afterwards, on whichever quantity turns out to be the one worth barring."
+ },
+ "what_this_does_and_does_not_license": [
+  "LICENSED: statements about the comparison under measured routing for OLMoE and Qwen3-30B, split into step, kernel and gap terms, at the stated token counts on two devices, on synthetic weights.",
+  "NOT LICENSED: any statement about Gemma-4 or GPT-OSS-120B under faithful routing -- they have no measured routing and are NOT-RUN.",
+  "NOT LICENSED: re-labelling legs 1-3's numbers using this leg's ratios. Different fixtures; only the within-process matched pairs here support a comparison.",
+  "NOT LICENSED: calling d/g_gpu 'the kernel speedup' without also saying that summed kernel time excludes launch gaps."
+ ]
+}

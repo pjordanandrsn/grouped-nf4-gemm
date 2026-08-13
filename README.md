@@ -280,6 +280,52 @@ looser. Loss trajectories sit ≤0.003 median |Δ| against a 0.05 band.
 From inside a model, [experts4bit-qlora](https://pypi.org/project/experts4bit-qlora/)
 ≥ 0.11.0 exposes it as `enable_fast_train(model, dgrad=True)`.
 
+### Benchmark this on real text. Random token ids understate it by 1.6–1.7×
+
+A MoE trainer benchmarked on random token ids is measuring a routing distribution
+no user will ever have — and the error is **against** this kernel. Measured inside
+a real QLoRA finetune (OLMoE-1B-7B, 16 layers / 64 experts, seq 512, LoRA r=8,
+grad checkpointing, e4b 0.17.5 + published wheels), fused vs the per-expert
+dequant-and-project loop, on two architectures
+([receipts](https://github.com/pjordanandrsn/grouped-nf4-gemm/tree/v0.10.0/bench/phase1/results/dequant_forward/leg-e2e),
+[write-up](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.10.0/bench/phase1/results/dequant_forward/RESULTS-e2e-training.md),
+prereg stamped pre-data):
+
+| experts resident | RTX 4090 (sm_89) | H100 (sm_90) |
+|---|---:|---:|
+| **real prose** (wikitext-2) | **4.50×** | **4.75×** |
+| random token ids | 2.75× | 2.81× |
+
+The mechanism is routing, and it is measurable off the live router during the
+timed run: prose hits **98.4%** of experts at **cv 0.687**, random ids only
+**87.5%** at **cv 1.463** — fewer experts, far more unevenly. That is the opposite
+of the intuition that random input spreads load, and it matters because fewer hit
+experts means fewer iterations of exactly the Python loop this kernel replaces.
+The fiction flatters the baseline. Prose routing reproduces across both cards to
+the third decimal (0.984, cv 0.686/0.687), as it should — routing is a property
+of model and data, not silicon; the random-id cells sit a little apart
+(0.875/1.463 vs 0.883/1.471), which is bf16 non-determinism flipping marginal
+routing decisions on inputs that carry no real structure to route on.
+
+Under expert offload the same cells read 2.53×/4.06× (prose) and 1.81×/2.38×
+(random): host↔device streaming is paid by both arms and compresses the ratio.
+Which makes the honest note about our own prior number: `dgrad-gate`'s **1.99×**
+for OLMoE was measured with random ids *and* offload, and it replicates here at
+1.81×/2.38× — but it understated the same kernel on the same model by more than
+half, purely through the fixture.
+
+**What this does not claim.** The baseline is experts4bit-qlora's own per-expert
+loop, not any third party's implementation. **Peak VRAM does not improve** — the
+fused arms peak *higher* (5.31 → 5.65/5.87 GB), and a self-pair of the reference
+arm against itself varied peak by 1.33× on identical work, so every peak
+difference at this scale is allocator noise; only the ~1.9× *transient* (the
+bytes held across forward-to-backward) is real, and it does not reach peak.
+Absolute s/step is not comparable across the two rented hosts, because the
+per-expert loop is host-bound and their CPUs differ; only within-host ratios are
+reported. All eight self-pairs landed in 0.967–1.032. One model, 24 steps, seq
+512 — steps are cheaper, which is not a claim that the adapter trains to a
+better model.
+
 ## The NVMe tier: compute on packed bytes that never fit in RAM (0.2.5 / 0.2.6)
 
 `nvme_arena` relocates a checkpoint's per-expert tensors into an expert-major
