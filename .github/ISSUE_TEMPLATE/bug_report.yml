@@ -1,0 +1,68 @@
+name: Bug report
+description: Something raises, hangs, corrupts, or returns the wrong values.
+title: "[bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        For a number that does not reproduce, use "A published number does not
+        reproduce" instead — it asks for the fields that make a timing report
+        usable.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Include the full traceback if there is one, not just the last line.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: >-
+        The smallest thing that shows it. Shapes matter here more than most
+        places — expert count, K, N, and how many rows per group.
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: >-
+        GPU and compute capability, driver, torch, triton, and the package
+        version. `python -c "import torch, nf4_grouped; print(torch.__version__,
+        torch.cuda.get_device_name(0), torch.cuda.get_device_capability(0))"`
+      render: shell
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface
+      options:
+        - fused GEMM (gemm_4bit_grouped / dgrad_4bit_grouped)
+        - MXFP4 native lane
+        - training (nf4_qlora / mxfp4_qlora)
+        - NVMe arena / residency
+        - provenance / verification
+        - packaging or install
+        - not sure
+    validations:
+      required: true
+  - type: checkboxes
+    id: checked
+    attributes:
+      label: Before filing
+      options:
+        - label: >-
+            I checked this is not the documented CPU limitation (the fused GEMM
+            is CUDA-only and says so loudly; `nf4_pack_ref` imports triton,
+            which is Linux-only today)
+          required: false
+        - label: >-
+            If it is a wrong-values report, I compared against `dequant_ref` —
+            the pure-torch oracle — rather than against another accelerated lane
+          required: false
