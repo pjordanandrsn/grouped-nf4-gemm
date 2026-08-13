@@ -1,0 +1,275 @@
++ PY=
++ for c in python3.12 python3.11 python3 python
++ command -v python3.12
++ python3.12 -c 'import torch'
++ PY=python3.12
++ break
++ '[' -z python3.12 ']'
++ echo PY=python3.12
+PY=python3.12
++ python3.12 -c 'import torch;print('\''TORCH'\'',torch.__version__,torch.version.cuda)'
+TORCH 2.8.0+cu128 12.8
++ python3.12 -c 'import torch;print('\''GPU'\'',torch.cuda.get_device_name(0),torch.cuda.get_device_capability())'
+GPU NVIDIA GeForce RTX 4090 (8, 9)
++ command -v gcc
++ cd /root
++ rm -rf h2h
++ mkdir h2h
++ tar xzf /root/gnf4-h2h.tgz -C h2h
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+++ python3.12 -
++ TV=0.23.0
++ '[' -n 0.23.0 ']'
++ python3.12 -m pip install -q --no-cache-dir --index-url https://download.pytorch.org/whl/cu128 torchvision==0.23.0
++ tail -3
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+++ python3.12 -c 'import torch;v=torch.__version__.split('\''+'\'')[0].replace('\''.'\'','\'''\'');print(v[:3])'
++ TORCH_TAG=280
++ python3.12 -m pip install -q --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu128 'unsloth[cu128-torch280]'
++ tail -8
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+
+[notice] A new release of pip is available: 26.1.2 -> 26.2.1
+[notice] To update, run: python3.12 -m pip install --upgrade pip
++ python3.12 -m pip install -q --no-cache-dir bitsandbytes
++ tail -2
+[notice] A new release of pip is available: 26.1.2 -> 26.2.1
+[notice] To update, run: python3.12 -m pip install --upgrade pip
++ python3.12 -c 'import unsloth;print('\''UNSLOTH'\'',unsloth.__version__)'
++ tail -2
+🦥 Unsloth Zoo will now patch everything to make training faster!
+UNSLOTH 2026.8.15
++ python3.12 -
++ tail -3
+🦥 Unsloth: Will patch your computer to enable 2x faster free finetuning.
+🦥 Unsloth Zoo will now patch everything to make training faster!
+TMA_LIVE False
++ cd /root/h2h
++ python3.12 bench/phase1/validate_unsloth_native.py --models OLMoE --out /root/h2h-out/wiring_gate.json
++ tail -25
+  "b_rel_unsloth_4bit": 0.0022461272750481623,
+  "b_rel_unsloth_bf16": 0.0022461272750481623,
+  "b_rel_fused": 0.0016658579946689663,
+  "b_rel_dequant": 0.0022461262863873715,
+  "G2_PASS": true,
+  "max_abs_delta_4bit_vs_bf16": 0.0,
+  "G3_PASS": true
+}
+{
+  "model": "allenai/OLMoE-1B-7B-0924",
+  "proj": "down",
+  "N": 2048,
+  "K": 1024,
+  "regime": "prefill_s2048",
+  "b_rel_unsloth_4bit": 0.002226872534972607,
+  "b_rel_unsloth_bf16": 0.002226872534972607,
+  "b_rel_fused": 0.0016980610545275117,
+  "b_rel_dequant": 0.002226872534972607,
+  "G2_PASS": true,
+  "max_abs_delta_4bit_vs_bf16": 0.0,
+  "G3_PASS": true
+}
+
+VERDICT: PASS
+wrote /root/h2h-out/wiring_gate.json
++ grep -q '"VERDICT": "PASS"' /root/h2h-out/wiring_gate.json
++ python3.12 -m pytest -q kernel/test_nf4_grouped.py
++ tail -5
++ cat /root/h2h-out/suite.txt
+/usr/bin/python3.12: No module named pytest
++ BACKENDS='fused_nf4 unsloth_native unsloth_native_bf16 unsloth dequant_grouped fused_nf4_selfpair'
++ REGIMES='decode_bs1 decode_m8 prefill_s2048'
++ for rep in 1 2 3
++ tail -40
++ python3.12 bench/phase1/harness.py --regimes decode_bs1 decode_m8 prefill_s2048 --backends fused_nf4 unsloth_native unsloth_native_bf16 unsloth dequant_grouped fused_nf4_selfpair --iters 100 --out /root/h2h-out/h2h_rep1.json
+    prefill_s2048 fused_nf4_selfpair    1.471 ms 11134670.7 tok/s  err 1.70e-03
+== openai/gpt-oss-120b gate_up N=5760 K=2880 E=128 k=4
+       decode_bs1 fused_nf4           0.184 ms    21701.4 tok/s  err 1.68e-03
+       decode_bs1 unsloth_native      0.850 ms     4706.3 tok/s  err 2.27e-03
+       decode_bs1 unsloth_native_bf16    0.303 ms    13196.8 tok/s  err 2.27e-03
+       decode_bs1 unsloth          skipped: no unsloth grouped path ran; probed: unsloth_zoo.moe_utils: import ModuleNotFoun
+       decode_bs1 dequant_grouped     0.257 ms    15593.8 tok/s  err 2.27e-03
+       decode_bs1 fused_nf4_selfpair    0.183 ms    21822.6 tok/s  err 1.68e-03
+        decode_m8 fused_nf4           0.319 ms   100160.3 tok/s  err 1.70e-03
+        decode_m8 unsloth_native      0.846 ms    37806.5 tok/s  err 2.22e-03
+        decode_m8 unsloth_native_bf16    0.305 ms   104865.8 tok/s  err 2.22e-03
+        decode_m8 unsloth          skipped: no unsloth grouped path ran; probed: unsloth_zoo.moe_utils: import ModuleNotFoun
+        decode_m8 dequant_grouped     0.265 ms   120656.4 tok/s  err 2.22e-03
+        decode_m8 fused_nf4_selfpair    0.329 ms    97200.6 tok/s  err 1.70e-03
+    prefill_s2048 fused_nf4           5.915 ms  1384929.1 tok/s  err 1.70e-03
+    prefill_s2048 unsloth_native     20.507 ms   399471.3 tok/s  err 2.23e-03
+    prefill_s2048 unsloth_native_bf16    4.980 ms  1644911.2 tok/s  err 2.23e-03
+    prefill_s2048 unsloth          skipped: no unsloth grouped path ran; probed: unsloth_zoo.moe_utils: import ModuleNotFoun
+    prefill_s2048 dequant_grouped     7.748 ms  1057296.4 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4_selfpair    5.943 ms  1378478.5 tok/s  err 1.70e-03
+== openai/gpt-oss-120b down N=2880 K=2880 E=128 k=4
+       decode_bs1 fused_nf4           0.177 ms    22579.5 tok/s  err 1.68e-03
+       decode_bs1 unsloth_native      0.534 ms     7497.6 tok/s  err 2.22e-03
+       decode_bs1 unsloth_native_bf16    0.214 ms    18690.2 tok/s  err 2.22e-03
+       decode_bs1 unsloth          skipped: no unsloth grouped path ran; probed: unsloth_zoo.moe_utils: import ModuleNotFoun
+       decode_bs1 dequant_grouped     0.232 ms    17208.2 tok/s  err 2.22e-03
+       decode_bs1 fused_nf4_selfpair    0.179 ms    22321.4 tok/s  err 1.68e-03
+        decode_m8 fused_nf4           0.281 ms   114051.1 tok/s  err 1.70e-03
+        decode_m8 unsloth_native      0.535 ms    59865.9 tok/s  err 2.22e-03
+        decode_m8 unsloth_native_bf16    0.213 ms   150240.4 tok/s  err 2.22e-03
+        decode_m8 unsloth          skipped: no unsloth grouped path ran; probed: unsloth_zoo.moe_utils: import ModuleNotFoun
+        decode_m8 dequant_grouped     0.245 ms   130497.2 tok/s  err 2.22e-03
+        decode_m8 fused_nf4_selfpair    0.278 ms   114909.5 tok/s  err 1.70e-03
+    prefill_s2048 fused_nf4           3.124 ms  2622185.1 tok/s  err 1.70e-03
+    prefill_s2048 unsloth_native     10.427 ms   785623.1 tok/s  err 2.23e-03
+    prefill_s2048 unsloth_native_bf16    2.597 ms  3154574.2 tok/s  err 2.23e-03
+    prefill_s2048 unsloth          skipped: no unsloth grouped path ran; probed: unsloth_zoo.moe_utils: import ModuleNotFoun
+    prefill_s2048 dequant_grouped     8.067 ms  1015550.6 tok/s  err 2.86e-03
+    prefill_s2048 fused_nf4_selfpair    3.126 ms  2620373.4 tok/s  err 1.70e-03
+receipts -> /root/h2h-out/h2h_rep1.json (144 cells)
++ echo 'REP1_DONE rc=0'
+REP1_DONE rc=0
++ sync
++ for rep in 1 2 3
++ python3.12 bench/phase1/harness.py --regimes decode_bs1 decode_m8 prefill_s2048 --backends fused_nf4 unsloth_native unsloth_native_bf16 unsloth dequant_grouped fused_nf4_selfpair --iters 100 --out /root/h2h-out/h2h_rep2.json
++ tail -40
+    prefill_s2048 fused_nf4_selfpair    1.470 ms 11142546.0 tok/s  err 1.70e-03
+== openai/gpt-oss-120b gate_up N=5760 K=2880 E=128 k=4
+       decode_bs1 fused_nf4           0.183 ms    21809.3 tok/s  err 1.68e-03
+       decode_bs1 unsloth_native      0.842 ms     4752.1 tok/s  err 2.27e-03
+       decode_bs1 unsloth_native_bf16    0.300 ms    13331.9 tok/s  err 2.27e-03
+       decode_bs1 unsloth          skipped: no unsloth grouped path ran; probed: unsloth_zoo.moe_utils: import ModuleNotFoun
+       decode_bs1 dequant_grouped     0.251 ms    15943.9 tok/s  err 2.27e-03
+       decode_bs1 fused_nf4_selfpair    0.182 ms    21945.2 tok/s  err 1.68e-03
+        decode_m8 fused_nf4           0.371 ms    86206.9 tok/s  err 1.70e-03
+        decode_m8 unsloth_native      0.847 ms    37789.3 tok/s  err 2.22e-03
+        decode_m8 unsloth_native_bf16    0.306 ms   104712.0 tok/s  err 2.22e-03
+        decode_m8 unsloth          skipped: no unsloth grouped path ran; probed: unsloth_zoo.moe_utils: import ModuleNotFoun
+        decode_m8 dequant_grouped     0.258 ms   124007.9 tok/s  err 2.22e-03
+        decode_m8 fused_nf4_selfpair    0.316 ms   101132.7 tok/s  err 1.70e-03
+    prefill_s2048 fused_nf4           5.919 ms  1384083.1 tok/s  err 1.70e-03
+    prefill_s2048 unsloth_native     20.504 ms   399540.5 tok/s  err 2.23e-03
+    prefill_s2048 unsloth_native_bf16    4.977 ms  1645937.1 tok/s  err 2.23e-03
+    prefill_s2048 unsloth          skipped: no unsloth grouped path ran; probed: unsloth_zoo.moe_utils: import ModuleNotFoun
+    prefill_s2048 dequant_grouped     7.743 ms  1057921.2 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4_selfpair    5.927 ms  1382181.2 tok/s  err 1.70e-03
+== openai/gpt-oss-120b down N=2880 K=2880 E=128 k=4
+       decode_bs1 fused_nf4           0.176 ms    22710.8 tok/s  err 1.68e-03
+       decode_bs1 unsloth_native      0.513 ms     7796.9 tok/s  err 2.22e-03
+       decode_bs1 unsloth_native_bf16    0.208 ms    19242.6 tok/s  err 2.22e-03
+       decode_bs1 unsloth          skipped: no unsloth grouped path ran; probed: unsloth_zoo.moe_utils: import ModuleNotFoun
+       decode_bs1 dequant_grouped     0.305 ms    13130.3 tok/s  err 2.22e-03
+       decode_bs1 fused_nf4_selfpair    0.177 ms    22579.5 tok/s  err 1.68e-03
+        decode_m8 fused_nf4           0.274 ms   116611.3 tok/s  err 1.70e-03
+        decode_m8 unsloth_native      0.644 ms    49682.0 tok/s  err 2.22e-03
+        decode_m8 unsloth_native_bf16    0.210 ms   152068.1 tok/s  err 2.22e-03
+        decode_m8 unsloth          skipped: no unsloth grouped path ran; probed: unsloth_zoo.moe_utils: import ModuleNotFoun
+        decode_m8 dequant_grouped     0.258 ms   124023.3 tok/s  err 2.22e-03
+        decode_m8 fused_nf4_selfpair    0.264 ms   121124.0 tok/s  err 1.70e-03
+    prefill_s2048 fused_nf4           3.124 ms  2622091.2 tok/s  err 1.70e-03
+    prefill_s2048 unsloth_native     10.430 ms   785391.7 tok/s  err 2.23e-03
+    prefill_s2048 unsloth_native_bf16    2.594 ms  3158310.4 tok/s  err 2.23e-03
+    prefill_s2048 unsloth          skipped: no unsloth grouped path ran; probed: unsloth_zoo.moe_utils: import ModuleNotFoun
+    prefill_s2048 dequant_grouped     8.310 ms   985767.9 tok/s  err 2.86e-03
+    prefill_s2048 fused_nf4_selfpair    3.143 ms  2606725.6 tok/s  err 1.70e-03
+receipts -> /root/h2h-out/h2h_rep2.json (144 cells)
++ echo 'REP2_DONE rc=0'
+REP2_DONE rc=0
++ sync
++ for rep in 1 2 3
++ python3.12 bench/phase1/harness.py --regimes decode_bs1 decode_m8 prefill_s2048 --backends fused_nf4 unsloth_native unsloth_native_bf16 unsloth dequant_grouped fused_nf4_selfpair --iters 100 --out /root/h2h-out/h2h_rep3.json
++ tail -40
+    prefill_s2048 fused_nf4_selfpair    1.551 ms 10564542.7 tok/s  err 1.70e-03
+== openai/gpt-oss-120b gate_up N=5760 K=2880 E=128 k=4
+       decode_bs1 fused_nf4           0.184 ms    21792.2 tok/s  err 1.68e-03
+       decode_bs1 unsloth_native      0.849 ms     4712.0 tok/s  err 2.27e-03
+       decode_bs1 unsloth_native_bf16    0.302 ms    13241.5 tok/s  err 2.27e-03
+       decode_bs1 unsloth          skipped: no unsloth grouped path ran; probed: unsloth_zoo.moe_utils: import ModuleNotFoun
+       decode_bs1 dequant_grouped     0.259 ms    15439.7 tok/s  err 2.27e-03
+       decode_bs1 fused_nf4_selfpair    0.183 ms    21881.8 tok/s  err 1.68e-03
+        decode_m8 fused_nf4           0.334 ms    95858.9 tok/s  err 1.70e-03
+        decode_m8 unsloth_native      0.849 ms    37697.4 tok/s  err 2.22e-03
+        decode_m8 unsloth_native_bf16    0.367 ms    87168.8 tok/s  err 2.22e-03
+        decode_m8 unsloth          skipped: no unsloth grouped path ran; probed: unsloth_zoo.moe_utils: import ModuleNotFoun
+        decode_m8 dequant_grouped     0.288 ms   111210.0 tok/s  err 2.22e-03
+        decode_m8 fused_nf4_selfpair    0.341 ms    93733.9 tok/s  err 1.70e-03
+    prefill_s2048 fused_nf4           5.928 ms  1381811.9 tok/s  err 1.70e-03
+    prefill_s2048 unsloth_native     20.543 ms   398773.8 tok/s  err 2.23e-03
+    prefill_s2048 unsloth_native_bf16    5.000 ms  1638337.1 tok/s  err 2.23e-03
+    prefill_s2048 unsloth          skipped: no unsloth grouped path ran; probed: unsloth_zoo.moe_utils: import ModuleNotFoun
+    prefill_s2048 dequant_grouped     7.918 ms  1034598.4 tok/s  err 2.23e-03
+    prefill_s2048 fused_nf4_selfpair    5.932 ms  1380872.7 tok/s  err 1.70e-03
+== openai/gpt-oss-120b down N=2880 K=2880 E=128 k=4
+       decode_bs1 fused_nf4           0.220 ms    18212.3 tok/s  err 1.68e-03
+       decode_bs1 unsloth_native      0.546 ms     7329.4 tok/s  err 2.22e-03
+       decode_bs1 unsloth_native_bf16    0.223 ms    17909.6 tok/s  err 2.22e-03
+       decode_bs1 unsloth          skipped: no unsloth grouped path ran; probed: unsloth_zoo.moe_utils: import ModuleNotFoun
+       decode_bs1 dequant_grouped     0.250 ms    15970.4 tok/s  err 2.22e-03
+       decode_bs1 fused_nf4_selfpair    0.178 ms    22449.7 tok/s  err 1.68e-03
+        decode_m8 fused_nf4           0.295 ms   108318.9 tok/s  err 1.70e-03
+        decode_m8 unsloth_native      0.549 ms    58302.2 tok/s  err 2.22e-03
+        decode_m8 unsloth_native_bf16    0.210 ms   152439.0 tok/s  err 2.22e-03
+        decode_m8 unsloth          skipped: no unsloth grouped path ran; probed: unsloth_zoo.moe_utils: import ModuleNotFoun
+        decode_m8 dequant_grouped     0.260 ms   123016.4 tok/s  err 2.22e-03
+        decode_m8 fused_nf4_selfpair    0.288 ms   111210.0 tok/s  err 1.70e-03
+    prefill_s2048 fused_nf4           3.134 ms  2613525.0 tok/s  err 1.70e-03
+    prefill_s2048 unsloth_native     10.448 ms   784083.1 tok/s  err 2.23e-03
+    prefill_s2048 unsloth_native_bf16    2.602 ms  3148870.2 tok/s  err 2.23e-03
+    prefill_s2048 unsloth          skipped: no unsloth grouped path ran; probed: unsloth_zoo.moe_utils: import ModuleNotFoun
+    prefill_s2048 dequant_grouped     8.682 ms   943519.7 tok/s  err 2.86e-03
+    prefill_s2048 fused_nf4_selfpair    3.139 ms  2609715.1 tok/s  err 1.70e-03
+receipts -> /root/h2h-out/h2h_rep3.json (144 cells)
++ echo 'REP3_DONE rc=0'
+REP3_DONE rc=0
++ sync
++ echo OK
++ echo H2H_ALL_DONE
+H2H_ALL_DONE

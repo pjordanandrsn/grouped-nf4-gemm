@@ -1,0 +1,178 @@
++ PY=
++ for c in python3.12 python3.11 python3 python
++ command -v python3.12
++ python3.12 -c 'import torch'
++ PY=python3.12
++ break
++ '[' -z python3.12 ']'
++ echo PY=python3.12
+PY=python3.12
++ python3.12 -c 'import torch;print('\''TORCH'\'',torch.__version__,torch.version.cuda)'
+TORCH 2.8.0+cu128 12.8
++ python3.12 -c 'import torch;print('\''GPU'\'',torch.cuda.get_device_name(0),torch.cuda.get_device_capability())'
+GPU NVIDIA H100 80GB HBM3 (9, 0)
++ command -v gcc
++ cd /root
++ rm -rf h2h
++ mkdir h2h
++ tar xzf /root/gnf4-h2h.tgz -C h2h
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+++ python3.12 -
++ TV=0.23.0
++ '[' -n 0.23.0 ']'
++ python3.12 -m pip install -q --no-cache-dir --index-url https://download.pytorch.org/whl/cu128 torchvision==0.23.0
++ tail -3
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+++ python3.12 -c 'import torch;v=torch.__version__.split('\''+'\'')[0].replace('\''.'\'','\'''\'');print(v[:3])'
++ TORCH_TAG=280
++ python3.12 -m pip install -q --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu128 'unsloth[cu128-torch280]'
++ tail -8
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+
+[notice] A new release of pip is available: 26.1.2 -> 26.2.1
+[notice] To update, run: python3.12 -m pip install --upgrade pip
++ python3.12 -m pip install -q --no-cache-dir bitsandbytes
++ tail -2
+[notice] A new release of pip is available: 26.1.2 -> 26.2.1
+[notice] To update, run: python3.12 -m pip install --upgrade pip
++ python3.12 -m pip install -q --no-cache-dir grouped_gemm
++ tail -2
+[notice] A new release of pip is available: 26.1.2 -> 26.2.1
+[notice] To update, run: python3.12 -m pip install --upgrade pip
++ python3.12 -c 'import grouped_gemm;print('\''PROXY_PKG ok'\'')'
++ tail -1
+PROXY_PKG ok
++ python3.12 -c 'import unsloth;print('\''UNSLOTH'\'',unsloth.__version__)'
++ tail -2
+🦥 Unsloth Zoo will now patch everything to make training faster!
+UNSLOTH 2026.8.15
++ python3.12 -
++ tail -3
+🦥 Unsloth: Will patch your computer to enable 2x faster free finetuning.
+🦥 Unsloth Zoo will now patch everything to make training faster!
+TMA_LIVE True
++ cd /root/h2h
++ python3.12 bench/phase1/validate_unsloth_native.py --models OLMoE --out /root/h2h-out/wiring_gate.json
++ tail -25
+  "b_rel_unsloth_4bit": 0.0022461270472393306,
+  "b_rel_unsloth_bf16": 0.0022461270472393306,
+  "b_rel_fused": 0.0016658579946689663,
+  "b_rel_dequant": 0.0022461270472393306,
+  "G2_PASS": true,
+  "max_abs_delta_4bit_vs_bf16": 0.0,
+  "G3_PASS": true
+}
+{
+  "model": "allenai/OLMoE-1B-7B-0924",
+  "proj": "down",
+  "N": 2048,
+  "K": 1024,
+  "regime": "prefill_s2048",
+  "b_rel_unsloth_4bit": 0.0022268756886403176,
+  "b_rel_unsloth_bf16": 0.0022268756886403176,
+  "b_rel_fused": 0.001697994998238505,
+  "b_rel_dequant": 0.0022268756886403176,
+  "G2_PASS": true,
+  "max_abs_delta_4bit_vs_bf16": 0.0,
+  "G3_PASS": true
+}
+
+VERDICT: PASS
+wrote /root/h2h-out/wiring_gate.json
++ grep -q '"VERDICT": "PASS"' /root/h2h-out/wiring_gate.json
++ python3.12 -m pip install -q --no-cache-dir pytest
++ tail -2
+[notice] A new release of pip is available: 26.1.2 -> 26.2.1
+[notice] To update, run: python3.12 -m pip install --upgrade pip
++ python3.12 -m pytest -q kernel/test_nf4_grouped.py
++ tail -5
++ cat /root/h2h-out/suite.txt
+.................................................                        [100%]
+49 passed in 114.72s (0:01:54)
++ BACKENDS='fused_nf4 unsloth_native unsloth_native_bf16 unsloth dequant_grouped fused_nf4_selfpair'
++ REGIMES='decode_bs1 decode_m8 prefill_s2048'
+++ '[' 1 = 1 ']'
+++ echo
++ '[' -f /root/h2h_backward.py ']'
++ H2H_REPO=/root/h2h
++ H2H_OUT=/root/h2h-out
++ python3.12 /root/h2h_backward.py
++ tail -30
+🦥 Unsloth: Will patch your computer to enable 2x faster free finetuning.
+🦥 Unsloth Zoo will now patch everything to make training faster!
+{"model": "allenai/OLMoE-1B-7B-0924", "proj": "gate_up", "regime": "decode_m8", "N": 2048, "K": 2048, "rank": 16, "g_ref_ms": 3.1197279691696167, "g_kernel_ms_for_ref": 2.7849279642105103, "T1_kernel_over_ref": 1.1202185511660148, "g_ms_for_bf16": 2.7750080823898315, "u_bf16_ms": 3.1340800523757935, "g_ms_for_4bit": 3.019247889518738, "u_4bit_ms": 3.8064799308776855, "g_selfpair": 1.0880140885638674, "u_bf16_over_g": 1.1293949276272846, "u_4bit_over_g": 1.2607377963537902, "status": "ok"}
+{"model": "allenai/OLMoE-1B-7B-0924", "proj": "gate_up", "regime": "prefill_s2048", "N": 2048, "K": 2048, "rank": 16, "g_ref_ms": 16.24631977081299, "g_kernel_ms_for_ref": 11.780720233917236, "T1_kernel_over_ref": 1.3790599766590743, "g_ms_for_bf16": 11.789440155029297, "u_bf16_ms": 4.658735990524292, "g_ms_for_4bit": 11.826159954071045, "u_4bit_ms": 5.650032043457031, "g_selfpair": 1.0031146346695763, "u_bf16_over_g": 0.3951617658907159, "u_4bit_over_g": 0.47775711350090955, "status": "ok"}
+{"model": "allenai/OLMoE-1B-7B-0924", "proj": "down", "regime": "decode_m8", "N": 2048, "K": 1024, "rank": 16, "g_ref_ms": 5.316240072250366, "g_kernel_ms_for_ref": 2.865391969680786, "T1_kernel_over_ref": 1.855327343868634, "g_ms_for_bf16": 2.855520009994507, "u_bf16_ms": 3.0955199003219604, "g_ms_for_4bit": 2.861440062522888, "u_4bit_ms": 3.69484806060791, "g_selfpair": 1.0020731959529825, "u_bf16_over_g": 1.0840477004144389, "u_4bit_over_g": 1.291254745818516, "status": "ok"}
+{"model": "allenai/OLMoE-1B-7B-0924", "proj": "down", "regime": "prefill_s2048", "N": 2048, "K": 1024, "rank": 16, "g_ref_ms": 11.957695960998535, "g_kernel_ms_for_ref": 7.442032098770142, "T1_kernel_over_ref": 1.6067783371929618, "g_ms_for_bf16": 7.3779520988464355, "u_bf16_ms": 3.505776047706604, "g_ms_for_4bit": 7.932495832443237, "u_4bit_ms": 4.641056060791016, "g_selfpair": 1.0751622843530668, "u_bf16_over_g": 0.4751692611632356, "u_4bit_over_g": 0.585068830645897, "status": "ok"}
+{"model": "Qwen/Qwen3-30B-A3B", "proj": "gate_up", "regime": "decode_m8", "N": 1536, "K": 2048, "rank": 16, "g_ref_ms": 5.322128057479858, "g_kernel_ms_for_ref": 2.931280016899109, "T1_kernel_over_ref": 1.815632770256435, "g_ms_for_bf16": 2.919808030128479, "u_bf16_ms": 1.8621919751167297, "g_ms_for_4bit": 1.8043040037155151, "u_4bit_ms": 2.9752320051193237, "g_selfpair": 0.617952956186685, "u_bf16_over_g": 0.6377789073464493, "u_4bit_over_g": 1.6489638104180746, "status": "ok"}
+{"model": "Qwen/Qwen3-30B-A3B", "proj": "gate_up", "regime": "prefill_s2048", "N": 1536, "K": 2048, "rank": 16, "g_ref_ms": 22.246527671813965, "g_kernel_ms_for_ref": 10.732367992401123, "T1_kernel_over_ref": 2.0728442863276078, "g_ms_for_bf16": 10.709487915039062, "u_bf16_ms": 4.902992010116577, "g_ms_for_4bit": 10.407855987548828, "u_4bit_ms": 7.268223762512207, "g_selfpair": 0.9718350746662069, "u_bf16_over_g": 0.4578175958564209, "u_4bit_over_g": 0.698340154899084, "status": "ok"}
+{"model": "Qwen/Qwen3-30B-A3B", "proj": "down", "regime": "decode_m8", "N": 2048, "K": 768, "rank": 16, "g_ref_ms": 4.320863962173462, "g_kernel_ms_for_ref": 2.610751986503601, "T1_kernel_over_ref": 1.6550265917675677, "g_ms_for_bf16": 2.6103360652923584, "u_bf16_ms": 2.337488055229187, "g_ms_for_4bit": 1.7943999767303467, "u_4bit_ms": 2.201743960380554, "g_selfpair": 0.6874210568474728, "u_bf16_over_g": 0.8954739913794922, "u_4bit_over_g": 1.227008464630303, "status": "ok"}
+{"model": "Qwen/Qwen3-30B-A3B", "proj": "down", "regime": "prefill_s2048", "N": 2048, "K": 768, "rank": 16, "g_ref_ms": 23.704383850097656, "g_kernel_ms_for_ref": 7.570623874664307, "T1_kernel_over_ref": 3.1311004538775538, "g_ms_for_bf16": 7.55187201499939, "u_bf16_ms": 4.793040037155151, "g_ms_for_4bit": 7.879967927932739, "u_4bit_ms": 6.258016109466553, "g_selfpair": 1.043445640005775, "u_bf16_over_g": 0.6346823711571519, "u_4bit_over_g": 0.7941677132064552, "status": "ok"}
+{"model": "google/gemma-4-26B-A4B", "proj": "gate_up", "regime": "decode_m8", "N": 1408, "K": 2816, "rank": 16, "g_ref_ms": 6.259520053863525, "g_kernel_ms_for_ref": 3.434720039367676, "T1_kernel_over_ref": 1.822425112416408, "g_ms_for_bf16": 3.417215943336487, "u_bf16_ms": 2.887071967124939, "g_ms_for_4bit": 3.1714080572128296, "u_4bit_ms": 4.27241587638855, "g_selfpair": 0.928067792554059, "u_bf16_over_g": 0.844860850176788, "u_4bit_over_g": 1.3471668732983335, "status": "ok"}
+{"model": "google/gemma-4-26B-A4B", "proj": "gate_up", "regime": "prefill_s2048", "N": 1408, "K": 2816, "rank": 16, "g_ref_ms": 26.16086483001709, "g_kernel_ms_for_ref": 12.529856204986572, "T1_kernel_over_ref": 2.087882287077302, "g_ms_for_bf16": 12.653200149536133, "u_bf16_ms": 5.350847959518433, "g_ms_for_4bit": 12.542288303375244, "u_4bit_ms": 7.856767892837524, "g_selfpair": 0.991234482593326, "u_bf16_over_g": 0.4228849537098799, "u_4bit_over_g": 0.6264222048478344, "status": "ok"}
+{"model": "google/gemma-4-26B-A4B", "proj": "down", "regime": "decode_m8", "N": 2816, "K": 704, "rank": 16, "g_ref_ms": 6.072864055633545, "g_kernel_ms_for_ref": 3.095840096473694, "T1_kernel_over_ref": 1.961620712436285, "g_ms_for_bf16": 3.1897120475769043, "u_bf16_ms": 3.249184012413025, "g_ms_for_4bit": 2.9230239391326904, "u_4bit_ms": 3.760655999183655, "g_selfpair": 0.9163911649495741, "u_bf16_over_g": 1.018644932191073, "u_4bit_over_g": 1.286563530608478, "status": "ok"}
+{"model": "google/gemma-4-26B-A4B", "proj": "down", "regime": "prefill_s2048", "N": 2816, "K": 704, "rank": 16, "g_ref_ms": 23.435775756835938, "g_kernel_ms_for_ref": 8.06987190246582, "T1_kernel_over_ref": 2.9041075298450436, "g_ms_for_bf16": 7.266463994979858, "u_bf16_ms": 5.313503980636597, "g_ms_for_4bit": 7.374783992767334, "u_4bit_ms": 6.98089599609375, "g_selfpair": 1.0149068374745007, "u_bf16_over_g": 0.7312365387494534, "u_4bit_over_g": 0.9465898937433447, "status": "ok"}
+{"model": "openai/gpt-oss-120b", "proj": "gate_up", "regime": "decode_m8", "N": 5760, "K": 2880, "rank": 16, "g_ref_ms": 4.768608093261719, "g_kernel_ms_for_ref": 3.192720055580139, "T1_kernel_over_ref": 1.4935879157107088, "g_ms_for_bf16": 3.209679961204529, "u_bf16_ms": 2.8674880266189575, "g_ms_for_4bit": 3.051584005355835, "u_4bit_ms": 3.574176073074341, "g_selfpair": 0.9507440125621236, "u_bf16_over_g": 0.8933875218957489, "u_4bit_over_g": 1.1712527221276898, "status": "ok"}
+{"model": "openai/gpt-oss-120b", "proj": "gate_up", "regime": "prefill_s2048", "N": 5760, "K": 2880, "rank": 16, "g_ref_ms": 87.7706069946289, "g_kernel_ms_for_ref": 16.213279724121094, "T1_kernel_over_ref": 5.413501061358322, "g_ms_for_bf16": 16.21009635925293, "u_bf16_ms": 11.098527908325195, "g_ms_for_4bit": 16.208688735961914, "u_4bit_ms": 16.870031356811523, "g_selfpair": 0.999913163792502, "u_bf16_over_g": 0.6846676085296689, "u_4bit_over_g": 1.0408017348980427, "status": "ok"}
+{"model": "openai/gpt-oss-120b", "proj": "down", "regime": "decode_m8", "N": 2880, "K": 2880, "rank": 16, "g_ref_ms": 3.8702080249786377, "g_kernel_ms_for_ref": 3.138896107673645, "T1_kernel_over_ref": 1.232983791823233, "g_ms_for_bf16": 3.1174240112304688, "u_bf16_ms": 2.632480025291443, "g_ms_for_4bit": 2.9144480228424072, "u_4bit_ms": 3.485904097557068, "g_selfpair": 0.9348898360772087, "u_bf16_over_g": 0.844440799778271, "u_4bit_over_g": 1.1960769484429954, "status": "ok"}
+{"model": "openai/gpt-oss-120b", "proj": "down", "regime": "prefill_s2048", "N": 2880, "K": 2880, "rank": 16, "g_ref_ms": 44.5357608795166, "g_kernel_ms_for_ref": 10.236815929412842, "T1_kernel_over_ref": 4.350548176953599, "g_ms_for_bf16": 10.157279968261719, "u_bf16_ms": 7.113919973373413, "g_ms_for_4bit": 10.328991889953613, "u_4bit_ms": 10.322751998901367, "g_selfpair": 1.0169053055767332, "u_bf16_over_g": 0.7003764783093661, "u_4bit_over_g": 0.9993958857632258, "status": "ok"}
+MEDIAN T1=1.839  u_4bit/g=1.106  u_bf16/g=0.716  self=0.996
+BACKWARD_DONE
++ echo 'BACKWARD rc=0'
+BACKWARD rc=0
++ echo OK
++ echo H2H_ALL_DONE
+H2H_ALL_DONE

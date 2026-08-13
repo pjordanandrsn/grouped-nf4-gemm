@@ -330,15 +330,45 @@ dequantize-then-matmul baseline on the same stacks:
   training, a job it is excellent at; this comparison is the 4-bit-storage
   regime, which both must serve when weights are quantized).
 
-  > ⚠️ **This is not a comparison against Unsloth, and an earlier wording
-  > invited that reading.** Unsloth's own MoE kernel is
+  > ⚠️ **That is an execution class, not Unsloth.** Unsloth's own MoE kernel is
   > `unsloth/kernels/moe/grouped_gemm/interface.py::grouped_gemm`, and the
-  > backend above has never executed it — it returns early on tgale96's
-  > package where that is installed, and raises `TypeError: 'module' object is
-  > not callable` where it is not. The numbers above stand for what they
-  > measure: an execution class, not a vendor. A direct head-to-head against
-  > Unsloth's kernel has since been run on two cards and is not yet published;
-  > until it is, treat any "versus Unsloth" reading of this repo as unsupported.
+  > backend above has never executed it — it returns early on tgale96's package
+  > where that is installed, and raises `TypeError: 'module' object is not
+  > callable` where it is not. **The proxy is also slower than the real thing:
+  > 1.33× at median on an H100 (up to 3.40×), worst on the widest FFNs.** So the
+  > 4.67× above was measured against a weaker opponent than "unsloth's MoE
+  > backend" implies. Superseded by the head-to-head below, not rescaled.
+- **Head-to-head against Unsloth's own kernel** — same pod, same process, arms
+  interleaved with the fused kernel re-timed immediately before each comparator.
+  Unsloth runs with `autotune=True` (their autotuner, their best config per
+  shape) against gnf4's *shipped default*. Protocol
+  [`prereg_unsloth_head_to_head.json`](kernel/prereg_unsloth_head_to_head.json)
+  + amendments, stamped pre-data; full write-up and per-cell matrix in
+  [`RESULTS-unsloth-head-to-head.md`](kernel/RESULTS-unsloth-head-to-head.md).
+  **`H2H_CONFIRMED` on both devices**, in the **4-bit-storage regime**:
+
+  | device | TMA | decode | prefill | J/token |
+  |---|---|---:|---:|---:|
+  | H100 80GB HBM3 (sm_90) | live | **1.70×** | 1.67× | 2.51× better (23/24 cells) |
+  | RTX 4090 (sm_89) | unavailable | **2.79×** | 2.79× | **3.32× better (24/24)** |
+
+  Three things travel with those numbers, and quoting them without these is
+  quoting them wrong:
+  - **The margin is card-dependent.** With Unsloth's TMA path live the decode
+    margin drops from 2.79× to 1.70× — 40% of it. An H100 was rented
+    specifically so their fast path was not compiled out.
+  - **Unsloth wins their own regime.** Against their **bf16-resident** kernel —
+    weights already bf16, nothing to dequantize — they run **2.6–5.3× faster at
+    prefill on the H100**. gnf4's advantage is the 4-bit-storage regime
+    specifically and is *not* a general claim. Their kernel is excellent at the
+    job it was built for.
+  - **It is not a simple decay in M.** Median `unsloth/fused` runs 2.32 → 1.48 →
+    1.67 across `decode_bs1` → `decode_m8` → `prefill` (H100), so the minimum is
+    at `decode_m8`. The advantage tracks how *bandwidth-bound* a cell is, not how
+    small it is.
+
+  Forward pass only. A training-axis leg exists but is **exploratory** and
+  licenses no claim — see the results doc.
 
   Axolotl/PEFT
   QLoRA forwards run bitsandbytes `Linear4bit` — see the flagship bnb

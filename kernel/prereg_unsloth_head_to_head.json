@@ -1,0 +1,82 @@
+{
+  "registered_utc": "2026-08-12T20:10:00Z",
+  "purpose": "HEAD-TO-HEAD vs UNSLOTH'S OWN KERNEL, one box, one process, interleaved. Closes a real gap: every prior 'unsloth' receipt in this repo ran grouped_gemm.ops.gmm (tgale96's standalone package), NOT unsloth's kernel. The README's claim was hedged correctly ('the grouped-bf16-GEMM CLASS that unsloth's MoE backend rides') and named the impl it ran, but it is not a head-to-head, and 'competitive' therefore rested on two sets of self-reported numbers. This protocol measures unsloth.kernels.moe.grouped_gemm.interface.grouped_gemm directly, in the same process, against the shipped fused kernel.",
+
+  "why_the_old_arm_could_never_have_run_it": "Verified empirically on silicon (validate_unsloth_native.py G1), not argued from source. TWO independent reasons, either sufficient: (1) bk_unsloth tries tgale96's grouped_gemm.ops.gmm FIRST and returns on success, so wherever that package is installed - as in the env that banked the v6 comparator receipts - the unsloth probes are never reached; (2) where they ARE reached, getattr(unsloth.kernels.moe, 'grouped_gemm') yields the SUBMODULE rather than a callable, and the call raises TypeError: 'module' object is not callable - observed verbatim in a container without tgale96 installed. NOTE, recorded because this protocol's own discipline demands it: a first draft of this finding attributed the failure to the empty unsloth/kernels/moe/__init__.py making that getattr return None. The file is genuinely 0 bytes, but the inference was WRONG - python binds a submodule onto its parent package on import regardless of __init__ contents. The conclusion survived; the stated mechanism did not, and was corrected before this stamp.",
+
+  "frozen_commit": "the commit carrying this file. No code/config/harness/reducer change between this stamp and reported results.",
+
+  "prior_work_disclosure": "A wiring/correctness gate (bench/phase1/validate_unsloth_native.py) ran BEFORE this stamp on the QNAP A2000, verdict PASS on 8 cells (OLMoE + Qwen3-30B x {gate_up, down} x {decode_bs1, prefill_s2048}). It produced NO timing data of any kind — three gates only: (G1) the old backend demonstrably does not run unsloth's kernel and the new entry resolves, (G2) numeric agreement vs the fp64 reference, (G3) the 4-bit and bf16-resident arms return BIT-IDENTICAL values (max|delta| = 0.0 on every cell). The A2000 is a correctness-only testbed by operator instruction (2026-07-27); no TIMING claim in this protocol may cite it. Numeric agreement is not contention-sensitive, so the fidelity numbers ARE citable and are disclosed here rather than presented later as if fresh: fused b_rel 0.00166-0.00170 vs unsloth 0.00220-0.00225 across all 8 cells, i.e. fused ~0.75x the error, consistent with this repo's standing fp32-accumulation fidelity claim. That observation is EXPLORATORY at this point and does not discharge Q1, which is re-measured on the rented devices. The TIMING registration window is intact: no arm has been timed anywhere.",
+
+  "arms": {
+    "fused_nf4": "gnf4's shipped kernel, gemm_4bit_grouped, SHIPPED DEFAULT config. No per-shape tuning.",
+    "unsloth_native": "unsloth.kernels.moe.grouped_gemm.interface.grouped_gemm, 4-BIT STORAGE: the dequant to bf16 is INSIDE the timed region because their GEMM consumes bf16 and a 4-bit checkpoint must be materialized once per forward per layer to feed it. This is the apples-to-apples cell.",
+    "unsloth_native_bf16": "The same unsloth kernel, BF16-RESIDENT: weights already bf16, nothing dequantized, stack materialized once and cached. gnf4 does not compete in this regime at all. This is unsloth's CEILING and is reported, not barred.",
+    "unsloth": "RETAINED UNCHANGED: the old tgale96 proxy backend. Kept as an arm specifically to MEASURE how far the proxy misrepresented unsloth's real kernel, which is the quantitative form of the correction this repo owes.",
+    "dequant_grouped": "The e4b product path. Retained as the anchor that ties this run to every prior result-set in the repo."
+  },
+
+  "handicaps_registered_in_unsloths_favour": [
+    "unsloth's kernel runs with autotune=True: THEIR autotuner picks THEIR best config per shape. The fused kernel runs its shipped default with no per-shape tuning. This is deliberate and asymmetric in their favour.",
+    "One device is an H100 (sm_90) specifically so unsloth's TMA path is LIVE. TMA gates on torch.cuda.get_device_capability()[0] >= 9 (interface.py::_check_tma_support). Benchmarking only on Ampere/Ada would measure their kernel with its fast path compiled out, and the result would deserve to be dismissed.",
+    "The bf16-resident arm gets strongest-self treatment (stack materialized once, cached), symmetric with the fused op's cached assembly.",
+    "Dequant is charged to unsloth ONLY in the 4-bit-storage cell, where it is genuinely unavoidable, and never in the bf16-resident cell."
+  ],
+
+  "protocol": {
+    "devices": "TWO rented cards, both required for any verdict (two-card rule: nothing ships on one card's evidence). D1 = H100 (sm_90, TMA available). D2 = consumer/prosumer sm_86-89 (TMA unavailable) - the class most users run and where this repo's prior claims live. QNAP/A2000 is EXCLUDED from timing entirely.",
+    "regimes": "decode_bs1 (M=1), decode_m8 (batched decode), prefill_s2048 (wide M). Registered because unsloth's kernel and gnf4's both dispatch differently across the M axis; a single-regime result would not support any general statement.",
+    "shapes": "The 8 census cells (OLMoE, Qwen3-30B, Gemma-4-26B, GPT-OSS-120B x {gate_up, down}), unchanged from every prior result-set in this repo.",
+    "pairing": "PAIRED and INTERLEAVED. fused_nf4 is re-timed immediately before each comparator and the ratio taken per pair, median over reps. Unpaired sweeps on a drifting box have reported the default config as 1.283x faster than itself.",
+    "reps": "n=3 fresh-process reps per device. Property suite once per device.",
+    "reduction": "Cell value = median across reps of the per-rep paired ratio. Worst-rep reported alongside."
+  },
+
+  "frozen_verdict_criteria_params": {
+    "p1_min_cells": 7,
+    "p1_total_cells": 8,
+    "p1_bar": 1.0,
+    "p1_predicted_median_band": [2.0, 6.0],
+    "p2_min_cells": 5,
+    "p2_total_cells": 8,
+    "p2_bar": 1.0,
+    "p2_predicted_median_band": [1.2, 3.0],
+    "q1_fidelity_bar": "fused b_rel <= 2x dequant path's b_rel, all cells",
+    "q2_self_pair_band": [0.97, 1.03],
+    "suite_expect": "44/44"
+  },
+
+  "frozen_verdict_criteria": {
+    "P1_decode_4bit": "PRIMARY. In the 4-bit-storage regime at decode (decode_bs1 + decode_m8), paired unsloth_native/fused_nf4 >= 1.0 on at least 7 of 8 census cells, ON BOTH DEVICES. Predicted median ratio 2.0-6.0x. A median outside that band is a MISS of the prediction even if the >=1.0 bar is met, and is reported as such.",
+
+    "P2_prefill_4bit": "In the 4-bit-storage regime at prefill_s2048, paired unsloth_native/fused_nf4 >= 1.0 on at least 5 of 8 census cells, on both devices. Predicted median 1.2-3.0x. Registered lower than P1 because prefill is compute-bound, which is unsloth's kernel's design point and not the regime this repo's roofline ever claimed.",
+
+    "P3_bf16_ceiling": "REPORT ONLY, NOT BARRED. unsloth_native_bf16 vs fused_nf4, all regimes. gnf4 does not serve the bf16-resident regime, so no bar can be fair. PREDICTED, so it is not unfalsifiable: unsloth_bf16 BEATS fused at prefill on a majority of cells, and is within 0.5-1.5x at decode. Reported at full volume whichever way it lands. If unsloth_bf16 beats fused everywhere including decode, that is a material fact about where this kernel's advantage actually comes from and it gets stated plainly.",
+
+    "P4_proxy_error": "REPORT ONLY. Ratio unsloth(tgale96 proxy)/unsloth_native per cell. This QUANTIFIES how wrong the old comparator was. Whatever it shows is published, including if it shows the prior README numbers flattered the fused kernel. No bar, because there is no outcome here that would be a 'failure' - only a correction of known size.",
+
+    "Q1_fidelity": "GATE. Property suite 44/44 on both devices, and fused b_rel <= 2x the dequant path's on every cell. Fails => the speed table is void, not merely narrowed: a wrong kernel's timing is meaningless.",
+
+    "Q2_self_pair": "GATE. fused_nf4 timed against itself must read within [0.97, 1.03] per device. Outside that band the run is VOID (instrument broken), NOT 'failed' - and is re-run rather than reported.",
+
+    "Q3_engagement": "GATE, POSITIVE CONTROL. The receipt's IMPL_NOTE for unsloth_native must name the native entry path, AND env.unsloth_native.supports_tma must be TRUE on D1 (H100) and FALSE on D2. This gate exists because THE ENTIRE REASON THIS PROTOCOL IS NECESSARY is that a comparator silently never fired for months. An arm that does not demonstrably engage does not get scored. A gate whose control is uninstrumented is not a gate.",
+
+    "E1_energy": "REPORT ONLY. J/token per arm per cell, via the harness's existing pynvml sampler.",
+
+    "verdict_key": "H2H_CONFIRMED = P1 AND P2 AND Q1 AND Q2 AND Q3, on BOTH devices. P3/P4/E1 are reported and never enter the verdict."
+  },
+
+  "exploratory_leg_cannot_change_verdict": {
+    "backward": "unsloth's grouped_gemm is an autograd Function with dX and dW; gnf4's training path (kernel/nf4_qlora.py) is QLoRA-shaped - frozen 4-bit base, so dX + LoRA grads and NO dW. The arms are therefore STRUCTURALLY ASYMMETRIC and a raw ratio between them would be misleading. Registered EXPLORATORY: measured on the same pod at ~zero marginal cost, reported with the asymmetry stated, and explicitly BARRED from the verdict. It is not evidence for any training claim; it scopes whether a future registered training protocol is worth building.",
+    "rule": "No exploratory number may be quoted without its exploratory label, and none may be used to rescue a failed confirmatory criterion."
+  },
+
+  "exclusions_and_stop_rules": {
+    "not_run": "A cell whose stack does not fit a device is recorded NOT-RUN with the reason. Never silently dropped, never backfilled from the other device.",
+    "cross_run": "Only WITHIN-RUN ratios transfer. No number measured on one pod may be divided by a number from another pod. This repo has broken this rule once (#22's 22.21 GB/s carried across pods) and it produced a faster-than-light result.",
+    "no_tune_clause": "Failures are reported at full volume and the claim is narrowed. No re-tuning of the fused kernel, no re-running for a better number, no post-hoc arm changes. If unsloth's kernel wins a cell, that cell is published as a loss.",
+    "bill_cap": "Hard $35/job standing cap. Session-independent teardown watcher on the mini, evidence-first, continuous receipt pull, teardown verified by re-query (204 then 404)."
+  },
+
+  "what_would_falsify_the_claim": "If unsloth_native beats fused_nf4 at decode in the 4-bit-storage regime on either device, the repo's central decode claim does not survive contact with the real comparator and the README says so. That is the outcome this protocol is built to be capable of producing."
+}

@@ -1,0 +1,142 @@
+{
+  "gpu": "NVIDIA RTX A2000 12GB",
+  "capability": "8.6",
+  "torch": "2.8.0+cu128",
+  "NOTE": "correctness/wiring only \u2014 this box is not a timing testbed",
+  "G1": {
+    "unsloth.kernels.moe.__init__ bytes": 0,
+    "getattr(moe,'grouped_gemm')": "<module 'unsloth.kernels.moe.grouped_gemm' from '/opt/conda/lib/python3.11/site-packages/unsloth/kernels/moe/grouped_gemm/__init__.py'>",
+    "attr_is_callable": false,
+    "old_probe_expectation_unsatisfiable": true,
+    "old_backend_impl_actually_used": null,
+    "old_backend_error": "ImportError: no unsloth grouped path ran; probed: unsloth_zoo.moe_utils: import ModuleNotFoundError | unsloth.kernels.moe.grouped_gemm: TypeError: 'module' object is not callable",
+    "old_backend_ran_unsloths_kernel": false,
+    "new_entry_resolves": true,
+    "new_entry": "unsloth.kernels.moe.grouped_gemm.interface.grouped_gemm",
+    "fingerprint": {
+      "entry": "unsloth.kernels.moe.grouped_gemm.interface.grouped_gemm",
+      "unsloth_version": "2026.8.15",
+      "supports_tma": false,
+      "device_capability": [
+        8,
+        6
+      ]
+    },
+    "PASS": true
+  },
+  "cells": [
+    {
+      "model": "allenai/OLMoE-1B-7B-0924",
+      "proj": "gate_up",
+      "N": 2048,
+      "K": 2048,
+      "regime": "decode_bs1",
+      "b_rel_unsloth_4bit": 0.0022320090804863607,
+      "b_rel_unsloth_bf16": 0.0022320090804863607,
+      "b_rel_fused": 0.0016565437999831911,
+      "b_rel_dequant": 0.002232343280639039,
+      "G2_PASS": true,
+      "max_abs_delta_4bit_vs_bf16": 0.0,
+      "G3_PASS": true
+    },
+    {
+      "model": "allenai/OLMoE-1B-7B-0924",
+      "proj": "gate_up",
+      "N": 2048,
+      "K": 2048,
+      "regime": "prefill_s2048",
+      "b_rel_unsloth_4bit": 0.0022269392541832043,
+      "b_rel_unsloth_bf16": 0.0022269392541832043,
+      "b_rel_fused": 0.0016981546433229727,
+      "b_rel_dequant": 0.002792075008023668,
+      "G2_PASS": true,
+      "max_abs_delta_4bit_vs_bf16": 0.0,
+      "G3_PASS": true
+    },
+    {
+      "model": "allenai/OLMoE-1B-7B-0924",
+      "proj": "down",
+      "N": 2048,
+      "K": 1024,
+      "regime": "decode_bs1",
+      "b_rel_unsloth_4bit": 0.0022461272750481623,
+      "b_rel_unsloth_bf16": 0.0022461272750481623,
+      "b_rel_fused": 0.0016658579946689663,
+      "b_rel_dequant": 0.0022461272750481623,
+      "G2_PASS": true,
+      "max_abs_delta_4bit_vs_bf16": 0.0,
+      "G3_PASS": true
+    },
+    {
+      "model": "allenai/OLMoE-1B-7B-0924",
+      "proj": "down",
+      "N": 2048,
+      "K": 1024,
+      "regime": "prefill_s2048",
+      "b_rel_unsloth_4bit": 0.002226872534972607,
+      "b_rel_unsloth_bf16": 0.002226872534972607,
+      "b_rel_fused": 0.0016980610545275117,
+      "b_rel_dequant": 0.002838430122074244,
+      "G2_PASS": true,
+      "max_abs_delta_4bit_vs_bf16": 0.0,
+      "G3_PASS": true
+    },
+    {
+      "model": "Qwen/Qwen3-30B-A3B",
+      "proj": "gate_up",
+      "N": 1536,
+      "K": 2048,
+      "regime": "decode_bs1",
+      "b_rel_unsloth_4bit": 0.002202759125631751,
+      "b_rel_unsloth_bf16": 0.002202759125631751,
+      "b_rel_fused": 0.0016602205941338086,
+      "b_rel_dequant": 0.0022022563402125813,
+      "G2_PASS": true,
+      "max_abs_delta_4bit_vs_bf16": 0.0,
+      "G3_PASS": true
+    },
+    {
+      "model": "Qwen/Qwen3-30B-A3B",
+      "proj": "gate_up",
+      "N": 1536,
+      "K": 2048,
+      "regime": "prefill_s2048",
+      "b_rel_unsloth_4bit": 0.0022269417109550644,
+      "b_rel_unsloth_bf16": 0.0022269417109550644,
+      "b_rel_fused": 0.0016979368786066455,
+      "b_rel_dequant": 0.0022269417109550644,
+      "G2_PASS": true,
+      "max_abs_delta_4bit_vs_bf16": 0.0,
+      "G3_PASS": true
+    },
+    {
+      "model": "Qwen/Qwen3-30B-A3B",
+      "proj": "down",
+      "N": 2048,
+      "K": 768,
+      "regime": "decode_bs1",
+      "b_rel_unsloth_4bit": 0.0022257244916793657,
+      "b_rel_unsloth_bf16": 0.0022257244916793657,
+      "b_rel_fused": 0.0016642790436175213,
+      "b_rel_dequant": 0.0022257244916793657,
+      "G2_PASS": true,
+      "max_abs_delta_4bit_vs_bf16": 0.0,
+      "G3_PASS": true
+    },
+    {
+      "model": "Qwen/Qwen3-30B-A3B",
+      "proj": "down",
+      "N": 2048,
+      "K": 768,
+      "regime": "prefill_s2048",
+      "b_rel_unsloth_4bit": 0.0022296977839335345,
+      "b_rel_unsloth_bf16": 0.0022296977839335345,
+      "b_rel_fused": 0.0017012831438105252,
+      "b_rel_dequant": 0.0022296977839335345,
+      "G2_PASS": true,
+      "max_abs_delta_4bit_vs_bf16": 0.0,
+      "G3_PASS": true
+    }
+  ],
+  "VERDICT": "PASS"
+}

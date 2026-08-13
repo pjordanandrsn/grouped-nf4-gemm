@@ -1,0 +1,29 @@
+{
+  "registered_utc": "2026-08-12T21:40:00Z",
+  "amends": "kernel/prereg_unsloth_head_to_head.json",
+  "status": "REGISTERED PRE-DATA for run 2. Run 1 is complete and reported; this amendment is stamped before any run-2 timing exists.",
+
+  "why": "Run 1 returned NOT CONFIRMED on Q2 (self-pair 1.039 H100 / 1.032 RTX4090 against a [0.97,1.03] band). Diagnosis found a DEEPER defect than the one first written down: the base protocol registered 'fused_nf4 is re-timed immediately before each comparator and the ratio taken per pair', but the harness timed every backend ONCE per cell and all ratios were divided against that single shared base timing. That is not pairing at all — it charges every comparator whatever the box did between the base timing and its own. The bracketed self-pair was measuring exactly that accumulated drift, and correctly refused to certify the instrument.",
+
+  "NOT_BLIND_DISCLOSURE": "Run 2 is NOT a blind confirmatory and must never be described as one. Run 1's effect sizes are known to the author (decode median 1.86x H100 / 2.79x RTX4090; prefill 1.65x / 2.70x; one losing cell, OLMoE gate_up prefill on H100 at 0.822x). Run 2 therefore tests REPRODUCIBILITY UNDER A CORRECTED INSTRUMENT, not discovery. Its evidentiary weight is lower than a blind run's and any write-up says so in the same breath as the numbers.",
+
+  "changes": {
+    "A1_true_pairing": "harness gains --paired-base <backend>. The base is re-timed IMMEDIATELY BEFORE every backend in the cell, and each cell records base_ms_paired + paired_ratio = ms_median/base_ms_paired. Ratios are now per-pair, so drift cancels inside the pair. Run 2 uses --paired-base fused_nf4. Roughly doubles timing cost; accepted.",
+    "A2_self_pair_placement": "Because the base is re-timed before EVERY backend including itself, the base row now carries a genuine ADJACENT base-vs-base self-pair. The band stays EXACTLY [0.97, 1.03] — UNCHANGED. The failure is being fixed by correcting the measurement, not by widening the bar to admit it. The old cell-spanning `fused_nf4_selfpair` alias is retained and reduced separately as `self_pair_bracketed` so the two placements can be compared directly.",
+    "A3_iters": "--iters 100 -> 200. Run 1's worst self-pair cells were the smallest shapes (fused ~0.10 ms), where per-call fixed costs dominate the median.",
+    "A4_suite_expect": "'44/44' in the base prereg was copied from the v6-era protocol without re-counting and is UNMEETABLE: the suite now has 49 tests. Corrected to 'all property tests pass, 0 failed (49 at time of this amendment)'. pytest is now installed by the runner before any timing — in run 1 it was absent from the image, discovered mid-matrix, and the suite ran free on the A2000 instead.",
+    "A5_P4_now_measurable": "Run 1 could not score P4 (how far the old proxy misrepresents unsloth) because tgale96's grouped_gemm was not installed, so the `unsloth` proxy arm errored. Run 2 installs it. P4 remains REPORT-ONLY and cannot enter the verdict."
+  },
+
+  "explicitly_unchanged": [
+    "P1 bar (>=1.0 on >=7/8 decode cells, both devices) and its PREDICTED BAND 2.0-6.0x. Run 1 MISSED that band on the H100 at 1.86x. The band is NOT being adjusted to fit observed data — that would make it unfalsifiable. It is expected to miss again on the H100, and that miss will be reported again.",
+    "P2 bar and band 1.2-3.0x.",
+    "P3 bf16-resident ceiling stays REPORT-ONLY, never barred.",
+    "Q1 fidelity comparative bar (fused b_rel <= 2x dequant path).",
+    "Q3 engagement positive control (native impl in IMPL_NOTE; TMA true on sm_90, false below).",
+    "The arms, the census shapes, the three regimes, the two-device requirement, the no-tune clause, and the $35 bill cap.",
+    "verdict_key: H2H_CONFIRMED = P1 AND P2 AND Q1 AND Q2 AND Q3 on BOTH devices."
+  ],
+
+  "what_would_falsify": "If Q2 still fails with adjacent pairing, the instrument is not merely mis-placed and the timing claims do not stand on this harness at all — the correct response is to fix the harness again, not to report the numbers anyway. If the run-1 effect sizes do NOT reproduce under true pairing, run 1's ratios were an artifact of the shared-base division and must be retracted."
+}
