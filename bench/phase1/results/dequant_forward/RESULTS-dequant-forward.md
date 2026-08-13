@@ -241,6 +241,46 @@ on every row, and the `lora_A` positive control fired in all three arms.
 
 ---
 
+## Routing fidelity — a known limit in the fixtures, and its direction
+
+**Added after publication, on an operator datum: a single OLMoE forward at
+training shape touches a median 57 of 64 experts (89%), max 63 (98%).** Neither
+fixture family in these legs models that, and the two families are wrong in
+*opposite* directions.
+
+**The decode band (`decode_bs1`, `decode_m8`, `decode_m32`) UNDER-charges the
+baseline.** `make_activations` builds `experts = list(range(top_k))` — exactly
+`top_k` groups of M rows. At 32 tokens real routing spreads the same total rows
+over ~57 distinct experts averaging ~4.5 rows each. The dequant-on-forward arm
+pays one `dequantize_4bit` per **hit** expert, so reality charges it roughly
+**7× more dequant calls** than the fixture does, while the fused arm is
+single-launch and far less sensitive to group count. **Every decode-band ratio
+in these legs, F1's 1.588 included, is therefore CONSERVATIVE** — the
+routing-faithful number should be larger. Byte-count bound for OLMoE `gate_up`
+on the H100: 57 dequants rather than 8 adds ~0.14 ms to a ~0.45 ms baseline,
+which would move `decode_m32` from 1.564 toward ~2. That is an estimate from
+traffic, not a measurement, and it is not claimed.
+
+**The token-budget regimes are correct on occupancy and wrong on skew.**
+Deriving expected occupancy from this repo's own measured OLMoE histogram
+(`bench/phase1/results/routing_olmoe.json`) gives 1.000 at T ≥ 512, so
+"all E experts hit" is right at 2048 and 11 800 tokens; the 57/64 datum is a
+~30-token shape and does not apply there. What is wrong is that every expert
+gets an equal 256 tokens while the measured histogram ranges **31 to 795**
+(cv 0.506). This repo already established that uniform is **not consistently
+conservative** — measured routing ran 3–7% *slower* than uniform on OLMoE and
+14–17% *faster* on Qwen3-30B — so the sign of that correction is
+shape-dependent and is **not assumed here in either direction**.
+
+Fixing this needs measurement, not arithmetic: a routing-faithful regime
+replaying measured occupancy and skew at a stated token count. The machinery
+exists (`prefill_measured` replays measured counts and drops empty groups;
+`routing_olmoe.json` and `routing_qwen.json` are in-repo). Until then these
+numbers stand as measured, with the direction of the error stated per regime
+above.
+
+---
+
 ## What can now be claimed that could not before
 
 **Before:** the training axis had one comparator — Unsloth's grouped GEMM at
