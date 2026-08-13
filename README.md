@@ -342,9 +342,9 @@ dequantize-then-matmul baseline on the same stacks:
   interleaved with the fused kernel re-timed immediately before each comparator.
   Unsloth runs with `autotune=True` (their autotuner, their best config per
   shape) against gnf4's *shipped default*. Protocol
-  [`prereg_unsloth_head_to_head.json`](kernel/prereg_unsloth_head_to_head.json)
+  [`prereg_unsloth_head_to_head.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.9.0/kernel/prereg_unsloth_head_to_head.json)
   + amendments, stamped pre-data; full write-up and per-cell matrix in
-  [`RESULTS-unsloth-head-to-head.md`](kernel/RESULTS-unsloth-head-to-head.md).
+  [`RESULTS-unsloth-head-to-head.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.9.0/kernel/RESULTS-unsloth-head-to-head.md).
   **`H2H_CONFIRMED` on both devices**, in the **4-bit-storage regime**:
 
   | device | TMA | decode | prefill | J/token |
