@@ -323,12 +323,24 @@ dequantize-then-matmul baseline on the same stacks:
 - **Versus the other execution classes** (same-run census on the v6 kernel —
   an **exploratory census, not a blind confirmatory run**, as its own receipt
   says; treat these as measured, not confirmed, [receipts](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.9.0/bench/phase1/results/comparators_v6/RESULTS-comparators-v6.md)):
-  the grouped-bf16-GEMM class that unsloth's MoE backend rides
-  (`grouped_gemm.ops.gmm`, dequant inside the timed path as 4-bit storage
-  requires) loses to the fused kernel on **every census cell — decode
-  median 4.67×, prefill median 3.02×** (their kernel targets bf16-resident
+  the grouped-bf16-GEMM **execution class** (`grouped_gemm.ops.gmm` —
+  tgale96's standalone package — dequant inside the timed path as 4-bit
+  storage requires) loses to the fused kernel on **every census cell — decode
+  median 4.67×, prefill median 3.02×** (that class targets bf16-resident
   training, a job it is excellent at; this comparison is the 4-bit-storage
-  regime, which both must serve when weights are quantized). Axolotl/PEFT
+  regime, which both must serve when weights are quantized).
+
+  > ⚠️ **This is not a comparison against Unsloth, and an earlier wording
+  > invited that reading.** Unsloth's own MoE kernel is
+  > `unsloth/kernels/moe/grouped_gemm/interface.py::grouped_gemm`, and the
+  > backend above has never executed it — it returns early on tgale96's
+  > package where that is installed, and raises `TypeError: 'module' object is
+  > not callable` where it is not. The numbers above stand for what they
+  > measure: an execution class, not a vendor. A direct head-to-head against
+  > Unsloth's kernel has since been run on two cards and is not yet published;
+  > until it is, treat any "versus Unsloth" reading of this repo as unsupported.
+
+  Axolotl/PEFT
   QLoRA forwards run bitsandbytes `Linear4bit` — see the flagship bnb
   baseline. GPTQ-Marlin is fidelity-excellent but per-expert
   (launch-storm at MoE decode) and format-incompatible with NF4 checkpoints.
