@@ -108,9 +108,41 @@ reproduce leg 1's within [0.85, 1.15] at `decode_m8` on the same device class.
 There is a known reason the two legs can diverge, and it is larger at high
 expert counts: leg 2 passes `expert_ids` as the **documented list form** while
 leg 1 passed a CUDA tensor, costing one device sync per group in both arms. At
-`decode_m8` that is 4–8 syncs; at `tokbudget_2048` it is 128, which is why leg
-2's 2048 figures (2.486 median) sit well above leg 1's (1.709) and why B1 is
-registered only at `decode_m8`. `E1` measures that cost directly.
+`decode_m8` that is 4–8 syncs; at `tokbudget_2048` it is 128, which is why B1 is
+registered only at `decode_m8`. `E1` measures that cost directly — see below.
+
+## E1 — what leg 1's `expert_ids` form cost (report-only)
+
+RTX 4090 (sm_89), both forms timed **adjacently inside one cell** on identical
+fixtures, order list → list → tensor → tensor → list. Ratios are
+tensor ÷ list, so **> 1 means leg 1's form was slower**.
+
+| regime | groups | fused arm | dequant arm |
+|---|---:|---:|---:|
+| `tokbudget_2048` | 64–128 | **1.145×** (1.065–1.243, n=8) | **1.081×** (1.054–1.151, n=6) |
+| `decode_m8` | 4–8 | 1.127× (1.071–1.166, n=3) | 1.006× (0.924–1.087, n=2) |
+
+Self-pairs on the surviving cells are 0.993–1.008 and drift 0.976–1.018 — a
+usable instrument, against attempt 1's 0.83–1.42 (archived void in
+`eids_form/attempt1-void/`, with the diagnosis). Most `decode_m8` cells still
+void on this card, exactly as the size threshold above predicts, so the n=2–3
+`decode_m8` rows are thin and are shown rather than leaned on.
+
+**The cost is asymmetric, and in the direction the source predicts.** At 2048
+tokens the tensor form slowed the **fused** arm 1.145× but the dequant arm only
+1.081×. That is what the code says should happen: the fused arm pays the sync
+twice — once in `FusedGroupedNf4.forward`'s `[int(e) for e in expert_ids]` and
+again inside `lora_delta_grouped` — while the dequant arm pays it once.
+
+**What this does not explain.** Composing those two figures, leg 1's form would
+depress a `D/G` ratio by 1.081/1.145 = **0.944×**. The observed leg-1-to-leg-2
+gap at `tokbudget_2048` on the H100 is 1.709/2.195 = **0.779×**. So the
+`expert_ids` form accounts for roughly **a quarter** of that gap and no more;
+the rest is not attributed here. It cannot be: E1 was measured on a 4090 and
+the gap is an H100 gap, and the prereg's `cross_run` rule allows only
+within-run ratios. The honest statement is that the two legs' 2048 figures are
+**not interchangeable**, that part of the difference is now measured, and that
+the remainder is unattributed.
 
 ---
 
@@ -136,3 +168,12 @@ registered only at `decode_m8`. `E1` measures that cost directly.
 timings; `verdicts-leg2.json`; `bf16_redprec.txt` per device (see
 `RESULTS-dequant-forward.md` for what that probe settled). Property suite 49/49
 and this leg's 20 CPU tests green on both devices.
+
+`eids_form/attempt2/` — E1 as reported above. `eids_form/attempt1-void/` — the
+first attempt, VOID, kept with `WHY-VOID.md` so the reason attempt 2 is shaped
+the way it is can be checked rather than taken on trust.
+
+All pods `DELETE`d and re-query-verified gone (HTTP 404); zero live at close;
+`currentSpendPerHr` back at the $0.005 idle-volume floor. Metered spend for
+leg 2 plus both E1 attempts and the bf16 probes: **$1.57**, read as an
+account-balance delta (185.5488 → 183.9802).

@@ -1,5 +1,5 @@
 bf25adb0fd1a3089da6308e9e6ef22c504bc9eb4b91c449ae28b68755620c2a9  ./RESULTS-dequant-forward.md
-3ff24ebe7981b3b67d484238eb545b7ba337d2d672dd9453add44743ecfd5204  ./RESULTS-floorfree.md
+4134c491633977b5ab93bc23b0a92933b0d9becaa6d6b1a0babbfd6bcb84d9bf  ./RESULTS-floorfree.md
 b99ebd51621b65ba6a23005e2bc9124a674ae6a9507ef002c4ca6aa26833164e  ./bf16_redprec/A2000-error-only.txt
 6e2e3de9c2209a18127bdcacd201f2c0947674a8712d53fb91564860a2a71ffd  ./bf16_redprec/ADA-4090.txt
 6fe0d1b2f499334d12896bb8298c4a4f262a38c4f3529e5449f47bbf0657eca1  ./bf16_redprec/H100.txt
@@ -9,6 +9,10 @@ a12b7cb43c9d9134b5bb1b35e9096b66775d9e92e7611d1cc92b02edd6782a87  ./eids_form/at
 b8ba294971d5648551cc3d2a884d93eded14eed2c01f873617a2b7e13f27f50b  ./eids_form/attempt1-void/floorfree_eids-list2.json
 255d9cb8841cd6e0cb6b72570a846980df7084e64f8886d619bcf49b7ed0ab10  ./eids_form/attempt1-void/floorfree_eids-tensor.json
 b8e725fa3d63349c8f787b7c75232c358e5756da4a8480917f5c671757d681fc  ./eids_form/attempt1-void/suite.txt
+a12b7cb43c9d9134b5bb1b35e9096b66775d9e92e7611d1cc92b02edd6782a87  ./eids_form/attempt2/DONE
+9c57b569e6ec925e88dd9ff3140c7a06a467594eec7c5aae21f2cb3c662cfa72  ./eids_form/attempt2/eids_form_E1.json
+f5d23b177ec327ece05c3037fdabdd89b611331ba3565744799d9ae71f885f13  ./eids_form/attempt2/run.log
+2ef70aea2a6b5a66cae3bfeb66085dc28d2e9e1c04eeb11e322b0a3f9928031f  ./eids_form/attempt2/suite.txt
 a12b7cb43c9d9134b5bb1b35e9096b66775d9e92e7611d1cc92b02edd6782a87  ./leg2/ADA/DONE
 6e2e3de9c2209a18127bdcacd201f2c0947674a8712d53fb91564860a2a71ffd  ./leg2/ADA/bf16_redprec.txt
 35fa82689a9f84cf159d43873cbb878c5ab436f4a966a0e7d1071dc7c5ab9851  ./leg2/ADA/floorfree_ADA.json
