@@ -1,0 +1,16 @@
+{
+ "registered_utc": "2026-08-13T16:00:00Z",
+ "purpose": "DECIDES WHICH OF LEG 4'S TWO RESULTS IS THE REAL ONE. The adversarial race removed this leg's small-batch speed headline by graphing the baseline (8.6-12.5x gain) against a fused path that cannot be captured. But that race used a STATIC fixture, and CUDA graphs require static shapes -- MoE routing does not provide them, since per-expert group sizes change every step. A real trainer can only use graphs by padding every expert to a fixed capacity C, re-capturing per step, or bucketing. This measures the price of each so the graphed race can be read as either the real world or an artifact of the fixture.",
+ "what_is_measured": {
+  "capacity_tax": "C set so NO token is dropped across 64 independent routing draws; padded problem is E groups x C rows against faithful routing's smaller skewed total. rows_padded/rows_faithful is the compute a graphed arm pays EVERY step to have static shapes.",
+  "capture_cost": "wall time to capture once -- what a re-capture-per-step strategy would pay.",
+  "the_real_race": "D_base graphed AT PADDED SHAPES against G_base at FAITHFUL shapes. That is what each side actually gets: the baseline may graph but must pad; the fused path cannot graph but need not pad."
+ },
+ "not_measured": "Token-dropping (a smaller C, discarding overflow) is the other standard MoE option and is deliberately excluded: it changes what the model computes, so it is not a like-for-like comparison and would need a quality metric to adjudicate.",
+ "frozen_predictions": {
+  "P1_padding_is_expensive_at_training_shape": "PREDICTED: capacity tax > 3x at T=32. Measured draws give ~1-17 rows per hit expert over 64 experts, so a no-drop capacity multiplies rows several-fold. If the tax is near 1, routing is far more uniform than measured and the faithful fixture is wrong.",
+  "P2_padding_is_cheap_at_token_budget": "PREDICTED: capacity tax < 1.5x at T=2048, where occupancy is ~1.0 and counts are closer to even.",
+  "P3_the_real_race": "NO DIRECTION PREDICTED -- this is the point. If d_graphed_padded/g_faithful stays well above 1, the graphed race was an artifact of the static fixture and leg 4's speed numbers substantially return. If it stays below 1, graphing really is available to the baseline in situ and gnf4's case is memory alone."
+ },
+ "no_bars": "Report-only. Whatever it shows is written into RESULTS-leg4-routed.md verbatim, replacing the caveat currently there with a measured answer, in EITHER direction. No optimisation may be added to the fused arm to influence this race."
+}

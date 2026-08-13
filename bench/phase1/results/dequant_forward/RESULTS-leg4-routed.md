@@ -140,3 +140,35 @@ host-to-device copy `gemm_4bit_grouped` performs when handed a list. That is a
 change to shipped code and a **separate experiment with its own registration**;
 the stop rule here explicitly bars adding it after the fact to even this race.
 
+## ⚠️ CAVEAT ON THE ADVERSARIAL RESULT ITSELF — it is an UPPER BOUND on what graphing buys the baseline
+
+Added after the fact, and it cuts toward gnf4, so it is stated as a limit on
+what was shown rather than as a reason to discount it. **The result stands
+exactly as measured: under the static shapes this fixture provides, the
+baseline captures and the fused path does not.**
+
+But **CUDA graphs require static shapes, and MoE routing does not provide
+them.** Per-expert group sizes change every step with the router, so a graph
+captured at one routing draw is invalid at the next. A real trainer can only
+use graphs by:
+
+- **padding to a fixed expert capacity** — every expert gets `C` rows whether it
+  was routed `C` tokens or none. At training shape the measured draws give
+  ~1–17 rows per hit expert over 64 experts, so a capacity that drops no tokens
+  costs roughly **4× the rows** of faithful routing. That tax is paid on every
+  step, by whichever arm is graphed.
+- **re-capturing per step**, whose cost is the capture time itself; or
+- **bucketing** to a few discrete shapes, which is padding with extra steps.
+
+So the 8.6–12.5× the baseline gained here is what graphing is worth **when the
+shapes happen to be static**, which this fixture makes them and real training
+does not. Whether any of it is collectable in situ is **unestablished**, and
+the write-up above should not be read as saying it is.
+
+The test that decides which of this leg's two results is the real one is
+registered in `kernel/prereg_dequant_forward_dynamic.json`: measure the
+capacity-padding tax and race `D_base` graphed-at-padded-shapes against
+`G_base` at faithful shapes. If padding is cheap, the graphed race is the real
+world and gnf4's case is memory. If padding costs ~4×, the ungraphed comparison
+is the relevant one after all and leg 4's speed numbers return.
+
