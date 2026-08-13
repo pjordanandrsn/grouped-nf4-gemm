@@ -92,6 +92,26 @@ def _timed(fn, iters):
     return statistics.median(ts)
 
 
+def _warm(fn, min_s: float):
+    """Hold the GPU busy for min_s BEFORE any pilot or timed block.
+
+    AMENDMENT 1. Run 1's consumer-card leg went VOID: 8 of 8 `decode_m8` cells
+    failed the self-pair, and the timings inside them stepped DOWN across the
+    cell (gemma down: 3.138, 3.135, 2.528, 1.579 ms). Every position-2 and
+    position-3 cell on the same box was flat to ~0.3%. The cause is not the
+    kernel and not the sample count: a stack build is a long CPU-bound stretch
+    with the GPU idle, so the cell that runs immediately after it — always the
+    smallest one — measures the card CLOCKING BACK UP. `_timed`'s 10 warm-up
+    iterations are ~14 ms on a 1.4 ms cell, nowhere near enough to boost.
+
+    The fix is wall-clock, not iteration-count, and it is applied identically to
+    every arm, so it cannot favour one. No criterion, band or arm changes."""
+    t0 = time.perf_counter()
+    while time.perf_counter() - t0 < min_s:
+        fn()
+    torch.cuda.synchronize()
+
+
 def _pilot_iters(fn, block_ms: float, lo: int = 20, hi: int = 200) -> int:
     """Iterations so one timed block spans >= block_ms. Registered rule: the
     h2h self-pair failed on sub-0.2 ms cells read off too few launches."""
@@ -486,6 +506,9 @@ def cell(spec, regime, device, args, stack):
         row["mem"] = mem
 
         # ---- timing --------------------------------------------------------
+        # AMENDMENT 1: clocks up before the pilot, not just before the block.
+        _warm(step["G"], args.warm_s)
+        row["warm_s"] = args.warm_s
         iters = _pilot_iters(step["G"], args.block_ms)
         row["iters"] = iters
 
@@ -556,6 +579,11 @@ def main():
                     default=["decode_m8", "tokbudget_2048", "tokbudget_11800"])
     ap.add_argument("--block-ms", type=float, default=250.0,
                     help="per-timed-block wall target; sets iters per cell")
+    ap.add_argument("--warm-s", type=float, default=1.5,
+                    help="AMENDMENT 1: seconds of GPU-busy warm-up before the "
+                         "pilot and first timed block of every cell, so the "
+                         "cell after a stack build does not measure clock "
+                         "recovery. 0 reproduces run 1.")
     ap.add_argument("--energy", action="store_true")
     ap.add_argument("--energy-s", type=float, default=1.5)
     ap.add_argument("--fid-rows", type=int, default=16,

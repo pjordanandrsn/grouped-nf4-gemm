@@ -1,0 +1,195 @@
+{
+ "leg": "training axis vs dequant-on-forward",
+ "TIER": "see PREREG-dequant-forward.md",
+ "baseline_source": {
+  "module": "QuantizedNaiveMoe",
+  "repo": "https://github.com/genonai/nf4moe",
+  "writeup": "https://huggingface.co/mncai/nf4moe",
+  "quant": {
+   "quant_type": "nf4",
+   "blocksize": 64
+  }
+ },
+ "gpu": "NVIDIA GeForce RTX 4090",
+ "capability": "8.9",
+ "torch": "2.8.0+cu128",
+ "rank": 16,
+ "scaling": 1.0,
+ "grad_checkpointing": "OFF in every arm (single-projection cell)",
+ "routing_weights": "not applied by any arm (projection boundary)",
+ "regimes": [
+  "decode_m8"
+ ],
+ "block_ms": 250.0,
+ "rows": [
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "gate_up",
+   "regime": "decode_m8",
+   "N": 2048,
+   "K": 2048,
+   "E": 64,
+   "top_k": 8,
+   "groups": 8,
+   "rows": 64,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 8,
+    "nonempty_groups": 8,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0016979448143038564,
+   "b_rel_D": 0.002230362406081972,
+   "b_rel_G_over_D": 0.7612865109606104,
+   "status": "gate_only"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "down",
+   "regime": "decode_m8",
+   "N": 2048,
+   "K": 1024,
+   "E": 64,
+   "top_k": 8,
+   "groups": 8,
+   "rows": 64,
+   "rank": 16,
+   "gate": {
+    "deq_calls_D": 8,
+    "nonempty_groups": 8,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0016969621584603384,
+   "b_rel_D": 0.002229052537374347,
+   "b_rel_G_over_D": 0.7612930292164535,
+   "status": "gate_only"
+  }
+ ],
+ "bitsandbytes": "0.50.0"
+}
