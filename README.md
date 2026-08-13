@@ -77,6 +77,22 @@ picks the reader, and the two formats share tensor *names* on DeepSeek-V4
 (`.weight`/`.scale` either way), so that flag is the only thing separating them —
 both readers assert their format and name the other in the error.
 
+**`--absmax-dtype bf16` takes 5.6% off every arena row, losslessly.** An NF4 row
+is 11.1% fp32 absmax (294,912 of 2,654,208 B on Qwen3-30B). For a **bf16**
+checkpoint that absmax is exactly representable in bf16 — it is `|w|.amax()` over
+a block, so it *is* one of the source magnitudes, and the maximum of a set of
+bf16 values is a bf16 value. Measured on the real model: **80/80 expert tensors
+bitwise identical** after a round-trip, against an fp32-source control that is
+correctly *not* identical. So the bytes shrink and nothing the model computes
+changes. `auto` picks it only for sources where that proof holds, and the cast
+*refuses* rather than rounding if it ever does not. The default stays `f32`,
+because the arena index is self-describing but readers older than this refuse the
+segment. int8/double-quant would take 8.3% instead — for a numerics change, a
+re-bake accepted as a different quantization config, and a kernel contract that
+excludes nested absmax. Consuming a bf16-absmax arena needs `experts4bit-qlora`
+new enough to widen it back to fp32 at staging; VRAM and the kernel contract are
+unchanged either way.
+
 **The one ordering trap, because it costs 1.45 TB to get wrong.** An arena's
 segment order has two legitimate forms. `arena_experts.K3_KINDS` is the
 released-K3 spelling and interleaves per projection — fine for

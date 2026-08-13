@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.11.0 — 2026-08-13
 
 ### `bake_nf4 --absmax-dtype bf16`: 5.6% off every arena row, bitwise lossless
 
