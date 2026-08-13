@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.10.0 — 2026-08-13
+
+### `bake_nf4` handles fused expert layouts (Gemma-4, GraniteMoe)
+
+A fused checkpoint ships **one 3-D `[E, X, Y]` tensor per layer** instead of per-expert
+2-D tensors, and was unbakeable. Now detected rather than flagged: when per-expert
+discovery finds nothing, `E` is read off `shape[0]`.
+
+The arena row format needed no change — `bake_nf4` already quantizes `cat[gate;up]` as one
+`[2I, H]` matrix and Gemma-4 ships it pre-concatenated (`[128, 1408, 2816]` slices to
+exactly that). Neither did the provenance schema: the record is already
+`(file, byte range, sha256)`, and a fused slab is a byte range like any other, so
+`verify --against-source` re-checks exactly the bytes consumed.
+
+Verified end-to-end on `google/gemma-4-26B-A4B`: **8/8 arena segments byte-identical** to
+what experts4bit-qlora's loader builds, **8/8 provenance ranges** re-read and matched. A
+full 3840-row / 12.85 GB bake then trained end-to-end, with step-0 loss bit-identical to
+the host-resident arm — the check that catches a wrong expert ORDER, which no hash would.
+
+**Refuses what it cannot bake correctly.** Per-slab and whole-stack quantization coincide
+only when each expert's numel is a multiple of the 64-element block. That is asserted per
+projection, because a checkpoint failing it would bake rows the loader silently cannot
+reproduce.
+
+### `capacity_for_bytes` no longer over-promises rows for pinned tiers
+
+It returned `usable_bytes // row_stride`, assuming a row costs exactly its stride. For a
+pinned tier — the default, and the one the docstring points callers at — that hands back a
+`hot_rows` that OOMs partway through the first training step.
+
+`pinned` now defaults to `True` and applies `PINNED_ROW_FACTOR = 1.9`; `pinned=False` gives
+the old arithmetic for the mmap tier; `factor=` overrides.
+
+**The constant is conservative and not well determined.** A follow-up measurement across
+five `hot_rows` values found the relationship is not linear in `hot_rows` over the range
+that matters — 3.1 GB of extra pinned buffer between 2048 and 3216 rows did not move the
+requirement at all, and three explanations for that were tested and refuted. Every
+measurement says 1.9 **under**-promises, so nothing built on it is unsafe, but it should be
+read as a safe bound rather than a measured cost. See grouped-nf4-gemm#58.
+
+Not this module's doing either way: the same effect reproduces on a bare
+`torch.empty(n).pin_memory()` with no gnf4 code in the process.
+
+### The bake says what it searched for
+
+Discovery matching nothing surfaced as `ValueError: max() arg is an empty sequence`, naming
+none of the three things that decide the match. That cost a diagnosis twice — Kimi K3's
+`.weight_packed`, then Gemma-4's fused layout. The error now prints the prefix, marker and
+key it searched for, plus either the near-miss names the checkpoint really has or, when the
+layout is fused, that this path does not support it. `--prefix` and `--moe` are exposed on
+the CLI; `bake_nf4()` always accepted them.
+
 ## Unreleased
 
 **`dgrad_kernel` now defaults to `True`.** The single-launch dgrad has been
