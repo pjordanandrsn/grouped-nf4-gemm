@@ -52,7 +52,8 @@ def _expert_names(layer, e, prefix="model.layers", proj=PROJ, suffix="weight",
     # `moe` is the attribute the experts hang off. transformers-canonical
     # checkpoints say `mlp`; a checkpoint published in DeepSeek's own reference
     # spelling says `ffn` and drops the `model.` prefix entirely.
-    base = f"{prefix}.{layer}.{moe}.experts.{e}."
+    mid = f"{moe}." if moe else ""       # falsy moe: experts sit on the layer
+    base = f"{prefix}.{layer}.{mid}experts.{e}."
     return {p: f"{base}{p}.{suffix}" for p in proj}
 
 
@@ -211,6 +212,56 @@ class _Shards:
                                   hashlib.sha256(raw).hexdigest())
 
 
+def _explain_no_experts(sh, prefix, marker, gate_key):
+    """Say what was searched for and what the checkpoint actually has.
+
+    Discovery matching nothing used to surface as ``max() arg is an empty
+    sequence`` one line later, which names none of the three things that decide
+    the match. That has now cost a diagnosis twice: Kimi K3 spelling its weights
+    ``.weight_packed``, and Gemma-4 nesting its stack under
+    ``model.language_model.layers`` with a FUSED expert tensor and no per-expert
+    index. Both were minutes of reading this function to learn what it wanted.
+    """
+    near = sorted({n for n in sh.wm if "expert" in n.lower()})
+    # Detect a FUSED layout from the checkpoint itself rather than from whatever
+    # got through the strict filter. Gemma-4 differs from the default in THREE
+    # ways at once -- no MoE attribute, no per-expert index, no `.weight` suffix
+    # -- so a user running the defaults matches nothing, and a diagnosis that
+    # only fires once they have already guessed two of the three is no help.
+    unindexed = []
+    for n in near:
+        parts = n.split(".")
+        if "experts" in parts:
+            i = parts.index("experts")
+            if i + 1 < len(parts) and not parts[i + 1].isdigit():
+                unindexed.append(n)
+    lines = [
+        "found no per-expert tensors to bake.",
+        f"  searched: names starting {prefix + '.'!r}, containing {marker!r}, ending {gate_key!r}",
+    ]
+    if unindexed:
+        lines += [
+            # NOT "matched": these come from the checkpoint's whole key list, and
+            # in the default Gemma-4 path they fail all three checks above. Saying
+            # "matched" directly under the `searched:` line claimed the opposite
+            # of what happened, in the one message meant to end the confusion.
+            f"  the checkpoint has {len(unindexed)} key(s) with NO per-expert index "
+            f"after 'experts' (they need not have matched the search), e.g.",
+            f"    {unindexed[0]}",
+            "  that is a FUSED expert layout (one 3-D tensor per layer). This bake path",
+            "  reads per-expert 2-D tensors and does not support it.",
+        ]
+    elif near:
+        lines += [
+            f"  the checkpoint has {len(near)} key(s) containing 'expert', e.g.",
+            *[f"    {n}" for n in near[:3]],
+            "  adjust prefix=/moe=/proj= to match, or the source= suffix if it is not bf16.",
+        ]
+    else:
+        lines.append("  the checkpoint has NO keys containing 'expert' at all.")
+    raise ValueError("\n".join(lines))
+
+
 def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
              align=4096, limit_experts=0, quantize_fn=None, log=print,
              proj=PROJ, source="bf16", moe="mlp",
@@ -229,14 +280,28 @@ def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
     # real K3 bytes showed that.
     wsuf = mxfp4_suffixes[0] if source in ("mxfp4", "fp8") else ".weight"
     gate_key = f"{proj[0]}{wsuf}"
-    marker = f".{moe}.experts."
+    # A falsy `moe` means the experts hang straight off the layer, with no
+    # block attribute between -- Gemma-4 spells it
+    # `model.language_model.layers.0.experts.gate_up_proj`. Building the
+    # marker unconditionally as `.{moe}.experts.` made that layout
+    # unmatchable for EVERY value of `moe` ("" gives "..experts."), so the
+    # fused-layout diagnosis below could never fire on the checkpoint that
+    # motivated it (Bugbot, PR #55).
+    marker = f".{moe}.experts." if moe else ".experts."
     depth = len(prefix.split("."))          # `model.layers` -> 2, `layers` -> 1
     lays, es = set(), set()
     for name in sh.wm:
         if marker in name and name.endswith(gate_key) and name.startswith(prefix + "."):
             parts = name.split(".")
+            after = parts[parts.index("experts") + 1]
+            if not after.isdigit():
+                # No per-expert index to parse. Skip rather than crash on
+                # int(); _explain_no_experts re-derives this from the checkpoint.
+                continue
             lays.add(int(parts[depth]))
-            es.add(int(parts[parts.index("experts") + 1]))
+            es.add(int(after))
+    if not es:
+        _explain_no_experts(sh, prefix, marker, gate_key)
     if layers is None:
         layers = sorted(lays)
     E = max(es) + 1
@@ -370,6 +435,14 @@ def main():
     ap.add_argument("--layers", default=None, help="e.g. 0-93")
     ap.add_argument("--align", type=int, default=4096)
     ap.add_argument("--limit-experts", type=int, default=0)
+    # bake_nf4() has always taken these; the CLI did not expose them, so a
+    # checkpoint that nests its stack (Gemma-4: model.language_model.layers) or
+    # names its MoE block differently (Mixtral: block_sparse_moe) could only be
+    # baked by importing the function.
+    ap.add_argument("--prefix", default="model.layers",
+                    help="layer-stack prefix, e.g. model.language_model.layers")
+    ap.add_argument("--moe", default="mlp",
+                    help="MoE block attribute between the layer and 'experts'")
     args = ap.parse_args()
     layers = None
     if args.layers:
@@ -379,7 +452,7 @@ def main():
         else:
             layers = [int(x) for x in args.layers.split(",")]
     bake_nf4(args.snapshot, args.out, layers=layers, align=args.align,
-             limit_experts=args.limit_experts)
+             limit_experts=args.limit_experts, prefix=args.prefix, moe=args.moe)
     return 0
 
 
