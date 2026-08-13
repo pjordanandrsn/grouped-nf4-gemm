@@ -1,0 +1,64 @@
+{
+ "probe": "CUDA graph capture feasibility for the training step",
+ "tier": "EXPLORATORY / feasibility only",
+ "gpu": "NVIDIA H100 80GB HBM3",
+ "capability": "9.0",
+ "torch": "2.8.0+cu128",
+ "rows": [
+  {
+   "model": "OLMoE",
+   "regime": "decode_m8",
+   "attempts": {
+    "G_base(eids=list)": {
+     "attempt": "G_base(eids=list)",
+     "captured": false,
+     "note": "AcceleratorError: CUDA error: operation failed due to a previous error during capture\nCUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.\nFor debugging consider passing CUDA_LAUNCH_BLOCKING=1\nCompile with `TORCH_USE_CUDA_DSA` to enable device-side as"
+    },
+    "G_base(eids=devtensor)": {
+     "attempt": "G_base(eids=devtensor)",
+     "captured": false,
+     "note": "AcceleratorError: CUDA error: operation failed due to a previous error during capture\nCUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.\nFor debugging consider passing CUDA_LAUNCH_BLOCKING=1\nCompile with `TORCH_USE_CUDA_DSA` to enable device-side as"
+    },
+    "D_base(bnb dequant + F.linear)": {
+     "attempt": "D_base(bnb dequant + F.linear)",
+     "captured": true,
+     "note": "captured and replayed"
+    },
+    "G_full(eids=list, lora)": {
+     "attempt": "G_full(eids=list, lora)",
+     "captured": false,
+     "note": "AcceleratorError: CUDA error: operation failed due to a previous error during capture\nCUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.\nFor debugging consider passing CUDA_LAUNCH_BLOCKING=1\nCompile with `TORCH_USE_CUDA_DSA` to enable device-side as"
+    }
+   },
+   "status": "ok"
+  },
+  {
+   "model": "gpt-oss",
+   "regime": "decode_m8",
+   "attempts": {
+    "G_base(eids=list)": {
+     "attempt": "G_base(eids=list)",
+     "captured": false,
+     "note": "AcceleratorError: CUDA error: operation failed due to a previous error during capture\nCUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.\nFor debugging consider passing CUDA_LAUNCH_BLOCKING=1\nCompile with `TORCH_USE_CUDA_DSA` to enable device-side as"
+    },
+    "G_base(eids=devtensor)": {
+     "attempt": "G_base(eids=devtensor)",
+     "captured": false,
+     "note": "AcceleratorError: CUDA error: operation failed due to a previous error during capture\nCUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.\nFor debugging consider passing CUDA_LAUNCH_BLOCKING=1\nCompile with `TORCH_USE_CUDA_DSA` to enable device-side as"
+    },
+    "D_base(bnb dequant + F.linear)": {
+     "attempt": "D_base(bnb dequant + F.linear)",
+     "captured": true,
+     "note": "captured and replayed"
+    },
+    "G_full(eids=list, lora)": {
+     "attempt": "G_full(eids=list, lora)",
+     "captured": false,
+     "note": "AcceleratorError: CUDA error: operation failed due to a previous error during capture\nCUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.\nFor debugging consider passing CUDA_LAUNCH_BLOCKING=1\nCompile with `TORCH_USE_CUDA_DSA` to enable device-side as"
+    }
+   },
+   "status": "ok"
+  }
+ ],
+ "bitsandbytes": "0.50.0"
+}
