@@ -5,13 +5,16 @@ OTS-stamped before the data it governs existed. Reducer:
 `bench/phase1/reduce_unsloth_h2h.py`. Receipts:
 `bench/phase1/results/unsloth_h2h/`.
 
-> **Status: `measured`. The timestamps are not yet attested.** The `.ots` files
-> are committed, but their Bitcoin attestations are still pending confirmation,
-> so `ots verify` will not complete yet — re-run `ots upgrade` and it will. Until
-> then the pre-data ordering of protocol against results rests on this repo's
-> commit history, not on an external clock. The verdict below is
-> `H2H_CONFIRMED` **against the registered protocol**, which is a different and
-> weaker claim than "independently timestamped". They are not conflated here.
+> **Status: `measured`. Timestamps partially attested.** The base protocol and
+> amendment 1 carry **complete** Bitcoin attestations (`ots upgrade` succeeded
+> 2026-08-13); amendment 2 was stamped last and is still pending — it will
+> complete on a later run. One distinction kept deliberately: *upgrading*
+> embeds the Bitcoin merkle path, which is not the same as this machine having
+> *verified* it. `ots verify` needs a Bitcoin node the authoring host does not
+> run, so the two completed stamps are offered for anyone with one to check,
+> not asserted as checked here. The verdict below is `H2H_CONFIRMED` **against
+> the registered protocol** — a different and weaker claim than "independently
+> timestamped", and they are not conflated.
 
 ---
 
