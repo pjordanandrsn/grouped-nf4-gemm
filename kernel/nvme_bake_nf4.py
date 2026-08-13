@@ -201,6 +201,36 @@ class _Shards:
                              f"does not cover weight {tuple(w_shape)}")
         return (w * exp[:w_shape[0], :w_shape[1]]).to(torch.bfloat16), [w_src, s_src]
 
+    def read_bf16_slab(self, name, e, n_experts):
+        """One expert out of a FUSED [E, X, Y] tensor, by byte range.
+
+        A contiguous [E, X, Y] tensor is E contiguous [X, Y] slabs, so expert
+        `e` is a sub-range of the parent's own range and needs no whole-layer
+        materialization -- Gemma-4's per-layer gate_up is 1.01 GB.
+
+        Provenance is unchanged in KIND: the record is already
+        (file, byte range, sha256), and a slab is a byte range like any other,
+        so `verify --against-source` re-checks exactly the bytes consumed with
+        no schema change.
+        """
+        path, lo, hi, shape, dtype = self.locate(name)
+        assert dtype == "BF16", (name, dtype)
+        if len(shape) != 3:
+            raise ValueError(f"{name!r} is {len(shape)}-D, expected [E, X, Y]")
+        E, X, Y = shape
+        if E != n_experts:
+            raise ValueError(f"{name!r} has E={E}, expected {n_experts}")
+        slab = X * Y * 2
+        if (hi - lo) != E * slab:
+            raise ValueError(f"{name!r}: byte range {hi - lo} != E*X*Y*2 {E * slab}")
+        s_lo = lo + e * slab
+        with open(path, "rb") as f:
+            f.seek(s_lo)
+            raw = f.read(slab)
+        t = self.torch.frombuffer(bytearray(raw), dtype=self.torch.bfloat16)
+        return t.reshape(X, Y), (os.path.basename(path), s_lo, s_lo + slab,
+                                 hashlib.sha256(raw).hexdigest())
+
     def read_bf16(self, name):
         path, lo, hi, shape, dtype = self.locate(name)
         assert dtype == "BF16", (name, dtype)
@@ -265,7 +295,8 @@ def _explain_no_experts(sh, prefix, marker, gate_key):
 def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
              align=4096, limit_experts=0, quantize_fn=None, log=print,
              proj=PROJ, source="bf16", moe="mlp",
-             mxfp4_suffixes=(".weight", ".scale")):
+             mxfp4_suffixes=(".weight", ".scale"),
+             fused_proj=("gate_up_proj", "down_proj")):
     """Quantize-bake. Discovers (L, E) from the checkpoint index; emits the
     same arena/index/manifest triple as the relocation bake, with the
     two-hop provenance schema."""
@@ -300,17 +331,54 @@ def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
                 continue
             lays.add(int(parts[depth]))
             es.add(int(after))
-    if not es:
+    # FUSED layout: one 3-D [E, X, Y] tensor per layer, no per-expert index.
+    # Detected rather than flagged, so a Gemma-4 bake needs only the prefix the
+    # #55 error already prints. E comes from the SHAPE, not from a name.
+    fused_names = {}
+    if not es and source == "bf16":
+        for name in sh.wm:
+            if (name.startswith(prefix + ".") and ".experts." in name
+                    and name.endswith("." + fused_proj[0])):
+                fused_names[int(name.split(".")[depth])] = name
+    fused = bool(fused_names)
+    if not es and not fused:
         _explain_no_experts(sh, prefix, marker, gate_key)
-    if layers is None:
-        layers = sorted(lays)
-    E = max(es) + 1
-    n_e = min(E, limit_experts) if limit_experts else E
 
-    # geometry from layer0/expert0 shapes
-    _n0 = _expert_names(layers[0], 0, prefix, proj, suffix=wsuf.lstrip("."), moe=moe)
-    g_shape = sh.locate(_n0[proj[0]])[3]
-    d_shape = sh.locate(_n0[proj[2]])[3]
+    if fused:
+        if layers is None:
+            layers = sorted(fused_names)
+        g_full = sh.locate(fused_names[layers[0]])[3]          # [E, 2I, H]
+        d_full = sh.locate(fused_names[layers[0]].replace(
+            "." + fused_proj[0], "." + fused_proj[1]))[3]      # [E, H, I]
+        if len(g_full) != 3 or len(d_full) != 3:
+            raise ValueError(f"fused tensors must be 3-D; got {g_full} and {d_full}")
+        E = g_full[0]
+        g_shape = [g_full[1] // 2, g_full[2]]                  # -> [I, H]
+        d_shape = [d_full[1], d_full[2]]                       # -> [H, I]
+        if g_full[1] % 2:
+            raise ValueError(f"fused gate_up dim1={g_full[1]} is odd; expected 2*intermediate")
+        # Per-slab and whole-tensor blocking coincide ONLY when each expert's
+        # numel is a multiple of the blocksize -- bitsandbytes blocks 64
+        # CONTIGUOUS elements. Verified bitwise on Gemma-4 before this was
+        # written (gnf4#56 step 0); a checkpoint that fails it would bake rows
+        # that silently do not match what the loader builds, so refuse instead.
+        for lbl, (a, b) in (("gate_up", (g_full[1], g_full[2])),
+                            ("down", (d_full[1], d_full[2]))):
+            if (a * b) % 64:
+                raise ValueError(
+                    f"fused {lbl} slab is {a}x{b} = {a * b} elements, not a multiple of "
+                    f"the 64-element block. Per-expert and whole-stack quantization would "
+                    f"disagree, so the baked rows would not match what the loader builds.")
+        log(f"nf4 bake: FUSED layout, E={E} from {fused_names[layers[0]].split('.')[-1]} shape {g_full}")
+    else:
+        if layers is None:
+            layers = sorted(lays)
+        E = max(es) + 1
+        # geometry from layer0/expert0 shapes
+        _n0 = _expert_names(layers[0], 0, prefix, proj, suffix=wsuf.lstrip("."), moe=moe)
+        g_shape = sh.locate(_n0[proj[0]])[3]
+        d_shape = sh.locate(_n0[proj[2]])[3]
+    n_e = min(E, limit_experts) if limit_experts else E
     if source == "mxfp4":
         # packed [rows, K//2] on disk; the logical matrix is twice as wide in K.
         # FP8 is one byte per element, so its on-disk shape is ALREADY logical --
@@ -346,21 +414,41 @@ def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
     with open(out, "wb") as dst:
         for li, lay in enumerate(layers):
             for e in range(n_e):
-                names = _expert_names(lay, e, prefix, proj, moe=moe)
-                if source in ("mxfp4", "fp8"):
+                if fused:
+                    gname = fused_names[lay]
+                    dname = gname.replace("." + fused_proj[0], "." + fused_proj[1])
+                    # Already [2I, H] on disk -- no cat, unlike the per-expert path
+                    # which concatenates gate and up to build the same matrix.
+                    gate_up, src_gu = sh.read_bf16_slab(gname, e, E)
+                    down, src_d = sh.read_bf16_slab(dname, e, E)
+                    # ONE source slab feeds the gate_up segments. The per-expert
+                    # path lists two because it concatenates two separate
+                    # tensors; carrying that shape over here would record the
+                    # same byte range twice and overstate what was consumed.
+                    src_g, src_u = [src_gu], []
+                    src_d = [src_d]
+                    gu_b, gu_a = quantize_fn(gate_up)
+                    dn_b, dn_a = quantize_fn(down)
+                    del gate_up, down
+                    _fused_done = True
+                else:
+                    _fused_done = False
+                    names = _expert_names(lay, e, prefix, proj, moe=moe)
+                if not _fused_done and source in ("mxfp4", "fp8"):
                     rd = sh.read_mxfp4 if source == "mxfp4" else sh.read_fp8
                     stems = [names[p].rsplit(".", 1)[0] for p in proj]
                     gate, src_g = rd(stems[0], *mxfp4_suffixes)
                     up, src_u = rd(stems[1], *mxfp4_suffixes)
                     down, src_d = rd(stems[2], *mxfp4_suffixes)
-                else:
+                elif not _fused_done:
                     gate, src_g = sh.read_bf16(names[proj[0]])
                     up, src_u = sh.read_bf16(names[proj[1]])
                     down, src_d = sh.read_bf16(names[proj[2]])
                     src_g, src_u, src_d = [src_g], [src_u], [src_d]
-                gu_b, gu_a = quantize_fn(torch.cat([gate, up], 0))
-                dn_b, dn_a = quantize_fn(down)
-                del gate, up, down
+                if not _fused_done:
+                    gu_b, gu_a = quantize_fn(torch.cat([gate, up], 0))
+                    dn_b, dn_a = quantize_fn(down)
+                    del gate, up, down
                 seg_bytes = [
                     (gu_b.contiguous().view(torch.uint8).numpy().tobytes(),
                      src_g + src_u),
