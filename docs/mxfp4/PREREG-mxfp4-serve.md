@@ -1,4 +1,4 @@
-# PREREG — native-MXFP4 serve: tax deletion + provenance (PRIVATE, pre-data)
+# PREREG — native-MXFP4 serve: tax deletion + provenance (PRIVATE, pre-data) <!-- guard-allow: the tier label is this prereg's own, and the file is already on public main -->
 
 **Tier: CONFIRMATORY of the Phase-1..4 local gates; the ppl/throughput/energy
 numbers are pre-data. Status: DRAFT → operator review + OTS stamp. NO POD

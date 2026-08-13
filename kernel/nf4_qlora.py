@@ -43,7 +43,7 @@ class FusedGroupedNf4(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, a_cat, packed, absmax, sizes, expert_ids, weights_fn=None,
-                dgrad_kernel=False):
+                dgrad_kernel=True):
         from nf4_grouped import gemm_4bit_grouped
 
         ctx.dgrad_kernel = dgrad_kernel
@@ -83,13 +83,35 @@ class FusedGroupedNf4(torch.autograd.Function):
             K = half * 2
             grad_out = grad_out.contiguous()
 
-            # Opt-in single-launch dgrad. Off by default on purpose: the loop
-            # below decodes with `dequant_ref`, the same oracle the reference
-            # path uses, so its gradient is EXACT and a test pins that. The
-            # kernel accumulates in fp32 over a different order and lands at
-            # ~2.9e-3 relative -- inside the bf16 budget, but not zero, so
-            # switching is a decision a training run makes deliberately rather
-            # than inherits. Same bargain as e4b's `enable_fast_train`.
+            # Single-launch dgrad. ON by default since 2026-08-12.
+            #
+            # It was off on the argument that the loop below decodes with
+            # `dequant_ref` -- the same oracle the reference path uses -- so its
+            # gradient is EXACT, while the kernel accumulates in fp32 over a
+            # different order and lands at ~2.9e-3 relative. Inside the bf16
+            # budget, but not zero, so exactness was treated as something a
+            # training run should not silently inherit.
+            #
+            # What that left out is the price, which 0.7.0 had already measured
+            # and published: against this same per-expert decode oracle the
+            # kernel runs 5.92 ms vs 61.78 ms on gate_up at E=256, and 3.28 ms
+            # vs 85.12 ms on down (A2000, T_cat=4096) -- and the composed
+            # training step 403.7 -> 26.5 ms. The loop materializes a decoded
+            # expert per group, which is precisely the round trip the fused
+            # forward exists to avoid, so the shipped default was paying the
+            # forward's whole thesis back in the backward.
+            #
+            # 2.9e-3 sits an order of magnitude inside the bf16 mantissa budget
+            # (eps ~3.9e-3, and a K-term dot accumulates ~sqrt(K) of it), so
+            # this gradient is not distinguishable from the loop's at the dtype
+            # training actually runs in.
+            #
+            # `dgrad_kernel=False` restores the exact loop, and is the right
+            # choice for gradient-equivalence work: bit-exact A/B against a
+            # reference trainer, or convergence forensics. The guards below are
+            # unchanged -- an ineligible shape or offload-staged storage still
+            # falls back to the loop -- so exactness is never merely a flag away
+            # from being silently wrong.
             if ctx.dgrad_kernel and dgrad_eligible(grad_out, packed, absmax) is None:
                 if packed.device == grad_out.device:
                     return ((dgrad_4bit_grouped(grad_out, packed, absmax,
@@ -122,7 +144,7 @@ class FusedGroupedNf4(torch.autograd.Function):
 
 
 def gemm_4bit_grouped_train(a_cat, packed, absmax, sizes, expert_ids,
-                            weights_fn=None, dgrad_kernel=False):
+                            weights_fn=None, dgrad_kernel=True):
     """Differentiable ``gemm_4bit_grouped``. Same arguments, same output; the
     only difference is that ``a_cat`` may require grad.
 
@@ -217,7 +239,7 @@ def _lora_delta_grouped_loop(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1
 
 def fused_grouped_lora(a_cat, packed, absmax, sizes, expert_ids,
                        lora_A=None, lora_B=None, weights_fn=None, scaling=1.0,
-                       dgrad_kernel=False):
+                       dgrad_kernel=True):
     """Frozen 4-bit projection through the fused kernel **plus** the trainable
     low-rank delta, returned pre-activation so callers can apply SwiGLU after.
 
