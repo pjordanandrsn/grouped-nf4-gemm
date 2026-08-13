@@ -56,11 +56,67 @@ def open_direct_ro(path: str):
     return os.open(path, os.O_RDONLY), "buffered (no O_DIRECT)"
 
 
+def cpu_budget() -> int:
+    """CPUs this process may actually use.
+
+    Order matters, and the obvious calls are the wrong ones. Inside a container
+    with a CPU quota but no cpuset, ``os.cpu_count()`` and
+    ``os.sched_getaffinity`` both report the HOST's cores: on a RunPod L40S box
+    they said **256** while ``cpu.max`` was ``2720000 100000`` — a real budget of
+    **27.2**. So read the cgroup first and fall back only when there is no quota.
+    """
+    try:                                              # cgroup v2
+        quota, period = open("/sys/fs/cgroup/cpu.max").read().split()
+        if quota != "max":
+            return max(1, int(int(quota) / int(period)))
+    except (OSError, ValueError):
+        pass
+    try:                                              # cgroup v1
+        q = int(open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read())
+        p = int(open("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read())
+        if q > 0 and p > 0:
+            return max(1, q // p)
+    except (OSError, ValueError):
+        pass
+    try:
+        return len(os.sched_getaffinity(0))           # respects taskset
+    except AttributeError:                            # macOS, Windows
+        return os.cpu_count() or 4
+
+
+def default_qd(cpus: int | None = None) -> int:
+    """Queue depth for this host: ``clamp(cpus // 4, 4, 16)``.
+
+    A fixed ``qd=4`` was measured optimal on a 12-core box that sat at load ~9.8
+    throughout, with 8 and 16 coming back *worse*. Re-measured on an idle 32-vCPU
+    L40S against the same arena and the same scattered pattern, that inverts:
+
+        qd=1  2.04 GB/s   qd=4  5.31   qd=8  5.95 (+12%)   qd=16  6.13 (+15%)
+
+    So 4 was tuned to a CPU-starved regime rather than to the device. The floor
+    stays at 4 and the divisor is deliberately coarse: this only departs from the
+    old constant above ~20 CPUs, which is the only region where more depth was
+    actually measured to help. Small and mid-size hosts get exactly what they got
+    before, so the change cannot regress them.
+
+    Pass ``qd=`` explicitly to override; this is only the default.
+    """
+    n = cpu_budget() if cpus is None else cpus
+    return min(16, max(4, n // 4))
+
+
 class ArenaReader:
-    """Thread-pool async reader over a baked arena. qd = max in-flight reads."""
+    """Thread-pool async reader over a baked arena. qd = max in-flight reads.
+
+    ``qd=None`` (the default) sizes it from the host's CPU budget — see
+    :func:`default_qd`.
+    """
 
     def __init__(self, arena_path: str, index: dict | None = None, *,
-                 qd: int = 4, warn=print):
+                 qd: int | None = None, warn=print):
+        qd = default_qd() if qd is None else int(qd)
+        if qd < 1:
+            raise ValueError(f"qd must be >= 1, got {qd}")
         self.path = arena_path
         self.index = index or load_index(arena_path)
         self.row_bytes = self.index["row_bytes"]

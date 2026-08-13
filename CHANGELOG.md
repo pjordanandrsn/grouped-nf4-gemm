@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased
+
+### The arena reader's queue depth scales with the host's CPU budget
+
+`ArenaReader(qd=...)` and `ColdTier(qd=...)` now default to `None`, which resolves to
+`clamp(cpus // 4, 4, 16)` via `nvme_reader.default_qd()`.
+
+The old fixed `qd=4` was measured optimal on a 12-core box that sat at load ~9.8, where 8
+and 16 came back *worse*. Re-measured on an idle 32-vCPU L40S against the same arena and
+the same scattered pattern, that inverts:
+
+| qd | O_DIRECT | vs qd=4 |
+|---|---|---|
+| 1 | 2.04 GB/s | 0.38x |
+| 4 | 5.31 GB/s | — |
+| 8 | 5.95 GB/s | +12% |
+| 16 | 6.13 GB/s | +15% |
+
+So 4 was tuned to a CPU-starved regime rather than to the device.
+
+**This cannot regress a smaller host:** the divisor is coarse and the floor is 4, so
+anything under ~20 CPUs gets exactly the depth it got before. The cap is 16 because that
+is where the measurement stops.
+
+`cpu_budget()` reads the **cgroup quota** before `sched_getaffinity`/`cpu_count`: in a
+container with a CPU quota and no cpuset both of those report the *host's* cores — 256 on
+the box above, where the real budget was 27.2.
+
+The serving path (`arena_experts.ArenaExperts`) already defaulted to `qd=16` and is
+unchanged; the measurement covers the training access pattern only.
+
 ## 0.10.0 — 2026-08-13
 
 ### `bake_nf4` handles fused expert layouts (Gemma-4, GraniteMoe)
