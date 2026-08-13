@@ -74,11 +74,26 @@ def test_cast_rejects_unknown_dtype():
 
 # ------------------------------------------------------------ resolve / auto
 @pytest.mark.parametrize("source,expect", [
-    ("bf16", "bf16"), ("fp16", "bf16"), ("f16", "bf16"),
+    ("bf16", "bf16"),
+    # fp16 has 10 mantissa bits to bf16's 7, so an fp16 magnitude is not
+    # generally bf16-representable and the exactness proof does not carry.
+    # `auto` must NOT pick a mode cast_absmax would then refuse.
+    ("fp16", "f32"), ("f16", "f32"),
     ("fp32", "f32"), ("mxfp4", "f32"), ("fp8", "f32"), ("weird", "f32"),
 ])
 def test_auto_decides_from_source_dtype(source, expect):
     assert resolve_absmax_dtype("auto", source) == expect
+
+
+def test_auto_never_picks_a_mode_the_cast_would_refuse():
+    """The two halves must agree: whatever `auto` selects for a source, a real
+    absmax from that source must survive `cast_absmax`. fp16 is the case that
+    made this worth asserting rather than assuming."""
+    w16 = torch.randn(8, 128, dtype=torch.float16).float()
+    am16 = w16.reshape(8, 2, 64).abs().amax(-1)
+    chosen = resolve_absmax_dtype("auto", "fp16")
+    cast_absmax(am16, chosen)          # must not raise
+    assert chosen == "f32"
 
 
 def test_explicit_beats_auto():

@@ -68,7 +68,15 @@ ABSMAX_DTYPES = ("f32", "bf16", "auto")
 #: of a set of bf16 values is a bf16 value. Measured on Qwen3-30B: 80/80 expert
 #: tensors bitwise identical after a bf16 round-trip, and an fp32 control
 #: correctly NOT identical -- which is why this is a whitelist, not a default.
-_ABSMAX_LOSSLESS_SOURCES = ("bf16", "fp16", "f16")
+#:
+#: **fp16 is deliberately NOT here.** It has 10 mantissa bits to bf16's 7, so an
+#: fp16 magnitude is not generally bf16-representable and the proof above does
+#: not carry. ``auto`` therefore leaves an fp16 checkpoint on f32 rather than
+#: choosing a mode ``cast_absmax`` would then refuse tensor by tensor. Storing
+#: fp16 absmax AS fp16 would be lossless and equally small, and the consumer
+#: side already allows the f16->f32 widening; it is simply not implemented here,
+#: because no checkpoint in use needs it.
+_ABSMAX_LOSSLESS_SOURCES = ("bf16",)
 
 
 def resolve_absmax_dtype(absmax_dtype: str, source: str) -> str:
