@@ -16,7 +16,11 @@ import pytest
 sys.path.insert(0, os.path.dirname(__file__))
 
 from nvme_arena import bake, load_index  # noqa: E402
-from nvme_residency import ColdTier, capacity_for_bytes  # noqa: E402
+from nvme_residency import (  # noqa: E402
+    PINNED_ROW_FACTOR,
+    ColdTier,
+    capacity_for_bytes,
+)
 from test_nvme_arena import E, L, make_snapshot  # noqa: E402
 
 
@@ -100,9 +104,30 @@ def test_same_expert_twice_in_one_request_shares_a_slot(arena):
 
 
 def test_capacity_for_bytes_floors_and_never_returns_zero():
-    assert capacity_for_bytes(10 * 4096, 4096) == 10
-    assert capacity_for_bytes(4095, 4096) == 1          # never 0 rows
-    assert capacity_for_bytes(9000, 4096) == 2
+    # pinned=False is the plain arithmetic: a row costs exactly its stride.
+    assert capacity_for_bytes(10 * 4096, 4096, pinned=False) == 10
+    assert capacity_for_bytes(4095, 4096, pinned=False) == 1      # never 0 rows
+    assert capacity_for_bytes(9000, 4096, pinned=False) == 2
+    assert capacity_for_bytes(0, 4096, pinned=False) == 1         # still never 0
+
+
+def test_capacity_for_bytes_defaults_to_the_pinned_cost():
+    """The default must budget for what a PINNED row really costs.
+
+    ColdTier pins by default, and a pinned row costs ~1.9x its stride of real
+    host memory (measured by cap ladder, see PINNED_ROW_FACTOR). Dividing by the
+    stride alone returns a hot_rows that OOMs partway through the first step, so
+    the default has to be the conservative one -- a caller who wants the raw
+    arithmetic asks for it.
+    """
+    budget, stride = 10 * 4096, 4096
+    assert capacity_for_bytes(budget, stride) < capacity_for_bytes(budget, stride, pinned=False)
+    assert capacity_for_bytes(budget, stride) == int(budget // (stride * PINNED_ROW_FACTOR))
+    # An explicit factor overrides both, and 1.0 reproduces the unpinned answer.
+    assert capacity_for_bytes(budget, stride, factor=1.0) == 10
+    assert capacity_for_bytes(budget, stride, factor=2.0) == 5
+    with pytest.raises(ValueError):
+        capacity_for_bytes(budget, stride, factor=0)
 
 
 def test_hit_rate_rises_with_hot_fraction_under_skewed_routing(arena):

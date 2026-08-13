@@ -27,6 +27,8 @@ never evict its own freshly-read rows.
 
 Usage::
 
+    # capacity_for_bytes budgets for what a PINNED row really costs (~1.9x the
+    # stride); pass pinned=False for the mmap tier.
     tier = ColdTier(arena, hot_rows=capacity_for_bytes(free_ram, row_stride))
     slots = tier.ensure(layer, routed_expert_ids)   # -> slots into tier.buffer
     # hand tier.pinned_tensor() + slots to the gather kernel
@@ -386,10 +388,49 @@ def segment_tensor(tier: "ColdTier", index: dict, layer: int, experts,
     return out
 
 
-def capacity_for_bytes(usable_bytes: int, row_stride: int) -> int:
+#: Host RAM a PINNED row actually costs, as a multiple of ``row_stride``.
+#:
+#: Measured 2026-08-13 by laddering a container's swap-inclusive memory cap until
+#: the process died, with no model loaded — the tier alone. A ``ColdTier`` at
+#: ``hot_rows=128`` needed (768, 896] MiB and at 512 needed (2304, 2560] MiB:
+#: **3.84–4.89 MB per row against a 2.654 MB stride, i.e. 1.45–1.84×.**
+#:
+#: It is not this module's doing. The same effect reproduces on a bare
+#: ``torch.empty(n).pin_memory()`` with no gnf4 code in the process — a 1 GiB
+#: pinned buffer needs (2048, 2560] MiB where the identical *pageable* buffer
+#: needs (1280, 1536] MiB. Allocating pinned directly
+#: (``torch.empty(n, pin_memory=True)``) changes nothing, so it is not the
+#: pageable-source copy either; page-locked pages simply cost the cgroup more
+#: than their nominal size.
+#:
+#: 1.9 is the conservative end of the measured band, so this UNDER-promises
+#: capacity. Measured on cgroup v1 + driver 575.64.05 + torch 2.8.0+cu128; treat
+#: it as a starting point on other stacks, not a constant of nature.
+PINNED_ROW_FACTOR = 1.9
+
+
+def capacity_for_bytes(usable_bytes: int, row_stride: int, *,
+                       pinned: bool = True,
+                       factor: float | None = None) -> int:
     """How many rows fit in a byte budget.
 
     Use MEASURED free RAM, never a declared figure: a pod rented with 4 GPUs
     still exposed 503 GB, identical to a 1-GPU pod (2026-07-30).
+
+    ``pinned`` defaults to True because :class:`ColdTier` does. A pinned row
+    costs about :data:`PINNED_ROW_FACTOR` × ``row_stride`` of real host memory,
+    so dividing a budget by the stride alone over-promises capacity by that
+    factor and hands back a ``hot_rows`` that OOMs partway through the first
+    step. Pass ``pinned=False`` for the mmap tier, where a row costs its stride.
+
+    Args:
+        usable_bytes: measured free host RAM to spend on the tier.
+        row_stride: bytes per row, from the arena index.
+        pinned: whether the tier will page-lock its buffer.
+        factor: override the multiplier; measure your own with a cap ladder
+            rather than guessing, and see :data:`PINNED_ROW_FACTOR` for how.
     """
-    return max(1, int(usable_bytes) // int(row_stride))
+    f = factor if factor is not None else (PINNED_ROW_FACTOR if pinned else 1.0)
+    if f <= 0:
+        raise ValueError("factor must be > 0")
+    return max(1, int(int(usable_bytes) // (int(row_stride) * f)))
