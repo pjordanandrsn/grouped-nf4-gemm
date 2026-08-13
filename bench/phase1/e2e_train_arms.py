@@ -73,9 +73,24 @@ def _sha(t: torch.Tensor) -> str:
 
 
 def frozen_tensors(model):
+    """Quantized expert storage, wherever it lives.
+
+    Parameters ALONE is not enough: under `offload=1` e4b keeps the 4-bit expert
+    bytes in pinned CPU RAM and streams a layer at a time, so a params-only scan
+    hashed 32 tensors totalling 0.00 GiB on the first attempt -- an integrity
+    check that would have reported every arm 'unchanged' having compared
+    essentially nothing. Buffers are included and the byte total is asserted by
+    the caller, because a check that cannot see is worse than no check: it reads
+    as a pass.
+    """
+    seen = set()
     for n, p in model.named_parameters():
-        if not p.requires_grad and ("experts" in n) and p.dtype == torch.uint8:
+        if not p.requires_grad and ("expert" in n) and p.dtype == torch.uint8:
+            seen.add(id(p))
             yield n, p
+    for n, b in model.named_buffers():
+        if b is not None and ("expert" in n) and b.dtype == torch.uint8 and id(b) not in seen:
+            yield n, b
 
 
 def frozen_hashes(model):
@@ -119,7 +134,18 @@ def text_batches(tok, n, seq, device):
     """Real prose. Routing is a function of token content, so this is not
     cosmetic: it is the only cell whose routing distribution a user would see."""
     from datasets import load_dataset
-    ds = load_dataset("wikitext", "wikitext-2-raw-v1", split="train")
+    # Bare "wikitext" stopped resolving: current huggingface_hub requires
+    # namespace/name and raises HfUriError on the legacy id.
+    ds, err = None, None
+    for repo in ("Salesforce/wikitext", "wikitext"):
+        try:
+            ds = load_dataset(repo, "wikitext-2-raw-v1", split="train")
+            break
+        except Exception as e:
+            err = f"{repo}: {type(e).__name__}: {str(e)[:120]}"
+    if ds is None:
+        # Never silently fall back to random ids -- text-vs-random IS the cell.
+        raise SystemExit(f"could not load wikitext ({err})")
     buf, out = [], []
     for row in ds:
         t = row["text"].strip()
@@ -286,7 +312,14 @@ def main():
     if not frozen_before:
         raise SystemExit("FATAL: hashed 0 frozen expert tensors — the integrity "
                          "check would be vacuous.")
-    print(f"frozen tensors under check: {len(frozen_before)} ({nbytes/2**30:.2f} GiB)", flush=True)
+    # A check that hashes a trivial number of bytes still PASSES, which is worse
+    # than no check. Record it so a green integrity result can be read against
+    # how much it actually covered.
+    vacuous = nbytes < (0.25 * 2**30)
+    print("frozen tensors under check: %d (%.2f GiB)%s"
+          % (len(frozen_before), nbytes / 2**30,
+             "  !! COVERAGE TOO SMALL — integrity result is near-vacuous"
+             if vacuous else ""), flush=True)
 
     # `reference` runs FIRST and LAST. The pair brackets the whole sweep, so its
     # ratio is drift + noise; every other arm's margin is read against it.
@@ -305,7 +338,9 @@ def main():
                    model=a.model, steps=a.steps, warmup=a.warmup, seq=a.seq,
                    layers=layers, num_experts=n_exp, trainable_params=n_train,
                    offload=bool(a.offload), env=env,
-                   frozen_tensors_hashed=len(frozen_before), cells={})
+                   frozen_tensors_hashed=len(frozen_before),
+                   frozen_bytes_hashed=nbytes,
+                   frozen_check_vacuous=bool(vacuous), cells={})
     dest = Path(a.out)
     dest.mkdir(parents=True, exist_ok=True)
     art = dest / f"e2e_{a.tag}.json"
@@ -326,6 +361,15 @@ def main():
                 continue
             after, _ = frozen_hashes(model)
             res["frozen_changed"] = len([k for k, v in frozen_before.items() if after.get(k) != v])
+            # gnf4 is arch-gated and has to BUILD. When it does not, enable_*
+            # returns 0, nothing is patched, and the arm silently runs the
+            # reference loop -- reporting a ~1.00x that looks like a real
+            # measurement of a fused path that never executed. An arm that
+            # patched nothing is not a datapoint.
+            if en is not None and not res["n_patched"]:
+                res["INVALID_no_modules_patched"] = True
+                print("  !! INVALID: %s patched 0 modules — this arm ran the "
+                      "reference path, not its own" % name, flush=True)
             results[name], grads[name] = res, g
             print("  %.4f s/step (mean-all %.4f, first %.4f) | peak %.3f GB "
                   "(resident %.3f transient %.3f) | frozen_changed %d"
