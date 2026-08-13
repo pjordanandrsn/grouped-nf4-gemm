@@ -391,3 +391,134 @@ def test_no_expert_keys_at_all_is_distinguished():
     with pytest.raises(ValueError, match="NO keys containing 'expert'"):
         _explain_no_experts(_wm(["model.layers.0.self_attn.q_proj.weight"]),
                             "model.layers", ".mlp.experts.", "gate_proj.weight")
+
+
+# --------------------------------------------------- fused expert layouts --
+def make_fused_snapshot(root, seed=17, prefix="model.language_model.layers",
+                        moe="", i=I, h=H):
+    """Gemma-4 / GraniteMoe shape: ONE 3-D tensor per layer, no per-expert index.
+
+    gate_up is [E, 2I, H] -- already concatenated, which is exactly the matrix
+    the per-expert path builds with torch.cat -- and down is [E, H, I].
+    """
+    g = torch.Generator().manual_seed(seed)
+    mid = f"{moe}." if moe else ""
+    tensors = {}
+    for lay in range(L):
+        base = f"{prefix}.{lay}.{mid}experts."
+        tensors[base + "gate_up_proj"] = torch.randn(E, 2 * i, h, generator=g).bfloat16()
+        tensors[base + "down_proj"] = torch.randn(E, h, i, generator=g).bfloat16()
+    os.makedirs(root, exist_ok=True)
+    with open(os.path.join(root, "model.safetensors"), "wb") as f:
+        f.write(_st_bytes(tensors))
+    with open(os.path.join(root, "model.safetensors.index.json"), "w") as f:
+        json.dump({"weight_map": {k: "model.safetensors" for k in tensors}}, f)
+    return tensors
+
+
+def test_fused_layout_bakes_through_bake_nf4(tmp_path):
+    """Route test: in through bake_nf4, geometry derived from the SHAPE.
+
+    E cannot come from the name here -- there is no per-expert index -- so this
+    also pins that discovery reads it off the 3-D tensor.
+    """
+    snap = tmp_path / "snap"
+    make_fused_snapshot(str(snap))
+    arena = str(tmp_path / "fused.arena")
+    bake_nf4(str(snap), arena, prefix="model.language_model.layers",
+             quantize_fn=mock_quantize, log=lambda *a: None)
+    idx = load_index(arena)
+    assert idx["n_layers"] == L and idx["n_experts_per_layer"] == E
+    assert {s["suffix"] for s in idx["segments"]} == {
+        "nf4.gate_up_blocks", "nf4.gate_up_absmax",
+        "nf4.down_blocks", "nf4.down_absmax"}
+    # same row geometry the per-expert path produces for the same I/H
+    assert dict(zip([s["suffix"] for s in idx["segments"]],
+                    [s["shape_per_expert"] for s in idx["segments"]]))[
+        "nf4.gate_up_blocks"] == [2 * I, H // 2]
+
+
+def test_fused_rows_carry_the_right_expert(tmp_path):
+    """Slab e must be expert e -- an off-by-one in the byte range would bake a
+    self-consistent arena of the WRONG weights, which no hash check would catch."""
+    snap = tmp_path / "snap"
+    tensors = make_fused_snapshot(str(snap))
+    arena = str(tmp_path / "fused.arena")
+    bake_nf4(str(snap), arena, prefix="model.language_model.layers",
+             quantize_fn=mock_quantize, log=lambda *a: None)
+    idx = load_index(arena)
+    segs = {s["suffix"]: s for s in idx["segments"]}
+    raw = open(arena, "rb").read()
+    gu = tensors["model.language_model.layers.0.experts.gate_up_proj"]
+    for e in range(E):
+        want, _ = mock_quantize(gu[e])
+        s = segs["nf4.gate_up_blocks"]
+        base = e * idx["row_stride"] + s["seg_off"]
+        got = raw[base: base + s["length"]]
+        assert got == want.contiguous().view(torch.uint8).numpy().tobytes(), f"expert {e}"
+
+
+def test_fused_provenance_ranges_are_the_slab_not_the_whole_tensor(tmp_path):
+    """Each source_range must cover ONE expert's slab and re-read to its sha256.
+
+    Recording the parent tensor's whole range would still hash-verify while
+    describing 128x the bytes the row actually consumed.
+    """
+    snap = tmp_path / "snap"
+    make_fused_snapshot(str(snap))
+    arena = str(tmp_path / "fused.arena")
+    bake_nf4(str(snap), arena, prefix="model.language_model.layers",
+             quantize_fn=mock_quantize, log=lambda *a: None)
+    man = json.load(open(arena + ".manifest.json"))
+    slab_gu, slab_dn = 2 * I * H * 2, H * I * 2
+    seen = 0
+    for row in man["rows"]:
+        for seg in row["segments"]:
+            for src in seg["sources"]:
+                lo, hi = src["source_range"]
+                assert (hi - lo) in (slab_gu, slab_dn), (seg["suffix"], hi - lo)
+                with open(os.path.join(str(snap), src["source_file"]), "rb") as f:
+                    f.seek(lo)
+                    assert hashlib.sha256(f.read(hi - lo)).hexdigest() == src["sha256"]
+                seen += 1
+    assert seen == L * E * 4
+
+
+def test_fused_slab_not_block_aligned_is_refused(tmp_path):
+    """Per-slab and whole-stack quantization coincide only when each expert's
+    numel is a multiple of the 64-element block. A checkpoint that breaks that
+    must be refused, not baked into rows the loader will not reproduce."""
+    snap = tmp_path / "snap"
+    # 2I*H = 2*32*32 = 2048 is fine; make down's slab H*I = 32*2 = 64... use an
+    # I that leaves gate_up divisible but down NOT: I=2 -> down slab 32*2=64 ok.
+    # Instead shrink H so H*I is not a multiple of 64.
+    make_fused_snapshot(str(snap), i=2, h=64)   # down slab = 64*2 = 128, ok
+    # force the failure explicitly with a hand-rolled odd geometry
+    g = torch.Generator().manual_seed(3)
+    t = {"model.language_model.layers.0.experts.gate_up_proj":
+         torch.randn(E, 2, 33, generator=g).bfloat16(),
+         "model.language_model.layers.0.experts.down_proj":
+         torch.randn(E, 33, 1, generator=g).bfloat16()}
+    with open(os.path.join(str(snap), "model.safetensors"), "wb") as f:
+        f.write(_st_bytes(t))
+    with open(os.path.join(str(snap), "model.safetensors.index.json"), "w") as f:
+        json.dump({"weight_map": {k: "model.safetensors" for k in t}}, f)
+    with pytest.raises(ValueError, match="multiple of"):
+        bake_nf4(str(snap), str(tmp_path / "bad.arena"),
+                 prefix="model.language_model.layers",
+                 quantize_fn=mock_quantize, log=lambda *a: None)
+
+
+def test_fused_near_miss_prefix_gets_the_diagnostic_not_an_int_error(tmp_path):
+    """`model.language_model` instead of `model.language_model.layers`.
+
+    The wrong-but-plausible prefix still matches every expert key, so without a
+    digit check the layer id parses as "layers" and int() raises -- the exact raw
+    failure this module replaced. It must produce the structured message instead.
+    """
+    snap = tmp_path / "snap"
+    make_fused_snapshot(str(snap))
+    with pytest.raises(ValueError, match="found no per-expert tensors"):
+        bake_nf4(str(snap), str(tmp_path / "x.arena"),
+                 prefix="model.language_model",          # one segment short
+                 quantize_fn=mock_quantize, log=lambda *a: None)
