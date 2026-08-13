@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased
+
+**`dgrad_kernel` now defaults to `True`.** The single-launch dgrad has been
+opt-in since 0.7.0, so the QLoRA backward took the per-expert decode loop unless
+a caller asked otherwise.
+
+- **Why it flipped.** The loop decodes through `dequant_ref`, so its gradient is
+  exact — that was the entire case for the old default, and it never priced
+  itself against the gap 0.7.0 had already measured: **5.92 ms vs 61.78 ms**
+  (gate_up, E=256) and **3.28 ms vs 85.12 ms** (down, E=256) on an A2000 at
+  T_cat=4096, with the composed training step at **403.7 → 26.5 ms**. The loop
+  materializes a decoded expert per group, which is exactly the round trip the
+  fused forward exists to avoid: the shipped default was paying the forward's
+  thesis back in the backward.
+- **Fidelity.** ~2.9e-3 relative against the exact loop — an order of magnitude
+  inside bf16's own mantissa budget (eps ~3.9e-3, and a K-term dot accumulates
+  ~sqrt(K) of it). Not zero, which is why this is a changelog entry and not a
+  silent tweak.
+- **Escape hatch unchanged.** `dgrad_kernel=False` restores the exact loop — use
+  it for a bit-exact A/B against a reference trainer, or convergence forensics.
+  Every guard still declines to the loop on its own: ineligible shapes, non-bf16
+  gradients, evicted storage, and offload-staged weights on another device.
+- `test_dgrad_kernel_is_off_by_default` is inverted to
+  `test_dgrad_kernel_is_on_by_default` and now pins **both** halves — the
+  default must be the kernel, and `dgrad_kernel=False` must still reach the
+  exact loop, so the escape hatch the new default depends on is itself tested.
+  Mutation-verified: restoring the old default fails it.
+  `test_fused_backward_matches_dequant_reference` now pins `dgrad_kernel=False`
+  explicitly, so its exactness assertion keeps meaning what it says instead of
+  silently re-scoping to whatever the default becomes.
+
 ## 0.9.0 — 2026-08-12
 
 **The arena grew a staging seam: `segment_into` fills a destination the caller owns.**

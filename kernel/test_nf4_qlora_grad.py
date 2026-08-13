@@ -116,7 +116,12 @@ def test_fused_backward_matches_dequant_reference():
     out_ref.sum().backward()
 
     a_fus = a.clone().cuda().to(torch.bfloat16).requires_grad_(True)
-    out_fus = FusedGroupedNf4.apply(a_fus, packed_c, absmax_c, sizes, eids)
+    # dgrad_kernel=False EXPLICITLY: this test is about the exact loop, and the
+    # default became the kernel on 2026-08-12. Pinning the flag here keeps the
+    # exactness assertion below meaningful instead of silently re-scoping it to
+    # whatever the default happens to be.
+    out_fus = FusedGroupedNf4.apply(a_fus, packed_c, absmax_c, sizes, eids,
+                                    None, False)
     out_fus.sum().backward()
 
     # Tolerances from the DTYPE, not from what happens to pass. bf16 carries an
@@ -278,13 +283,19 @@ def test_no_rows_returns_none_as_before():
 # --- the opt-in dgrad route through the autograd Function --------------------
 
 @pytest.mark.skipif(not CUDA, reason="fused kernel is CUDA/Triton only")
-def test_dgrad_kernel_is_off_by_default():
-    """The default backward must stay the exact one.
+def test_dgrad_kernel_is_on_by_default():
+    """The default backward is the single-launch kernel, since 2026-08-12.
 
-    `test_fused_backward_matches_dequant_reference` asserts grad_rel == 0.0, which
-    holds because the loop decodes with the same oracle the reference uses. The
-    kernel is fp32-accumulating and lands near 2.9e-3 — inside the bf16 budget but
-    not zero. Inheriting that silently is what this test prevents.
+    Inverted from `test_dgrad_kernel_is_off_by_default`. The old default was the
+    exact loop, defended on the grounds that a ~2.9e-3 gradient should not be
+    inherited silently. What it cost is what 0.7.0 already published: the loop
+    materializes a decoded expert per group — the very round trip the fused
+    forward exists to avoid — and measures an order of magnitude slower than
+    the kernel on the same problem.
+
+    This test now pins the OTHER direction: the default must be the kernel, and
+    `dgrad_kernel=False` must still reach the exact loop. Both halves are
+    asserted here so a future flip in either direction is loud.
     """
     packed, absmax = _packed_stack()
     a, sizes, eids = _grouped_inputs()
@@ -293,11 +304,25 @@ def test_dgrad_kernel_is_off_by_default():
     a_ref = a.clone().cuda().to(torch.bfloat16).requires_grad_(True)
     _reference_forward(a_ref, packed_c, absmax_c, sizes, eids).sum().backward()
 
+    def _rel(grad):
+        return ((grad.float() - a_ref.grad.float()).norm()
+                / a_ref.grad.float().norm()).item()
+
     a_def = a.clone().cuda().to(torch.bfloat16).requires_grad_(True)
     FusedGroupedNf4.apply(a_def, packed_c, absmax_c, sizes, eids).sum().backward()
-    rel = ((a_def.grad.float() - a_ref.grad.float()).norm()
-           / a_ref.grad.float().norm()).item()
-    assert rel == 0.0, f"default backward is no longer the exact one: rel {rel}"
+    rel_default = _rel(a_def.grad)
+    assert rel_default > 0.0, (
+        "default backward is exact — the dgrad kernel is off again, or it "
+        "silently fell back")
+    assert rel_default < 1e-2, (
+        f"default backward relative error {rel_default} exceeds the bf16 budget")
+
+    a_exact = a.clone().cuda().to(torch.bfloat16).requires_grad_(True)
+    FusedGroupedNf4.apply(a_exact, packed_c, absmax_c, sizes, eids,
+                          None, False).sum().backward()
+    assert _rel(a_exact.grad) == 0.0, (
+        "dgrad_kernel=False no longer reaches the exact loop — the escape hatch "
+        "the new default depends on is broken")
 
 
 @pytest.mark.skipif(not CUDA, reason="fused kernel is CUDA/Triton only")

@@ -231,14 +231,20 @@ from nf4_qlora import fused_grouped_lora
 from nf4_grouped import dgrad_eligible
 
 out = fused_grouped_lora(a_cat, packed, absmax, sizes, expert_ids,
-                         lora_A, lora_B, scaling=alpha / r,
-                         dgrad_kernel=True)      # opt-in; default is the loop
+                         lora_A, lora_B, scaling=alpha / r)
+                         # dgrad_kernel defaults to True since 0.9.1
 ```
 
-**Opt-in on purpose.** The loop decodes with the same oracle the reference uses, so its
-gradient is *exact* and a test pins that; the kernel accumulates fp32 in a different order
-and lands near 2.9e-3 — inside the bf16 budget, not zero. Ask `dgrad_eligible()` before
-committing rather than catching: opted in, it falls back to the loop for non-bf16
+**On by default since 0.9.1**, opt-in before that. The loop decodes with the same oracle
+the reference uses, so its gradient is *exact*; the kernel accumulates fp32 in a different
+order and lands near 2.9e-3 — inside the bf16 budget, not zero — and that non-zero was the
+whole case for making it opt-in. What the case never priced is the gap measured two
+paragraphs above: an order of magnitude on the isolated backward, and 403.7 → 26.5 ms on
+the composed step. Shipping the loop as the default meant the backward paid back the very
+round trip the fused forward exists to avoid. `dgrad_kernel=False` restores the exact loop
+and is the right choice for gradient-equivalence work — a bit-exact A/B against a reference
+trainer, or convergence forensics. Ask `dgrad_eligible()` before
+committing rather than catching: it falls back to the loop for non-bf16
 gradients, a `BLOCK_K` that does not divide the quant blocksize, empty/evicted storage, and
 offload-staged weights on another device — where the kernel would need the whole stack
 resident, which is what offload exists to avoid.
