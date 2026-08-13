@@ -1,0 +1,379 @@
+#!/usr/bin/env python3
+"""END-TO-END: the two arms inside a real QLoRA finetune, not a fixture.
+
+Every number in legs 1-4 is a microbenchmark: synthetic activations, measured
+routing *histograms*, one op at a time. This runs the same comparison inside
+`experts4bit_qlora`'s real training pipeline -- streaming NF4 load, frozen 4-bit
+experts, per-expert LoRA, gradient checkpointing, AdamW -- and reports what a
+user actually pays: seconds per step and peak VRAM.
+
+ADAPTED FROM `experts4bit-qlora/bench/dgrad-gate/dgrad_gate.py` (2026-08-06,
+e4b 0.11.0 / gnf4 0.7.0, A5000+A6000). That driver's design is kept because it
+is right: ONE model load, adapter snapshot/restore between arms, so every arm
+starts bit-identical on identical data. Not a fork of e4b -- this imports the
+published package and patches nothing in it.
+
+WHAT THE BASELINE IS, PRECISELY. `ExpertsLoRA.forward`'s per-expert Python loop:
+dequantize-and-project one hit expert at a time, plus the low-rank delta. That
+is the same FAMILY as GenON's `QuantizedNaiveMoE` and the arm legs 1-4 measured,
+but it is e4b's code, not GenON's. Nothing here is a measurement of GenON's
+implementation and it must not be reported as one.
+
+FIVE THINGS THIS ADDS to the driver it came from, each because its absence would
+have let a wrong number through:
+
+1. SELF-PAIR / DRIFT GATE. `reference` runs twice, first and last. The ratio of
+   the two is the instrument's own noise floor plus any drift across the sweep.
+   Legs 1-3 of this program died three times on instruments that were never
+   self-paired; a speedup smaller than the self-pair spread is not a speedup.
+
+2. STEADY STATE, NOT MEAN-OVER-ALL. The source averages wall time over every
+   step including the first, which carries allocator warmup, autotune and lazy
+   init. Here each step is timed individually and the first `--warmup` are
+   dropped, with the median of what remains reported alongside the mean the
+   source would have produced, so the difference is visible rather than assumed.
+
+3. REAL TEXT, AND RANDOM TOKENS, AS SEPARATE CELLS. The source feeds random
+   token ids, arguing correctly that arm-vs-arm on identical inputs makes the
+   text irrelevant. That holds for a dense model. It does NOT obviously hold for
+   MoE: routing is a function of token content, and leg 4 established that
+   per-expert SKEW is what sets this comparison. Random ids plausibly route
+   flatter than prose. Both are run; if they disagree, the source's cost table
+   was measuring a routing distribution no user will ever have.
+
+4. MEASURED ROUTING, from the model itself. Occupancy and cv are captured off
+   the live `top_k_index` during the run. Legs 1-4 drew from histograms captured
+   once, offline; this reports what the router actually did during training, and
+   closes the open item asking for occupancy on the real model rather than
+   derived.
+
+5. PEAK DECOMPOSED. `max_memory_allocated` is absolute and includes the resident
+   model, so a 5% difference between arms can be a large difference in the part
+   that actually varies. Resident baseline is recorded before each arm's first
+   step and subtracted, so the transient -- the part legs 1-4 measured at
+   18.7-48.6x -- is reported separately from the total.
+
+Report-only against `kernel/prereg_dequant_forward_e2e.json`.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import statistics as st
+import time
+from pathlib import Path
+
+import torch
+
+
+def _sha(t: torch.Tensor) -> str:
+    return hashlib.sha256(t.detach().to("cpu").contiguous().view(torch.uint8).numpy().tobytes()).hexdigest()
+
+
+def frozen_tensors(model):
+    for n, p in model.named_parameters():
+        if not p.requires_grad and ("experts" in n) and p.dtype == torch.uint8:
+            yield n, p
+
+
+def frozen_hashes(model):
+    h, nb = {}, 0
+    for n, t in frozen_tensors(model):
+        h[n] = _sha(t)
+        nb += t.numel() * t.element_size()
+    return h, nb
+
+
+def trainable_snapshot(model):
+    return {n: p.detach().clone() for n, p in model.named_parameters() if p.requires_grad}
+
+
+def restore(model, snap):
+    with torch.no_grad():
+        for n, p in model.named_parameters():
+            if n in snap:
+                p.copy_(snap[n])
+
+
+def rel(a, b):
+    d = (a - b).norm().item()
+    n = b.norm().item()
+    return d / n if n else (0.0 if d == 0 else float("inf"))
+
+
+def grads_now(model):
+    return {n: p.grad.detach().float().clone()
+            for n, p in model.named_parameters() if p.requires_grad and p.grad is not None}
+
+
+# ---------------------------------------------------------------- data -----
+def random_batches(tok, n, seq, device, seed=0):
+    g = torch.Generator().manual_seed(seed)
+    vocab = int(getattr(tok, "vocab_size", 32000))
+    return [torch.randint(0, vocab, (1, seq), generator=g).to(device) for _ in range(n)]
+
+
+def text_batches(tok, n, seq, device):
+    """Real prose. Routing is a function of token content, so this is not
+    cosmetic: it is the only cell whose routing distribution a user would see."""
+    from datasets import load_dataset
+    ds = load_dataset("wikitext", "wikitext-2-raw-v1", split="train")
+    buf, out = [], []
+    for row in ds:
+        t = row["text"].strip()
+        if not t:
+            continue
+        buf.extend(tok(t, add_special_tokens=False)["input_ids"])
+        while len(buf) >= seq and len(out) < n:
+            out.append(torch.tensor(buf[:seq], device=device).unsqueeze(0))
+            buf = buf[seq:]
+        if len(out) >= n:
+            break
+    if len(out) < n:
+        raise SystemExit(f"wikitext gave {len(out)} of {n} batches at seq={seq}")
+    return out
+
+
+# ------------------------------------------------------------- routing -----
+class RoutingTap:
+    """Occupancy and skew off the LIVE router, from the same forwards being
+    timed. `ExpertsLoRA.forward(hidden, top_k_index, top_k_weights)` -- the tap
+    reads arg 1 and never touches the value."""
+
+    def __init__(self, model, num_experts):
+        self.E = num_experts
+        self.counts = []
+        self.handles = []
+        for m in model.modules():
+            if type(m).__name__ == "ExpertsLoRA":
+                self.handles.append(m.register_forward_pre_hook(self._hook))
+
+    def _hook(self, _mod, args):
+        if len(args) < 2 or not torch.is_tensor(args[1]):
+            return
+        idx = args[1].detach().reshape(-1)
+        c = torch.bincount(idx, minlength=self.E).float()
+        self.counts.append(c.cpu())
+
+    def summarise(self):
+        if not self.counts:
+            return None
+        occ, cvs = [], []
+        for c in self.counts:
+            hit = int((c > 0).sum())
+            occ.append(hit / self.E)
+            nz = c[c > 0]
+            if len(nz) > 1 and float(nz.mean()) > 0:
+                cvs.append(float(nz.std(unbiased=False) / nz.mean()))
+        return {"forwards_observed": len(self.counts),
+                "occupancy_median": st.median(occ), "occupancy_min": min(occ),
+                "occupancy_max": max(occ),
+                "cv_median": st.median(cvs) if cvs else None,
+                "E": self.E}
+
+    def close(self):
+        for h in self.handles:
+            h.remove()
+        self.handles = []
+
+
+# ----------------------------------------------------------------- arm -----
+def run_arm(model, arm, batches, lr, enable, disable, warmup, tap_E):
+    torch.cuda.empty_cache()
+    torch.cuda.synchronize()
+    resident = torch.cuda.memory_allocated()          # decomposition baseline
+    torch.cuda.reset_peak_memory_stats()
+    n_patched = enable(model) if enable else 0
+    params = [p for p in model.parameters() if p.requires_grad]
+    opt = torch.optim.AdamW(params, lr=lr)
+    tap = RoutingTap(model, tap_E) if tap_E else None
+
+    losses, per_step, first_grads, routing = [], [], None, None
+    t_all = time.perf_counter()
+    for i, ids in enumerate(batches):
+        torch.cuda.synchronize()
+        t0 = time.perf_counter()
+        opt.zero_grad(set_to_none=True)
+        out = model(input_ids=ids, labels=ids)
+        out.loss.backward()
+        if i == 0:
+            first_grads = grads_now(model)
+        opt.step()
+        torch.cuda.synchronize()
+        per_step.append(time.perf_counter() - t0)
+        losses.append(float(out.loss.detach()))
+        # One step's worth of routing is enough and keeps the tap off the timed
+        # steps: every later step pays no hook at all.
+        if tap is not None and i == 0:
+            routing = tap.summarise()
+            tap.close()
+            tap = None
+    mean_all = (time.perf_counter() - t_all) / max(1, len(batches))
+    if tap is not None:
+        routing = tap.summarise()
+        tap.close()
+
+    steady = per_step[warmup:] or per_step
+    peak = torch.cuda.max_memory_allocated()
+    if disable:
+        disable(model)
+    return dict(
+        arm=arm, n_patched=n_patched, losses=losses,
+        s_per_step=round(st.median(steady), 4),
+        s_per_step_mean_all=round(mean_all, 4),          # what the source reported
+        s_per_step_first=round(per_step[0], 4),
+        s_per_step_spread=round((max(steady) - min(steady)) / st.median(steady), 4),
+        steps_timed=len(per_step), warmup_dropped=warmup,
+        train_peak_gb=round(peak / 2**30, 3),
+        resident_gb=round(resident / 2**30, 3),
+        transient_gb=round((peak - resident) / 2**30, 3),
+        routing=routing,
+    ), first_grads
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--model", default="allenai/OLMoE-1B-7B-0924")
+    ap.add_argument("--steps", type=int, default=24)
+    ap.add_argument("--warmup", type=int, default=4)
+    ap.add_argument("--seq", type=int, default=512)
+    ap.add_argument("--r", type=int, default=8)
+    ap.add_argument("--alpha", type=int, default=16)
+    ap.add_argument("--lr", type=float, default=1e-4)
+    ap.add_argument("--offload", type=int, default=1)
+    ap.add_argument("--data", default="both", choices=["text", "random", "both"])
+    ap.add_argument("--out", default=os.environ.get("DQF_OUT", "/root/dqf-out"))
+    ap.add_argument("--tag", default="e2e")
+    a = ap.parse_args()
+
+    import experts4bit_qlora as e4b
+    from experts4bit_qlora import (disable_batched_train, disable_fast_train,
+                                   enable_batched_train, enable_fast_train,
+                                   load_moe_4bit_streaming)
+    from transformers import AutoTokenizer
+    import nf4_grouped
+
+    env = dict(gpu=torch.cuda.get_device_name(0),
+               cap=list(torch.cuda.get_device_capability(0)),
+               vram_total_gb=round(torch.cuda.get_device_properties(0).total_memory / 2**30, 2),
+               torch=torch.__version__, e4b=e4b.__version__,
+               gnf4=getattr(__import__("nf4_grouped"), "__version__", "?"),
+               gnf4_has_dgrad=hasattr(nf4_grouped, "dgrad_4bit_grouped"))
+    print("env:", json.dumps(env), flush=True)
+
+    tok = AutoTokenizer.from_pretrained(a.model, trust_remote_code=True)
+    model, cfg = load_moe_4bit_streaming(a.model, "cuda", torch.bfloat16, r=a.r,
+                                         alpha=a.alpha, quant_type="nf4",
+                                         offload=bool(a.offload))
+    if not a.offload:
+        model.to("cuda")
+    model.config.use_cache = False
+    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+    model.train()
+    tcfg = getattr(cfg, "text_config", cfg)
+    layers = getattr(tcfg, "num_hidden_layers", -1)
+    n_exp = getattr(tcfg, "num_experts", getattr(tcfg, "n_routed_experts", 0))
+
+    for n, p in model.named_parameters():
+        p.requires_grad_("lora" in n and "experts" in n)
+    n_train = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"layers={layers} experts={n_exp} trainable={n_train:,}", flush=True)
+
+    base_snap = trainable_snapshot(model)
+    frozen_before, nbytes = frozen_hashes(model)
+    if not frozen_before:
+        raise SystemExit("FATAL: hashed 0 frozen expert tensors — the integrity "
+                         "check would be vacuous.")
+    print(f"frozen tensors under check: {len(frozen_before)} ({nbytes/2**30:.2f} GiB)", flush=True)
+
+    # `reference` runs FIRST and LAST. The pair brackets the whole sweep, so its
+    # ratio is drift + noise; every other arm's margin is read against it.
+    ARMS = [
+        ("reference", None, None),
+        ("fast_train", lambda m: enable_fast_train(m), disable_fast_train),
+        ("fast_train_dgrad", lambda m: enable_fast_train(m, dgrad=True), disable_fast_train),
+        ("batched", enable_batched_train, disable_batched_train),
+        ("reference_selfpair", None, None),
+    ]
+
+    modes = ["text", "random"] if a.data == "both" else [a.data]
+    payload = dict(probe="end-to-end QLoRA training, fused vs per-expert dequant loop",
+                   prereg="kernel/prereg_dequant_forward_e2e.json",
+                   adapted_from="experts4bit-qlora/bench/dgrad-gate/dgrad_gate.py",
+                   model=a.model, steps=a.steps, warmup=a.warmup, seq=a.seq,
+                   layers=layers, num_experts=n_exp, trainable_params=n_train,
+                   offload=bool(a.offload), env=env,
+                   frozen_tensors_hashed=len(frozen_before), cells={})
+    dest = Path(a.out)
+    dest.mkdir(parents=True, exist_ok=True)
+    art = dest / f"e2e_{a.tag}.json"
+
+    for mode in modes:
+        print(f"\n########## data={mode} ##########", flush=True)
+        batches = (text_batches(tok, a.steps, a.seq, "cuda") if mode == "text"
+                   else random_batches(tok, a.steps, a.seq, "cuda"))
+        results, grads = {}, {}
+        for name, en, dis in ARMS:
+            restore(model, base_snap)
+            print(f"--- arm {name} ({mode}) ---", flush=True)
+            try:
+                res, g = run_arm(model, name, batches, a.lr, en, dis, a.warmup, n_exp)
+            except Exception as exc:
+                print(f"arm {name} FAILED: {type(exc).__name__}: {exc}", flush=True)
+                results[name] = dict(arm=name, failed=f"{type(exc).__name__}: {str(exc)[:300]}")
+                continue
+            after, _ = frozen_hashes(model)
+            res["frozen_changed"] = len([k for k, v in frozen_before.items() if after.get(k) != v])
+            results[name], grads[name] = res, g
+            print("  %.4f s/step (mean-all %.4f, first %.4f) | peak %.3f GB "
+                  "(resident %.3f transient %.3f) | frozen_changed %d"
+                  % (res["s_per_step"], res["s_per_step_mean_all"], res["s_per_step_first"],
+                     res["train_peak_gb"], res["resident_gb"], res["transient_gb"],
+                     res["frozen_changed"]), flush=True)
+
+        ref = results.get("reference", {})
+        ref_g = grads.get("reference", {})
+        for name in list(results):
+            r = results[name]
+            if "failed" in r or not ref.get("s_per_step"):
+                continue
+            r["speedup_vs_reference"] = round(ref["s_per_step"] / r["s_per_step"], 4)
+            r["peak_vs_reference"] = round(r["train_peak_gb"] / ref["train_peak_gb"], 4)
+            if r["transient_gb"] > 0 and ref.get("transient_gb", 0) > 0:
+                r["transient_vs_reference"] = round(r["transient_gb"] / ref["transient_gb"], 4)
+            g = grads.get(name, {})
+            per = {k: rel(g[k], ref_g[k]) for k in ref_g if k in g}
+            r["grad_rel_mean"] = (sum(per.values()) / len(per)) if per else None
+            r["grad_rel_worst"] = max(per.values()) if per else None
+            if ref.get("losses") and r.get("losses"):
+                dl = sorted(abs(x - y) for x, y in zip(r["losses"], ref["losses"]))
+                r["loss_median_abs_delta"] = dl[len(dl) // 2]
+        payload["cells"][mode] = results
+        art.write_text(json.dumps(payload, indent=1, default=str))
+
+    print("\n=== SUMMARY ===")
+    for mode, results in payload["cells"].items():
+        sp = results.get("reference_selfpair", {}).get("speedup_vs_reference")
+        rt = (results.get("reference", {}) or {}).get("routing") or {}
+        print("data=%-7s SELF-PAIR %s   routing occ %s cv %s" % (
+            mode, ("%.4f" % sp) if sp else "n/a",
+            ("%.3f" % rt["occupancy_median"]) if rt.get("occupancy_median") else "?",
+            ("%.3f" % rt["cv_median"]) if rt.get("cv_median") else "?"))
+        for name, r in results.items():
+            if "failed" in r:
+                print("  %-20s FAILED %s" % (name, r["failed"][:60]))
+                continue
+            print("  %-20s %8.4f s/step  %6sx  peak %6.3f GB (%sx)  transient %6.3f GB  gradΔ %s"
+                  % (name, r["s_per_step"],
+                     ("%.3f" % r["speedup_vs_reference"]) if r.get("speedup_vs_reference") else "-",
+                     r["train_peak_gb"],
+                     ("%.3f" % r["peak_vs_reference"]) if r.get("peak_vs_reference") else "-",
+                     r["transient_gb"],
+                     ("%.1e" % r["grad_rel_mean"]) if r.get("grad_rel_mean") else "-"))
+    print("E2E_DONE")
+
+
+if __name__ == "__main__":
+    main()
