@@ -507,3 +507,18 @@ def test_fused_slab_not_block_aligned_is_refused(tmp_path):
         bake_nf4(str(snap), str(tmp_path / "bad.arena"),
                  prefix="model.language_model.layers",
                  quantize_fn=mock_quantize, log=lambda *a: None)
+
+
+def test_fused_near_miss_prefix_gets_the_diagnostic_not_an_int_error(tmp_path):
+    """`model.language_model` instead of `model.language_model.layers`.
+
+    The wrong-but-plausible prefix still matches every expert key, so without a
+    digit check the layer id parses as "layers" and int() raises -- the exact raw
+    failure this module replaced. It must produce the structured message instead.
+    """
+    snap = tmp_path / "snap"
+    make_fused_snapshot(str(snap))
+    with pytest.raises(ValueError, match="found no per-expert tensors"):
+        bake_nf4(str(snap), str(tmp_path / "x.arena"),
+                 prefix="model.language_model",          # one segment short
+                 quantize_fn=mock_quantize, log=lambda *a: None)

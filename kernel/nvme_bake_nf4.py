@@ -339,7 +339,18 @@ def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
         for name in sh.wm:
             if (name.startswith(prefix + ".") and ".experts." in name
                     and name.endswith("." + fused_proj[0])):
-                fused_names[int(name.split(".")[depth])] = name
+                # The segment at `depth` must BE the layer id. A near-miss
+                # prefix -- `model.language_model` for a checkpoint whose stack
+                # is `model.language_model.layers` -- still matches every key
+                # here but puts "layers" at that position, and int() on it
+                # crashes with exactly the raw error this module exists to
+                # replace. Skip instead, so discovery comes up empty and
+                # _explain_no_experts prints the structured diagnostic naming
+                # what was searched for (Bugbot, PR #57).
+                seg = name.split(".")[depth]
+                if not seg.isdigit():
+                    continue
+                fused_names[int(seg)] = name
     fused = bool(fused_names)
     if not es and not fused:
         _explain_no_experts(sh, prefix, marker, gate_key)
