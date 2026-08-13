@@ -1,0 +1,413 @@
+{
+ "probe": "graphed baseline vs shipped fused, plus memory under faithful routing",
+ "prereg": "kernel/prereg_dequant_forward_graphed.json",
+ "gpu": "NVIDIA H100 80GB HBM3",
+ "capability": "9.0",
+ "torch": "2.8.0+cu128",
+ "tokens": [
+  32,
+  2048
+ ],
+ "rows": [
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "gate_up",
+   "tokens": 32,
+   "E": 64,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 59,
+    "of": 64,
+    "occupancy": 0.921875,
+    "total_rows": 256,
+    "min_rows": 1,
+    "max_rows": 19,
+    "mean_rows": 4.338983050847458,
+    "cv": 0.7095410392134658
+   },
+   "fiction_regime": "decode_m32",
+   "memory": {
+    "fiction": {
+     "G": 10486784,
+     "D": 77595648,
+     "groups": 8,
+     "D_over_G": 7.399375061029196
+    },
+    "faithful": {
+     "G": 10486784,
+     "D": 505414656,
+     "groups": 59,
+     "D_over_G": 48.19539107509032
+    }
+   },
+   "memory_fixture_effect_D": 6.513440753790728,
+   "g_wall_ms": 1.9997194952641923,
+   "d_wall_ms": 12.054397678002715,
+   "d_graphed_wall_ms": 1.4099950669333339,
+   "d_capture": "captured",
+   "d_over_g_ungraphed": 6.028044286486367,
+   "d_over_g_GRAPHED": 0.705096424909861,
+   "graph_speedup_for_baseline": 8.549248121995493,
+   "status": "ok"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "gate_up",
+   "tokens": 2048,
+   "E": 64,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 64,
+    "of": 64,
+    "occupancy": 1.0,
+    "total_rows": 16384,
+    "min_rows": 23,
+    "max_rows": 1231,
+    "mean_rows": 256.0,
+    "cv": 0.6802877647518686
+   },
+   "fiction_regime": "tokbudget_2048",
+   "memory": {
+    "fiction": {
+     "G": 671089664,
+     "D": 1207960576,
+     "groups": 64,
+     "D_over_G": 1.7999987792987377
+    },
+    "faithful": {
+     "G": 671089664,
+     "D": 1207960576,
+     "groups": 64,
+     "D_over_G": 1.7999987792987377
+    }
+   },
+   "memory_fixture_effect_D": 1.0,
+   "g_wall_ms": 10.03424065032353,
+   "d_wall_ms": 12.1055341946582,
+   "d_graphed_wall_ms": 8.31369007161508,
+   "d_capture": "captured",
+   "d_over_g_ungraphed": 1.2064225501974466,
+   "d_over_g_GRAPHED": 0.828532059508362,
+   "graph_speedup_for_baseline": 1.4560964012826723,
+   "status": "ok"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "down",
+   "tokens": 32,
+   "E": 64,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 59,
+    "of": 64,
+    "occupancy": 0.921875,
+    "total_rows": 256,
+    "min_rows": 1,
+    "max_rows": 19,
+    "mean_rows": 4.338983050847458,
+    "cv": 0.7095410392134658
+   },
+   "fiction_regime": "decode_m32",
+   "memory": {
+    "fiction": {
+     "G": 10486784,
+     "D": 44041216,
+     "groups": 8,
+     "D_over_G": 4.199687530514598
+    },
+    "faithful": {
+     "G": 10486784,
+     "D": 257950720,
+     "groups": 59,
+     "D_over_G": 24.59769553754516
+    }
+   },
+   "memory_fixture_effect_D": 5.857029923969402,
+   "g_wall_ms": 1.2289217673242092,
+   "d_wall_ms": 9.851991470592717,
+   "d_graphed_wall_ms": 1.1351031096031268,
+   "d_capture": "captured",
+   "d_over_g_ungraphed": 8.016776765248396,
+   "d_over_g_GRAPHED": 0.9236577459886984,
+   "graph_speedup_for_baseline": 8.679380214223297,
+   "status": "ok"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "down",
+   "tokens": 2048,
+   "E": 64,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 64,
+    "of": 64,
+    "occupancy": 1.0,
+    "total_rows": 16384,
+    "min_rows": 23,
+    "max_rows": 1231,
+    "mean_rows": 256.0,
+    "cv": 0.6802877647518686
+   },
+   "fiction_regime": "tokbudget_2048",
+   "memory": {
+    "fiction": {
+     "G": 671089664,
+     "D": 939525120,
+     "groups": 64,
+     "D_over_G": 1.3999993896493688
+    },
+    "faithful": {
+     "G": 671089664,
+     "D": 940389376,
+     "groups": 64,
+     "D_over_G": 1.4012872294811562
+    }
+   },
+   "memory_fixture_effect_D": 1.0009198859951718,
+   "g_wall_ms": 5.427411889346938,
+   "d_wall_ms": 5.671875039115548,
+   "d_graphed_wall_ms": 5.076029275854428,
+   "d_capture": "captured",
+   "d_over_g_ungraphed": 1.0450423064902166,
+   "d_over_g_GRAPHED": 0.9352577949386498,
+   "graph_speedup_for_baseline": 1.1173842251256172,
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "gate_up",
+   "tokens": 32,
+   "E": 128,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 59,
+    "of": 128,
+    "occupancy": 0.4609375,
+    "total_rows": 256,
+    "min_rows": 1,
+    "max_rows": 18,
+    "mean_rows": 4.338983050847458,
+    "cv": 0.7899901725061206
+   },
+   "fiction_regime": "decode_m32",
+   "memory": {
+    "fiction": {
+     "G": 7865344,
+     "D": 59245568,
+     "groups": 8,
+     "D_over_G": 7.532482749641973
+    },
+    "faithful": {
+     "G": 7865344,
+     "D": 381682688,
+     "groups": 59,
+     "D_over_G": 48.52714490300742
+    }
+   },
+   "memory_fixture_effect_D": 6.442383808355082,
+   "g_wall_ms": 1.6557485874121387,
+   "d_wall_ms": 12.122620005781451,
+   "d_graphed_wall_ms": 1.3128386189540227,
+   "d_capture": "captured",
+   "d_over_g_ungraphed": 7.321534258246638,
+   "d_over_g_GRAPHED": 0.7928973208462349,
+   "graph_speedup_for_baseline": 9.233899605604153,
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "gate_up",
+   "tokens": 2048,
+   "E": 128,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 99,
+    "of": 128,
+    "occupancy": 0.7734375,
+    "total_rows": 16384,
+    "min_rows": 1,
+    "max_rows": 1004,
+    "mean_rows": 165.4949494949495,
+    "cv": 1.2043729632478681
+   },
+   "fiction_regime": "tokbudget_2048",
+   "memory": {
+    "fiction": {
+     "G": 503317504,
+     "D": 1308623872,
+     "groups": 128,
+     "D_over_G": 2.5999967447982892
+    },
+    "faithful": {
+     "G": 503317504,
+     "D": 1126171648,
+     "groups": 99,
+     "D_over_G": 2.237497482304927
+    }
+   },
+   "memory_fixture_effect_D": 0.8605770321756747,
+   "g_wall_ms": 8.277287489424149,
+   "d_wall_ms": 16.958030103705823,
+   "d_graphed_wall_ms": 11.75700198703756,
+   "d_capture": "captured",
+   "d_over_g_ungraphed": 2.0487424322730146,
+   "d_over_g_GRAPHED": 1.4203930940008338,
+   "graph_speedup_for_baseline": 1.4423770721823939,
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "down",
+   "tokens": 32,
+   "E": 128,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 59,
+    "of": 128,
+    "occupancy": 0.4609375,
+    "total_rows": 256,
+    "min_rows": 1,
+    "max_rows": 18,
+    "mean_rows": 4.338983050847458,
+    "cv": 0.7899901725061206
+   },
+   "fiction_regime": "decode_m32",
+   "memory": {
+    "fiction": {
+     "G": 10486784,
+     "D": 35652608,
+     "groups": 8,
+     "D_over_G": 3.399765647885949
+    },
+    "faithful": {
+     "G": 10486784,
+     "D": 196084736,
+     "groups": 59,
+     "D_over_G": 18.698271653158873
+    }
+   },
+   "memory_fixture_effect_D": 5.499870752793176,
+   "g_wall_ms": 0.835774481917421,
+   "d_wall_ms": 5.172592083302637,
+   "d_graphed_wall_ms": 1.0673929781963427,
+   "d_capture": "captured",
+   "d_over_g_ungraphed": 6.188980634388066,
+   "d_over_g_GRAPHED": 1.277130375825242,
+   "graph_speedup_for_baseline": 4.846005350384794,
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "down",
+   "tokens": 2048,
+   "E": 128,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 99,
+    "of": 128,
+    "occupancy": 0.7734375,
+    "total_rows": 16384,
+    "min_rows": 1,
+    "max_rows": 1004,
+    "mean_rows": 165.4949494949495,
+    "cv": 1.2043729632478681
+   },
+   "fiction_regime": "tokbudget_2048",
+   "memory": {
+    "fiction": {
+     "G": 671089664,
+     "D": 1073852416,
+     "groups": 128,
+     "D_over_G": 1.6001623532678935
+    },
+    "faithful": {
+     "G": 671089664,
+     "D": 983228416,
+     "groups": 99,
+     "D_over_G": 1.4651222761195737
+    }
+   },
+   "memory_fixture_effect_D": 0.9156085150531523,
+   "g_wall_ms": 4.78718257509172,
+   "d_wall_ms": 16.51181698932002,
+   "d_graphed_wall_ms": 5.665232761142154,
+   "d_capture": "captured",
+   "d_over_g_ungraphed": 3.4491721864198306,
+   "d_over_g_GRAPHED": 1.1834168996643317,
+   "graph_speedup_for_baseline": 2.914587570448052,
+   "status": "ok"
+  },
+  {
+   "model": "google/gemma-4-26B-A4B",
+   "proj": "gate_up",
+   "tokens": 32,
+   "E": 128,
+   "top_k": 8,
+   "status": "not_run",
+   "reason": "no measured routing for google/gemma-4-26B-A4B"
+  },
+  {
+   "model": "google/gemma-4-26B-A4B",
+   "proj": "gate_up",
+   "tokens": 2048,
+   "E": 128,
+   "top_k": 8,
+   "status": "not_run",
+   "reason": "no measured routing for google/gemma-4-26B-A4B"
+  },
+  {
+   "model": "google/gemma-4-26B-A4B",
+   "proj": "down",
+   "tokens": 32,
+   "E": 128,
+   "top_k": 8,
+   "status": "not_run",
+   "reason": "no measured routing for google/gemma-4-26B-A4B"
+  },
+  {
+   "model": "google/gemma-4-26B-A4B",
+   "proj": "down",
+   "tokens": 2048,
+   "E": 128,
+   "top_k": 8,
+   "status": "not_run",
+   "reason": "no measured routing for google/gemma-4-26B-A4B"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "gate_up",
+   "tokens": 32,
+   "E": 128,
+   "top_k": 4,
+   "status": "not_run",
+   "reason": "no measured routing for openai/gpt-oss-120b"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "gate_up",
+   "tokens": 2048,
+   "E": 128,
+   "top_k": 4,
+   "status": "not_run",
+   "reason": "no measured routing for openai/gpt-oss-120b"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "down",
+   "tokens": 32,
+   "E": 128,
+   "top_k": 4,
+   "status": "not_run",
+   "reason": "no measured routing for openai/gpt-oss-120b"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "down",
+   "tokens": 2048,
+   "E": 128,
+   "top_k": 4,
+   "status": "not_run",
+   "reason": "no measured routing for openai/gpt-oss-120b"
+  }
+ ]
+}
