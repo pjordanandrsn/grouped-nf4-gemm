@@ -1,0 +1,606 @@
+{
+ "leg": "4 - routing-faithful fixture, kernel and step ratios split",
+ "prereg": "kernel/prereg_dequant_forward_routed.json",
+ "gpu": "NVIDIA GeForce RTX 4090",
+ "capability": "8.9",
+ "torch": "2.8.0+cu128",
+ "tokens": [
+  32,
+  2048
+ ],
+ "seed": 0,
+ "rows": [
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "gate_up",
+   "tokens": 32,
+   "E": 64,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 59,
+    "of": 64,
+    "occupancy": 0.921875,
+    "total_rows": 256,
+    "min_rows": 1,
+    "max_rows": 19,
+    "mean_rows": 4.338983050847458,
+    "cv": 0.7095410392134658
+   },
+   "fiction_regime": "decode_m32",
+   "fiction_groups": 8,
+   "fiction_rows": 256,
+   "fiction": {
+    "G": {
+     "wall_ms": 0.8676575465748707,
+     "gpu_ms": 0.23595169999999888,
+     "busy_fraction": 0.2719410450948443,
+     "gap_ms": 0.6317058465748718
+    },
+    "D": {
+     "wall_ms": 2.1545336271325746,
+     "gpu_ms": 0.26046775000000005,
+     "busy_fraction": 0.12089286828474863,
+     "gap_ms": 1.8940658771325745
+    },
+    "d_over_g_wall": 2.4831612836628034,
+    "d_over_g_gpu": 1.103902832656011,
+    "d_over_g_gap": 2.9983352020600362,
+    "groups": 8,
+    "total_rows": 256
+   },
+   "faithful": {
+    "G": {
+     "wall_ms": 1.6054662006596725,
+     "gpu_ms": 1.2060436249999988,
+     "busy_fraction": 0.7512108473566406,
+     "gap_ms": 0.39942257565967365
+    },
+    "D": {
+     "wall_ms": 12.44041335148116,
+     "gpu_ms": 2.2827039999999448,
+     "busy_fraction": 0.18349100914144184,
+     "gap_ms": 10.157709351481216
+    },
+    "d_over_g_wall": 7.748785584130951,
+    "d_over_g_gpu": 1.8927209204392974,
+    "d_over_g_gap": 25.430984552400588,
+    "groups": 59,
+    "total_rows": 256
+   },
+   "fixture_effect_G_wall": 1.8503454582943983,
+   "fixture_effect_G_gpu": 5.111400447634005,
+   "fixture_effect_D_wall": 5.774063210161104,
+   "fixture_effect_D_gpu": 8.763864240390392,
+   "ratio_shift_wall": 3.120532538547417,
+   "ratio_shift_gpu": 1.7145720297549878,
+   "status": "ok"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "gate_up",
+   "tokens": 2048,
+   "E": 64,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 64,
+    "of": 64,
+    "occupancy": 1.0,
+    "total_rows": 16384,
+    "min_rows": 23,
+    "max_rows": 1231,
+    "mean_rows": 256.0,
+    "cv": 0.6802877647518686
+   },
+   "fiction_regime": "tokbudget_2048",
+   "fiction_groups": 64,
+   "fiction_rows": 16384,
+   "fiction": {
+    "G": {
+     "wall_ms": 10.420199766134223,
+     "gpu_ms": 9.9593541,
+     "busy_fraction": 0.9557738165796037,
+     "gap_ms": 0.4608456661342224
+    },
+    "D": {
+     "wall_ms": 21.80234270170331,
+     "gpu_ms": 21.537636699999993,
+     "busy_fraction": 0.9878588275890812,
+     "gap_ms": 0.26470600170331693
+    },
+    "d_over_g_wall": 2.0923152330112895,
+    "d_over_g_gpu": 2.1625535635890274,
+    "d_over_g_gap": 0.5743918651200263,
+    "groups": 64,
+    "total_rows": 16384
+   },
+   "faithful": {
+    "G": {
+     "wall_ms": 11.603271088873347,
+     "gpu_ms": 11.06916545000001,
+     "busy_fraction": 0.9539693906328274,
+     "gap_ms": 0.5341056388733367
+    },
+    "D": {
+     "wall_ms": 22.272183327004313,
+     "gpu_ms": 21.962544325000128,
+     "busy_fraction": 0.9860975011987819,
+     "gap_ms": 0.3096390020041859
+    },
+    "d_over_g_wall": 1.9194745306228034,
+    "d_over_g_gpu": 1.98411925670513,
+    "d_over_g_gap": 0.5797336322030797,
+    "groups": 64,
+    "total_rows": 16384
+   },
+   "fixture_effect_G_wall": 1.1135363380061216,
+   "fixture_effect_G_gpu": 1.1114340688017117,
+   "fixture_effect_D_wall": 1.0215500064249654,
+   "fixture_effect_D_gpu": 1.0197286095461038,
+   "ratio_shift_wall": 0.9173926090765342,
+   "ratio_shift_gpu": 0.917489069455573,
+   "status": "ok"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "down",
+   "tokens": 32,
+   "E": 64,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 59,
+    "of": 64,
+    "occupancy": 0.921875,
+    "total_rows": 256,
+    "min_rows": 1,
+    "max_rows": 19,
+    "mean_rows": 4.338983050847458,
+    "cv": 0.7095410392134658
+   },
+   "fiction_regime": "decode_m32",
+   "fiction_groups": 8,
+   "fiction_rows": 256,
+   "fiction": {
+    "G": {
+     "wall_ms": 0.8517364847163359,
+     "gpu_ms": 0.14838257500000018,
+     "busy_fraction": 0.17421183389768471,
+     "gap_ms": 0.7033539097163357
+    },
+    "D": {
+     "wall_ms": 2.3219711861262717,
+     "gpu_ms": 0.1844204750000017,
+     "busy_fraction": 0.07942410142809268,
+     "gap_ms": 2.13755071112627
+    },
+    "d_over_g_wall": 2.726161468707761,
+    "d_over_g_gpu": 1.2428715096769378,
+    "d_over_g_gap": 3.03908271724593,
+    "groups": 8,
+    "total_rows": 256
+   },
+   "faithful": {
+    "G": {
+     "wall_ms": 1.2416285121192534,
+     "gpu_ms": 0.6420164500000021,
+     "busy_fraction": 0.5170761171585748,
+     "gap_ms": 0.5996120621192513
+    },
+    "D": {
+     "wall_ms": 13.363242878889045,
+     "gpu_ms": 1.393871350000008,
+     "busy_fraction": 0.10430636954163387,
+     "gap_ms": 11.969371528889036
+    },
+    "d_over_g_wall": 10.762673978934497,
+    "d_over_g_gpu": 2.1710835446661894,
+    "d_over_g_gap": 19.961859150372725,
+    "groups": 59,
+    "total_rows": 256
+   },
+   "fixture_effect_G_wall": 1.457761331584578,
+   "fixture_effect_G_gpu": 4.326764446566595,
+   "fixture_effect_D_wall": 5.7551286418772705,
+   "fixture_effect_D_gpu": 7.55811603890509,
+   "ratio_shift_wall": 3.947922418563181,
+   "ratio_shift_gpu": 1.7468286365583547,
+   "status": "ok"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "down",
+   "tokens": 2048,
+   "E": 64,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 64,
+    "of": 64,
+    "occupancy": 1.0,
+    "total_rows": 16384,
+    "min_rows": 23,
+    "max_rows": 1231,
+    "mean_rows": 256.0,
+    "cv": 0.6802877647518686
+   },
+   "fiction_regime": "tokbudget_2048",
+   "fiction_groups": 64,
+   "fiction_rows": 16384,
+   "fiction": {
+    "G": {
+     "wall_ms": 6.410064352676272,
+     "gpu_ms": 5.870512450000002,
+     "busy_fraction": 0.9158273812881456,
+     "gap_ms": 0.5395519026762701
+    },
+    "D": {
+     "wall_ms": 13.688907645021876,
+     "gpu_ms": 7.898394050000026,
+     "busy_fraction": 0.5769922812557191,
+     "gap_ms": 5.79051359502185
+    },
+    "d_over_g_wall": 2.1355335753074938,
+    "d_over_g_gpu": 1.3454351927999102,
+    "d_over_g_gap": 10.732078908998206,
+    "groups": 64,
+    "total_rows": 16384
+   },
+   "faithful": {
+    "G": {
+     "wall_ms": 7.027944245686133,
+     "gpu_ms": 6.507825874999996,
+     "busy_fraction": 0.925992814896704,
+     "gap_ms": 0.520118370686137
+    },
+    "D": {
+     "wall_ms": 13.88398532445232,
+     "gpu_ms": 7.909974474999994,
+     "busy_fraction": 0.5697193053833783,
+     "gap_ms": 5.974010849452326
+    },
+    "d_over_g_wall": 1.9755400497057922,
+    "d_over_g_gpu": 1.2154557646335302,
+    "d_over_g_gap": 11.4858678065369,
+    "groups": 64,
+    "total_rows": 16384
+   },
+   "fixture_effect_G_wall": 1.0963921513130972,
+   "fixture_effect_G_gpu": 1.1085618045150376,
+   "fixture_effect_D_wall": 1.01425078497782,
+   "fixture_effect_D_gpu": 1.0014661746333064,
+   "ratio_shift_wall": 0.9250803043081801,
+   "ratio_shift_gpu": 0.9033922786753578,
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "gate_up",
+   "tokens": 32,
+   "E": 128,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 59,
+    "of": 128,
+    "occupancy": 0.4609375,
+    "total_rows": 256,
+    "min_rows": 1,
+    "max_rows": 18,
+    "mean_rows": 4.338983050847458,
+    "cv": 0.7899901725061206
+   },
+   "fiction_regime": "decode_m32",
+   "fiction_groups": 8,
+   "fiction_rows": 256,
+   "fiction": {
+    "G": {
+     "wall_ms": 0.8365984819829464,
+     "gpu_ms": 0.2048996249999974,
+     "busy_fraction": 0.24491991010351147,
+     "gap_ms": 0.631698856982949
+    },
+    "D": {
+     "wall_ms": 2.171990688269337,
+     "gpu_ms": 0.21871735000000828,
+     "busy_fraction": 0.10069902747800652,
+     "gap_ms": 1.9532733382693288
+    },
+    "d_over_g_wall": 2.5962163870070376,
+    "d_over_g_gpu": 1.0674365558258638,
+    "d_over_g_gap": 3.0920957299152625,
+    "groups": 8,
+    "total_rows": 256
+   },
+   "faithful": {
+    "G": {
+     "wall_ms": 1.3537212554365396,
+     "gpu_ms": 0.9120007999999986,
+     "busy_fraction": 0.6736991063244422,
+     "gap_ms": 0.44172045543654104
+    },
+    "D": {
+     "wall_ms": 12.642851884787282,
+     "gpu_ms": 1.9513080749999616,
+     "busy_fraction": 0.15434081588410484,
+     "gap_ms": 10.691543809787321
+    },
+    "d_over_g_wall": 9.339331737618535,
+    "d_over_g_gpu": 2.1395903106663554,
+    "d_over_g_gap": 24.204321258387598,
+    "groups": 59,
+    "total_rows": 256
+   },
+   "fixture_effect_G_wall": 1.6181254025561744,
+   "fixture_effect_G_gpu": 4.450963734072282,
+   "fixture_effect_D_wall": 5.820859156104959,
+   "fixture_effect_D_gpu": 8.921597097806314,
+   "ratio_shift_wall": 3.5972855669342243,
+   "ratio_shift_gpu": 2.00441918443666,
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "gate_up",
+   "tokens": 2048,
+   "E": 128,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 99,
+    "of": 128,
+    "occupancy": 0.7734375,
+    "total_rows": 16384,
+    "min_rows": 1,
+    "max_rows": 1004,
+    "mean_rows": 165.4949494949495,
+    "cv": 1.2043729632478681
+   },
+   "fiction_regime": "tokbudget_2048",
+   "fiction_groups": 128,
+   "fiction_rows": 16384,
+   "fiction": {
+    "G": {
+     "wall_ms": 8.147077538693944,
+     "gpu_ms": 7.672624399999995,
+     "busy_fraction": 0.9417640084508133,
+     "gap_ms": 0.47445313869394923
+    },
+    "D": {
+     "wall_ms": 39.630005679403745,
+     "gpu_ms": 38.98103685000031,
+     "busy_fraction": 0.9836243064244445,
+     "gap_ms": 0.6489688294034366
+    },
+    "d_over_g_wall": 4.864321652909765,
+    "d_over_g_gpu": 5.08053500572768,
+    "d_over_g_gap": 1.3678249261663342,
+    "groups": 128,
+    "total_rows": 16384
+   },
+   "faithful": {
+    "G": {
+     "wall_ms": 9.436972914263606,
+     "gpu_ms": 8.774358199999988,
+     "busy_fraction": 0.9297852478455138,
+     "gap_ms": 0.6626147142636185
+    },
+    "D": {
+     "wall_ms": 31.62072276075681,
+     "gpu_ms": 31.179084525000253,
+     "busy_fraction": 0.9860332656183097,
+     "gap_ms": 0.4416382357565567
+    },
+    "d_over_g_wall": 3.3507272986831778,
+    "d_over_g_gpu": 3.5534319222345285,
+    "d_over_g_gap": 0.6665083437625756,
+    "groups": 99,
+    "total_rows": 16384
+   },
+   "fixture_effect_G_wall": 1.1583261444908801,
+   "fixture_effect_G_gpu": 1.1435928233369528,
+   "fixture_effect_D_wall": 0.7978985170115818,
+   "fixture_effect_D_gpu": 0.7998526218011568,
+   "ratio_shift_wall": 0.6888375271562938,
+   "ratio_shift_gpu": 0.699420812616874,
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "down",
+   "tokens": 32,
+   "E": 128,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 59,
+    "of": 128,
+    "occupancy": 0.4609375,
+    "total_rows": 256,
+    "min_rows": 1,
+    "max_rows": 18,
+    "mean_rows": 4.338983050847458,
+    "cv": 0.7899901725061206
+   },
+   "fiction_regime": "decode_m32",
+   "fiction_groups": 8,
+   "fiction_rows": 256,
+   "fiction": {
+    "G": {
+     "wall_ms": 0.8465909523268541,
+     "gpu_ms": 0.136083125000001,
+     "busy_fraction": 0.16074247501225558,
+     "gap_ms": 0.7105078273268531
+    },
+    "D": {
+     "wall_ms": 2.1331186375270286,
+     "gpu_ms": 0.16624337500000846,
+     "busy_fraction": 0.0779344252473168,
+     "gap_ms": 1.96687526252702
+    },
+    "d_over_g_wall": 2.519656785445385,
+    "d_over_g_gpu": 1.2216310802680879,
+    "d_over_g_gap": 2.7682668464427813,
+    "groups": 8,
+    "total_rows": 256
+   },
+   "faithful": {
+    "G": {
+     "wall_ms": 1.1469500263532002,
+     "gpu_ms": 0.5059574250000023,
+     "busy_fraction": 0.44113292939948373,
+     "gap_ms": 0.6409926013531979
+    },
+    "D": {
+     "wall_ms": 14.676686227321625,
+     "gpu_ms": 1.173641450000077,
+     "busy_fraction": 0.07996637877392687,
+     "gap_ms": 13.503044777321549
+    },
+    "d_over_g_wall": 12.796273499366901,
+    "d_over_g_gpu": 2.3196446815659866,
+    "d_over_g_gap": 21.065835625583357,
+    "groups": 59,
+    "total_rows": 256
+   },
+   "fixture_effect_G_wall": 1.354786539119996,
+   "fixture_effect_G_gpu": 3.7180026913696946,
+   "fixture_effect_D_wall": 6.880389102191067,
+   "fixture_effect_D_gpu": 7.0597787731391834,
+   "ratio_shift_wall": 5.0785779925598,
+   "ratio_shift_gpu": 1.898809484330522,
+   "status": "ok"
+  },
+  {
+   "model": "Qwen/Qwen3-30B-A3B",
+   "proj": "down",
+   "tokens": 2048,
+   "E": 128,
+   "top_k": 8,
+   "routing": {
+    "hit_experts": 99,
+    "of": 128,
+    "occupancy": 0.7734375,
+    "total_rows": 16384,
+    "min_rows": 1,
+    "max_rows": 1004,
+    "mean_rows": 165.4949494949495,
+    "cv": 1.2043729632478681
+   },
+   "fiction_regime": "tokbudget_2048",
+   "fiction_groups": 128,
+   "fiction_rows": 16384,
+   "fiction": {
+    "G": {
+     "wall_ms": 5.625382127861182,
+     "gpu_ms": 4.910589449999992,
+     "busy_fraction": 0.8729343782138831,
+     "gap_ms": 0.7147926778611904
+    },
+    "D": {
+     "wall_ms": 28.00225464006265,
+     "gpu_ms": 9.242501874999803,
+     "busy_fraction": 0.3300627750801399,
+     "gap_ms": 18.759752765062846
+    },
+    "d_over_g_wall": 4.97784043885199,
+    "d_over_g_gpu": 1.8821573192195529,
+    "d_over_g_gap": 26.245026489633275,
+    "groups": 128,
+    "total_rows": 16384
+   },
+   "faithful": {
+    "G": {
+     "wall_ms": 6.3718422533323364,
+     "gpu_ms": 5.627083324999992,
+     "busy_fraction": 0.8831171741668822,
+     "gap_ms": 0.7447589283323444
+    },
+    "D": {
+     "wall_ms": 22.119357318927843,
+     "gpu_ms": 7.848580374999889,
+     "busy_fraction": 0.354828590263052,
+     "gap_ms": 14.270776943927954
+    },
+    "d_over_g_wall": 3.471422618373814,
+    "d_over_g_gpu": 1.3947865922173635,
+    "d_over_g_gap": 19.161605723724474,
+    "groups": 99,
+    "total_rows": 16384
+   },
+   "fixture_effect_G_wall": 1.1326950078242888,
+   "fixture_effect_G_gpu": 1.145907916411135,
+   "fixture_effect_D_wall": 0.7899134410156323,
+   "fixture_effect_D_gpu": 0.8491835307309641,
+   "ratio_shift_wall": 0.6973752294829297,
+   "ratio_shift_gpu": 0.7410573908857521,
+   "status": "ok"
+  },
+  {
+   "model": "google/gemma-4-26B-A4B",
+   "proj": "gate_up",
+   "tokens": 32,
+   "E": 128,
+   "top_k": 8,
+   "status": "not_run",
+   "reason": "no measured routing for google/gemma-4-26B-A4B"
+  },
+  {
+   "model": "google/gemma-4-26B-A4B",
+   "proj": "gate_up",
+   "tokens": 2048,
+   "E": 128,
+   "top_k": 8,
+   "status": "not_run",
+   "reason": "no measured routing for google/gemma-4-26B-A4B"
+  },
+  {
+   "model": "google/gemma-4-26B-A4B",
+   "proj": "down",
+   "tokens": 32,
+   "E": 128,
+   "top_k": 8,
+   "status": "not_run",
+   "reason": "no measured routing for google/gemma-4-26B-A4B"
+  },
+  {
+   "model": "google/gemma-4-26B-A4B",
+   "proj": "down",
+   "tokens": 2048,
+   "E": 128,
+   "top_k": 8,
+   "status": "not_run",
+   "reason": "no measured routing for google/gemma-4-26B-A4B"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "gate_up",
+   "tokens": 32,
+   "E": 128,
+   "top_k": 4,
+   "status": "not_run",
+   "reason": "no measured routing for openai/gpt-oss-120b"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "gate_up",
+   "tokens": 2048,
+   "E": 128,
+   "top_k": 4,
+   "status": "not_run",
+   "reason": "no measured routing for openai/gpt-oss-120b"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "down",
+   "tokens": 32,
+   "E": 128,
+   "top_k": 4,
+   "status": "not_run",
+   "reason": "no measured routing for openai/gpt-oss-120b"
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "proj": "down",
+   "tokens": 2048,
+   "E": 128,
+   "top_k": 4,
+   "status": "not_run",
+   "reason": "no measured routing for openai/gpt-oss-120b"
+  }
+ ]
+}
