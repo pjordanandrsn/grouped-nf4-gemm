@@ -52,11 +52,14 @@ class ColdTier:
             :func:`capacity_for_bytes`.
         pinned: True allocates a CUDA-pinned buffer (the engine path, gatherable
             over UVA); False uses plain mmap (tests, CPU-only benches).
-        qd: in-flight NVMe reads; N0 measured the device link saturated at >= 4.
+        qd: in-flight NVMe reads. ``None`` (default) sizes it from the host's
+            CPU budget via :func:`nvme_reader.default_qd`. The old fixed 4 was
+            measured on a loaded 12-core box; on an idle 32-vCPU host qd=8 and
+            qd=16 read 12% and 15% faster at the same pattern.
     """
 
     def __init__(self, arena_path: str, *, hot_rows: int, pinned: bool = True,
-                 qd: int = 4, index=None, reader: ArenaReader | None = None):
+                 qd: int | None = None, index=None, reader: ArenaReader | None = None):
         if hot_rows < 1:
             raise ValueError("hot_rows must be >= 1")
         self.reader = reader or ArenaReader(arena_path, index, qd=qd)
