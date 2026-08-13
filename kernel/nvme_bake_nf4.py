@@ -241,7 +241,12 @@ def _explain_no_experts(sh, prefix, marker, gate_key):
     ]
     if unindexed:
         lines += [
-            f"  but {len(unindexed)} key(s) matched with NO per-expert index after 'experts', e.g.",
+            # NOT "matched": these come from the checkpoint's whole key list, and
+            # in the default Gemma-4 path they fail all three checks above. Saying
+            # "matched" directly under the `searched:` line claimed the opposite
+            # of what happened, in the one message meant to end the confusion.
+            f"  the checkpoint has {len(unindexed)} key(s) with NO per-expert index "
+            f"after 'experts' (they need not have matched the search), e.g.",
             f"    {unindexed[0]}",
             "  that is a FUSED expert layout (one 3-D tensor per layer). This bake path",
             "  reads per-expert 2-D tensors and does not support it.",
