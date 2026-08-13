@@ -57,6 +57,73 @@ def _expert_names(layer, e, prefix="model.layers", proj=PROJ, suffix="weight",
     return {p: f"{base}{p}.{suffix}" for p in proj}
 
 
+#: absmax storage options. "f32" is what shipped first and is always safe;
+#: "bf16" halves the absmax segment (-5.6% of a Qwen3-30B row) and is BITWISE
+#: LOSSLESS for a bf16 checkpoint; "auto" picks bf16 exactly when the source
+#: dtype proves it lossless.
+ABSMAX_DTYPES = ("f32", "bf16", "auto")
+
+#: source dtypes for which bf16 absmax is lossless BY CONSTRUCTION. absmax is
+#: ``|w|.amax()`` over a block, so it IS one of the source magnitudes; the max
+#: of a set of bf16 values is a bf16 value. Measured on Qwen3-30B: 80/80 expert
+#: tensors bitwise identical after a bf16 round-trip, and an fp32 control
+#: correctly NOT identical -- which is why this is a whitelist, not a default.
+#:
+#: **fp16 is deliberately NOT here.** It has 10 mantissa bits to bf16's 7, so an
+#: fp16 magnitude is not generally bf16-representable and the proof above does
+#: not carry. ``auto`` therefore leaves an fp16 checkpoint on f32 rather than
+#: choosing a mode ``cast_absmax`` would then refuse tensor by tensor. Storing
+#: fp16 absmax AS fp16 would be lossless and equally small, and the consumer
+#: side already allows the f16->f32 widening; it is simply not implemented here,
+#: because no checkpoint in use needs it.
+_ABSMAX_LOSSLESS_SOURCES = ("bf16",)
+
+
+def resolve_absmax_dtype(absmax_dtype: str, source: str) -> str:
+    """('auto'|'bf16'|'f32', source) -> 'bf16' | 'f32'.
+
+    ``auto`` decides from the SOURCE dtype rather than by sampling values: the
+    losslessness is a proof about bf16 arithmetic, and a sample could pass on
+    the experts it looked at and lose precision on one it did not.
+    """
+    if absmax_dtype not in ABSMAX_DTYPES:
+        raise ValueError(f"absmax_dtype must be one of {ABSMAX_DTYPES}, "
+                         f"got {absmax_dtype!r}")
+    if absmax_dtype != "auto":
+        return absmax_dtype
+    return "bf16" if source in _ABSMAX_LOSSLESS_SOURCES else "f32"
+
+
+def cast_absmax(am, want: str):
+    """Cast absmax to the arena's storage dtype, refusing a LOSSY cast.
+
+    The check is per tensor and deliberately not a warning. ``bf16`` is chosen
+    because it is exact, so an inexact tensor means the assumption behind the
+    choice is false for this checkpoint — and silently rounding the scale of
+    every weight in the block is not a thing to discover later from an accuracy
+    regression. Cheap: absmax is K/64 of the weight elements.
+
+    Applied in ``bake_nf4`` rather than only inside the default quantizer, so an
+    INJECTED ``quantize_fn`` cannot hand back a dtype the row geometry did not
+    budget for — that would write a short row and corrupt every later offset.
+    """
+    import torch
+
+    if want == "f32":
+        return am.to(torch.float32)
+    if want != "bf16":
+        raise ValueError(f"unknown absmax storage dtype {want!r}")
+    am32 = am.to(torch.float32)
+    small = am32.to(torch.bfloat16)
+    if not torch.equal(small.to(torch.float32), am32):
+        raise ValueError(
+            "refusing to store absmax as bf16: the round-trip is not exact for "
+            "this tensor, so it would change what the model computes. This is "
+            "expected for an fp32 checkpoint — bake with --absmax-dtype f32 "
+            "(or 'auto', which picks f32 for such sources).")
+    return small
+
+
 def default_quantize_expert(dev="cuda"):
     """The flagship quantize, verbatim: bf16 [N,K] -> (packed u8 [N,K/2],
     absmax f32 [N,K/64]), returned as CPU tensors."""
@@ -296,10 +363,21 @@ def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
              align=4096, limit_experts=0, quantize_fn=None, log=print,
              proj=PROJ, source="bf16", moe="mlp",
              mxfp4_suffixes=(".weight", ".scale"),
-             fused_proj=("gate_up_proj", "down_proj")):
+             fused_proj=("gate_up_proj", "down_proj"),
+             absmax_dtype="f32"):
     """Quantize-bake. Discovers (L, E) from the checkpoint index; emits the
     same arena/index/manifest triple as the relocation bake, with the
-    two-hop provenance schema."""
+    two-hop provenance schema.
+
+    ``absmax_dtype`` is ``"f32"`` (default, unchanged), ``"bf16"``, or
+    ``"auto"``. bf16 halves the absmax segment — 11.1% of a Qwen3-30B row down
+    to 5.6% — and is bitwise lossless for a bf16 checkpoint; see
+    :func:`cast_absmax`. The default stays f32 because the arena's index is
+    self-describing but *older consumers are not*: a reader that predates bf16
+    absmax refuses the segment outright, so flipping the default would break
+    them on a library upgrade alone.
+    """
+    am_store = resolve_absmax_dtype(absmax_dtype, source)
     if source not in ("bf16", "mxfp4", "fp8"):
         raise ValueError(f"source must be 'bf16', 'mxfp4' or 'fp8'; got {source!r}")
     sh = _Shards(snapshot)
@@ -398,11 +476,13 @@ def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
         d_shape = [d_shape[0], d_shape[1] * 2]
     I, H = g_shape
     assert d_shape == [H, I], (g_shape, d_shape)
+    am_dt = "BF16" if am_store == "bf16" else "F32"
+    am_sz = 2 if am_store == "bf16" else 4
     segs = [
         ("nf4.gate_up_blocks", (2 * I, H // 2), "U8", 2 * I * (H // 2)),
-        ("nf4.gate_up_absmax", (2 * I, H // 64), "F32", 2 * I * (H // 64) * 4),
+        ("nf4.gate_up_absmax", (2 * I, H // 64), am_dt, 2 * I * (H // 64) * am_sz),
         ("nf4.down_blocks", (H, I // 2), "U8", H * (I // 2)),
-        ("nf4.down_absmax", (H, I // 64), "F32", H * (I // 64) * 4),
+        ("nf4.down_absmax", (H, I // 64), am_dt, H * (I // 64) * am_sz),
     ]
     seg_geo, off = [], 0
     for suf, shape, dt, ln in segs:
@@ -460,6 +540,11 @@ def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
                     gu_b, gu_a = quantize_fn(torch.cat([gate, up], 0))
                     dn_b, dn_a = quantize_fn(down)
                     del gate, up, down
+                # AFTER the quantizer, so an injected one cannot hand back a
+                # width the row geometry did not budget for -- that would write
+                # a short row and shift every offset after it.
+                gu_a = cast_absmax(gu_a, am_store)
+                dn_a = cast_absmax(dn_a, am_store)
                 seg_bytes = [
                     (gu_b.contiguous().view(torch.uint8).numpy().tobytes(),
                      src_g + src_u),
@@ -504,7 +589,9 @@ def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
     quantizer = {"kind": "bnb.quantize_4bit", "quant_type": "nf4",
                  "blocksize": 64, "bnb": bnb_v,
                  "torch": __import__("torch").__version__,
-                 "layout": "cat[gate;up] dim0, nested-absmax dequantized f32",
+                 "layout": f"cat[gate;up] dim0, nested-absmax dequantized, "
+                           f"absmax stored {am_store}",
+                 "absmax_dtype": am_store,
                  "source": source, "proj": list(proj), "moe_attr": moe}
     index = {"magic": MAGIC, "version": VERSION, "snapshot": snapshot,
              "prefix": prefix, "align": align, "row_bytes": row_bytes,
@@ -540,6 +627,12 @@ def main():
     # baked by importing the function.
     ap.add_argument("--prefix", default="model.layers",
                     help="layer-stack prefix, e.g. model.language_model.layers")
+    ap.add_argument("--absmax-dtype", default="f32", choices=ABSMAX_DTYPES,
+                    help="absmax storage. bf16 halves that segment (-5.6%% of "
+                         "the row) and is bitwise lossless for a bf16 "
+                         "checkpoint; auto picks it only for such sources. "
+                         "Default f32 — consumers older than bf16 absmax "
+                         "refuse the segment.")
     ap.add_argument("--moe", default="mlp",
                     help="MoE block attribute between the layer and 'experts'")
     args = ap.parse_args()
@@ -551,7 +644,8 @@ def main():
         else:
             layers = [int(x) for x in args.layers.split(",")]
     bake_nf4(args.snapshot, args.out, layers=layers, align=args.align,
-             limit_experts=args.limit_experts, prefix=args.prefix, moe=args.moe)
+             limit_experts=args.limit_experts, prefix=args.prefix, moe=args.moe,
+             absmax_dtype=args.absmax_dtype)
     return 0
 
 
