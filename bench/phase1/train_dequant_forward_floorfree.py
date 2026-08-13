@@ -203,8 +203,15 @@ def cell(spec, regime, device, args, stack):
         # ---- timing: warm FIRST (amendment 1) -------------------------------
         _warm(step["G_base"], args.warm_s)
         row["warm_s"] = args.warm_s
-        iters = _pilot_iters(step["G_base"], args.block_ms)
+        # AMENDMENT 2: the ceiling is passed explicitly. Leg 1's `_pilot_iters`
+        # defaults to hi=200, which on a sub-millisecond cell CONTRADICTS the
+        # same protocol's registered 250 ms block target -- 22 of 24 sub-3 ms
+        # cells in run 1 pinned at 200 and ran a median 151 ms block. Leg 1's
+        # file is stamped and is not edited; the ceiling is supplied from here.
+        iters = _pilot_iters(step["G_base"], args.block_ms, hi=args.max_iters)
         row["iters"] = iters
+        row["iters_ceiling"] = args.max_iters
+        row["iters_clamped"] = bool(iters >= args.max_iters)
 
         t = {}
         t["gb_a"] = _timed(step["G_base"], iters)
@@ -251,6 +258,11 @@ def main():
                              "tokbudget_2048"])
     ap.add_argument("--block-ms", type=float, default=250.0)
     ap.add_argument("--warm-s", type=float, default=1.5)
+    ap.add_argument("--max-iters", type=int, default=2000,
+                    help="AMENDMENT 2: iteration ceiling. Leg 1's default of "
+                         "200 could not reach the registered 250 ms block "
+                         "target on sub-1.25 ms cells, so the self-pair was "
+                         "certifying blocks 40%% shorter than registered.")
     ap.add_argument("--energy", action="store_true")
     ap.add_argument("--energy-s", type=float, default=1.5)
     ap.add_argument("--fid-rows", type=int, default=16)
@@ -270,7 +282,7 @@ def main():
            "torch": torch.__version__, "rank": RANK, "scaling": SCALING,
            "eids_form": "tensor" if args.eids_tensor else "list",
            "regimes": args.regimes, "block_ms": args.block_ms,
-           "warm_s": args.warm_s, "rows": []}
+           "warm_s": args.warm_s, "max_iters": args.max_iters, "rows": []}
     try:
         import bitsandbytes as bnb
         out["bitsandbytes"] = bnb.__version__
