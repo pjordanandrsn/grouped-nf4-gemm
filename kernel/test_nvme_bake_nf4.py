@@ -360,24 +360,34 @@ def test_no_experts_names_what_it_searched_for():
     from nvme_bake_nf4 import _explain_no_experts
     sh = _wm(["model.layers.0.mlp.experts.0.gate_proj.weight_packed"])
     with pytest.raises(ValueError) as ei:
-        _explain_no_experts(sh, "model.layers", ".mlp.experts.", "gate_proj.weight", [])
+        _explain_no_experts(sh, "model.layers", ".mlp.experts.", "gate_proj.weight")
     msg = str(ei.value)
     assert "model.layers." in msg and ".mlp.experts." in msg and "gate_proj.weight" in msg
     assert "weight_packed" in msg, "must show a near-miss key from the checkpoint"
 
 
-def test_fused_expert_layout_is_named_as_such():
-    """Gemma-4 stores one 3-D tensor per layer with no per-expert index. That is
-    unsupported here, and the error must say so rather than blame the prefix."""
-    from nvme_bake_nf4 import _explain_no_experts
-    fused = "model.language_model.layers.0.experts.gate_up_proj"
+def test_fused_expert_layout_is_reported_THROUGH_bake_nf4(tmp_path):
+    """Route test, not a fixture test.
+
+    The first version of this called _explain_no_experts directly with a
+    hand-built marker and a pre-filled `unindexed` list -- and so passed while
+    the branch was UNREACHABLE from bake_nf4, because the marker was always
+    built as `.{moe}.experts.` and Gemma-4 hangs experts straight off the layer.
+    A test that constructs the state under test cannot see that the production
+    path never produces it. This one goes in through the real entry point with a
+    real (if tiny) index file.
+    """
+    import json as _json
+    names = {f"model.language_model.layers.{l}.experts.{p}": "model-00001.safetensors"
+             for l in range(2) for p in ("gate_up_proj", "down_proj")}
+    (tmp_path / "model.safetensors.index.json").write_text(_json.dumps({"weight_map": names}))
+    from nvme_bake_nf4 import bake_nf4
     with pytest.raises(ValueError, match="FUSED"):
-        _explain_no_experts(_wm([fused]), "model.language_model.layers",
-                            ".experts.", "gate_up_proj", [fused])
+        bake_nf4(str(tmp_path), str(tmp_path / "out.arena"))   # DEFAULT knobs
 
 
 def test_no_expert_keys_at_all_is_distinguished():
     from nvme_bake_nf4 import _explain_no_experts
     with pytest.raises(ValueError, match="NO keys containing 'expert'"):
         _explain_no_experts(_wm(["model.layers.0.self_attn.q_proj.weight"]),
-                            "model.layers", ".mlp.experts.", "gate_proj.weight", [])
+                            "model.layers", ".mlp.experts.", "gate_proj.weight")

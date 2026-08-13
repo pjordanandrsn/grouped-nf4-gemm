@@ -52,7 +52,8 @@ def _expert_names(layer, e, prefix="model.layers", proj=PROJ, suffix="weight",
     # `moe` is the attribute the experts hang off. transformers-canonical
     # checkpoints say `mlp`; a checkpoint published in DeepSeek's own reference
     # spelling says `ffn` and drops the `model.` prefix entirely.
-    base = f"{prefix}.{layer}.{moe}.experts.{e}."
+    mid = f"{moe}." if moe else ""       # falsy moe: experts sit on the layer
+    base = f"{prefix}.{layer}.{mid}experts.{e}."
     return {p: f"{base}{p}.{suffix}" for p in proj}
 
 
@@ -211,7 +212,7 @@ class _Shards:
                                   hashlib.sha256(raw).hexdigest())
 
 
-def _explain_no_experts(sh, prefix, marker, gate_key, unindexed):
+def _explain_no_experts(sh, prefix, marker, gate_key):
     """Say what was searched for and what the checkpoint actually has.
 
     Discovery matching nothing used to surface as ``max() arg is an empty
@@ -222,6 +223,18 @@ def _explain_no_experts(sh, prefix, marker, gate_key, unindexed):
     index. Both were minutes of reading this function to learn what it wanted.
     """
     near = sorted({n for n in sh.wm if "expert" in n.lower()})
+    # Detect a FUSED layout from the checkpoint itself rather than from whatever
+    # got through the strict filter. Gemma-4 differs from the default in THREE
+    # ways at once -- no MoE attribute, no per-expert index, no `.weight` suffix
+    # -- so a user running the defaults matches nothing, and a diagnosis that
+    # only fires once they have already guessed two of the three is no help.
+    unindexed = []
+    for n in near:
+        parts = n.split(".")
+        if "experts" in parts:
+            i = parts.index("experts")
+            if i + 1 < len(parts) and not parts[i + 1].isdigit():
+                unindexed.append(n)
     lines = [
         "found no per-expert tensors to bake.",
         f"  searched: names starting {prefix + '.'!r}, containing {marker!r}, ending {gate_key!r}",
@@ -262,24 +275,28 @@ def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
     # real K3 bytes showed that.
     wsuf = mxfp4_suffixes[0] if source in ("mxfp4", "fp8") else ".weight"
     gate_key = f"{proj[0]}{wsuf}"
-    marker = f".{moe}.experts."
+    # A falsy `moe` means the experts hang straight off the layer, with no
+    # block attribute between -- Gemma-4 spells it
+    # `model.language_model.layers.0.experts.gate_up_proj`. Building the
+    # marker unconditionally as `.{moe}.experts.` made that layout
+    # unmatchable for EVERY value of `moe` ("" gives "..experts."), so the
+    # fused-layout diagnosis below could never fire on the checkpoint that
+    # motivated it (Bugbot, PR #55).
+    marker = f".{moe}.experts." if moe else ".experts."
     depth = len(prefix.split("."))          # `model.layers` -> 2, `layers` -> 1
     lays, es = set(), set()
-    unindexed = []
     for name in sh.wm:
         if marker in name and name.endswith(gate_key) and name.startswith(prefix + "."):
             parts = name.split(".")
             after = parts[parts.index("experts") + 1]
             if not after.isdigit():
-                # A FUSED layout: one 3-D tensor for the whole layer, no per-expert
-                # index to parse. Collect rather than crash on int(), so the error
-                # below can say which shape the checkpoint actually uses.
-                unindexed.append(name)
+                # No per-expert index to parse. Skip rather than crash on
+                # int(); _explain_no_experts re-derives this from the checkpoint.
                 continue
             lays.add(int(parts[depth]))
             es.add(int(after))
     if not es:
-        _explain_no_experts(sh, prefix, marker, gate_key, unindexed)
+        _explain_no_experts(sh, prefix, marker, gate_key)
     if layers is None:
         layers = sorted(lays)
     E = max(es) + 1
