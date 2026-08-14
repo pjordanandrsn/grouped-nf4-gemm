@@ -264,10 +264,27 @@ class ColdTier:
 
 
 # safetensors dtype tag -> torch dtype. Only the tags the bake accepts.
+#
+# The FP8 tags map to ``uint8`` on purpose: this is a byte-relocation tier, and
+# these tags label BYTES it must hand back unchanged, not values to convert.
+# `mxfp4_residency._PACKED_BYTE_DTYPES` and `nvme_bake_nf4._MXFP4_BYTE_DTYPES`
+# already say the same thing -- DeepSeek-V4 labels its MXFP4 experts
+# ``I8``/``F8_E8M0`` where Kimi K3 labels both ``U8``, same bytes either way --
+# and this table was the one place that had not been told. The consequence was
+# narrow and total: the bake could WRITE a V4 arena and `mxfp4_residency` could
+# SERVE from it, while anything going through :func:`segment_geometry` (the
+# training tier's geometry check) died with ``KeyError: 'F8_E8M0'``.
+#
+# ``float8_e8m0fnu`` would be the wrong target even where torch has it (>= 2.7).
+# An e8m0 byte is an EXPONENT; materializing it as a float and later casting
+# yields the value (2**-5 -> 0) instead of the exponent byte (122), so every
+# block would be scaled by 2**-127. Reinterpreting as ``uint8`` is what every
+# consumer of these bytes already does.
 _ST_TO_TORCH = {
     "U8": "uint8", "I8": "int8", "F16": "float16", "BF16": "bfloat16",
     "F32": "float32", "F64": "float64", "I16": "int16", "I32": "int32",
     "I64": "int64", "U16": "uint16", "U32": "uint32", "U64": "uint64",
+    "F8_E8M0": "uint8", "F8_E4M3": "uint8",
 }
 
 
