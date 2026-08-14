@@ -4,6 +4,38 @@
 
 ## 0.12.0 — 2026-08-14
 
+### The package would not import at all on a platform it declares support for
+
+`pyproject.toml` pins triton as `triton>=3.4; platform_system == 'Linux'` — a
+deliberate marker, since there is no triton wheel for arm64 Darwin at all
+(`pip install triton` there: "No matching distribution found"). A non-Linux
+install is therefore a **supported** configuration by this package's own
+packaging. It simply did not work: `nf4_grouped`, `mxfp4_grouped` and
+`host_gather` each ran a bare `import triton` at module scope, so importing any
+of them raised `ModuleNotFoundError: No module named 'triton'`.
+
+The failure landed in exactly the wrong place. What this package promises
+without a GPU is specific and pure-torch: `dequant_ref` (whose docstring already
+says "Runs on CPU (no CUDA/Triton)"), the README's CPU quickstart, and the
+**taught** refusal — "requires CUDA tensors ... use `dequant_ref(packed, absmax,
+N, K)`" — that `test_cpu_refusal` pins as doctrine. A raw import error preempted
+all three, so a CPU-only user following the README got precisely the unhelpful
+error that guard exists to prevent, one import too early for it to speak.
+
+`kernel/_triton_shim.py` centralizes the import. Where triton is present it
+binds the real modules and nothing else changes, so the CUDA path is unaffected
+by construction. Where it is absent, `@triton.jit` still **defines** the kernels
+— they are built at import, so the decorator must succeed — while a *launch*
+raises, naming the CPU alternative for the module in hand: `dequant_ref` for
+NF4, `mxfp4_pack_ref.dequant_mxfp4` for MXFP4, and for `host_gather`, the honest
+answer that a device-side gather over UVA has no CPU equivalent.
+
+This had also disarmed the contributor checklist: `test_readme_cpu_block.py` and
+`test_cpu_refusal.py` are an "Always" item in the PR template *because* they are
+the CPU-only tests anyone can run — and on a machine without triton they could
+not even be collected. Whole kernel suite on such a box went from 196 passed
+with 7 collection errors to 235 passed with none. (#78)
+
 ### The arena tier could not read DeepSeek-V4's own scale dtype
 
 `nvme_residency._ST_TO_TORCH` had no entry for `F8_E8M0`, so staging a real
