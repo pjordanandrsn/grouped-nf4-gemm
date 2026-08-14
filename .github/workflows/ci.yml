@@ -69,6 +69,16 @@ jobs:
           python -m pip install --quiet --upgrade pip
           python -m pip install --quiet torch --index-url https://download.pytorch.org/whl/cpu
           python -m pip install --quiet triton pytest numpy
+
+      # The interpreter suites `importorskip("triton")` -- correct on macOS,
+      # where there is no triton wheel at all, but it means a BROKEN install
+      # above would turn them into silent skips and this job would stay green
+      # about nothing. Same rule the GGUF step states in as many words. Assert
+      # the dependency is really here, so a skip can only ever mean "platform
+      # without triton", never "CI stopped testing this".
+      - name: triton is actually installed (a skip here must never be silent)
+        run: python -c "import triton; print('triton', triton.__version__)"
+
       - name: interpreter-mode contract + fuzz
         env:
           TRITON_INTERPRET: "1"
