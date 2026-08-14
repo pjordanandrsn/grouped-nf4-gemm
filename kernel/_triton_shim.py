@@ -21,15 +21,25 @@ The contract here is narrow on purpose:
   unmodified below their import line, so the CUDA path is untouched by
   construction.
 * **Absent** — define-time triton use resolves (kernels are *defined* at import,
-  so the decorator must succeed) while *launch*-time use raises with the same
-  instruction the device guard gives.
+  so the decorator must succeed) while *launch*-time use raises with the CPU
+  alternative **for the module that defined that kernel**.
 
-The one deliberate subtlety is that unknown attributes raise ``AttributeError``
-rather than returning a stub. ``nf4_grouped`` probes ``getattr(tl, "gather",
-None)`` to decide whether the register-LUT variant exists; raising is what lets
-that fall back to its default, so a triton-less box reports ``HAS_TL_GATHER =
-False`` — the same answer triton < 3.3 gives — instead of selecting a variant
-backed by a stub.
+Two details are load-bearing:
+
+*The fallbacks are per module.* This shim is shared, so a single hard-coded
+"use ``dequant_ref``" would send an MXFP4 or a gather caller to an NF4-only API.
+``_CPU_PATH`` is keyed by the defining module, and ``host_gather`` gets the
+honest answer — a device-side gather over UVA has no CPU equivalent at all.
+
+*Unknown attributes raise ``AttributeError``* rather than returning another
+stub. ``nf4_grouped`` probes ``getattr(tl, "gather", None)`` to decide whether
+the register-LUT variant exists; raising is what lets that fall back to its
+default, so a triton-less box reports ``HAS_TL_GATHER = False`` — the same
+answer triton < 3.3 gives — instead of selecting a variant backed by a stub.
+
+The stand-ins are defined unconditionally, and only *bound* in the fallback
+branch, so ``test_triton_shim`` can exercise this routing on Linux CI too. Logic
+that only exists on the platforms CI does not run is logic nothing checks.
 """
 
 from __future__ import annotations
@@ -38,6 +48,90 @@ import functools
 
 __all__ = ["HAS_TRITON", "tl", "triton"]
 
+_NO_TRITON = (
+    "triton is not installed, so this fused kernel cannot run. triton is a "
+    "Linux-only dependency of grouped-nf4-gemm and has no wheel for this "
+    "platform."
+)
+
+#: The CPU alternative is **per module** — see the module docstring. Keyed by
+#: the defining module of the kernel that was launched, which is exactly the
+#: module whose fallback applies. ``test_triton_shim`` fails if a module that
+#: imports this shim is missing an entry.
+_CPU_PATH = {
+    "nf4_grouped":
+        "For a CPU-checkable decode of the same NF4 bytes, use "
+        "dequant_ref(packed, absmax, N, K) — the pure-torch reference the "
+        "property suite pins the kernel against.",
+    "mxfp4_grouped":
+        "For a CPU-checkable decode of the same MXFP4 bytes, use "
+        "mxfp4_pack_ref.dequant_mxfp4(blocks, scales) — the pure-torch "
+        "reference the interpreter-parity gate gates this kernel on.",
+    "host_gather":
+        "This primitive has no CPU equivalent: it is a device-side gather "
+        "reading pinned host memory over UVA, so the fallback is to not "
+        "prefetch rather than to compute the same thing differently.",
+}
+
+#: A consumer added later without an entry gets a message that is vague but
+#: never WRONG — misdirection is the failure mode being avoided here.
+_CPU_PATH_UNKNOWN = (
+    "That module's pure-torch reference, where it has one, is the "
+    "CPU-checkable path."
+)
+
+
+class _UnlaunchableKernel:
+    """A ``@triton.jit`` kernel on a box with no triton.
+
+    Kernels are defined at import, so decorating must succeed; only a launch can
+    fail. Triton launches are subscripted — ``kernel[grid](...)`` — so
+    ``__getitem__`` returns self and the call raises, naming the CPU alternative
+    for the defining module rather than surfacing an ``AttributeError`` on a
+    stub.
+    """
+
+    def __init__(self, fn):
+        self._fn = fn
+        functools.update_wrapper(self, fn)
+
+    def __getitem__(self, _grid):
+        return self
+
+    def __call__(self, *_args, **_kwargs):
+        # `__module__` is the module that DEFINED the kernel, so a shared shim
+        # still names the right fallback for the caller in hand.
+        mod = (getattr(self._fn, "__module__", "") or "").rsplit(".", 1)[-1]
+        raise RuntimeError(
+            f"{self._fn.__name__}: {_NO_TRITON} {_CPU_PATH.get(mod, _CPU_PATH_UNKNOWN)}"
+        )
+
+
+class _MissingModule:
+    """Stand-in for ``triton`` / ``triton.language``."""
+
+    #: Kernel signatures annotate with ``tl.constexpr``. Every consumer has
+    #: ``from __future__ import annotations``, so these are strings and are
+    #: never evaluated — but binding it explicitly means dropping that
+    #: future-import later cannot turn this shim into an import error.
+    constexpr = object()
+
+    def __init__(self, name):
+        self._name = name
+
+    def __getattr__(self, attr):
+        # Raising is load-bearing: see the module docstring on
+        # `getattr(tl, "gather", None)`.
+        raise AttributeError(f"{self._name}.{attr}: {_NO_TRITON}")
+
+    @staticmethod
+    def jit(fn=None, **_kwargs):
+        def wrap(f):
+            return _UnlaunchableKernel(f)
+
+        return wrap if fn is None else wrap(fn)
+
+
 try:
     import triton
     import triton.language as tl
@@ -45,58 +139,5 @@ try:
     HAS_TRITON = True
 except ModuleNotFoundError:  # no triton wheel for this platform (e.g. macOS)
     HAS_TRITON = False
-
-    _NO_TRITON = (
-        "triton is not installed, so the fused kernel cannot run. triton is a "
-        "Linux-only dependency of grouped-nf4-gemm; on this platform use the "
-        "pure-torch path — dequant_ref(packed, absmax, N, K) — which decodes "
-        "the same NF4 bytes and is what the property suite pins the kernel "
-        "against."
-    )
-
-    class _UnlaunchableKernel:
-        """A ``@triton.jit`` kernel on a box with no triton.
-
-        Kernels are defined at import, so decorating must succeed; only a launch
-        can fail. Triton launches are subscripted — ``kernel[grid](...)`` — so
-        ``__getitem__`` returns self and the call raises, naming the same CPU
-        alternative the device guard does rather than surfacing an
-        ``AttributeError`` on a stub.
-        """
-
-        def __init__(self, fn):
-            self._fn = fn
-            functools.update_wrapper(self, fn)
-
-        def __getitem__(self, _grid):
-            return self
-
-        def __call__(self, *_args, **_kwargs):
-            raise RuntimeError(f"{self._fn.__name__}: {_NO_TRITON}")
-
-    class _MissingModule:
-        """Stand-in for ``triton`` / ``triton.language``."""
-
-        #: Kernel signatures annotate with ``tl.constexpr``. Every consumer has
-        #: ``from __future__ import annotations``, so these are strings and are
-        #: never evaluated — but binding it explicitly means dropping that
-        #: future-import later cannot turn this shim into an import error.
-        constexpr = object()
-
-        def __init__(self, name):
-            self._name = name
-
-        def __getattr__(self, attr):
-            # Raising is load-bearing: see the module docstring on
-            # `getattr(tl, "gather", None)`.
-            raise AttributeError(f"{self._name}.{attr}: {_NO_TRITON}")
-
-        @staticmethod
-        def jit(fn=None, **_kwargs):
-            def wrap(f):
-                return _UnlaunchableKernel(f)
-
-            return wrap if fn is None else wrap(fn)
-
     triton = _MissingModule("triton")
     tl = _MissingModule("triton.language")
