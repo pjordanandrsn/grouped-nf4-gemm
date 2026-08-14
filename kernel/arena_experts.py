@@ -130,14 +130,47 @@ class ArenaExpertSource:
         got = self._stage.get(n)
         if got is None:
             want_pin = str(self.device) != "cpu" and torch.cuda.is_available()
-            got = {}
+            align = self.index["align"]
+            got, keep = {}, []
             for s, g in self.segments.items():
-                t = torch.empty(n, g["length"], dtype=torch.uint8)
-                # Pinned only for a real H2D. `pin_memory()` on a CPU-target
-                # source buys nothing and costs page-locking.
-                got[s] = t.pin_memory() if want_pin else t
+                ln = g["length"]
+                # OVER-ALLOCATE and hand back an aligned sub-view. A pinned
+                # tensor is NOT reliably page-aligned: torch's caching host
+                # allocator suballocates and has been measured 1024 B off
+                # (see nvme_reader.alloc_landing). The scatter path DMAs
+                # O_DIRECT bytes straight into these rows, so an unaligned base
+                # is an EINVAL -- and worse, it depends on what else has been
+                # pinned, so it passes in a fresh process and fails in a real
+                # one.
+                t = torch.empty(n * ln + align, dtype=torch.uint8)
+                if want_pin:
+                    t = t.pin_memory()
+                pad = (-t.data_ptr()) % align
+                view = t[pad:pad + n * ln].view(n, ln)
+                assert view.data_ptr() % align == 0, "aligned sub-view is not aligned"
+                got[s] = view
+                keep.append(t)          # the view aliases it; it must outlive
             self._stage[n] = got
+            self._stage_keep = getattr(self, "_stage_keep", [])
+            self._stage_keep.append(keep)
         return got
+
+    def _scatter_ok(self, stage: dict, n: int) -> bool:
+        """Is a scattering read legal for THIS staging, right now?
+
+        The layout check is about the arena's geometry; this is about the
+        addresses actually allocated. Both must hold, and a failure here must
+        FALL BACK rather than raise -- an allocator that hands back an
+        unaligned block is not a reason to fail a fetch.
+        """
+        if self._scatter_layout() is None:
+            return False
+        align = self.index["align"]
+        for s, g in self.segments.items():
+            t = stage[s]
+            if t.data_ptr() % align or (g["length"] % align):
+                return False
+        return True
 
     def _scatter_layout(self):
         """``[(suffix|None, length)]`` covering a whole row in file order, or
@@ -211,7 +244,7 @@ class ArenaExpertSource:
         n = len(ids)
         stage = self._staging(n)
 
-        if self._scatter_layout() is not None:
+        if self._scatter_ok(stage, n):
             # DMA straight into staging: the CPU never touches these bytes, so
             # neither the memcpy nor the dirty-page penalty on the H2D exists.
             scratch = self._scratch()

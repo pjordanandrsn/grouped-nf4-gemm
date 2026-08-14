@@ -153,3 +153,39 @@ def test_scatter_views_must_cover_the_whole_row(aligned_arena):
         short = [memoryview(bytearray(4096))]
         with pytest.raises(ValueError, match="cover"):
             src.reader.read_row_scatter(1, 0, short)
+
+
+def test_every_staging_row_is_page_aligned(aligned_arena):
+    """The scatter DMAs O_DIRECT bytes into these rows, so each row's ADDRESS
+    must be align-aligned — not just its length.
+
+    `torch.empty(...).pin_memory()` does NOT guarantee this: the caching host
+    allocator suballocates and has been measured 1024 B off (see
+    `nvme_reader.alloc_landing`). So staging over-allocates and hands back an
+    aligned sub-view. CI caught the unaligned version on Linux while it passed
+    locally, which is exactly why this asserts addresses rather than trusting
+    the allocator.
+    """
+    arena, _ = aligned_arena
+    with ArenaExpertSource(arena) as src:
+        align = src.index["align"]
+        n = 3
+        stage = src._staging(n)
+        for s, g in src.segments.items():
+            t = stage[s]
+            assert t.data_ptr() % align == 0, f"{s}: base {t.data_ptr():#x} unaligned"
+            for r in range(n):
+                assert t[r].data_ptr() % align == 0, f"{s} row {r} unaligned"
+        assert src._scatter_ok(stage, n), "aligned staging still refused the scatter"
+
+
+def test_unaligned_staging_falls_back_instead_of_raising(aligned_arena, monkeypatch):
+    """An allocator that hands back an unaligned block must cost the fast path,
+    not the fetch. Raising here would turn a performance concern into an
+    outage."""
+    arena, _ = aligned_arena
+    with ArenaExpertSource(arena) as src:
+        monkeypatch.setattr(src, "_scatter_ok", lambda *a, **k: False)
+        out = src.fetch_raw(1, [0, 1])
+        assert src.last_fetch_path == "copy"
+        assert out["w1.weight_packed"].shape[0] == 2
