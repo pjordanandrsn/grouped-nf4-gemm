@@ -212,6 +212,39 @@ class RoutingTap:
 
 
 # ----------------------------------------------------------------- arm -----
+def warm_gpu(seconds: float, device="cuda"):
+    """Wall-clock GPU-busy work before the FIRST timed arm of a mode.
+
+    THE CLOCK-RECOVERY LAW, applied at leg level. `--warmup N` drops the first N
+    STEPS of each arm. It does not cover the gap between a model load -- a long
+    CPU-bound stretch with the GPU idle -- and the first arm timed after it,
+    which reads the card boosting back up.
+
+    Measured, 2026-08-14 L40S capturability gate: the FIRST data mode of every
+    sweep blew the e2e prereg's G1 band (text 0.9564 / 0.9047) and worsened
+    monotonically to 0.8926, while the mode that ran SECOND was clean throughout
+    (1.0010-1.0453). Those cells were excluded and the gate could not close.
+
+    The fix is wall-clock, not more iterations -- the same one that took the 4090
+    from 9 void cells to 0 in the leg-1 re-run. More warm-up ITERATIONS do not
+    work: a per-arm warmup of 4 steps is over in a fraction of the time the card
+    needs to come back up.
+    """
+    if not torch.cuda.is_available() or seconds <= 0:
+        return 0.0
+    a = torch.randn(2048, 2048, device=device, dtype=torch.bfloat16)
+    b = torch.randn(2048, 2048, device=device, dtype=torch.bfloat16)
+    t0 = time.perf_counter()
+    while time.perf_counter() - t0 < seconds:
+        for _ in range(8):
+            c = a @ b          # noqa: F841 -- discarded; the point is the work
+    torch.cuda.synchronize()
+    el = time.perf_counter() - t0
+    del a, b
+    torch.cuda.empty_cache()
+    return el
+
+
 def busy_fraction(model, opt, ids, m=3):
     """GPU-busy fraction of a real training step (C4), measured on this arm.
 
@@ -337,6 +370,9 @@ def main():
     # content-independence, and `both` still runs the matched pair, but a run
     # that says nothing about its fixture now gets prose.
     ap.add_argument("--data", default="text", choices=["text", "random", "both"])
+    ap.add_argument("--warm-s", type=float, default=1.5,
+                    help="wall-clock GPU-busy seconds before the first arm of "
+                         "each data mode (clock recovery). 0 disables it.")
     ap.add_argument("--busy-steps", type=int, default=3,
                     help="profiled steps per arm for the GPU-busy label (C4). "
                          "Costs 2+2N steps per arm; 0 disables it and the cell "
@@ -429,6 +465,7 @@ def main():
                    frozen_check_vacuous=bool(vacuous),
                    integrity_applicable=integrity_applicable,
                    data_default="text (C5); random ids are opt-in",
+                   clock_recovery_warm_s=a.warm_s,
                    random_id_understatement=(
                        "1.6-1.7x on every matched pair — any table citing a "
                        "random-id cell states this factor beside it"),
@@ -441,6 +478,13 @@ def main():
         print(f"\n########## data={mode} ##########", flush=True)
         batches = (text_batches(tok, a.steps, a.seq, "cuda") if mode == "text"
                    else random_batches(tok, a.steps, a.seq, "cuda"))
+        # Clock recovery, before the first arm of EVERY mode. Building batches
+        # is itself a CPU-bound stretch with the GPU idle -- `text_batches`
+        # tokenises wikitext -- so the mode that runs first is not the only one
+        # exposed, it is just the worst. Cheap enough to do unconditionally.
+        el = warm_gpu(a.warm_s)
+        print(f"clock-recovery warm-up: {el:.2f}s GPU-busy before arm 1",
+              flush=True)
         results, grads = {}, {}
         for name, en, dis in ARMS:
             restore(model, base_snap)
