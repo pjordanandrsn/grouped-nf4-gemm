@@ -2,6 +2,44 @@
 
 ## Unreleased
 
+### `ArenaExpertSource.fetch_raw` lands rows in pinned staging — 3.5x
+
+`fetch_raw` copied every byte on the host **three times** before the device saw it:
+`bytearray(mv[...])` once per SEGMENT per expert (a required copy, since the landing
+buffer is reused, but a Python-level one), then `torch.stack`, then a pageable
+`.to(device)`.
+
+The measured symptom was that the path ran at **~0.72 GB/s regardless of the device** —
+identical on a 6.88 GB/s and a 22.71 GB/s NVMe. That is a host ceiling, not a read limit.
+
+Now the reader's bytes go straight into a **pinned `[E, length]` staging tensor per
+segment**, reused across calls, and each segment moves to the device in one transfer. This
+is `nvme_residency.segment_into`'s shape applied to the serving path, which predated it.
+
+Measured on a real K3 layer (896 experts, 17.5 MB rows, top-16 decode), same slice, same
+bench, same pod class:
+
+| | per layer | achieved |
+|---|---|---|
+| before | 387.3 ms | 0.725 GB/s |
+| after | **111.4 ms** | **2.52 GB/s** |
+
+**3.5x**, and 10x cumulative with the amplification fix above (1113 -> 111 ms). Bytes read
+are unchanged at 18,529,910,784 — the fix removes host copies, not reads, and the counter
+confirms it.
+
+Returned tensors never alias the staging: `.to()` is a no-op when the source is already on
+the target, so on the DEFAULT `device="cpu"` the result would have handed back the reused
+buffer and the next fetch of the same expert count would rewrite a caller's earlier result
+in place (Cursor Bugbot). Detected by pointer identity rather than by comparing device
+strings, which get `cuda` vs `cuda:0` wrong.
+
+The device transfer is **synchronous on purpose**: staging is reused, and a
+`non_blocking=True` copy is not ordered against the *host* writes of the next call, so the
+CPU could overwrite staging mid-DMA. Making it async needs an event recorded here and
+waited on before reuse. Still ~9x under this box's device rate (22.94 GB/s at qd=16), which
+stays open in #73.
+
 ### `moe_layer_forward` read every expert row three times
 
 A row carries all six segments, but `moe_layer_forward` called `fused_stacks`
