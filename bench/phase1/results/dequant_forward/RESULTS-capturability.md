@@ -3,7 +3,10 @@
 **2026-08-14 · RTX A2000 12GB (sm_86) · torch 2.8.0+cu128 · triton 3.4.0 ·
 bitsandbytes 0.50.0 · report-only.**
 Scope registered pre-data in
-[`kernel/prereg_capturability_scope.json`](../../../../kernel/prereg_capturability_scope.json).
+[`kernel/prereg_capturability_scope.json`](../../../../kernel/prereg_capturability_scope.json),
+OTS-stamped 2026-08-14 while the throughput gate below was still in flight
+(calendar-pending; `ots upgrade` once Bitcoin confirms). Because the gate has
+not returned, the register is genuinely pre-data for the one number it grades.
 
 > **CAPTURABILITY IS A PRECONDITION, NOT A SPEEDUP.** Nothing in this document
 > is a performance claim, and capture success must not be reported as one. See
