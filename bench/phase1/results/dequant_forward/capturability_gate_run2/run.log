@@ -1,0 +1,1003 @@
++ PY=
++ for c in python3.12 python3.11 python3 python
++ command -v python3.12
++ python3.12 -c 'import torch'
++ PY=python3.12
++ break
++ '[' -z python3.12 ']'
++ python3.12 -c 'import torch;print('\''GPU'\'',torch.cuda.get_device_name(0),torch.cuda.get_device_capability(0))'
+GPU NVIDIA L40S (8, 9)
++ command -v gcc
++ '[' -f /root/dqf_cap.tgz ']'
++ cd /root
++ rm -rf gnf4
++ mkdir gnf4
++ tar xzf /root/dqf_cap.tgz -C gnf4
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
++ DRIVER=bench/phase1/e2e_train_arms.py
++ '[' -f /root/gnf4/bench/phase1/e2e_train_arms.py ']'
++ '[' -f /root/gnf4/kernel/nf4_grouped.py ']'
+++ python3.12 -c 'import torch;print(torch.__version__.split('\''+'\'')[0])'
++ TV=2.8.0
++ echo torch==2.8.0
++ python3.12 -m pip install -q --no-cache-dir -c /root/constraints.txt experts4bit-qlora grouped-nf4-gemm transformers datasets accelerate bitsandbytes
++ tail -5
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+
+[notice] A new release of pip is available: 26.1.2 -> 26.2.1
+[notice] To update, run: python3.12 -m pip install --upgrade pip
++ python3.12 -
+e4b 0.19.0 | gnf4 ? | dgrad True | tf 5.15.0
+++ python3.12 -c 'import nf4_grouped,os;print(os.path.dirname(nf4_grouped.__file__))'
++ SITE=/usr/local/lib/python3.12/dist-packages
++ '[' -n /usr/local/lib/python3.12/dist-packages ']'
++ cp /usr/local/lib/python3.12/dist-packages/nf4_grouped.py /root/pub_nf4_grouped.py
++ cp /usr/local/lib/python3.12/dist-packages/nf4_qlora.py /root/pub_nf4_qlora.py
++ echo SITE=/usr/local/lib/python3.12/dist-packages
+SITE=/usr/local/lib/python3.12/dist-packages
++ cd /root/gnf4
++ export DQF_REPO=/root/gnf4
++ DQF_REPO=/root/gnf4
++ MODEL=allenai/OLMoE-1B-7B-0924
++ STEPS=24
++ use_version pub
++ case "$1" in
++ cp /root/pub_nf4_grouped.py /usr/local/lib/python3.12/dist-packages/nf4_grouped.py
++ cp /root/pub_nf4_qlora.py /usr/local/lib/python3.12/dist-packages/nf4_qlora.py
++ find /usr/local/lib/python3.12/dist-packages -name __pycache__ -type d -exec rm -rf '{}' +
+++ python3.12 -c 'import nf4_grouped;print(hasattr(nf4_grouped,'\''to_device_i32'\''))'
++ HAS=False
++ echo 'VERSION_CHECK want=pub to_device_i32=False'
+VERSION_CHECK want=pub to_device_i32=False
++ case "$1:$HAS" in
++ :
++ sweep pub1
++ L=pub1
++ for OFF in 1 0
++ echo '########## pub1 offload=1 ##########'
+########## pub1 offload=1 ##########
++ python3.12 bench/phase1/e2e_train_arms.py --model allenai/OLMoE-1B-7B-0924 --steps 24 --warmup 4 --seq 512 --offload 1 --data both --out /root/dqf-out --tag pub1-off1
++ tail -60
+env: {"gpu": "NVIDIA L40S", "cap": [8, 9], "vram_total_gb": 44.39, "torch": "2.8.0+cu128", "e4b": "0.19.0", "gnf4": "?", "gnf4_has_dgrad": true}
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files:  56%|█████▌    | 5/9 [00:00<00:00, 32.75it/s]Fetching 9 files:  67%|██████▋   | 6/9 [00:17<00:00, 32.75it/s]Fetching 9 files:  78%|███████▊  | 7/9 [00:37<00:13,  6.87s/it]Fetching 9 files:  89%|████████▉ | 8/9 [00:42<00:06,  6.38s/it]Fetching 9 files: 100%|██████████| 9/9 [00:42<00:00,  4.71s/it]
+[15:04:12]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[15:04:20]   quantized experts on 16/16 MoE layers (64 experts each)
+[15:04:20]   offloaded 16 layers' 4-bit experts to pinned CPU RAM (streamed to GPU one layer at a time during train/eval)
+[15:04:20]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+layers=16 experts=64 trainable=58,720,256
+frozen-storage check NOT APPLICABLE under offload=1 (32 tensors, 0.00 GiB — these are streaming staging buffers, not frozen storage); the resident cell carries this claim
+
+########## data=text ##########
+Generating test split:   0%|          | 0/4358 [00:00<?, ? examples/s]Generating test split:  23%|██▎       | 1000/4358 [00:00<00:00, 4392.77 examples/s]Generating test split: 100%|██████████| 4358/4358 [00:00<00:00, 15532.57 examples/s]Generating test split: 100%|██████████| 4358/4358 [00:00<00:00, 13211.49 examples/s]
+Generating train split:   0%|          | 0/36718 [00:00<?, ? examples/s]Generating train split:  11%|█         | 4000/36718 [00:00<00:01, 24660.88 examples/s]Generating train split:  19%|█▉        | 7000/36718 [00:00<00:01, 16831.79 examples/s]Generating train split:  41%|████      | 15000/36718 [00:00<00:00, 31533.42 examples/s]Generating train split: 100%|██████████| 36718/36718 [00:00<00:00, 61040.50 examples/s]
+Generating validation split:   0%|          | 0/3760 [00:00<?, ? examples/s]Generating validation split: 100%|██████████| 3760/3760 [00:00<00:00, 51310.48 examples/s]
+clock-recovery warm-up: 1.58s GPU-busy before arm 1
+--- arm reference (text) ---
+  2.4343 s/step (mean-all 2.5038, first 2.6386) | peak 2.641 GB (resident 1.115 transient 1.526) | frozen_changed 2
+--- arm fast_train (text) ---
+  0.7562 s/step (mean-all 0.8479, first 2.6457) | peak 2.489 GB (resident 1.553 transient 0.937) | frozen_changed 2
+--- arm fast_train_dgrad (text) ---
+  0.7460 s/step (mean-all 0.8308, first 0.7885) | peak 2.708 GB (resident 1.772 transient 0.936) | frozen_changed 2
+--- arm batched (text) ---
+  1.5114 s/step (mean-all 1.5426, first 1.4839) | peak 4.141 GB (resident 1.991 transient 2.150) | frozen_changed 2
+--- arm reference_selfpair (text) ---
+  2.8042 s/step (mean-all 2.9410, first 2.6085) | peak 3.516 GB (resident 2.210 transient 1.307) | frozen_changed 2
+
+########## data=random ##########
+clock-recovery warm-up: 1.57s GPU-busy before arm 1
+--- arm reference (random) ---
+  2.1629 s/step (mean-all 2.3616, first 2.3397) | peak 3.079 GB (resident 1.771 transient 1.308) | frozen_changed 2
+--- arm fast_train (random) ---
+  0.9798 s/step (mean-all 1.1532, first 1.3745) | peak 2.675 GB (resident 1.772 transient 0.903) | frozen_changed 2
+--- arm fast_train_dgrad (random) ---
+  1.0880 s/step (mean-all 1.1628, first 1.0526) | peak 2.864 GB (resident 1.992 transient 0.872) | frozen_changed 2
+--- arm batched (random) ---
+  2.1190 s/step (mean-all 2.2450, first 2.3258) | peak 4.353 GB (resident 2.211 transient 2.142) | frozen_changed 2
+--- arm reference_selfpair (random) ---
+  2.1472 s/step (mean-all 2.2856, first 2.3132) | peak 3.736 GB (resident 2.430 transient 1.306) | frozen_changed 2
+
+=== SUMMARY ===
+data=text    SELF-PAIR 0.8681   routing occ 0.984 cv 0.696
+  reference              2.4343 s/step   1.000x  peak  2.641 GB (1.000x)  transient  1.526 GB  gradΔ -  busy  25%  STEP_RATIO
+  fast_train             0.7562 s/step   3.219x  peak  2.489 GB (0.942x)  transient  0.937 GB  gradΔ 4.5e-02  busy  56%  STEP_RATIO
+  fast_train_dgrad       0.7460 s/step   3.263x  peak  2.708 GB (1.025x)  transient  0.936 GB  gradΔ 4.5e-02  busy  47%  STEP_RATIO
+  batched                1.5114 s/step   1.611x  peak  4.141 GB (1.568x)  transient  2.150 GB  gradΔ 4.2e-02  busy  33%  STEP_RATIO
+  reference_selfpair     2.8042 s/step   0.868x  peak  3.516 GB (1.331x)  transient  1.307 GB  gradΔ 3.6e-03  busy  22%  STEP_RATIO
+data=random  SELF-PAIR 1.0073   routing occ 0.883 cv 1.473   [RANDOM-ID FIXTURE: understates the fused advantage by 1.6-1.7x — state this factor beside any number below]
+  reference              2.1629 s/step   1.000x  peak  3.079 GB (1.000x)  transient  1.308 GB  gradΔ -  busy  23%  STEP_RATIO
+  fast_train             0.9798 s/step   2.208x  peak  2.675 GB (0.869x)  transient  0.903 GB  gradΔ 3.5e-02  busy  52%  STEP_RATIO
+  fast_train_dgrad       1.0880 s/step   1.988x  peak  2.864 GB (0.930x)  transient  0.872 GB  gradΔ 3.5e-02  busy  50%  STEP_RATIO
+  batched                2.1190 s/step   1.021x  peak  4.353 GB (1.414x)  transient  2.142 GB  gradΔ 2.8e-03  busy  30%  STEP_RATIO
+  reference_selfpair     2.1472 s/step   1.007x  peak  3.736 GB (1.213x)  transient  1.306 GB  gradΔ 2.8e-03  busy  25%  STEP_RATIO
+E2E_DONE
++ RC=0
++ echo 'SWEEP pub1 offload=1 rc=0'
+SWEEP pub1 offload=1 rc=0
++ '[' 0 -ne 0 ']'
++ for OFF in 1 0
++ echo '########## pub1 offload=0 ##########'
+########## pub1 offload=0 ##########
++ python3.12 bench/phase1/e2e_train_arms.py --model allenai/OLMoE-1B-7B-0924 --steps 24 --warmup 4 --seq 512 --offload 0 --data both --out /root/dqf-out --tag pub1-off0
++ tail -60
+env: {"gpu": "NVIDIA L40S", "cap": [8, 9], "vram_total_gb": 44.39, "torch": "2.8.0+cu128", "e4b": "0.19.0", "gnf4": "?", "gnf4_has_dgrad": true}
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 1771.58it/s]
+[15:18:25]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[15:18:28]   quantized experts on 16/16 MoE layers (64 experts each)
+[15:18:28]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+layers=16 experts=64 trainable=58,720,256
+frozen tensors under check: 32 (3.00 GiB)
+
+########## data=text ##########
+clock-recovery warm-up: 1.58s GPU-busy before arm 1
+--- arm reference (text) ---
+  2.1653 s/step (mean-all 2.1595, first 2.6390) | peak 5.308 GB (resident 4.490 transient 0.818) | frozen_changed 0
+--- arm fast_train (text) ---
+  0.5158 s/step (mean-all 0.5370, first 0.7961) | peak 5.653 GB (resident 4.716 transient 0.937) | frozen_changed 0
+--- arm fast_train_dgrad (text) ---
+  0.5018 s/step (mean-all 0.5729, first 0.5222) | peak 5.871 GB (resident 4.935 transient 0.936) | frozen_changed 0
+--- arm batched (text) ---
+  1.1923 s/step (mean-all 1.2612, first 1.2296) | peak 6.945 GB (resident 5.154 transient 1.791) | frozen_changed 0
+--- arm reference_selfpair (text) ---
+  2.5743 s/step (mean-all 2.6079, first 2.3107) | peak 6.183 GB (resident 5.373 transient 0.810) | frozen_changed 0
+
+########## data=random ##########
+clock-recovery warm-up: 1.57s GPU-busy before arm 1
+--- arm reference (random) ---
+  1.8815 s/step (mean-all 2.0951, first 2.2035) | peak 5.744 GB (resident 4.935 transient 0.809) | frozen_changed 0
+--- arm fast_train (random) ---
+  0.7144 s/step (mean-all 0.8742, first 4.1520) | peak 5.803 GB (resident 4.935 transient 0.868) | frozen_changed 0
+--- arm fast_train_dgrad (random) ---
+  0.7263 s/step (mean-all 0.7828, first 0.8043) | peak 6.022 GB (resident 5.154 transient 0.868) | frozen_changed 0
+--- arm batched (random) ---
+  1.8307 s/step (mean-all 1.9117, first 2.0274) | peak 6.869 GB (resident 5.373 transient 1.497) | frozen_changed 0
+--- arm reference_selfpair (random) ---
+  1.8997 s/step (mean-all 2.0155, first 2.0319) | peak 6.404 GB (resident 5.592 transient 0.811) | frozen_changed 0
+
+=== SUMMARY ===
+data=text    SELF-PAIR 0.8411   routing occ 0.984 cv 0.696
+  reference              2.1653 s/step   1.000x  peak  5.308 GB (1.000x)  transient  0.818 GB  gradΔ -  busy  16%  STEP_RATIO
+  fast_train             0.5158 s/step   4.198x  peak  5.653 GB (1.065x)  transient  0.937 GB  gradΔ 4.5e-02  busy  39%  STEP_RATIO
+  fast_train_dgrad       0.5018 s/step   4.315x  peak  5.871 GB (1.106x)  transient  0.936 GB  gradΔ 4.5e-02  busy  36%  STEP_RATIO
+  batched                1.1923 s/step   1.816x  peak  6.945 GB (1.308x)  transient  1.791 GB  gradΔ 4.3e-02  busy  24%  STEP_RATIO
+  reference_selfpair     2.5743 s/step   0.841x  peak  6.183 GB (1.165x)  transient  0.810 GB  gradΔ 3.7e-03  busy  13%  STEP_RATIO
+data=random  SELF-PAIR 0.9904   routing occ 0.883 cv 1.473   [RANDOM-ID FIXTURE: understates the fused advantage by 1.6-1.7x — state this factor beside any number below]
+  reference              1.8815 s/step   1.000x  peak  5.744 GB (1.000x)  transient  0.809 GB  gradΔ -  busy  14%  STEP_RATIO
+  fast_train             0.7144 s/step   2.634x  peak  5.803 GB (1.010x)  transient  0.868 GB  gradΔ 3.4e-02  busy  34%  STEP_RATIO
+  fast_train_dgrad       0.7263 s/step   2.591x  peak  6.022 GB (1.048x)  transient  0.868 GB  gradΔ 3.5e-02  busy  33%  STEP_RATIO
+  batched                1.8307 s/step   1.028x  peak  6.869 GB (1.196x)  transient  1.497 GB  gradΔ 2.9e-03  busy  17%  STEP_RATIO
+  reference_selfpair     1.8997 s/step   0.990x  peak  6.404 GB (1.115x)  transient  0.811 GB  gradΔ 2.9e-03  busy  14%  STEP_RATIO
+E2E_DONE
++ RC=0
++ echo 'SWEEP pub1 offload=0 rc=0'
+SWEEP pub1 offload=0 rc=0
++ '[' 0 -ne 0 ']'
++ use_version cap
++ case "$1" in
++ cp /root/gnf4/kernel/nf4_grouped.py /usr/local/lib/python3.12/dist-packages/nf4_grouped.py
++ cp /root/gnf4/kernel/nf4_qlora.py /usr/local/lib/python3.12/dist-packages/nf4_qlora.py
++ find /usr/local/lib/python3.12/dist-packages -name __pycache__ -type d -exec rm -rf '{}' +
+++ python3.12 -c 'import nf4_grouped;print(hasattr(nf4_grouped,'\''to_device_i32'\''))'
++ HAS=True
++ echo 'VERSION_CHECK want=cap to_device_i32=True'
+VERSION_CHECK want=cap to_device_i32=True
++ case "$1:$HAS" in
++ :
++ sweep cap
++ L=cap
++ for OFF in 1 0
++ echo '########## cap offload=1 ##########'
+########## cap offload=1 ##########
++ python3.12 bench/phase1/e2e_train_arms.py --model allenai/OLMoE-1B-7B-0924 --steps 24 --warmup 4 --seq 512 --offload 1 --data both --out /root/dqf-out --tag cap-off1
++ tail -60
+env: {"gpu": "NVIDIA L40S", "cap": [8, 9], "vram_total_gb": 44.39, "torch": "2.8.0+cu128", "e4b": "0.19.0", "gnf4": "?", "gnf4_has_dgrad": true}
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 1970.80it/s]
+[15:31:04]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[15:31:11]   quantized experts on 16/16 MoE layers (64 experts each)
+[15:31:11]   offloaded 16 layers' 4-bit experts to pinned CPU RAM (streamed to GPU one layer at a time during train/eval)
+[15:31:11]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+layers=16 experts=64 trainable=58,720,256
+frozen-storage check NOT APPLICABLE under offload=1 (32 tensors, 0.00 GiB — these are streaming staging buffers, not frozen storage); the resident cell carries this claim
+
+########## data=text ##########
+clock-recovery warm-up: 1.58s GPU-busy before arm 1
+--- arm reference (text) ---
+  2.5307 s/step (mean-all 2.4929, first 2.8973) | peak 2.641 GB (resident 1.115 transient 1.526) | frozen_changed 2
+--- arm fast_train (text) ---
+  0.7623 s/step (mean-all 0.9254, first 4.3732) | peak 2.489 GB (resident 1.553 transient 0.936) | frozen_changed 2
+--- arm fast_train_dgrad (text) ---
+  0.7471 s/step (mean-all 0.8415, first 0.7834) | peak 2.708 GB (resident 1.771 transient 0.937) | frozen_changed 2
+--- arm batched (text) ---
+  1.4422 s/step (mean-all 1.5933, first 1.6250) | peak 4.144 GB (resident 1.990 transient 2.153) | frozen_changed 2
+--- arm reference_selfpair (text) ---
+  2.8144 s/step (mean-all 2.8551, first 2.6083) | peak 3.517 GB (resident 2.210 transient 1.308) | frozen_changed 2
+
+########## data=random ##########
+clock-recovery warm-up: 1.57s GPU-busy before arm 1
+--- arm reference (random) ---
+  2.2646 s/step (mean-all 2.5946, first 2.8742) | peak 3.079 GB (resident 1.772 transient 1.307) | frozen_changed 2
+--- arm fast_train (random) ---
+  1.0093 s/step (mean-all 1.0226, first 1.1831) | peak 2.645 GB (resident 1.771 transient 0.874) | frozen_changed 2
+--- arm fast_train_dgrad (random) ---
+  1.0281 s/step (mean-all 1.1008, first 1.1456) | peak 2.894 GB (resident 1.991 transient 0.903) | frozen_changed 2
+--- arm batched (random) ---
+  2.1566 s/step (mean-all 2.2366, first 2.4257) | peak 4.353 GB (resident 2.210 transient 2.143) | frozen_changed 2
+--- arm reference_selfpair (random) ---
+  2.2563 s/step (mean-all 2.3807, first 2.4925) | peak 3.739 GB (resident 2.429 transient 1.310) | frozen_changed 2
+
+=== SUMMARY ===
+data=text    SELF-PAIR 0.8992   routing occ 0.984 cv 0.696
+  reference              2.5307 s/step   1.000x  peak  2.641 GB (1.000x)  transient  1.526 GB  gradΔ -  busy  24%  STEP_RATIO
+  fast_train             0.7623 s/step   3.320x  peak  2.489 GB (0.942x)  transient  0.936 GB  gradΔ 4.4e-02  busy  54%  STEP_RATIO
+  fast_train_dgrad       0.7471 s/step   3.387x  peak  2.708 GB (1.025x)  transient  0.937 GB  gradΔ 4.4e-02  busy  58%  STEP_RATIO
+  batched                1.4422 s/step   1.755x  peak  4.144 GB (1.569x)  transient  2.153 GB  gradΔ 4.3e-02  busy  32%  STEP_RATIO
+  reference_selfpair     2.8144 s/step   0.899x  peak  3.517 GB (1.332x)  transient  1.308 GB  gradΔ 3.6e-03  busy  21%  STEP_RATIO
+data=random  SELF-PAIR 1.0037   routing occ 0.883 cv 1.473   [RANDOM-ID FIXTURE: understates the fused advantage by 1.6-1.7x — state this factor beside any number below]
+  reference              2.2646 s/step   1.000x  peak  3.079 GB (1.000x)  transient  1.307 GB  gradΔ -  busy  24%  STEP_RATIO
+  fast_train             1.0093 s/step   2.244x  peak  2.645 GB (0.859x)  transient  0.874 GB  gradΔ 3.4e-02  busy  52%  STEP_RATIO
+  fast_train_dgrad       1.0281 s/step   2.203x  peak  2.894 GB (0.940x)  transient  0.903 GB  gradΔ 3.4e-02  busy  49%  STEP_RATIO
+  batched                2.1566 s/step   1.050x  peak  4.353 GB (1.414x)  transient  2.143 GB  gradΔ 2.9e-03  busy  28%  STEP_RATIO
+  reference_selfpair     2.2563 s/step   1.004x  peak  3.739 GB (1.214x)  transient  1.310 GB  gradΔ 2.8e-03  busy  23%  STEP_RATIO
+E2E_DONE
++ RC=0
++ echo 'SWEEP cap offload=1 rc=0'
+SWEEP cap offload=1 rc=0
++ '[' 0 -ne 0 ']'
++ for OFF in 1 0
++ echo '########## cap offload=0 ##########'
+########## cap offload=0 ##########
++ python3.12 bench/phase1/e2e_train_arms.py --model allenai/OLMoE-1B-7B-0924 --steps 24 --warmup 4 --seq 512 --offload 0 --data both --out /root/dqf-out --tag cap-off0
++ tail -60
+env: {"gpu": "NVIDIA L40S", "cap": [8, 9], "vram_total_gb": 44.39, "torch": "2.8.0+cu128", "e4b": "0.19.0", "gnf4": "?", "gnf4_has_dgrad": true}
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 1958.73it/s]
+[15:45:28]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[15:45:31]   quantized experts on 16/16 MoE layers (64 experts each)
+[15:45:31]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+layers=16 experts=64 trainable=58,720,256
+frozen tensors under check: 32 (3.00 GiB)
+
+########## data=text ##########
+clock-recovery warm-up: 1.58s GPU-busy before arm 1
+--- arm reference (text) ---
+  2.1812 s/step (mean-all 2.2068, first 2.6549) | peak 5.308 GB (resident 4.490 transient 0.818) | frozen_changed 0
+--- arm fast_train (text) ---
+  0.4709 s/step (mean-all 0.7053, first 0.7704) | peak 5.653 GB (resident 4.716 transient 0.937) | frozen_changed 0
+--- arm fast_train_dgrad (text) ---
+  0.4553 s/step (mean-all 0.5506, first 0.5305) | peak 5.871 GB (resident 4.935 transient 0.935) | frozen_changed 0
+--- arm batched (text) ---
+  1.1922 s/step (mean-all 1.2519, first 1.2826) | peak 6.948 GB (resident 5.154 transient 1.793) | frozen_changed 0
+--- arm reference_selfpair (text) ---
+  2.4807 s/step (mean-all 2.5499, first 2.4227) | peak 6.183 GB (resident 5.373 transient 0.810) | frozen_changed 0
+
+########## data=random ##########
+clock-recovery warm-up: 1.57s GPU-busy before arm 1
+--- arm reference (random) ---
+  1.8723 s/step (mean-all 2.1038, first 6.4081) | peak 5.745 GB (resident 4.935 transient 0.810) | frozen_changed 0
+--- arm fast_train (random) ---
+  0.7545 s/step (mean-all 0.7434, first 0.8556) | peak 5.839 GB (resident 4.936 transient 0.902) | frozen_changed 0
+--- arm fast_train_dgrad (random) ---
+  0.7267 s/step (mean-all 0.8045, first 0.8196) | peak 6.057 GB (resident 5.155 transient 0.902) | frozen_changed 0
+--- arm batched (random) ---
+  1.8404 s/step (mean-all 1.9214, first 3.2740) | peak 6.870 GB (resident 5.374 transient 1.497) | frozen_changed 0
+--- arm reference_selfpair (random) ---
+  1.8584 s/step (mean-all 1.9948, first 2.0401) | peak 6.403 GB (resident 5.592 transient 0.810) | frozen_changed 0
+
+=== SUMMARY ===
+data=text    SELF-PAIR 0.8793   routing occ 0.984 cv 0.696
+  reference              2.1812 s/step   1.000x  peak  5.308 GB (1.000x)  transient  0.818 GB  gradΔ -  busy  15%  STEP_RATIO
+  fast_train             0.4709 s/step   4.632x  peak  5.653 GB (1.065x)  transient  0.937 GB  gradΔ 4.4e-02  busy  37%  STEP_RATIO
+  fast_train_dgrad       0.4553 s/step   4.791x  peak  5.871 GB (1.106x)  transient  0.935 GB  gradΔ 4.4e-02  busy  42%  STEP_RATIO
+  batched                1.1922 s/step   1.830x  peak  6.948 GB (1.309x)  transient  1.793 GB  gradΔ 4.2e-02  busy  21%  STEP_RATIO
+  reference_selfpair     2.4807 s/step   0.879x  peak  6.183 GB (1.165x)  transient  0.810 GB  gradΔ 3.9e-03  busy  13%  STEP_RATIO
+data=random  SELF-PAIR 1.0075   routing occ 0.883 cv 1.473   [RANDOM-ID FIXTURE: understates the fused advantage by 1.6-1.7x — state this factor beside any number below]
+  reference              1.8723 s/step   1.000x  peak  5.745 GB (1.000x)  transient  0.810 GB  gradΔ -  busy  15%  STEP_RATIO
+  fast_train             0.7545 s/step   2.482x  peak  5.839 GB (1.016x)  transient  0.902 GB  gradΔ 3.5e-02  busy  36%  STEP_RATIO
+  fast_train_dgrad       0.7267 s/step   2.576x  peak  6.057 GB (1.054x)  transient  0.902 GB  gradΔ 3.5e-02  busy  37%  STEP_RATIO
+  batched                1.8404 s/step   1.017x  peak  6.870 GB (1.196x)  transient  1.497 GB  gradΔ 2.8e-03  busy  18%  STEP_RATIO
+  reference_selfpair     1.8584 s/step   1.008x  peak  6.403 GB (1.115x)  transient  0.810 GB  gradΔ 3.0e-03  busy  14%  STEP_RATIO
+E2E_DONE
++ RC=0
++ echo 'SWEEP cap offload=0 rc=0'
+SWEEP cap offload=0 rc=0
++ '[' 0 -ne 0 ']'
++ use_version pub
++ case "$1" in
++ cp /root/pub_nf4_grouped.py /usr/local/lib/python3.12/dist-packages/nf4_grouped.py
++ cp /root/pub_nf4_qlora.py /usr/local/lib/python3.12/dist-packages/nf4_qlora.py
++ find /usr/local/lib/python3.12/dist-packages -name __pycache__ -type d -exec rm -rf '{}' +
+++ python3.12 -c 'import nf4_grouped;print(hasattr(nf4_grouped,'\''to_device_i32'\''))'
++ HAS=False
++ echo 'VERSION_CHECK want=pub to_device_i32=False'
+VERSION_CHECK want=pub to_device_i32=False
++ case "$1:$HAS" in
++ :
++ sweep pub2
++ L=pub2
++ for OFF in 1 0
++ echo '########## pub2 offload=1 ##########'
+########## pub2 offload=1 ##########
++ python3.12 bench/phase1/e2e_train_arms.py --model allenai/OLMoE-1B-7B-0924 --steps 24 --warmup 4 --seq 512 --offload 1 --data both --out /root/dqf-out --tag pub2-off1
++ tail -60
+env: {"gpu": "NVIDIA L40S", "cap": [8, 9], "vram_total_gb": 44.39, "torch": "2.8.0+cu128", "e4b": "0.19.0", "gnf4": "?", "gnf4_has_dgrad": true}
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 2232.46it/s]
+[15:58:09]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[15:58:17]   quantized experts on 16/16 MoE layers (64 experts each)
+[15:58:17]   offloaded 16 layers' 4-bit experts to pinned CPU RAM (streamed to GPU one layer at a time during train/eval)
+[15:58:17]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+layers=16 experts=64 trainable=58,720,256
+frozen-storage check NOT APPLICABLE under offload=1 (32 tensors, 0.00 GiB — these are streaming staging buffers, not frozen storage); the resident cell carries this claim
+
+########## data=text ##########
+clock-recovery warm-up: 1.58s GPU-busy before arm 1
+--- arm reference (text) ---
+  2.4581 s/step (mean-all 2.5177, first 3.8486) | peak 2.640 GB (resident 1.115 transient 1.525) | frozen_changed 2
+--- arm fast_train (text) ---
+  0.7604 s/step (mean-all 0.7882, first 1.0758) | peak 2.488 GB (resident 1.552 transient 0.936) | frozen_changed 2
+--- arm fast_train_dgrad (text) ---
+  0.7496 s/step (mean-all 0.8211, first 0.7880) | peak 2.707 GB (resident 1.771 transient 0.936) | frozen_changed 2
+--- arm batched (text) ---
+  1.5119 s/step (mean-all 1.5726, first 1.4565) | peak 4.141 GB (resident 1.990 transient 2.151) | frozen_changed 2
+--- arm reference_selfpair (text) ---
+  2.7948 s/step (mean-all 2.9032, first 2.6331) | peak 3.516 GB (resident 2.209 transient 1.307) | frozen_changed 2
+
+########## data=random ##########
+clock-recovery warm-up: 1.57s GPU-busy before arm 1
+--- arm reference (random) ---
+  2.1895 s/step (mean-all 2.4454, first 2.3862) | peak 3.080 GB (resident 1.771 transient 1.308) | frozen_changed 2
+--- arm fast_train (random) ---
+  0.9618 s/step (mean-all 1.0285, first 1.1417) | peak 2.640 GB (resident 1.773 transient 0.867) | frozen_changed 2
+--- arm fast_train_dgrad (random) ---
+  0.9906 s/step (mean-all 1.0701, first 1.1207) | peak 2.860 GB (resident 1.991 transient 0.868) | frozen_changed 2
+--- arm batched (random) ---
+  2.1464 s/step (mean-all 2.2446, first 2.3296) | peak 4.354 GB (resident 2.210 transient 2.144) | frozen_changed 2
+--- arm reference_selfpair (random) ---
+  2.1106 s/step (mean-all 2.3367, first 3.0806) | peak 3.738 GB (resident 2.430 transient 1.308) | frozen_changed 2
+
+=== SUMMARY ===
+data=text    SELF-PAIR 0.8795   routing occ 0.984 cv 0.696
+  reference              2.4581 s/step   1.000x  peak  2.640 GB (1.000x)  transient  1.525 GB  gradΔ -  busy  25%  STEP_RATIO
+  fast_train             0.7604 s/step   3.233x  peak  2.488 GB (0.942x)  transient  0.936 GB  gradΔ 4.4e-02  busy  60%  STEP_RATIO
+  fast_train_dgrad       0.7496 s/step   3.279x  peak  2.707 GB (1.025x)  transient  0.936 GB  gradΔ 4.4e-02  busy  55%  STEP_RATIO
+  batched                1.5119 s/step   1.626x  peak  4.141 GB (1.569x)  transient  2.151 GB  gradΔ 4.3e-02  busy  35%  STEP_RATIO
+  reference_selfpair     2.7948 s/step   0.879x  peak  3.516 GB (1.332x)  transient  1.307 GB  gradΔ 3.9e-03  busy  22%  STEP_RATIO
+data=random  SELF-PAIR 1.0374   routing occ 0.883 cv 1.473   [RANDOM-ID FIXTURE: understates the fused advantage by 1.6-1.7x — state this factor beside any number below]
+  reference              2.1895 s/step   1.000x  peak  3.080 GB (1.000x)  transient  1.308 GB  gradΔ -  busy  26%  STEP_RATIO
+  fast_train             0.9618 s/step   2.276x  peak  2.640 GB (0.857x)  transient  0.867 GB  gradΔ 3.5e-02  busy  54%  STEP_RATIO
+  fast_train_dgrad       0.9906 s/step   2.210x  peak  2.860 GB (0.929x)  transient  0.868 GB  gradΔ 3.5e-02  busy  49%  STEP_RATIO
+  batched                2.1464 s/step   1.020x  peak  4.354 GB (1.414x)  transient  2.144 GB  gradΔ 2.9e-03  busy  26%  STEP_RATIO
+  reference_selfpair     2.1106 s/step   1.037x  peak  3.738 GB (1.214x)  transient  1.308 GB  gradΔ 2.9e-03  busy  25%  STEP_RATIO
+E2E_DONE
++ RC=0
++ echo 'SWEEP pub2 offload=1 rc=0'
+SWEEP pub2 offload=1 rc=0
++ '[' 0 -ne 0 ']'
++ for OFF in 1 0
++ echo '########## pub2 offload=0 ##########'
+########## pub2 offload=0 ##########
++ python3.12 bench/phase1/e2e_train_arms.py --model allenai/OLMoE-1B-7B-0924 --steps 24 --warmup 4 --seq 512 --offload 0 --data both --out /root/dqf-out --tag pub2-off0
++ tail -60
+env: {"gpu": "NVIDIA L40S", "cap": [8, 9], "vram_total_gb": 44.39, "torch": "2.8.0+cu128", "e4b": "0.19.0", "gnf4": "?", "gnf4_has_dgrad": true}
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 1935.34it/s]
+[16:12:13]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[16:12:16]   quantized experts on 16/16 MoE layers (64 experts each)
+[16:12:16]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+layers=16 experts=64 trainable=58,720,256
+frozen tensors under check: 32 (3.00 GiB)
+
+########## data=text ##########
+clock-recovery warm-up: 1.58s GPU-busy before arm 1
+--- arm reference (text) ---
+  2.1287 s/step (mean-all 2.1197, first 2.6017) | peak 5.308 GB (resident 4.490 transient 0.818) | frozen_changed 0
+--- arm fast_train (text) ---
+  0.5076 s/step (mean-all 0.7042, first 0.7845) | peak 5.653 GB (resident 4.716 transient 0.937) | frozen_changed 0
+--- arm fast_train_dgrad (text) ---
+  0.4718 s/step (mean-all 0.4986, first 0.5067) | peak 5.873 GB (resident 4.935 transient 0.937) | frozen_changed 0
+--- arm batched (text) ---
+  1.1689 s/step (mean-all 1.2034, first 1.2196) | peak 6.946 GB (resident 5.155 transient 1.791) | frozen_changed 0
+--- arm reference_selfpair (text) ---
+  2.4283 s/step (mean-all 2.5572, first 5.3331) | peak 6.183 GB (resident 5.374 transient 0.810) | frozen_changed 0
+
+########## data=random ##########
+clock-recovery warm-up: 1.57s GPU-busy before arm 1
+--- arm reference (random) ---
+  1.8766 s/step (mean-all 2.0823, first 2.1657) | peak 5.745 GB (resident 4.935 transient 0.809) | frozen_changed 0
+--- arm fast_train (random) ---
+  0.6865 s/step (mean-all 0.7018, first 0.7868) | peak 5.803 GB (resident 4.936 transient 0.867) | frozen_changed 0
+--- arm fast_train_dgrad (random) ---
+  0.7306 s/step (mean-all 0.7926, first 0.7662) | peak 6.022 GB (resident 5.154 transient 0.868) | frozen_changed 0
+--- arm batched (random) ---
+  1.8863 s/step (mean-all 1.9272, first 2.0512) | peak 6.869 GB (resident 5.373 transient 1.496) | frozen_changed 0
+--- arm reference_selfpair (random) ---
+  1.8795 s/step (mean-all 1.9862, first 2.0853) | peak 6.403 GB (resident 5.593 transient 0.810) | frozen_changed 0
+
+=== SUMMARY ===
+data=text    SELF-PAIR 0.8766   routing occ 0.984 cv 0.696
+  reference              2.1287 s/step   1.000x  peak  5.308 GB (1.000x)  transient  0.818 GB  gradΔ -  busy  15%  STEP_RATIO
+  fast_train             0.5076 s/step   4.194x  peak  5.653 GB (1.065x)  transient  0.937 GB  gradΔ 4.4e-02  busy  43%  STEP_RATIO
+  fast_train_dgrad       0.4718 s/step   4.512x  peak  5.873 GB (1.106x)  transient  0.937 GB  gradΔ 4.4e-02  busy  36%  STEP_RATIO
+  batched                1.1689 s/step   1.821x  peak  6.946 GB (1.309x)  transient  1.791 GB  gradΔ 4.3e-02  busy  22%  STEP_RATIO
+  reference_selfpair     2.4283 s/step   0.877x  peak  6.183 GB (1.165x)  transient  0.810 GB  gradΔ 3.6e-03  busy  14%  STEP_RATIO
+data=random  SELF-PAIR 0.9985   routing occ 0.883 cv 1.473   [RANDOM-ID FIXTURE: understates the fused advantage by 1.6-1.7x — state this factor beside any number below]
+  reference              1.8766 s/step   1.000x  peak  5.745 GB (1.000x)  transient  0.809 GB  gradΔ -  busy  14%  STEP_RATIO
+  fast_train             0.6865 s/step   2.734x  peak  5.803 GB (1.010x)  transient  0.867 GB  gradΔ 3.6e-02  busy  37%  STEP_RATIO
+  fast_train_dgrad       0.7306 s/step   2.569x  peak  6.022 GB (1.048x)  transient  0.868 GB  gradΔ 3.6e-02  busy  35%  STEP_RATIO
+  batched                1.8863 s/step   0.995x  peak  6.869 GB (1.196x)  transient  1.496 GB  gradΔ 2.9e-03  busy  17%  STEP_RATIO
+  reference_selfpair     1.8795 s/step   0.999x  peak  6.403 GB (1.115x)  transient  0.810 GB  gradΔ 2.9e-03  busy  14%  STEP_RATIO
+E2E_DONE
++ RC=0
++ echo 'SWEEP pub2 offload=0 rc=0'
+SWEEP pub2 offload=0 rc=0
++ '[' 0 -ne 0 ']'
++ python3.12 bench/phase1/reduce_capturability_gate.py /root/dqf-out --out /root/dqf-out/verdict.json
++ tee /root/dqf-out/gate.txt
+=== per-sweep reference self-pairs (drift inside each sweep) ===
+  pub1  random  offload=0 0.9904
+  pub1  random  offload=1 1.0073
+  pub1  text    offload=0 0.8411
+  pub1  text    offload=1 0.8681
+  cap   random  offload=0 1.0075
+  cap   random  offload=1 1.0037
+  cap   text    offload=0 0.8793
+  cap   text    offload=1 0.8992
+  pub2  random  offload=0 0.9985
+  pub2  random  offload=1 1.0374
+  pub2  text    offload=0 0.8766
+  pub2  text    offload=1 0.8795
+
+!! DRIFTED cells (sweep self-pair outside (0.95, 1.05)): [('text', 0), ('text', 1)]
+   Their gate ratios are reported but EXCLUDED from the verdict.
+
+--- INSTRUMENT self-pair  pub2/pub1 (same code twice) ---
+  random  offload=0 fast_train         1.0379   <-- OUTSIDE BAND
+  random  offload=0 fast_train_dgrad   0.9915
+  random  offload=1 fast_train         1.0313
+  random  offload=1 fast_train_dgrad   1.1118   <-- OUTSIDE BAND
+  median 1.0346   n=4
+
+--- GATE  cap/pub1 (the capturability change) ---
+  random  offload=0 fast_train         0.9422   <-- OUTSIDE BAND
+  random  offload=0 fast_train_dgrad   0.9946
+  random  offload=1 fast_train         1.0164
+  random  offload=1 fast_train_dgrad   1.1080   <-- OUTSIDE BAND
+  median 1.0055   n=4
+
+--- gate ratios in DRIFTED cells — reported, not counted ---
+  text    offload=0 fast_train         1.1034   <-- OUTSIDE BAND
+  text    offload=0 fast_train_dgrad   1.1102   <-- OUTSIDE BAND
+  text    offload=1 fast_train         1.0313
+  text    offload=1 fast_train_dgrad   1.0381   <-- OUTSIDE BAND
+  median 1.0708   n=4
+
+--- instrument ratios in DRIFTED cells — reported, not counted ---
+  text    offload=0 fast_train         0.9990
+  text    offload=0 fast_train_dgrad   1.0456   <-- OUTSIDE BAND
+  text    offload=1 fast_train         1.0042
+  text    offload=1 fast_train_dgrad   1.0049
+  median 1.0046   n=4
+
+VERDICT: VOID — the INSTRUMENT self-pair left the band on 2/4 cells (worst 1.1118). The box drifted; cap/pub1 is not readable, and this is NOT a statement about the change.
++ GRC=1
++ echo 'reducer rc=1'
+reducer rc=1
++ grep -E '^VERDICT:' /root/dqf-out/gate.txt
++ sync
++ echo OK
++ echo DQF_ALL_DONE
+DQF_ALL_DONE

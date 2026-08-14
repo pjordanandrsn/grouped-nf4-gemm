@@ -1,0 +1,1 @@
+VERDICT: VOID — the INSTRUMENT self-pair left the band on 2/4 cells (worst 1.1118). The box drifted; cap/pub1 is not readable, and this is NOT a statement about the change.

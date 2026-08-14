@@ -13,9 +13,12 @@ not returned, the register is genuinely pre-data for the one number it grades.
 > [What this does not license](#what-this-does-not-license).
 >
 > **STATUS: capture-verified, correctness-verified, NOT throughput-verified.**
-> The registered regression gate ran on an L40S and returned **UNUSABLE** — it
-> did not close. §7 says why, and this change does not merge on the strength of
-> §§1–6 alone.
+> The registered regression gate ran **twice** on rented L40S cards and returned
+> UNUSABLE (§7) then VOID (§8). The second run completed cleanly and its own
+> instrument self-pair — identical code, twice — varied by 11%, against a band
+> of 3.3%. **The e2e leg is host-bound (12–25% GPU-busy), so this gate cannot be
+> adjudicated on a shared rented pod at all.** §8 lists what would close it.
+> This change does not merge on the strength of §§1–6 alone.
 
 [`FINDING-host-bound-small-batch.md`](FINDING-host-bound-small-batch.md)
 recorded a structural asymmetry: the dequant-on-forward baseline captures into a
@@ -271,12 +274,89 @@ two e4b minor versions later.
    default is now `m=3` with `--busy-steps` to raise it. **C4 is not free, and
    the leg that folds it in has to pay for it in its wall-clock budget.**
 
-### What would close it
+## 8 · Run 2 — complete, and VOID. The instrument cannot resolve the question.
 
-One more card, with: `--busy-steps 3` (already the default), a wall-clock
-warm-up before the first arm so the first mode is not measuring clock recovery,
-and a deadline sized for three full sweeps. The two changes are in the harness;
-the run is not, and this document does not claim the gate as met until it is.
+**RTX L40S again, 2026-08-14, 82 min, $1.35.** All six sweeps completed this
+time (`--busy-steps 3` recovered ~60 minutes), all twelve cells present.
+Receipts in [`capturability_gate_run2/`](capturability_gate_run2/).
+
+### The warm-up did not work, and the data says so plainly
+
+Per-sweep `text` self-pairs, run 2 (with a 1.5 s wall-clock GPU warm-up before
+the first arm of every mode, confirmed firing in the log at 1.57–1.58 s):
+
+| | offload=1 | offload=0 |
+|---|---:|---:|
+| pub1 | 0.8681 | 0.8411 |
+| cap  | 0.8992 | 0.8793 |
+| pub2 | 0.8795 | 0.8766 |
+
+Run 1, *without* the warm-up, read 0.9564 / 0.9047 on the same two cells.
+**The warm-up made it worse, not better** — so "clock recovery" was the wrong
+diagnosis. What the numbers actually show is a highly reproducible ~12–16%
+slowdown of the reference arm between the first and last arm of the `text`
+mode, in every sweep. Reproducible at that tightness is a mechanism, not noise,
+and warming the *start* of the mode widens the gap rather than closing it.
+
+### Why the gate is VOID, and it is the instrument's own verdict
+
+With `text` excluded, four `random` cells remain — and the instrument self-pair
+on those cells, **running the identical published code twice**, reads:
+
+| cell | pub2/pub1 (same code) | cap/pub1 (the change) |
+|---|---:|---:|
+| random, offload=0, `fast_train` | **1.0379** | 0.9422 |
+| random, offload=0, `fast_train_dgrad` | 0.9915 | 0.9946 |
+| random, offload=1, `fast_train` | 1.0313 | 1.0164 |
+| random, offload=1, `fast_train_dgrad` | **1.1118** | 1.1080 |
+| median | 1.0346 | 1.0055 |
+
+**The two columns have the same spread.** Identical code varies by up to 11.2%;
+the change varies by up to 11.1%. A band of ±3.3% cannot be adjudicated by an
+instrument whose own noise is ±11%, and the run is VOID on the pre-committed
+rule before `cap/pub1` is even read.
+
+Note what is *not* being claimed. The gate median is 1.0055 and nothing suggests
+harm — but the instrument median is 1.0346, i.e. **the same-code comparison
+drifted further from 1.0 than the change did.** Reading a result out of these
+cells in either direction would be reading noise.
+
+### The cause, and it is C4's finding pointing back at C2
+
+These arms run at **12–25% GPU-busy** (§7): the e2e step is host-bound, which is
+exactly what the measurement-class label says. A host-bound ratio on a *shared
+rented pod* tracks that host's CPU contention, and contention varies over an
+80-minute run. The per-sweep self-pairs are clean for `random` (0.9904–1.0374)
+because a sweep is short; the cross-sweep comparison spans the whole run and is
+not.
+
+**So the quantity this gate is registered on is the one least able to survive
+the hardware it can be measured on.** That is a property of the gate's design,
+not of the change under test, and no number of re-runs on the same class of box
+fixes it.
+
+### What would actually close it — three options, none of them "run it again"
+
+1. **A quiet box.** Bare metal with dedicated CPU (Latitude.sh), where a
+   host-bound ratio is not competing with a neighbour. Costlier per hour, and
+   the honest fix for a host-bound measurement.
+2. **Register the band from the instrument, pre-data.** A band is supposed to
+   come from the instrument's measured noise floor; ±3.3% was inherited from
+   pods that happened to be quieter. Measuring the self-pair first and
+   registering the band from it is correct methodology — but it must be stamped
+   **before** the next run's data, or it is a bar moved to fit a result.
+3. **Grade the regression where the instrument can see.** The change removes
+   *host* work, and the microbench cells at `tokbudget_2048` run both arms at
+   96–99% GPU-busy, where the self-pair resolves to ~1%. That measures a
+   different thing than "the e2e numbers must not move" and would need its own
+   registration — but it is the cell where a call-path change is actually
+   resolvable.
+
+Until one of those runs, this change stays **capture-verified and
+correctness-verified, not throughput-verified**, and does not merge.
+
+**Spend across both attempts: ~$3.80** (run 1 $2.42, run 2 $1.35, plus wedged
+pods that never started a container and were destroyed 404-verified).
 
 ## What this does not license
 
