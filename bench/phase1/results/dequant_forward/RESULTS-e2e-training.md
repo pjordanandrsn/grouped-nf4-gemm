@@ -25,12 +25,18 @@ configurations, both devices, per cell:
 | **text, offload** | `fast_train` | 2.527× | 4.063× |
 | | `fast_train_dgrad` | 2.530× | 3.983× |
 | | `batched` | 1.612× | 2.081× |
-| **random ids, resident** | `fast_train` | 2.691× | 2.610× |
+| **random ids**¹**, resident** | `fast_train` | 2.691× | 2.610× |
 | | `fast_train_dgrad` | 2.753× | 2.813× |
 | | `batched` | 1.034× | 1.072× |
-| **random ids, offload** | `fast_train` | 1.754× | 2.325× |
+| **random ids**¹**, offload** | `fast_train` | 1.754× | 2.325× |
 | | `fast_train_dgrad` | 1.806× | 2.378× |
 | | `batched` | 1.004× | 0.994× |
+
+¹ **Random-id cells UNDERSTATE the fused advantage by 1.6–1.7×** — measured on
+every matched pair in this run, mechanism below. Standing rail since 2026-08-14:
+any table citing a random-id cell states this factor beside it, and real prose is
+now the harness default (`e2e_train_arms.py --data`, which defaults to `text`;
+random ids are opt-in for work that genuinely needs content-independence).
 
 **P1 confirmed on both cards.** Predicted ≥1.5× for `fast_train_dgrad` on
 OLMoE; the weakest of eight cells is 1.806×. The speed result is not

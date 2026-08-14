@@ -61,6 +61,18 @@ established here; the candidates named before the run were the per-element
 `int()` over `expert_ids` in `FusedGroupedNf4.forward` and the pageable
 host-to-device copy `gemm_4bit_grouped` performs when handed a list.
 
+> **RESOLVED 2026-08-14 — see
+> [`RESULTS-capturability.md`](RESULTS-capturability.md).** Bisected on an
+> RTX A2000, one process per attempt. **Both named candidates were real and
+> neither was sufficient**: with both removed, capture still failed. There were
+> **five** hazard sites, three never named — `build_group_tiles` (three pageable
+> transfers per call, called twice per step), `dgrad_4bit_grouped` repeating the
+> same conversion in the backward, and `lora_delta_grouped`, which is on the path
+> a real QLoRA finetune takes. All five are fixed as call-path changes; the
+> shipped path now captures 5/5 and every output is bitwise unchanged.
+> **This makes nothing faster, and capture success is not reported as a
+> speedup** — the graphed race's verdict below stands unchanged.
+
 Caveat on scope: this is "cannot as shipped", not "cannot". A change to
 `kernel/nf4_qlora.py` may well make it capturable. And CUDA graphs need static
 shapes, which MoE routing does not provide without padding or bucketing — so

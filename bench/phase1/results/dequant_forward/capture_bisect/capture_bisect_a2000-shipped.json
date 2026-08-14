@@ -1,0 +1,211 @@
+{
+ "probe": "C2 \u2014 the SHIPPED call path, no probe patches",
+ "mode": "shipped",
+ "tier": "EXPLORATORY / report-only, no prereg grades it",
+ "gpu": "NVIDIA RTX A2000 12GB",
+ "capability": "8.6",
+ "torch": "2.8.0+cu128",
+ "triton": "3.4.0",
+ "model": "OLMoE",
+ "regime": "decode_m8",
+ "proj": "gate_up",
+ "attempts": [
+  {
+   "arm": "D_base",
+   "eids_form": "list",
+   "patches": [],
+   "installed": [],
+   "captured": true,
+   "note": "captured and replayed",
+   "shape": {
+    "groups": 8,
+    "rows": 64,
+    "sizes_max": 8
+   },
+   "census_warm": {
+    "h2d_sites": [],
+    "h2d_calls": 0,
+    "legal_h2d_sites": [],
+    "legal_h2d_calls": 0,
+    "syncs": 0,
+    "sync_msgs": []
+   },
+   "census_cold": {
+    "h2d_sites": [],
+    "h2d_calls": 0,
+    "legal_h2d_calls": 0,
+    "syncs": 0
+   },
+   "census_selftest": {
+    "hazards_seen": 3,
+    "hazards_expected": 3,
+    "legal_seen": 1,
+    "legal_expected": 1,
+    "sync_seen": true,
+    "blind": false
+   },
+   "why": "POSITIVE CONTROL \u2014 the baseline still captures"
+  },
+  {
+   "arm": "G_base",
+   "eids_form": "list",
+   "patches": [],
+   "installed": [],
+   "captured": true,
+   "note": "captured and replayed",
+   "shape": {
+    "groups": 8,
+    "rows": 64,
+    "sizes_max": 8
+   },
+   "census_warm": {
+    "h2d_sites": [],
+    "h2d_calls": 0,
+    "legal_h2d_sites": [
+     "nf4_grouped.py:231"
+    ],
+    "legal_h2d_calls": 4,
+    "syncs": 0,
+    "sync_msgs": []
+   },
+   "census_cold": {
+    "h2d_sites": [
+     "nf4_grouped.py:551[pageable][blocking]"
+    ],
+    "h2d_calls": 1,
+    "legal_h2d_calls": 4,
+    "syncs": 1
+   },
+   "census_selftest": {
+    "hazards_seen": 3,
+    "hazards_expected": 3,
+    "legal_seen": 1,
+    "legal_expected": 1,
+    "sync_seen": true,
+    "blind": false
+   },
+   "why": "shipped fused path, eids as a list"
+  },
+  {
+   "arm": "G_base",
+   "eids_form": "devtensor",
+   "patches": [],
+   "installed": [],
+   "captured": true,
+   "note": "captured and replayed",
+   "shape": {
+    "groups": 8,
+    "rows": 64,
+    "sizes_max": 8
+   },
+   "census_warm": {
+    "h2d_sites": [],
+    "h2d_calls": 0,
+    "legal_h2d_sites": [
+     "nf4_grouped.py:231"
+    ],
+    "legal_h2d_calls": 2,
+    "syncs": 0,
+    "sync_msgs": []
+   },
+   "census_cold": {
+    "h2d_sites": [
+     "nf4_grouped.py:551[pageable][blocking]"
+    ],
+    "h2d_calls": 1,
+    "legal_h2d_calls": 2,
+    "syncs": 1
+   },
+   "census_selftest": {
+    "hazards_seen": 3,
+    "hazards_expected": 3,
+    "legal_seen": 1,
+    "legal_expected": 1,
+    "sync_seen": true,
+    "blind": false
+   },
+   "why": "shipped fused path, eids as a device tensor"
+  },
+  {
+   "arm": "G_full",
+   "eids_form": "list",
+   "patches": [],
+   "installed": [],
+   "captured": true,
+   "note": "captured and replayed",
+   "shape": {
+    "groups": 8,
+    "rows": 64,
+    "sizes_max": 8
+   },
+   "census_warm": {
+    "h2d_sites": [],
+    "h2d_calls": 0,
+    "legal_h2d_sites": [
+     "nf4_grouped.py:231"
+    ],
+    "legal_h2d_calls": 5,
+    "syncs": 0,
+    "sync_msgs": []
+   },
+   "census_cold": {
+    "h2d_sites": [
+     "nf4_grouped.py:551[pageable][blocking]"
+    ],
+    "h2d_calls": 1,
+    "legal_h2d_calls": 5,
+    "syncs": 1
+   },
+   "census_selftest": {
+    "hazards_seen": 3,
+    "hazards_expected": 3,
+    "legal_seen": 1,
+    "legal_expected": 1,
+    "sync_seen": true,
+    "blind": false
+   },
+   "why": "shipped + LoRA delta, eids as a list"
+  },
+  {
+   "arm": "G_full",
+   "eids_form": "devtensor",
+   "patches": [],
+   "installed": [],
+   "captured": true,
+   "note": "captured and replayed",
+   "shape": {
+    "groups": 8,
+    "rows": 64,
+    "sizes_max": 8
+   },
+   "census_warm": {
+    "h2d_sites": [],
+    "h2d_calls": 0,
+    "legal_h2d_sites": [
+     "nf4_grouped.py:231"
+    ],
+    "legal_h2d_calls": 3,
+    "syncs": 0,
+    "sync_msgs": []
+   },
+   "census_cold": {
+    "h2d_sites": [
+     "nf4_grouped.py:551[pageable][blocking]"
+    ],
+    "h2d_calls": 1,
+    "legal_h2d_calls": 3,
+    "syncs": 1
+   },
+   "census_selftest": {
+    "hazards_seen": 3,
+    "hazards_expected": 3,
+    "legal_seen": 1,
+    "legal_expected": 1,
+    "sync_seen": true,
+    "blind": false
+   },
+   "why": "shipped + LoRA delta, eids as a device tensor"
+  }
+ ],
+ "bitsandbytes": "0.50.0"
+}

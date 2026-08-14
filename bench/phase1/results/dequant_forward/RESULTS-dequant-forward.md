@@ -61,11 +61,20 @@ Reading rule: **`d/g` > 1 means the fused kernel is faster.** A cell whose
 self-pair or drift left its band is **VOID** — the number is withheld, not
 reported small.
 
+**Measurement class (backfilled 2026-08-14, `kernel/prereg_gpu_busy_labelling.json`):**
+the `decode_m8` row is a **STEP RATIO, not a kernel measurement** — both arms
+run well under 50% GPU-busy there (fused 9–33% H100 / 13–52% 4090; baseline
+4.4–11% / 4–55%), so roughly 90% of each step is host time and neither kernel is
+the bottleneck. The `tokbudget_*` rows **are** kernel measurements (80–99% busy,
+both arms, both devices). The numbers below are unchanged; only what they are
+called has changed. Source: [`host_bound/`](host_bound/), reported in
+[`FINDING-host-bound-small-batch.md`](FINDING-host-bound-small-batch.md).
+
 | | H100, run 1 (23/24 live) | RTX 4090, run 2 (24/24 live) |
 |---|---:|---:|
-| `decode_m8` median | **1.070×** (5 of 7 at bar) | **1.112×** (7 of 8 at bar) |
-| `tokbudget_2048` median | **1.709×** (7 of 8) | **1.827×** (8 of 8) |
-| `tokbudget_11800` median | **1.468×** (6 of 8) | **2.441×** (8 of 8) |
+| `decode_m8` median — **step ratio** | **1.070×** (5 of 7 at bar) | **1.112×** (7 of 8 at bar) |
+| `tokbudget_2048` median — kernel | **1.709×** (7 of 8) | **1.827×** (8 of 8) |
+| `tokbudget_11800` median — kernel | **1.468×** (6 of 8) | **2.441×** (8 of 8) |
 | range at 11 800 tokens | 0.797 – 1.825 | 1.754 – 4.785 |
 | transient memory D/G | 4.34 → 2.05 → 1.18 | 4.20 → 2.05 → 1.18 |
 | J/step D/G | 1.14 → 1.72 → 1.48 | 1.21 → 1.82 → 2.45 |
@@ -84,9 +93,12 @@ the instrument struggles and where the runs disagree by up to 33%.
 
 **1. The fused advantage is smallest at small batch — on both devices, in both
 runs.** `decode_m8` medians: 1.070 / 1.132 (H100 runs 1, 2) and 1.112 (4090
-run 2). The registered S1 band was **1.3–3.0×** and it **misses on every leg**.
-S1's bar (≥1.0 on ≥6 of 8) fails on the H100 in run 1 (5 of 7 live) and passes
-on the 4090 in run 2 (7 of 8).
+run 2). **These are step ratios, not kernel results** (see the measurement-class
+note above): S1 was registered as a claim about kernels and the cells it graded
+are ~90% host time, so what S1 actually tested at this band was a step ratio.
+The registered S1 band was **1.3–3.0×** and it **misses on every leg**. S1's bar
+(≥1.0 on ≥6 of 8) fails on the H100 in run 1 (5 of 7 live) and passes on the
+4090 in run 2 (7 of 8). The verdict is unchanged; the label is added.
 
 Most of what is being measured there is not either kernel. **The shared LoRA
 floor — the identical `lora_delta_grouped` call both arms make — is 54–66% of

@@ -62,10 +62,16 @@ import hashlib
 import json
 import os
 import statistics as st
+import sys
 import time
 from pathlib import Path
 
 import torch
+
+# The GPU-busy label rule (C4) lives in the harness so every leg applies the
+# same bar. This driver sits beside it.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import harness as H  # noqa: E402
 
 
 def _sha(t: torch.Tensor) -> str:
@@ -206,7 +212,48 @@ class RoutingTap:
 
 
 # ----------------------------------------------------------------- arm -----
-def run_arm(model, arm, batches, lr, enable, disable, warmup, tap_E):
+def busy_fraction(model, opt, ids, m=8):
+    """GPU-busy fraction of a real training step (C4), measured on this arm.
+
+    Same definition as everywhere else in the harness -- summed CUDA kernel
+    self-time per step over wall per step, back to back, no syncs between steps.
+    Cheap here (8 steps) because an e2e step is ~100x a microbench cell.
+
+    Kept OUT of the timed loop: it runs after the timed steps, on one batch, so
+    the profiler never touches the number the prereg grades.
+    """
+    from torch.profiler import ProfilerActivity, profile
+
+    def one():
+        opt.zero_grad(set_to_none=False)
+        model(input_ids=ids, labels=ids).loss.backward()
+
+    for _ in range(2):
+        one()
+    torch.cuda.synchronize()
+    t0 = time.perf_counter()
+    for _ in range(m):
+        one()
+    torch.cuda.synchronize()
+    wall_ms = (time.perf_counter() - t0) * 1000.0 / m
+    with profile(activities=[ProfilerActivity.CUDA], record_shapes=False) as pr:
+        for _ in range(m):
+            one()
+        torch.cuda.synchronize()
+    us = 0.0
+    for e in pr.key_averages():
+        v = getattr(e, "self_device_time_total", None)
+        if v is None:
+            v = getattr(e, "self_cuda_time_total", 0.0)
+        us += float(v or 0.0)
+    busy_ms = us / 1000.0 / m
+    opt.zero_grad(set_to_none=True)
+    return {"wall_per_step_ms": wall_ms, "gpu_busy_per_step_ms": busy_ms,
+            "busy_fraction": (busy_ms / wall_ms) if wall_ms else None}
+
+
+def run_arm(model, arm, batches, lr, enable, disable, warmup, tap_E,
+            measure_busy=True):
     torch.cuda.empty_cache()
     torch.cuda.synchronize()
     resident = torch.cuda.memory_allocated()          # decomposition baseline
@@ -243,6 +290,8 @@ def run_arm(model, arm, batches, lr, enable, disable, warmup, tap_E):
 
     steady = per_step[warmup:] or per_step
     peak = torch.cuda.max_memory_allocated()
+    # AFTER the timed steps and after peak is read, so neither is perturbed.
+    busy = busy_fraction(model, opt, batches[0]) if measure_busy else None
     if disable:
         disable(model)
     return dict(
@@ -256,6 +305,7 @@ def run_arm(model, arm, batches, lr, enable, disable, warmup, tap_E):
         resident_gb=round(resident / 2**30, 3),
         transient_gb=round((peak - resident) / 2**30, 3),
         routing=routing,
+        gpu_busy=busy,
     ), first_grads
 
 
@@ -269,7 +319,15 @@ def main():
     ap.add_argument("--alpha", type=int, default=16)
     ap.add_argument("--lr", type=float, default=1e-4)
     ap.add_argument("--offload", type=int, default=1)
-    ap.add_argument("--data", default="both", choices=["text", "random", "both"])
+    # REAL TEXT IS THE DEFAULT (C5). Random ids are a fixture that flatters the
+    # dequant baseline by 1.6-1.7x on every matched pair, because MoE routing is
+    # content-dependent: random ids hit FEWER experts (occupancy 0.875 vs 0.984)
+    # and far more unevenly (cv 1.463 vs 0.687), so the baseline's python loop
+    # runs fewer iterations -- which is precisely the cost the fused path
+    # removes. They stay available for work that genuinely needs
+    # content-independence, and `both` still runs the matched pair, but a run
+    # that says nothing about its fixture now gets prose.
+    ap.add_argument("--data", default="text", choices=["text", "random", "both"])
     ap.add_argument("--out", default=os.environ.get("DQF_OUT", "/root/dqf-out"))
     ap.add_argument("--tag", default="e2e")
     a = ap.parse_args()
@@ -355,7 +413,12 @@ def main():
                    frozen_tensors_hashed=len(frozen_before),
                    frozen_bytes_hashed=nbytes,
                    frozen_check_vacuous=bool(vacuous),
-                   integrity_applicable=integrity_applicable, cells={})
+                   integrity_applicable=integrity_applicable,
+                   data_default="text (C5); random ids are opt-in",
+                   random_id_understatement=(
+                       "1.6-1.7x on every matched pair — any table citing a "
+                       "random-id cell states this factor beside it"),
+                   cells={})
     dest = Path(a.out)
     dest.mkdir(parents=True, exist_ok=True)
     art = dest / f"e2e_{a.tag}.json"
@@ -409,6 +472,13 @@ def main():
             if ref.get("losses") and r.get("losses"):
                 dl = sorted(abs(x - y) for x, y in zip(r["losses"], ref["losses"]))
                 r["loss_median_abs_delta"] = dl[len(dl) // 2]
+            # REGISTERED LABEL (C4): the speedup above is a kernel result only
+            # if BOTH arms in the pair are GPU-bound. Applied per arm, because
+            # the reference and the arm can sit on opposite sides of the bar.
+            (r["measurement_class"], r["min_busy_fraction"],
+             _fr) = H.measurement_class({"reference": ref.get("gpu_busy"),
+                                         name: r.get("gpu_busy")})
+        payload["measurement_class_note"] = H.MEASUREMENT_CLASS_NOTE
         payload["cells"][mode] = results
         art.write_text(json.dumps(payload, indent=1, default=str))
 
@@ -416,21 +486,27 @@ def main():
     for mode, results in payload["cells"].items():
         sp = results.get("reference_selfpair", {}).get("speedup_vs_reference")
         rt = (results.get("reference", {}) or {}).get("routing") or {}
-        print("data=%-7s SELF-PAIR %s   routing occ %s cv %s" % (
+        print("data=%-7s SELF-PAIR %s   routing occ %s cv %s%s" % (
             mode, ("%.4f" % sp) if sp else "n/a",
             ("%.3f" % rt["occupancy_median"]) if rt.get("occupancy_median") else "?",
-            ("%.3f" % rt["cv_median"]) if rt.get("cv_median") else "?"))
+            ("%.3f" % rt["cv_median"]) if rt.get("cv_median") else "?",
+            "   [RANDOM-ID FIXTURE: understates the fused advantage by "
+            "1.6-1.7x — state this factor beside any number below]"
+            if mode == "random" else ""))
         for name, r in results.items():
             if "failed" in r:
                 print("  %-20s FAILED %s" % (name, r["failed"][:60]))
                 continue
-            print("  %-20s %8.4f s/step  %6sx  peak %6.3f GB (%sx)  transient %6.3f GB  gradΔ %s"
+            bf = (r.get("gpu_busy") or {}).get("busy_fraction")
+            print("  %-20s %8.4f s/step  %6sx  peak %6.3f GB (%sx)  transient %6.3f GB  gradΔ %s  busy %s  %s"
                   % (name, r["s_per_step"],
                      ("%.3f" % r["speedup_vs_reference"]) if r.get("speedup_vs_reference") else "-",
                      r["train_peak_gb"],
                      ("%.3f" % r["peak_vs_reference"]) if r.get("peak_vs_reference") else "-",
                      r["transient_gb"],
-                     ("%.1e" % r["grad_rel_mean"]) if r.get("grad_rel_mean") else "-"))
+                     ("%.1e" % r["grad_rel_mean"]) if r.get("grad_rel_mean") else "-",
+                     ("%3.0f%%" % (100 * bf)) if bf else "  ?",
+                     r.get("measurement_class", "unknown").upper()))
     print("E2E_DONE")
 
 

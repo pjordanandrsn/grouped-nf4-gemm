@@ -67,8 +67,21 @@ class FusedGroupedNf4(torch.autograd.Function):
         else:
             ctx.packed = ctx.absmax = None
             ctx.wshape = (packed.shape[0], packed.shape[1], packed.shape[2])
-        ctx.sizes = [int(s) for s in sizes]
-        ctx.expert_ids = [int(e) for e in expert_ids]
+        # Kept AS GIVEN. This used to be `[int(e) for e in expert_ids]`, which on
+        # a device tensor is one device-to-host sync PER GROUP -- eight of them
+        # on an 8-group cell, measured -- and a sync is illegal inside a CUDA
+        # graph capture. It was one of the five hazards that made the fused
+        # training path uncapturable while the dequant-on-forward baseline
+        # captured cleanly (bisected in bench/phase1/probe_capture_bisect.py).
+        #
+        # `sizes` stays a host sequence by contract: the kernel launch grid is
+        # derived from it, so it has to be host-readable anyway. `expert_ids`
+        # does not, and is passed through to the backward's dgrad kernel
+        # untouched. The per-expert fallback loop in backward is the only reader
+        # that needs host ints, and it materialises them ONCE, on its own branch,
+        # rather than making every step pay for a path it usually does not take.
+        ctx.sizes = sizes
+        ctx.expert_ids = expert_ids
         return out
 
     @staticmethod
@@ -123,9 +136,18 @@ class FusedGroupedNf4(torch.autograd.Function):
 
             grad_a = torch.empty(grad_out.shape[0], K, dtype=grad_out.dtype,
                                  device=grad_out.device)
+            # The fallback loop is the ONLY reader here that needs host ints, so
+            # the device->host trip happens here and once (`.tolist()`), not per
+            # element in every forward. This branch cannot be captured anyway --
+            # it enqueues per-expert work from python, which is the cost the
+            # fused forward exists to remove.
+            sizes_h = (ctx.sizes if isinstance(ctx.sizes, (list, tuple))
+                       else ctx.sizes.tolist())
+            eids_h = (ctx.expert_ids if isinstance(ctx.expert_ids, (list, tuple))
+                      else ctx.expert_ids.tolist())
             row = 0
-            for g, e in enumerate(ctx.expert_ids):
-                n = ctx.sizes[g]
+            for g, e in enumerate(eids_h):
+                n = int(sizes_h[g])
                 if n == 0:
                     continue
                 # recomputed, one expert live at a time -- never stored.
@@ -189,21 +211,40 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
     faster and is used instead — pathological routing must not silently cost
     more than it did before this change.
     """
-    nonzero = [(g, e) for g, e in enumerate(expert_ids) if int(sizes[g]) > 0]
-    if not nonzero:
+    # `sizes` is a host sequence by contract (the kernel launch grid comes off
+    # it), so which groups are non-empty is a host-side fact and needs no device
+    # read. `expert_ids` may be either form and is NEVER iterated in Python here:
+    # on a device tensor that would be one sync per group.
+    nz = [g for g in range(len(sizes)) if int(sizes[g]) > 0]
+    if not nz:
         return None                      # unchanged: no rows, no delta tensor
-    rows = [int(sizes[g]) for g, _ in nonzero]
+    rows = [int(sizes[g]) for g in nz]
     total, widest = sum(rows), max(rows)
     if len(rows) * widest > _PAD_WASTE_LIMIT * total:
         return _lora_delta_grouped_loop(a_cat, lora_A, lora_B, sizes,
                                         expert_ids, scaling)
 
     dev = a_cat.device
-    sz = torch.tensor(rows, device=dev)
-    eid = torch.tensor([e for _, e in nonzero], device=dev)
+    from nf4_grouped import to_device_i32
+    if torch.is_tensor(expert_ids):
+        # Select the surviving groups ON DEVICE. One index_select, no round trip.
+        sz_i32, nz_i = to_device_i32((rows, nz), dev)
+        eid = expert_ids[nz_i.to(torch.int64)].to(torch.int64)
+    else:
+        sz_i32, eid_i32 = to_device_i32((rows, [int(expert_ids[g]) for g in nz]),
+                                        dev)
+        eid = eid_i32.to(torch.int64)
+    sz = sz_i32.to(torch.int64)
     # Row -> (group, slot within group). Built on device: the whole point is to
     # stop enqueuing per-expert work from Python.
-    grp = torch.repeat_interleave(torch.arange(len(rows), device=dev), sz)
+    #
+    # `output_size=total` is load-bearing, not a micro-optimisation: without it
+    # repeat_interleave has to READ `sz` to learn how long its output is, which
+    # is a device-to-host sync and is illegal inside a CUDA graph capture. The
+    # value is already known on the host (`sum(rows)`), so handing it over costs
+    # nothing and removes the sync.
+    grp = torch.repeat_interleave(torch.arange(len(rows), device=dev), sz,
+                                  output_size=total)
     slot = torch.arange(total, device=dev) - (torch.cumsum(sz, 0) - sz)[grp]
 
     A, B = lora_A[eid], lora_B[eid]                    # [G, r, K], [G, N, r]
@@ -222,7 +263,13 @@ def _lora_delta_grouped_loop(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1
     skew, and as the oracle the batched path is tested against."""
     out = None
     row = 0
-    for g, e in enumerate(expert_ids):
+    # One materialisation, not one per group: `enumerate` over a device tensor
+    # syncs on every element. This path already enqueues per-expert work from
+    # python and is not capturable either way, but it should not pay 2E syncs
+    # to find that out.
+    eids_h = (expert_ids if isinstance(expert_ids, (list, tuple))
+              else expert_ids.tolist())
+    for g, e in enumerate(eids_h):
         n = int(sizes[g])
         if n == 0:
             continue

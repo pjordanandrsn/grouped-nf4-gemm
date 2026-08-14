@@ -737,6 +737,125 @@ BACKENDS = {
 }
 
 
+# ------------------------------------------------- GPU-busy fraction (C4)
+# A STANDARD INSTRUMENT, run in every leg alongside the self-pair.
+#
+# probe_gpu_busy_fraction.py was written after legs 2 and 3 had already been
+# graded, and it retroactively demoted their PRIMARY criterion from a kernel
+# result to a step ratio: at the decode band roughly 90% of both arms' step time
+# is host, so F1 was comparing one kernel launch against a per-expert python
+# loop. The medians (1.588 / 1.522 / 1.539 across three pairing schemes and two
+# devices) are real wall-clock step ratios that replicate well. They are not
+# kernel results. That is the class of thing that has to run BEFORE a result is
+# graded, not after, which is why it lives here now instead of in a probe.
+#
+# The self-pair asks "did the box drift?". This asks "is the quantity I am about
+# to grade even about the thing I think it is?". Neither substitutes for the
+# other and both are cheap.
+GPU_BUSY_KERNEL_BAR = 0.50
+
+
+def gpu_busy_fraction(step, m: int = 50):
+    """Summed CUDA kernel self-time per step / wall per step, over `m` steps run
+    back to back with no syncs between them -- i.e. how a training loop runs.
+
+    Near 1: the GPU is the bottleneck and a ratio measured here is about kernels.
+    Small: the host is, and kernel choice cannot move the wall clock much at
+    this size.
+    """
+    from torch.profiler import ProfilerActivity, profile
+
+    for _ in range(3):
+        step()
+    torch.cuda.synchronize()
+    t0 = time.perf_counter()
+    for _ in range(m):
+        step()
+    torch.cuda.synchronize()
+    wall_ms = (time.perf_counter() - t0) * 1000.0 / m
+
+    for _ in range(3):
+        step()
+    torch.cuda.synchronize()
+    with profile(activities=[ProfilerActivity.CUDA], record_shapes=False) as pr:
+        for _ in range(m):
+            step()
+        torch.cuda.synchronize()
+    total_us = 0.0
+    for e in pr.key_averages():
+        v = getattr(e, "self_device_time_total", None)
+        if v is None:
+            v = getattr(e, "self_cuda_time_total", 0.0)
+        total_us += float(v or 0.0)
+    busy_ms = total_us / 1000.0 / m
+    return {"wall_per_step_ms": wall_ms, "gpu_busy_per_step_ms": busy_ms,
+            "busy_fraction": (busy_ms / wall_ms) if wall_ms else None}
+
+
+def measurement_class(busy_by_arm: dict):
+    """REGISTERED INTERPRETATION, fixed 2026-08-14 and not negotiable per cell.
+
+    A cell in which EITHER arm runs below GPU_BUSY_KERNEL_BAR (~50%) GPU-busy is
+    a STEP-RATIO measurement, not a kernel measurement, and must be labelled as
+    such in any results table that prints it. It is still a real number -- it is
+    the wall-clock cost a training loop actually pays -- and it is not a claim
+    about kernels.
+
+    Returns (label, min_busy_fraction, per-arm fractions). `label` is
+    "kernel" or "step_ratio"; "unknown" when no arm reported, which is NOT the
+    same as "kernel" and must never be printed as one.
+    """
+    fr = {k: (v or {}).get("busy_fraction") for k, v in (busy_by_arm or {}).items()}
+    vals = [v for v in fr.values() if v is not None]
+    if not vals:
+        return "unknown", None, fr
+    lo = min(vals)
+    return ("kernel" if lo >= GPU_BUSY_KERNEL_BAR else "step_ratio"), lo, fr
+
+
+# ------------------------------------------------- routing visibility (C5)
+# Measured on OLMoE-1B-7B at seq 512, both devices, in the e2e leg
+# (RESULTS-e2e-training.md): random token ids route to FEWER experts and far
+# more unevenly than real prose -- occupancy 0.875 vs 0.984, cv 1.463 vs 0.687 --
+# which is the opposite of the intuition that random input spreads load. Fewer
+# hit experts means fewer iterations of the baseline's python loop, i.e. less of
+# exactly the cost the fused path removes.
+RANDOM_ID_UNDERSTATEMENT = "1.6-1.7x, measured on every matched pair"
+RANDOM_ID_UNDERSTATEMENT_NOTE = (
+    "Random token ids understate the fused advantage by 1.6-1.7x on every "
+    "matched pair (RESULTS-e2e-training.md): routing is content-dependent, and "
+    "random ids hit fewer experts (occupancy 0.875 vs 0.984) and far more "
+    "unevenly (cv 1.463 vs 0.687). Any results table citing a random-id cell "
+    "must state this factor beside it.")
+
+
+def routing_summary(sizes, E: int, fixture: str):
+    """Occupancy and cv of the group-size vector this cell actually ran.
+
+    Emitted into EVERY receipt so the fixture's routing behaviour is visible in
+    every run rather than reconstructed later. `fixture` names where the sizes
+    came from -- the cheapest way to stop a fiction being read as measured
+    routing, which is the error leg 4 found had understated this kernel ~4-5x at
+    training shape.
+    """
+    rows = [int(s) for s in sizes if int(s) > 0]
+    if not rows:
+        return {"fixture": fixture, "hit_experts": 0, "of": E, "occupancy": 0.0}
+    mean = sum(rows) / len(rows)
+    var = sum((x - mean) ** 2 for x in rows) / len(rows)
+    return {"fixture": fixture, "hit_experts": len(rows), "of": E,
+            "occupancy": len(rows) / E, "total_rows": sum(rows),
+            "min_rows": min(rows), "max_rows": max(rows), "mean_rows": mean,
+            "cv": (var ** 0.5) / mean if mean else None}
+
+
+MEASUREMENT_CLASS_NOTE = (
+    "gpu_busy_fraction = summed CUDA kernel self-time per step / wall per step, "
+    "no syncs between steps. A cell where EITHER arm is below "
+    f"{GPU_BUSY_KERNEL_BAR:.0%} is labelled step_ratio: a real wall-clock step "
+    "ratio, NOT a kernel measurement.")
+
+
 # ---------------------------------------------------------------- measurement
 class PowerSampler:
     """Mean GPU watts over start()..stop(). pynvml preferred; nvidia-smi poll

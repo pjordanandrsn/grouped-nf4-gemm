@@ -17,6 +17,24 @@ this prereg's stated motivation is overgeneralised and the erratum says how.
 Four device-runs across three legs have now each had exactly one clean device,
 and the identity of the clean one keeps changing. That is the finding.
 
+> **MEASUREMENT CLASS — backfilled 2026-08-14**
+> (`kernel/prereg_gpu_busy_labelling.json`)
+>
+> **F1, this leg's primary criterion, is a STEP RATIO, not a kernel
+> measurement.** It is graded on the decode band, where both arms run far below
+> 50% GPU-busy — fused 9–33% (H100) / 13–52% (4090), baseline 4.4–11% / 4–55% —
+> so roughly 90% of each step is host time and F1 compares one kernel launch
+> against a per-expert Python loop. Its median of **1.539 is a real wall-clock
+> step ratio and it replicates well** (1.588 / 1.522 / 1.539 across three
+> pairing schemes and two devices). It is not a claim about kernels, and the
+> PASS above should be read as a step-ratio PASS.
+>
+> The numbers in this document are unchanged. Measured in
+> [`host_bound/`](host_bound/) and reported in
+> [`FINDING-host-bound-small-batch.md`](FINDING-host-bound-small-batch.md); the
+> instrument now runs in every leg beside the self-pair, so no later leg
+> acquires its label after grading.
+
 ## THREE DEFECTS IN THIS LEG, ALL MINE, ALL FLATTERING
 
 **1. The self-pair gate became near-vacuous.** It is not degenerate — per-pair
@@ -39,13 +57,20 @@ two *collection strategies*. It reads a near-null 0.9858 (4090) and 1.0125
 block collection — all A, then all B — run alongside. **P1's numbers here
 should be ignored.**
 
-**3. The no-sync timing is contaminated on CPU-bound cells.** Per-call device
-time, leg 3 over leg 2 (which synchronised every iteration):
+**3. The no-sync timing is contaminated on CPU-bound cells.**
+⚠️ **THE 3.76× IN THIS SECTION IS RETRACTED** — see
+[`FINDING-host-bound-small-batch.md`](FINDING-host-bound-small-batch.md). It
+compared leg 2's figures from one pod against leg 3's from a different pod, a
+cross-run comparison this program's own rule forbids. Re-run on the same cell in
+the same process the two instruments agree, median 1.00× on both devices. The
+section is kept as written, with this marker, because deleting it would hide the
+error rather than record it. Per-call device time, leg 3 over leg 2 (which
+synchronised every iteration):
 
 | device | small cells | 5–13 ms cells |
 |---|---:|---:|
-| H100 | **3.76×** (0.44 → 1.68 ms) | 1.11–1.25× |
-| RTX 4090 | **0.60×** (0.92 → 0.41 ms) | 0.93–0.97× |
+| H100 | **3.76×** ⚠️ RETRACTED (0.44 → 1.68 ms) | 1.11–1.25× |
+| RTX 4090 | **0.60×** ⚠️ RETRACTED (0.92 → 0.41 ms) | 0.93–0.97× |
 
 On the 4090, dropping the per-call sync does what it should: spans get shorter
 and cleaner, because the sync stall is gone and the GPU is the bottleneck. On
