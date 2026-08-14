@@ -133,15 +133,22 @@ class ArenaExpertSource:
         return {s: torch.stack(v).to(self.device) for s, v in out.items()}
 
     def fused_stacks(self, layer: int, expert_ids: Sequence[int],
-                     proj: str = "gate"):
+                     proj: str = "gate", *, raw: dict | None = None):
         """``(blocks [E, N, K//2] uint8, scales [E, N, K//32] uint8)`` for one
         projection — the exact input contract of ``gemm_mxfp4_grouped``.
 
         ``proj`` is canonical (``gate``/``up``/``down``); the released-K3
         spelling (w1/w3/w2) is applied here so callers never hold it.
+
+        ``raw`` accepts an already-fetched :meth:`fetch_raw` dict and skips the
+        read. A row holds ALL SIX segments, so fetching per projection reads the
+        same row once per projection and discards two thirds of each read —
+        measured at **842 MB where 281 MB is needed** on a K3 layer. Callers that
+        want more than one projection should fetch once and pass it here.
         """
         w = K3_PROJ.get(proj, proj)
-        raw = self.fetch_raw(layer, expert_ids)
+        if raw is None:
+            raw = self.fetch_raw(layer, expert_ids)
         try:
             return raw[f"{w}.weight_packed"], raw[f"{w}.weight_scale"]
         except KeyError:
@@ -183,9 +190,15 @@ def moe_layer_forward(src: "ArenaExpertSource", layer: int,
     """
     from mxfp4_grouped import gemm_mxfp4_grouped
 
-    gb, gs = src.fused_stacks(layer, expert_ids, "gate")
-    ub, us = src.fused_stacks(layer, expert_ids, "up")
-    db, ds = src.fused_stacks(layer, expert_ids, "down")
+    # ONE fetch for all three projections. A row carries all six segments, so a
+    # fetch per projection read every row three times and threw two thirds of
+    # each read away: measured 842 MB where 281 MB is needed on a K3 layer
+    # (16 of 896 experts, 17.5 MB rows), and the reader's own byte counter
+    # confirmed the 3x to the byte.
+    raw = src.fetch_raw(layer, expert_ids)
+    gb, gs = src.fused_stacks(layer, expert_ids, "gate", raw=raw)
+    ub, us = src.fused_stacks(layer, expert_ids, "up", raw=raw)
+    db, ds = src.fused_stacks(layer, expert_ids, "down", raw=raw)
     dev = a_cat.device
     mv = lambda t: t.to(dev, non_blocking=True)  # noqa: E731
 
