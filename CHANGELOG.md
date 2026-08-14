@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## 0.12.0 — 2026-08-14
+
+### The arena tier could not read DeepSeek-V4's own scale dtype
+
+`nvme_residency._ST_TO_TORCH` had no entry for `F8_E8M0`, so staging a real
+DeepSeek-V4 MXFP4 arena died with `KeyError: 'F8_E8M0'` in `segment_geometry` —
+and again in `segment_tensor`, which resolves the same table.
+
+The gap was narrow and internally inconsistent: `nvme_bake_nf4._MXFP4_BYTE_DTYPES`
+and `mxfp4_residency._PACKED_BYTE_DTYPES` both already listed the tag, with
+comments saying V4 labels its MXFP4 experts `I8`/`F8_E8M0` where Kimi K3 labels
+both `U8` — same bytes, different label. So this package could **bake** such an
+arena and **serve** from it, and only the path through `segment_geometry` — the
+one a training tier's geometry check takes — could not read it back.
+
+Found on a rented 3090 after a 149 GB download and a 147 GB relocation bake of
+`deepseek-ai/DeepSeek-V4-Flash`; the bake and the load both succeeded and the very
+next call raised. Maps to `uint8`, not `float8_e8m0fnu`: these tags label **bytes
+to hand back unchanged**, and materializing an e8m0 exponent as a float then
+casting yields the value rather than the exponent byte, scaling every block by
+`2**-127`. (#75)
+
 ### `preadv` scatter: rows land in per-segment staging by DMA, no host copy
 
 `fetch_raw` now issues ONE scattering read per row — `os.preadv` takes an iovec list, so the
