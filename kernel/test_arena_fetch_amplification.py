@@ -60,3 +60,27 @@ def test_moe_layer_forward_reads_each_row_ONCE(baked, monkeypatch):  # noqa: F81
         assert src.reader.reads - before == len(ids), (
             f"read {src.reader.reads - before} rows for {len(ids)} experts; "
             "one row read per routed expert is the whole point")
+
+
+def test_a_fetch_result_survives_the_next_fetch(baked):
+    """Staging is reused, so a returned tensor must not alias it.
+
+    `.to(device)` is a no-op when the tensor is already on the target, so on the
+    DEFAULT `device="cpu"` the result would hand back the staging buffer itself
+    and the next fetch of the same expert count would rewrite a caller's earlier
+    result in place. The `torch.stack` path this replaced always allocated
+    fresh.
+
+    The existing reuse tests fetch the SAME rows twice and compare, which passes
+    either way -- this fetches DIFFERENT rows, which is what makes it a gate.
+    """
+    torch = pytest.importorskip("torch")
+    arena, _ = baked
+    with ArenaExpertSource(arena) as src:
+        first = src.fetch_raw(1, [0, 2])
+        kept = {k: v.clone() for k, v in first.items()}
+        src.fetch_raw(1, [1, 3])                      # same count, different rows
+        for k, v in first.items():
+            assert torch.equal(v, kept[k]), (
+                f"{k}: the first fetch's tensor changed when the second ran -- "
+                "it aliases the reused staging buffer")

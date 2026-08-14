@@ -28,6 +28,12 @@ bench, same pod class:
 are unchanged at 18,529,910,784 — the fix removes host copies, not reads, and the counter
 confirms it.
 
+Returned tensors never alias the staging: `.to()` is a no-op when the source is already on
+the target, so on the DEFAULT `device="cpu"` the result would have handed back the reused
+buffer and the next fetch of the same expert count would rewrite a caller's earlier result
+in place (Cursor Bugbot). Detected by pointer identity rather than by comparing device
+strings, which get `cuda` vs `cuda:0` wrong.
+
 The device transfer is **synchronous on purpose**: staging is reused, and a
 `non_blocking=True` copy is not ordered against the *host* writes of the next call, so the
 CPU could overwrite staging mid-DMA. Making it async needs an event recorded here and

@@ -179,7 +179,18 @@ class ArenaExpertSource:
                     stage[s][row].copy_(src[off:off + ln])
         out = {}
         for s, g in self.segments.items():
-            t = stage[s].to(self.device)
+            src = stage[s]
+            t = src.to(self.device)
+            # `.to()` is a NO-OP when the tensor is already on the target, so on
+            # a CPU source it returns `src` itself and the result would ALIAS
+            # the reused staging -- the next fetch of the same expert count
+            # would rewrite a caller's earlier result in place. The old
+            # `torch.stack` path always allocated fresh, so this would be a
+            # silent regression, and `device="cpu"` is the DEFAULT. Detect the
+            # alias by identity rather than by comparing device strings, which
+            # get "cuda" vs "cuda:0" wrong.
+            if t.data_ptr() == src.data_ptr():
+                t = t.clone()
             dt = _torch_dtype(g["dtype"])
             if dt is not torch.uint8:
                 t = t.view(dt)
