@@ -119,7 +119,7 @@ jobs:
       # CPU-reachable ones execute. The gap cannot recur, because nothing is
       # excluded by file any more.
       - name: GPU-labelled files, for the CPU-reachable tests inside them
-        run: cd kernel && python -m pytest test_arena_equivalence.py test_arena_experts.py test_mxfp4_qlora.py test_mxfp4_residency.py test_nf4_qlora_grad.py test_nvme_residency.py test_nf4_grouped.py test_mxfp4_grouped.py test_mxfp4_pipelined.py -q
+        run: cd kernel && python -m pytest test_arena_equivalence.py test_arena_experts.py test_mxfp4_qlora.py test_mxfp4_residency.py test_nf4_qlora_grad.py test_nvme_residency.py test_nf4_grouped.py test_mxfp4_grouped.py test_mxfp4_pipelined.py test_eids_forms.py -q
 
       - name: packaging allowlist + test-wiring guard
         run: cd kernel && python -m pytest test_packaging_covers_kernel.py test_check_readme_links.py -q
