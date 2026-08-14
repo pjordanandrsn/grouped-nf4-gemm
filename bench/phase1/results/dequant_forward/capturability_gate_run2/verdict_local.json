@@ -1,0 +1,20 @@
+{
+ "band": [
+  0.967,
+  1.032
+ ],
+ "instrument_selfpair": {
+  "('random', 0, 'fast_train')": 1.0379314272696207,
+  "('random', 0, 'fast_train_dgrad')": 0.9915460335842501,
+  "('random', 1, 'fast_train')": 1.0312570781426953,
+  "('random', 1, 'fast_train_dgrad')": 1.11182092555332
+ },
+ "gate": {
+  "('random', 0, 'fast_train')": 0.9422105782739112,
+  "('random', 0, 'fast_train_dgrad')": 0.9945570353213665,
+  "('random', 1, 'fast_train')": 1.0163986409966026,
+  "('random', 1, 'fast_train_dgrad')": 1.1079979879275654
+ },
+ "problems": [],
+ "verdict": "VERDICT: VOID \u2014 the INSTRUMENT self-pair left the band on 2/4 cells (worst 1.1118). The box drifted; cap/pub1 is not readable, and this is NOT a statement about the change."
+}

@@ -96,6 +96,180 @@ def repack_from_bnb(packed_list, states, N: int, K: int):
     return B, A
 
 
+class _PinnedIndexArena:
+    """A persistent pinned staging arena for the small int32 index tensors the
+    grouped kernels need (tile tables, expert ids, LoRA group sizes).
+
+    WHY AN ARENA AND NOT JUST `.pin_memory()` PER CALL. Measured on an RTX A2000
+    (torch 2.8.0+cu128), each construct captured in its own process against a
+    trivial kernel:
+
+        torch.tensor(list, device='cuda')          FAIL
+        torch.tensor(list).pin_memory().to(cuda)   FAIL   <- pinned, still fails
+        <pre-allocated pinned>.to(cuda, nb=True)   OK
+        dev.copy_(<pre-allocated pinned>, nb=True) OK
+        dev.copy_(<pre-allocated pinned>, nb=False) FAIL  <- nb=True is required
+        torch.arange(..., device='cuda')           OK
+        .pin_memory() with the result discarded    OK
+
+    So "use pinned memory" is not the fix on its own: pinned memory ALLOCATED
+    INSIDE the capture region still fails. The staging buffer has to already
+    exist when capture starts, which is what this arena is for.
+
+    NO SLICE IS EVER REUSED WHILE A COPY OFF IT COULD STILL BE IN FLIGHT. The
+    bump pointer only rewinds when (a) the stream is not capturing and (b) the
+    event recorded after the last hand-out has completed, so the host can never
+    overwrite bytes a pending async copy has not yet read. Inside a capture it
+    never rewinds at all, so the several call sites in one step -- forward
+    M-tile, forward eids, backward dgrad tiles, backward dgrad eids, and the two
+    LoRA tables -- each get distinct bytes, which is what makes a captured graph
+    replay the values it was captured with.
+
+    Growth keeps the old arena alive rather than freeing it, for the same
+    reason.
+
+    THE ARENA MUST NOT GROW DURING A CAPTURE, and that is why the default is
+    generous. Inside a capture nothing completes, so the bump pointer never
+    rewinds and one capture consumes the SUM of every call in it -- a whole-model
+    step is hundreds of calls, not the handful a single-projection cell makes.
+    Growing would allocate pinned memory inside the region, which is measured to
+    break capture (the `pin_inside_then_to` row above). So growth is refused
+    while capturing, with a named error, rather than producing the opaque
+    "previous error during capture" this whole change exists to eliminate.
+
+    The default holds 1 Mi int32 = 4 MiB of pinned host memory, allocated once
+    per device on first use. That is enough for a very large model step; raise it
+    with ``GNF4_PIN_ARENA_INTS`` if a capture ever reports exhaustion.
+    """
+
+    DEFAULT_INTS = int(os.environ.get("GNF4_PIN_ARENA_INTS", 1 << 20))
+
+    def __init__(self, device, n: int | None = None):
+        self.device = device
+        self.host = torch.empty(n or self.DEFAULT_INTS, dtype=torch.int32,
+                                pin_memory=True)
+        self.off = 0
+        self.evt = torch.cuda.Event()
+        self._retired: list = []
+
+    def _capturing(self) -> bool:
+        try:
+            return torch.cuda.is_current_stream_capturing()
+        except Exception:
+            return False
+
+    def take(self, n: int):
+        """A pinned int32 host view of length ``n`` that nothing else is using."""
+        capturing = self._capturing()
+        if not capturing and self.off and self.evt.query():
+            self.off = 0
+        if self.off + n > self.host.numel():
+            if capturing:
+                raise RuntimeError(
+                    "grouped-nf4: the pinned index arena (%d int32) was exhausted "
+                    "%d ints into a CUDA graph capture. Growing it here would "
+                    "allocate pinned memory inside the capture region, which is "
+                    "not capturable — so this refuses instead of failing later "
+                    "with an opaque 'previous error during capture'. Set "
+                    "GNF4_PIN_ARENA_INTS to at least %d and re-run; the arena is "
+                    "int32, so that is %.1f MiB of pinned host memory."
+                    % (self.host.numel(), self.off, 2 * (self.off + n),
+                       2 * (self.off + n) * 4 / 2**20))
+            self._retired.append(self.host)          # may still be in flight
+            self.host = torch.empty(max(2 * self.host.numel(), self.off + n),
+                                    dtype=torch.int32, pin_memory=True)
+            self.off = 0
+            if len(self._retired) > 8:
+                self._retired.pop(0)
+        view = self.host[self.off:self.off + n]
+        self.off += n
+        return view, capturing
+
+    def mark(self):
+        """Record the fence the rewind above waits on. Never inside a capture:
+        an event recorded during capture becomes a graph node and querying it
+        afterwards is not valid."""
+        if not self._capturing():
+            self.evt.record()
+
+
+_ARENAS: dict = {}
+
+
+def _arena(device) -> _PinnedIndexArena:
+    key = str(device)
+    if key not in _ARENAS:
+        _ARENAS[key] = _PinnedIndexArena(device)
+    return _ARENAS[key]
+
+
+def to_device_i32(seqs, device):
+    """One PINNED, async host-to-device transfer for a batch of small host-side
+    integer sequences. Returns one int32 device view per input, in order.
+
+    Why this exists, and why it is batched
+    --------------------------------------
+    ``torch.tensor(list, device='cuda')`` builds a PAGEABLE host tensor and
+    copies it with ``cudaMemcpyAsync`` followed by ``cudaStreamSynchronize``.
+    That sync is illegal inside a CUDA graph capture, and it is why the fused
+    training path could not be captured while the dequant-on-forward baseline
+    could -- the asymmetry recorded in
+    ``bench/phase1/results/dequant_forward/FINDING-host-bound-small-batch.md``.
+    A copy whose source is PINNED needs no such sync, so it is capturable, and it
+    is also the cheaper transfer.
+
+    The bisection (``bench/phase1/probe_capture_bisect.py``, RTX A2000, each
+    attempt in its own process) found FIVE such sites in the fused training step,
+    only two of which had been named as candidates. ``build_group_tiles`` alone
+    issued three per call and is called twice per step -- forward M-tile path and
+    backward dgrad -- so a single fused training step made **eight** separate
+    syncing transfers of a few hundred bytes each. Batching makes it one per call
+    site.
+
+    What this does NOT buy
+    ----------------------
+    A REPLAYED graph re-reads the staging buffer, so the routing metadata baked
+    into a capture is whatever it held at capture time. MoE routing changes every
+    step, so a captured fused graph is not usable without a padding or bucketing
+    scheme, which is a separate question with its own registration
+    (``kernel/prereg_capturability_scope.json``). **Capturability is a
+    precondition, not a speedup.**
+    """
+    lens = [len(s) for s in seqs]
+    total = sum(lens)
+    dev = torch.device(device)
+    # The staging arena needs a CUDA context; the interpreter/CPU contract path
+    # has none, and there is nothing to make capturable there either.
+    pinned = dev.type == "cuda" and torch.cuda.is_available()
+    if total == 0:
+        return [torch.empty(0, dtype=torch.int32, device=dev) for _ in seqs]
+    if not pinned:
+        packed = torch.tensor([v for s in seqs for v in s], dtype=torch.int32,
+                              device=dev)
+    else:
+        ar = _arena(dev)
+        host, _capturing = ar.take(total)
+        off = 0
+        for s, n in zip(seqs, lens):
+            if n:
+                # torch.as_tensor handles both host sequences and host TENSORS
+                # (a CPU tensor is host data and takes this path too — Bugbot,
+                # PR #85). Either way the write into `host` is a CPU->CPU copy
+                # into pinned memory, no CUDA call, so it stays capture-legal.
+                host[off:off + n] = torch.as_tensor(s, dtype=torch.int32).reshape(-1)
+            off += n
+        # non_blocking is REQUIRED, not an optimisation: the blocking form is
+        # `cudaMemcpyAsync` + `cudaStreamSynchronize`, and the sync is what is
+        # illegal under capture (measured — see _PinnedIndexArena).
+        packed = host.to(dev, non_blocking=True)
+        ar.mark()
+    out, off = [], 0
+    for n in lens:
+        out.append(packed[off:off + n])
+        off += n
+    return out
+
+
 def build_group_tiles(sizes, block_m: int, device):
     """Expand jagged group sizes into fixed M-tiles: (row0, valid_rows, group_idx).
 
@@ -120,8 +294,11 @@ def build_group_tiles(sizes, block_m: int, device):
             t_group.append(g)
             left -= take
         row += m
-    mk = lambda x: torch.tensor(x, dtype=torch.int32, device=device)  # noqa: E731
-    return mk(t_row0), mk(t_rows), mk(t_group)
+    # ONE pinned transfer for all three, not three pageable ones. Same values,
+    # same dtype, same shapes -- see to_device_i32 for why the transfer kind
+    # matters.
+    a, b, c = to_device_i32((t_row0, t_rows, t_group), device)
+    return a, b, c
 
 
 @triton.jit
@@ -488,10 +665,16 @@ def gemm_4bit_grouped(
             f"use dequant_ref(packed, absmax, N, K) — the pure-torch reference the property "
             f"suite pins the kernel against."
         )
+    # A CUDA tensor passes straight through; anything HOST — a list, or a CPU
+    # tensor (Bugbot, PR #85: `torch.tensor([...])` with no device= used to work
+    # via the per-element path and must keep working) — is converted ONCE here,
+    # at the boundary, through a pinned transfer (to_device_i32). It used to be
+    # a pageable `torch.tensor(list, device=dev)`, which syncs and is not
+    # capturable; a CPU tensor handed to the launch below would not work at all.
     eids = (
         expert_ids
-        if torch.is_tensor(expert_ids)
-        else torch.tensor(expert_ids, dtype=torch.int32, device=dev)
+        if torch.is_tensor(expert_ids) and expert_ids.is_cuda
+        else to_device_i32((expert_ids,), dev)[0]
     ).to(torch.int32)
     out = torch.empty(T, N, dtype=torch.bfloat16, device=dev)
     if max(sizes) == 1:
@@ -830,10 +1013,13 @@ def dgrad_4bit_grouped(grad_out, B, absmax, sizes, expert_ids, config=None):
             "fall back should check dgrad_eligible() first rather than catching this."
         )
     t_row0, t_rows, t_group = build_group_tiles(sizes, block_m, dev)
+    # Same boundary conversion as the forward's: a CUDA tensor passes through,
+    # anything host (list or CPU tensor) converts once through a pinned
+    # transfer. `ctx` hands this whatever the caller supplied, unchanged.
     eids = (
         expert_ids
-        if torch.is_tensor(expert_ids)
-        else torch.tensor(expert_ids, dtype=torch.int32, device=dev)
+        if torch.is_tensor(expert_ids) and expert_ids.is_cuda
+        else to_device_i32((expert_ids,), dev)[0]
     ).to(torch.int32)
     out = torch.empty(T, K, dtype=torch.bfloat16, device=dev)
     _dgrad_nf4_grouped[(t_row0.numel(), triton.cdiv(K, block_k))](

@@ -1,0 +1,47 @@
+{
+ "band": [
+  0.967,
+  1.032
+ ],
+ "prereg": "kernel/prereg_capturability_gate_oneside.json",
+ "p3_sidedness": "one-sided-harm",
+ "graded": [
+  [
+   "OLMoE-1B-7B-0924",
+   "down"
+  ],
+  [
+   "OLMoE-1B-7B-0924",
+   "gate_up"
+  ],
+  [
+   "Qwen3-30B-A3B",
+   "down"
+  ],
+  [
+   "Qwen3-30B-A3B",
+   "gate_up"
+  ]
+ ],
+ "dropped": {},
+ "instrument": {
+  "OLMoE-1B-7B-0924/down": 1.003461252346868,
+  "OLMoE-1B-7B-0924/gate_up": 1.0082824824233187,
+  "Qwen3-30B-A3B/down": 1.0004512847554077,
+  "Qwen3-30B-A3B/gate_up": 0.9927975662759847
+ },
+ "gate": {
+  "OLMoE-1B-7B-0924/down": 0.8374559639215252,
+  "OLMoE-1B-7B-0924/gate_up": 0.9327088236368956,
+  "Qwen3-30B-A3B/down": 0.7327886473297276,
+  "Qwen3-30B-A3B/gate_up": 0.8568057323515006
+ },
+ "d_over_g_secondary": {
+  "OLMoE-1B-7B-0924/down": 1.0602531322666209,
+  "OLMoE-1B-7B-0924/gate_up": 1.0581115122061182,
+  "Qwen3-30B-A3B/down": 1.3117691536166536,
+  "Qwen3-30B-A3B/gate_up": 1.149977621351823
+ },
+ "problems": [],
+ "verdict": "VERDICT: GATE PASSED \u2014 all 4 graded cells at or under the 1.032 harm bound (median 0.8471), instrument clean on all 4 (median 1.0020). Cells faster than 0.967 are reported as observed, NOT as a registered speedup claim. Does NOT close the e2e gate, which stays OPEN."
+}

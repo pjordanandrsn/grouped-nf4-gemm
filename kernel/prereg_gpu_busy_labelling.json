@@ -1,0 +1,30 @@
+{
+ "registered_utc": "2026-08-14T11:30:00Z",
+ "registers": "THE MEASUREMENT-CLASS LABEL. A standing interpretation rule, fixed now and applied to every leg from here on, plus a backfill onto the two legs that were graded before the instrument existed.",
+
+ "the_instrument": {
+  "quantity": "gpu_busy_fraction = summed CUDA kernel self-time per step / wall-clock per step, over steps run back to back with NO syncs between them -- i.e. how a training loop actually runs.",
+  "where": "bench/phase1/harness.py::gpu_busy_fraction, called from every leg driver beside the self-pair. It was bench/phase1/probe_gpu_busy_fraction.py, an after-the-fact probe; that is the thing being fixed.",
+  "cost": "~50 steps per arm per cell. Negligible beside a timing block, and it runs after the graded timings so it cannot perturb them."
+ },
+
+ "THE RULE, fixed now": {
+  "bar": 0.50,
+  "statement": "A cell in which EITHER arm runs below ~50% GPU-busy is a STEP-RATIO measurement, not a kernel measurement, and must be labelled as such in any results table that prints it.",
+  "what_it_does_not_say": "It is still a real number. A step ratio is the wall-clock cost a training loop actually pays, and where the baseline genuinely loops in Python, charging it that loop is fair. What the label forbids is calling it a kernel result.",
+  "unknown_is_not_kernel": "A cell run with --no-busy is labelled measurement_class=unknown. That is NOT 'kernel' and must never be printed as one.",
+  "why_a_bar_and_not_a_judgement": "The bar is registered so it cannot be chosen per cell after the numbers are in. 50% is the point at which the host is at least half the step; anything below it means kernel choice cannot move the wall clock much at that size."
+ },
+
+ "why_this_exists": "probe_gpu_busy_fraction.py was written AFTER legs 2 and 3 were graded, and it retroactively demoted their primary criterion (F1) from a kernel result to a step ratio: at the decode band roughly 90% of both arms' step time is host, so F1 compares one kernel launch against a per-expert Python loop. The three F1 medians -- 1.588, 1.522, 1.539 across three pairing schemes and two devices -- are real wall-clock step ratios that replicate well. They were reported as kernel results. That is the class of check that has to run BEFORE a result is graded.",
+
+ "backfill": {
+  "scope": "bench/phase1/results/dequant_forward/RESULTS-dequant-forward.md and RESULTS-leg3-interleaved.md.",
+  "rule": "THE NUMBERS STAY. Only the framing changes. No cell is re-run, re-reduced, or dropped, and no verdict is revised -- doing any of those would be a new experiment wearing an old prereg.",
+  "source_of_the_labels": "bench/phase1/results/dequant_forward/host_bound/ (H100 sm_90, RTX 4090 sm_89), reported in FINDING-host-bound-small-batch.md. Decode band: fused 9-33% / 13-52%, baseline 4.4-11% / 4-55%. Token budget: 80-92% / 91-96% fused, 24-76% / 43-99% baseline."
+ },
+
+ "third_device": "Reproduced on an RTX A2000 (sm_86, correctness testbed) while landing the instrument: OLMoE decode_m8 labels step_ratio on both projections (min busy fraction 26-44%), tokbudget_2048 labels kernel (96-99%). Same split as the two rented cards. The A2000's RATIOS are not quoted anywhere -- it is a shared production box and cannot support a timing claim (feedback: benchmark testbed policy) -- but which side of the bar a cell falls on is a structural fact that survives contention.",
+
+ "how_this_can_fail": "If a leg reports measurement_class=kernel for a cell whose ratio later proves host-dominated, the bar is wrong or the profiler is undercounting. The self-pair and this label are independent checks and neither substitutes for the other: the self-pair asks whether the box drifted, this asks whether the quantity is about what it claims to be."
+}

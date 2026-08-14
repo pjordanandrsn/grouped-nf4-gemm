@@ -1,0 +1,1 @@
+VERDICT: GATE PASSED — all 4 graded cells at or under the 1.032 harm bound (median 0.8471), instrument clean on all 4 (median 1.0020). Cells faster than 0.967 are reported as observed, NOT as a registered speedup claim. Does NOT close the e2e gate, which stays OPEN.

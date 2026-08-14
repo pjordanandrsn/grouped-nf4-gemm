@@ -1,0 +1,617 @@
+{
+ "probe": "C1 \u2014 bisect the fused path's CUDA graph capture failure",
+ "tier": "EXPLORATORY / report-only, no prereg grades it",
+ "gpu": "NVIDIA RTX A2000 12GB",
+ "capability": "8.6",
+ "torch": "2.8.0+cu128",
+ "triton": "3.4.0",
+ "model": "OLMoE",
+ "regime": "decode_m8",
+ "proj": "gate_up",
+ "attempts": [
+  {
+   "arm": "D_base",
+   "eids_form": "list",
+   "patches": [],
+   "installed": [],
+   "captured": true,
+   "note": "captured and replayed",
+   "shape": {
+    "groups": 8,
+    "rows": 64,
+    "sizes_max": 8
+   },
+   "census_warm": {
+    "h2d_sites": [],
+    "h2d_calls": 0,
+    "syncs": 0,
+    "sync_msgs": []
+   },
+   "census_cold": {
+    "h2d_sites": [],
+    "h2d_calls": 0,
+    "syncs": 0
+   },
+   "census_selftest": {
+    "h2d_seen": true,
+    "sync_seen": true,
+    "h2d_sites": [
+     "probe_capture_bisect.py:215"
+    ],
+    "sync_msgs": [
+     "Synchronization debug mode is a prototype feature and does not yet detect all synchronizing operations (Triggered intern",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)"
+    ]
+   },
+   "why": "POSITIVE CONTROL \u2014 the baseline must capture"
+  },
+  {
+   "arm": "G_base",
+   "eids_form": "list",
+   "patches": [],
+   "installed": [],
+   "captured": false,
+   "note": "AcceleratorError: CUDA error: operation failed due to a previous error during capture\nCUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.\nFor debugging consider passing CUDA_LAUNCH_BLOCKING=1\nCompile with `TORCH_USE_CUDA_DSA` to enable device-side as",
+   "shape": {
+    "groups": 8,
+    "rows": 64,
+    "sizes_max": 8
+   },
+   "census_warm": {
+    "h2d_sites": [
+     "nf4_grouped.py:119",
+     "nf4_grouped.py:490",
+     "nf4_grouped.py:832"
+    ],
+    "h2d_calls": 8,
+    "syncs": 8,
+    "sync_msgs": [
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)"
+    ]
+   },
+   "census_cold": {
+    "h2d_sites": [
+     "nf4_grouped.py:119",
+     "nf4_grouped.py:403",
+     "nf4_grouped.py:490",
+     "nf4_grouped.py:832"
+    ],
+    "h2d_calls": 9,
+    "syncs": 9
+   },
+   "census_selftest": {
+    "h2d_seen": true,
+    "sync_seen": true,
+    "h2d_sites": [
+     "probe_capture_bisect.py:215"
+    ],
+    "sync_msgs": [
+     "Synchronization debug mode is a prototype feature and does not yet detect all synchronizing operations (Triggered intern",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)"
+    ]
+   },
+   "why": "reproduce the published FAIL (list form)"
+  },
+  {
+   "arm": "G_base",
+   "eids_form": "devtensor",
+   "patches": [],
+   "installed": [],
+   "captured": false,
+   "note": "AcceleratorError: CUDA error: operation failed due to a previous error during capture\nCUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.\nFor debugging consider passing CUDA_LAUNCH_BLOCKING=1\nCompile with `TORCH_USE_CUDA_DSA` to enable device-side as",
+   "shape": {
+    "groups": 8,
+    "rows": 64,
+    "sizes_max": 8
+   },
+   "census_warm": {
+    "h2d_sites": [
+     "nf4_grouped.py:119",
+     "nf4_grouped.py:832"
+    ],
+    "h2d_calls": 7,
+    "syncs": 15,
+    "sync_msgs": [
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)"
+    ]
+   },
+   "census_cold": {
+    "h2d_sites": [
+     "nf4_grouped.py:119",
+     "nf4_grouped.py:403",
+     "nf4_grouped.py:832"
+    ],
+    "h2d_calls": 8,
+    "syncs": 16
+   },
+   "census_selftest": {
+    "h2d_seen": true,
+    "sync_seen": true,
+    "h2d_sites": [
+     "probe_capture_bisect.py:215"
+    ],
+    "sync_msgs": [
+     "Synchronization debug mode is a prototype feature and does not yet detect all synchronizing operations (Triggered intern",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)"
+    ]
+   },
+   "why": "reproduce the published FAIL (tensor form)"
+  },
+  {
+   "arm": "G_base",
+   "eids_form": "devtensor",
+   "patches": [
+    "ctx"
+   ],
+   "installed": [
+    "ctx:per-element int() over expert_ids/sizes removed"
+   ],
+   "captured": false,
+   "note": "AcceleratorError: CUDA error: operation failed due to a previous error during capture\nCUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.\nFor debugging consider passing CUDA_LAUNCH_BLOCKING=1\nCompile with `TORCH_USE_CUDA_DSA` to enable device-side as",
+   "shape": {
+    "groups": 8,
+    "rows": 64,
+    "sizes_max": 8
+   },
+   "census_warm": {
+    "h2d_sites": [
+     "nf4_grouped.py:119"
+    ],
+    "h2d_calls": 6,
+    "syncs": 6,
+    "sync_msgs": [
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)"
+    ]
+   },
+   "census_cold": {
+    "h2d_sites": [
+     "nf4_grouped.py:119",
+     "nf4_grouped.py:403"
+    ],
+    "h2d_calls": 7,
+    "syncs": 7
+   },
+   "census_selftest": {
+    "h2d_seen": true,
+    "sync_seen": true,
+    "h2d_sites": [
+     "probe_capture_bisect.py:215"
+    ],
+    "sync_msgs": [
+     "Synchronization debug mode is a prototype feature and does not yet detect all synchronizing operations (Triggered intern",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)"
+    ]
+   },
+   "why": "candidate 1 alone (HA)"
+  },
+  {
+   "arm": "G_base",
+   "eids_form": "list",
+   "patches": [
+    "gemm"
+   ],
+   "installed": [
+    "gemm:eids H2D hoisted"
+   ],
+   "captured": false,
+   "note": "AcceleratorError: CUDA error: operation failed due to a previous error during capture\nCUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.\nFor debugging consider passing CUDA_LAUNCH_BLOCKING=1\nCompile with `TORCH_USE_CUDA_DSA` to enable device-side as",
+   "shape": {
+    "groups": 8,
+    "rows": 64,
+    "sizes_max": 8
+   },
+   "census_warm": {
+    "h2d_sites": [
+     "nf4_grouped.py:119",
+     "nf4_grouped.py:832"
+    ],
+    "h2d_calls": 7,
+    "syncs": 7,
+    "sync_msgs": [
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)"
+    ]
+   },
+   "census_cold": {
+    "h2d_sites": [
+     "nf4_grouped.py:119",
+     "nf4_grouped.py:403",
+     "nf4_grouped.py:832",
+     "probe_capture_bisect.py:102"
+    ],
+    "h2d_calls": 9,
+    "syncs": 9
+   },
+   "census_selftest": {
+    "h2d_seen": true,
+    "sync_seen": true,
+    "h2d_sites": [
+     "probe_capture_bisect.py:215"
+    ],
+    "sync_msgs": [
+     "Synchronization debug mode is a prototype feature and does not yet detect all synchronizing operations (Triggered intern",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)"
+    ]
+   },
+   "why": "candidate 2 alone (HB)"
+  },
+  {
+   "arm": "G_base",
+   "eids_form": "list",
+   "patches": [
+    "tiles"
+   ],
+   "installed": [
+    "tiles:t_row0/t_rows/t_group H2D hoisted (3 per call)"
+   ],
+   "captured": false,
+   "note": "AcceleratorError: CUDA error: operation failed due to a previous error during capture\nCUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.\nFor debugging consider passing CUDA_LAUNCH_BLOCKING=1\nCompile with `TORCH_USE_CUDA_DSA` to enable device-side as",
+   "shape": {
+    "groups": 8,
+    "rows": 64,
+    "sizes_max": 8
+   },
+   "census_warm": {
+    "h2d_sites": [
+     "nf4_grouped.py:490",
+     "nf4_grouped.py:832"
+    ],
+    "h2d_calls": 2,
+    "syncs": 2,
+    "sync_msgs": [
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)"
+    ]
+   },
+   "census_cold": {
+    "h2d_sites": [
+     "nf4_grouped.py:119",
+     "nf4_grouped.py:403",
+     "nf4_grouped.py:490",
+     "nf4_grouped.py:832"
+    ],
+    "h2d_calls": 9,
+    "syncs": 9
+   },
+   "census_selftest": {
+    "h2d_seen": true,
+    "sync_seen": true,
+    "h2d_sites": [
+     "probe_capture_bisect.py:215"
+    ],
+    "sync_msgs": [
+     "Synchronization debug mode is a prototype feature and does not yet detect all synchronizing operations (Triggered intern",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)"
+    ]
+   },
+   "why": "HC alone"
+  },
+  {
+   "arm": "G_base",
+   "eids_form": "list",
+   "patches": [
+    "dgrad"
+   ],
+   "installed": [
+    "dgrad:eids H2D hoisted"
+   ],
+   "captured": false,
+   "note": "AcceleratorError: CUDA error: operation failed due to a previous error during capture\nCUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.\nFor debugging consider passing CUDA_LAUNCH_BLOCKING=1\nCompile with `TORCH_USE_CUDA_DSA` to enable device-side as",
+   "shape": {
+    "groups": 8,
+    "rows": 64,
+    "sizes_max": 8
+   },
+   "census_warm": {
+    "h2d_sites": [
+     "nf4_grouped.py:119",
+     "nf4_grouped.py:490"
+    ],
+    "h2d_calls": 7,
+    "syncs": 7,
+    "sync_msgs": [
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)"
+    ]
+   },
+   "census_cold": {
+    "h2d_sites": [
+     "nf4_grouped.py:119",
+     "nf4_grouped.py:403",
+     "nf4_grouped.py:490",
+     "probe_capture_bisect.py:102"
+    ],
+    "h2d_calls": 9,
+    "syncs": 9
+   },
+   "census_selftest": {
+    "h2d_seen": true,
+    "sync_seen": true,
+    "h2d_sites": [
+     "probe_capture_bisect.py:215"
+    ],
+    "sync_msgs": [
+     "Synchronization debug mode is a prototype feature and does not yet detect all synchronizing operations (Triggered intern",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)"
+    ]
+   },
+   "why": "HD alone"
+  },
+  {
+   "arm": "G_base",
+   "eids_form": "devtensor",
+   "patches": [
+    "ctx",
+    "gemm"
+   ],
+   "installed": [
+    "gemm:eids H2D hoisted",
+    "ctx:per-element int() over expert_ids/sizes removed"
+   ],
+   "captured": false,
+   "note": "AcceleratorError: CUDA error: operation failed due to a previous error during capture\nCUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.\nFor debugging consider passing CUDA_LAUNCH_BLOCKING=1\nCompile with `TORCH_USE_CUDA_DSA` to enable device-side as",
+   "shape": {
+    "groups": 8,
+    "rows": 64,
+    "sizes_max": 8
+   },
+   "census_warm": {
+    "h2d_sites": [
+     "nf4_grouped.py:119"
+    ],
+    "h2d_calls": 6,
+    "syncs": 6,
+    "sync_msgs": [
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)"
+    ]
+   },
+   "census_cold": {
+    "h2d_sites": [
+     "nf4_grouped.py:119",
+     "nf4_grouped.py:403"
+    ],
+    "h2d_calls": 7,
+    "syncs": 7
+   },
+   "census_selftest": {
+    "h2d_seen": true,
+    "sync_seen": true,
+    "h2d_sites": [
+     "probe_capture_bisect.py:215"
+    ],
+    "sync_msgs": [
+     "Synchronization debug mode is a prototype feature and does not yet detect all synchronizing operations (Triggered intern",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)"
+    ]
+   },
+   "why": "BOTH NAMED CANDIDATES REMOVED"
+  },
+  {
+   "arm": "G_base",
+   "eids_form": "devtensor",
+   "patches": [
+    "ctx",
+    "gemm",
+    "tiles"
+   ],
+   "installed": [
+    "gemm:eids H2D hoisted",
+    "tiles:t_row0/t_rows/t_group H2D hoisted (3 per call)",
+    "ctx:per-element int() over expert_ids/sizes removed"
+   ],
+   "captured": true,
+   "note": "captured and replayed",
+   "shape": {
+    "groups": 8,
+    "rows": 64,
+    "sizes_max": 8
+   },
+   "census_warm": {
+    "h2d_sites": [],
+    "h2d_calls": 0,
+    "syncs": 0,
+    "sync_msgs": []
+   },
+   "census_cold": {
+    "h2d_sites": [
+     "nf4_grouped.py:119",
+     "nf4_grouped.py:403"
+    ],
+    "h2d_calls": 7,
+    "syncs": 7
+   },
+   "census_selftest": {
+    "h2d_seen": true,
+    "sync_seen": true,
+    "h2d_sites": [
+     "probe_capture_bisect.py:215"
+    ],
+    "sync_msgs": [
+     "Synchronization debug mode is a prototype feature and does not yet detect all synchronizing operations (Triggered intern",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)"
+    ]
+   },
+   "why": "+ HC"
+  },
+  {
+   "arm": "G_base",
+   "eids_form": "devtensor",
+   "patches": [
+    "ctx",
+    "gemm",
+    "tiles",
+    "dgrad"
+   ],
+   "installed": [
+    "gemm:eids H2D hoisted",
+    "dgrad:eids H2D hoisted",
+    "tiles:t_row0/t_rows/t_group H2D hoisted (3 per call)",
+    "ctx:per-element int() over expert_ids/sizes removed"
+   ],
+   "captured": true,
+   "note": "captured and replayed",
+   "shape": {
+    "groups": 8,
+    "rows": 64,
+    "sizes_max": 8
+   },
+   "census_warm": {
+    "h2d_sites": [],
+    "h2d_calls": 0,
+    "syncs": 0,
+    "sync_msgs": []
+   },
+   "census_cold": {
+    "h2d_sites": [
+     "nf4_grouped.py:119",
+     "nf4_grouped.py:403"
+    ],
+    "h2d_calls": 7,
+    "syncs": 7
+   },
+   "census_selftest": {
+    "h2d_seen": true,
+    "sync_seen": true,
+    "h2d_sites": [
+     "probe_capture_bisect.py:215"
+    ],
+    "sync_msgs": [
+     "Synchronization debug mode is a prototype feature and does not yet detect all synchronizing operations (Triggered intern",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)"
+    ]
+   },
+   "why": "+ HD (all four)"
+  },
+  {
+   "arm": "G_base",
+   "eids_form": "list",
+   "patches": [
+    "ctx",
+    "gemm",
+    "tiles",
+    "dgrad"
+   ],
+   "installed": [
+    "gemm:eids H2D hoisted",
+    "dgrad:eids H2D hoisted",
+    "tiles:t_row0/t_rows/t_group H2D hoisted (3 per call)",
+    "ctx:per-element int() over expert_ids/sizes removed"
+   ],
+   "captured": true,
+   "note": "captured and replayed",
+   "shape": {
+    "groups": 8,
+    "rows": 64,
+    "sizes_max": 8
+   },
+   "census_warm": {
+    "h2d_sites": [],
+    "h2d_calls": 0,
+    "syncs": 0,
+    "sync_msgs": []
+   },
+   "census_cold": {
+    "h2d_sites": [
+     "nf4_grouped.py:119",
+     "nf4_grouped.py:403",
+     "probe_capture_bisect.py:102"
+    ],
+    "h2d_calls": 8,
+    "syncs": 8
+   },
+   "census_selftest": {
+    "h2d_seen": true,
+    "sync_seen": true,
+    "h2d_sites": [
+     "probe_capture_bisect.py:215"
+    ],
+    "sync_msgs": [
+     "Synchronization debug mode is a prototype feature and does not yet detect all synchronizing operations (Triggered intern",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)"
+    ]
+   },
+   "why": "all four, list form"
+  },
+  {
+   "arm": "G_full",
+   "eids_form": "devtensor",
+   "patches": [
+    "ctx",
+    "gemm",
+    "tiles",
+    "dgrad"
+   ],
+   "installed": [
+    "gemm:eids H2D hoisted",
+    "dgrad:eids H2D hoisted",
+    "tiles:t_row0/t_rows/t_group H2D hoisted (3 per call)",
+    "ctx:per-element int() over expert_ids/sizes removed"
+   ],
+   "captured": false,
+   "note": "AcceleratorError: CUDA error: operation failed due to a previous error during capture\nCUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.\nFor debugging consider passing CUDA_LAUNCH_BLOCKING=1\nCompile with `TORCH_USE_CUDA_DSA` to enable device-side as",
+   "shape": {
+    "groups": 8,
+    "rows": 64,
+    "sizes_max": 8
+   },
+   "census_warm": {
+    "h2d_sites": [
+     "nf4_qlora.py:202",
+     "nf4_qlora.py:203"
+    ],
+    "h2d_calls": 2,
+    "syncs": 4,
+    "sync_msgs": [
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)"
+    ]
+   },
+   "census_cold": {
+    "h2d_sites": [
+     "nf4_grouped.py:119",
+     "nf4_grouped.py:403",
+     "nf4_qlora.py:202",
+     "nf4_qlora.py:203"
+    ],
+    "h2d_calls": 9,
+    "syncs": 11
+   },
+   "census_selftest": {
+    "h2d_seen": true,
+    "sync_seen": true,
+    "h2d_sites": [
+     "probe_capture_bisect.py:215"
+    ],
+    "sync_msgs": [
+     "Synchronization debug mode is a prototype feature and does not yet detect all synchronizing operations (Triggered intern",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)",
+     "called a synchronizing CUDA operation (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:152.)"
+    ]
+   },
+   "why": "all four, + LoRA delta"
+  }
+ ],
+ "bitsandbytes": "0.50.0"
+}

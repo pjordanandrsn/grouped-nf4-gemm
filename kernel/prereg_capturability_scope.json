@@ -1,0 +1,35 @@
+{
+ "registered_utc": "2026-08-14T11:20:00Z",
+ "registers": "WHAT CAPTURABILITY DOES AND DOES NOT BUY. Written before the C1 bisection reported and before any C2 change was made, so the outcome can be graded rather than described.",
+ "background": "probe_cudagraph_feasibility.py measured a structural asymmetry: the dequant-on-forward baseline captures into a CUDA graph 4/4 (H100, 4090; now 4090+H100+A2000), and gnf4's fused training path fails 8/8, in isolated processes. probe_graphed_race.py then showed the consequence -- at training shape the fused path LOSES to a graphed baseline on both devices, and the leg-4 speed headline died to it. The claim that survived is memory, not speed.",
+
+ "the_registered_position": {
+  "capturability_is_a_PRECONDITION_not_a_win": "Making the fused path capturable removes an asymmetry. It does not produce a speedup, and no number in this directive's scope may be reported as one. The fused path being capturable puts it in the same class as the baseline; it does not put it ahead.",
+  "dynamic_shapes_are_the_real_barrier": "MoE routing makes group sizes and hit-expert sets a function of token content, so they change every step. A CUDA graph replays a FIXED launch sequence over FIXED buffers. Capturability therefore buys nothing usable without padding or bucketing the routing metadata to a static shape, and padding has its own cost (lora_delta_grouped already falls back to a per-expert loop past _PAD_WASTE_LIMIT=4.0 for exactly this reason). Nothing in C1-C2 addresses this.",
+  "what_C1_C2_would_establish": "That the fused path CAN be captured -- i.e. that the call path contains no host round-trip that is illegal during capture. That is a property of the call path, not a measurement of anything, and its correct report is a boolean plus the named hazards, not a ratio."
+ },
+
+ "prohibited_reports": [
+  "Reporting capture success, or any wall-clock number obtained by replaying a captured fused graph, as a speedup, an improvement, or a win.",
+  "Comparing a captured fused replay against an UNgraphed baseline. probe_graphed_race.py registered the honest race as graphed-vs-graphed or shipped-vs-shipped; a captured fused arm against an ungraphed baseline is the same error in the opposite direction, and it is the error this project has already made once.",
+  "Citing capturability as evidence that the leg-4 headline is restored. It is not: the graphed race's verdict stands until a NEW registered experiment replaces it."
+ ],
+
+ "what_a_throughput_claim_from_graphing_would_require": {
+  "own_prereg": "Registered pre-data, with the predicted direction and bar stated before the run.",
+  "own_padding_or_bucketing_scheme": "Named and fixed before the data, including how many buckets, how routing metadata is padded, and what the padding waste is per cell. A scheme chosen after seeing the numbers is a tuned result, not a measurement.",
+  "own_fidelity_gate": "The padded/bucketed path must produce the same values as the unpadded one to the registered tolerance. Padding a grouped GEMM changes which rows the kernel touches; a speed number from a path that computes something different is not a speed number.",
+  "both_arms_graphed": "The baseline is capturable today. Any race that graphs one arm must graph the other or say in the headline that it did not."
+ },
+
+ "C2_regression_gate_registered_here": {
+  "bar": "fast_train and fast_train_dgrad reproduce their measured e2e training ratios within the registered self-pair band 0.967-1.032, on at least one device, before any capturability change merges.",
+  "basis": "bench/phase1/results/dequant_forward/RESULTS-e2e-training.md, prereg kernel/prereg_dequant_forward_e2e.json. Text+resident fast_train_dgrad measured 4.504x (4090) and 4.746x (H100); random-ids+offload, the weakest cell, 1.806x / 2.378x.",
+  "rationale": "A capturability fix that costs throughput is not a fix. The call-path changes in scope (hoisting index-tensor construction out of the per-call path) should be neutral-to-positive; if they are not, the change does not merge.",
+  "stop_rule": "If the regression gate fails, the change is reverted and the failure is written into the results doc. No re-running for a better number."
+ },
+
+ "kernel_math_untouched": "C2 is a call-path change only. No Triton kernel source, no tiling constant, no dispatch threshold, and no numeric path moves. The fidelity suite must be bit-identical across the change; a fidelity delta means the scope was exceeded.",
+
+ "how_this_can_fail": "If C1 cannot isolate the cause -- if capture still fails with every named hazard removed -- then C2 does not proceed, the third hazard is the deliverable, and this registration stands unused rather than being loosened to fit."
+}

@@ -1,0 +1,273 @@
+{
+ "probe": "C2 \u2014 the SHIPPED call path, no probe patches",
+ "mode": "shipped",
+ "tier": "EXPLORATORY / report-only, no prereg grades it",
+ "gpu": "NVIDIA RTX A2000 12GB",
+ "capability": "8.6",
+ "torch": "2.8.0+cu128",
+ "triton": "3.4.0",
+ "model": "OLMoE",
+ "regime": "decode_m8",
+ "proj": "gate_up",
+ "attempts": [
+  {
+   "arm": "D_base",
+   "eids_form": "list",
+   "patches": [],
+   "installed": [],
+   "captured": true,
+   "note": "captured and replayed",
+   "shape": {
+    "groups": 8,
+    "rows": 64,
+    "sizes_max": 8,
+    "calls_per_step": 1
+   },
+   "census_warm": {
+    "h2d_sites": [],
+    "h2d_calls": 0,
+    "legal_h2d_sites": [],
+    "legal_h2d_calls": 0,
+    "syncs": 0,
+    "sync_msgs": []
+   },
+   "census_cold": {
+    "h2d_sites": [],
+    "h2d_calls": 0,
+    "legal_h2d_calls": 0,
+    "syncs": 0
+   },
+   "census_selftest": {
+    "hazards_seen": 3,
+    "hazards_expected": 3,
+    "legal_seen": 1,
+    "legal_expected": 1,
+    "sync_seen": true,
+    "blind": false
+   },
+   "why": "POSITIVE CONTROL \u2014 the baseline still captures"
+  },
+  {
+   "arm": "G_base",
+   "eids_form": "list",
+   "patches": [],
+   "installed": [],
+   "captured": true,
+   "note": "captured and replayed",
+   "shape": {
+    "groups": 8,
+    "rows": 64,
+    "sizes_max": 8,
+    "calls_per_step": 1
+   },
+   "census_warm": {
+    "h2d_sites": [],
+    "h2d_calls": 0,
+    "legal_h2d_sites": [
+     "nf4_grouped.py:258"
+    ],
+    "legal_h2d_calls": 4,
+    "syncs": 0,
+    "sync_msgs": []
+   },
+   "census_cold": {
+    "h2d_sites": [
+     "nf4_grouped.py:578[pageable][blocking]"
+    ],
+    "h2d_calls": 1,
+    "legal_h2d_calls": 4,
+    "syncs": 1
+   },
+   "census_selftest": {
+    "hazards_seen": 3,
+    "hazards_expected": 3,
+    "legal_seen": 1,
+    "legal_expected": 1,
+    "sync_seen": true,
+    "blind": false
+   },
+   "why": "shipped fused path, eids as a list"
+  },
+  {
+   "arm": "G_base",
+   "eids_form": "devtensor",
+   "patches": [],
+   "installed": [],
+   "captured": true,
+   "note": "captured and replayed",
+   "shape": {
+    "groups": 8,
+    "rows": 64,
+    "sizes_max": 8,
+    "calls_per_step": 1
+   },
+   "census_warm": {
+    "h2d_sites": [],
+    "h2d_calls": 0,
+    "legal_h2d_sites": [
+     "nf4_grouped.py:258"
+    ],
+    "legal_h2d_calls": 2,
+    "syncs": 0,
+    "sync_msgs": []
+   },
+   "census_cold": {
+    "h2d_sites": [
+     "nf4_grouped.py:578[pageable][blocking]"
+    ],
+    "h2d_calls": 1,
+    "legal_h2d_calls": 2,
+    "syncs": 1
+   },
+   "census_selftest": {
+    "hazards_seen": 3,
+    "hazards_expected": 3,
+    "legal_seen": 1,
+    "legal_expected": 1,
+    "sync_seen": true,
+    "blind": false
+   },
+   "why": "shipped fused path, eids as a device tensor"
+  },
+  {
+   "arm": "G_full",
+   "eids_form": "list",
+   "patches": [],
+   "installed": [],
+   "captured": true,
+   "note": "captured and replayed",
+   "shape": {
+    "groups": 8,
+    "rows": 64,
+    "sizes_max": 8,
+    "calls_per_step": 1
+   },
+   "census_warm": {
+    "h2d_sites": [],
+    "h2d_calls": 0,
+    "legal_h2d_sites": [
+     "nf4_grouped.py:258"
+    ],
+    "legal_h2d_calls": 5,
+    "syncs": 0,
+    "sync_msgs": []
+   },
+   "census_cold": {
+    "h2d_sites": [
+     "nf4_grouped.py:578[pageable][blocking]"
+    ],
+    "h2d_calls": 1,
+    "legal_h2d_calls": 5,
+    "syncs": 1
+   },
+   "census_selftest": {
+    "hazards_seen": 3,
+    "hazards_expected": 3,
+    "legal_seen": 1,
+    "legal_expected": 1,
+    "sync_seen": true,
+    "blind": false
+   },
+   "why": "shipped + LoRA delta, eids as a list"
+  },
+  {
+   "arm": "G_full",
+   "eids_form": "devtensor",
+   "patches": [],
+   "installed": [],
+   "captured": true,
+   "note": "captured and replayed",
+   "shape": {
+    "groups": 8,
+    "rows": 64,
+    "sizes_max": 8,
+    "calls_per_step": 1
+   },
+   "census_warm": {
+    "h2d_sites": [],
+    "h2d_calls": 0,
+    "legal_h2d_sites": [
+     "nf4_grouped.py:258"
+    ],
+    "legal_h2d_calls": 3,
+    "syncs": 0,
+    "sync_msgs": []
+   },
+   "census_cold": {
+    "h2d_sites": [
+     "nf4_grouped.py:578[pageable][blocking]"
+    ],
+    "h2d_calls": 1,
+    "legal_h2d_calls": 3,
+    "syncs": 1
+   },
+   "census_selftest": {
+    "hazards_seen": 3,
+    "hazards_expected": 3,
+    "legal_seen": 1,
+    "legal_expected": 1,
+    "sync_seen": true,
+    "blind": false
+   },
+   "why": "shipped + LoRA delta, eids as a device tensor"
+  },
+  {
+   "arm": "G_stack",
+   "eids_form": "devtensor",
+   "patches": [],
+   "installed": [],
+   "captured": true,
+   "note": "captured and replayed",
+   "shape": {
+    "groups": 8,
+    "rows": 64,
+    "sizes_max": 8,
+    "calls_per_step": 48
+   },
+   "census_warm": {
+    "h2d_sites": [],
+    "h2d_calls": 0,
+    "legal_h2d_sites": [
+     "nf4_grouped.py:258"
+    ],
+    "legal_h2d_calls": 144,
+    "syncs": 0,
+    "sync_msgs": []
+   },
+   "census_cold": {
+    "h2d_sites": [
+     "nf4_grouped.py:578[pageable][blocking]"
+    ],
+    "h2d_calls": 1,
+    "legal_h2d_calls": 144,
+    "syncs": 1
+   },
+   "census_selftest": {
+    "hazards_seen": 3,
+    "hazards_expected": 3,
+    "legal_seen": 1,
+    "legal_expected": 1,
+    "sync_seen": true,
+    "blind": false
+   },
+   "why": "48 fused+LoRA calls in ONE capture (arena sizing)"
+  },
+  {
+   "arm": "arena_guard",
+   "eids_form": "-",
+   "patches": [],
+   "captured": false,
+   "note": "grouped-nf4: the pinned index arena (256 int32) was exhausted 0 ints into a CUDA graph capture. Growing it here would allocate pinned memory inside the capture region, which is not capturable \u2014 so this refuses instead of failing later with an opaque 'previous error during capture'. Set GNF4_PIN_AREN",
+   "arena_capacity_ints": 256,
+   "requested_ints": 272,
+   "guard_fired_by_name": true,
+   "census_warm": {},
+   "census_cold": {},
+   "census_selftest": {},
+   "why": "NEGATIVE CONTROL \u2014 over-size request inside a capture must refuse BY NAME",
+   "negative_control_passed": true,
+   "verdict": "REFUSED BY NAME"
+  }
+ ],
+ "bitsandbytes": "0.50.0"
+}

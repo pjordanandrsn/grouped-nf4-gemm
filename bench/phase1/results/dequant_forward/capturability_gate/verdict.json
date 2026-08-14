@@ -1,0 +1,18 @@
+{
+ "band": [
+  0.967,
+  1.032
+ ],
+ "instrument_selfpair": {
+  "('random', 1, 'fast_train')": 0.9868526838496098,
+  "('random', 1, 'fast_train_dgrad')": 1.0156963204471356
+ },
+ "gate": {
+  "('random', 0, 'fast_train')": 1.0542578125,
+  "('random', 0, 'fast_train_dgrad')": 1.030469627163266,
+  "('random', 1, 'fast_train')": 1.0593520926933082,
+  "('random', 1, 'fast_train_dgrad')": 0.9800652072659526
+ },
+ "problems": [],
+ "verdict": "VERDICT: UNUSABLE \u2014 expected 8 comparable cells per comparison, got instrument=6 gate=8. An empty or partial comparison is not a pass."
+}

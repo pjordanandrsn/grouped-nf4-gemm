@@ -344,7 +344,12 @@ def cell(spec, regime, device, args, stack):
 
     row = {"model": spec.model, "proj": spec.proj, "regime": regime,
            "N": spec.N, "K": spec.K, "E": spec.E, "top_k": spec.top_k,
-           "groups": len(groups), "rows": T, "rank": RANK}
+           "groups": len(groups), "rows": T, "rank": RANK,
+           # C5: the fixture's routing behaviour, in EVERY receipt. These
+           # regimes are constructed, not measured — `decode_m*` builds exactly
+           # top_k groups where real OLMoE routing at T=32 hits ~58 of 64 — so
+           # the occupancy and cv here describe a fiction and say which one.
+           "routing": H.routing_summary(sizes, spec.E, fixture=regime)}
 
     # LoRA sized by the FULL expert count (lora_delta_grouped indexes by expert
     # id, not by group index) — [E,r,K] / [E,N,r], lora_B zero-init as standard.
@@ -552,6 +557,21 @@ def cell(spec, regime, device, args, stack):
         row["lora_floor_frac_of_g"] = t["lora_floor"] / t["g_a"]
         row["ms"] = t
 
+        # ---- GPU-busy fraction, beside the self-pair (C4) -------------------
+        # Runs in EVERY leg now, not as an after-the-fact probe. The self-pair
+        # says whether the box drifted; this says whether the ratio above is a
+        # statement about kernels at all. Legs 2 and 3 were graded before this
+        # existed and had their primary criterion demoted afterwards; that is
+        # the mistake this instrument is here to stop repeating.
+        if not args.no_busy:
+            busy = {k: H.gpu_busy_fraction(step[k], args.busy_steps)
+                    for k in ("G", "D")}
+            row["gpu_busy"] = busy
+            cls, lo, _fr = H.measurement_class(busy)
+            row["measurement_class"] = cls        # "kernel" | "step_ratio"
+            row["min_busy_fraction"] = lo
+            row["measurement_class_note"] = H.MEASUREMENT_CLASS_NOTE
+
         # ---- energy per step (B2) ------------------------------------------
         if args.energy:
             en = {}
@@ -584,6 +604,13 @@ def main():
                          "pilot and first timed block of every cell, so the "
                          "cell after a stack build does not measure clock "
                          "recovery. 0 reproduces run 1.")
+    ap.add_argument("--busy-steps", type=int, default=50,
+                    help="steps per arm for the GPU-busy fraction (C4). Runs by "
+                         "default in every leg, beside the self-pair.")
+    ap.add_argument("--no-busy", action="store_true",
+                    help="skip the GPU-busy instrument. A cell without it is "
+                         "labelled measurement_class=unknown, which is NOT the "
+                         "same as 'kernel' and must not be printed as one.")
     ap.add_argument("--energy", action="store_true")
     ap.add_argument("--energy-s", type=float, default=1.5)
     ap.add_argument("--fid-rows", type=int, default=16,
@@ -671,6 +698,25 @@ def main():
             statistics.median(r["g_selfpair"] for r in ok),
             statistics.median(r["d_selfpair"] for r in ok),
             len(ok)))
+        # The measurement class is printed with the medians, not buried in the
+        # receipt, because it changes what the medians above MEAN.
+        by = {}
+        for r in ok:
+            by[r.get("measurement_class", "unknown")] = \
+                by.get(r.get("measurement_class", "unknown"), 0) + 1
+        print("MEASUREMENT CLASS " + "  ".join(f"{k}={v}" for k, v in
+                                               sorted(by.items())))
+        sr = [r for r in ok if r.get("measurement_class") == "step_ratio"]
+        if sr:
+            print("  %d cell(s) are STEP RATIOS, not kernel measurements "
+                  "(min busy fraction %.1f%%). Label them as such in any table:"
+                  % (len(sr), 100 * min(r["min_busy_fraction"] for r in sr)))
+            for r in sr:
+                print("    %-28s %-8s %-16s d/g=%.3f  busy G=%.0f%% D=%.0f%%" % (
+                    r["model"].split("/")[-1][:28], r["proj"], r["regime"],
+                    r["d_over_g"],
+                    100 * r["gpu_busy"]["G"]["busy_fraction"],
+                    100 * r["gpu_busy"]["D"]["busy_fraction"]))
     print("DQF_DONE")
 
 

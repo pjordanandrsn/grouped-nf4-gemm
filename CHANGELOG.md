@@ -2,6 +2,70 @@
 
 ## Unreleased
 
+### The fused training path can now be CUDA-graphed — five hazards, three never named
+
+The dequant-on-forward baseline captures into a CUDA graph cleanly; gnf4's fused
+training path failed 8/8. That is a structural asymmetry against us, because
+graphing is how the host floor at small batch would be removed.
+
+CUDA's error (`operation failed due to a previous error during capture`) is what
+a **later** call reports after an **earlier** illegal one already killed the
+capture, so it never names the offender. Bisected with one attempt per process
+(a failed capture poisons the context) in
+[`bench/phase1/probe_capture_bisect.py`](bench/phase1/probe_capture_bisect.py):
+
+| | site | what | named beforehand? |
+|---|---|---|---|
+| HA | `FusedGroupedNf4.forward` | `[int(e) for e in expert_ids]` — one D2H sync **per group** | yes |
+| HB | `gemm_4bit_grouped` | pageable `torch.tensor(list, device=)` | yes |
+| HC | `build_group_tiles` | **three** pageable transfers per call, called **twice** per step | **no** |
+| HD | `dgrad_4bit_grouped` | HB again, in the backward | **no** |
+| HE | `lora_delta_grouped` | two more, plus a `repeat_interleave` reading its output length off a device tensor | **no** |
+
+HA wants a Python list and HB wants a device tensor, which is why neither
+`expert_ids` form captured. HC and HD key off `sizes`, so neither named candidate
+touched them. **With both named candidates removed, capture still failed.**
+
+Fixed as call-path changes — no kernel source, tiling constant, dispatch
+threshold or dtype moves, and **every output is bitwise identical** (26/26
+tensors, `torch.equal`, both `expert_ids` forms, forward and backward, including
+the `dgrad_kernel=False` and `_PAD_WASTE_LIMIT` fallbacks). `expert_ids` is now
+accepted and passed through as a device tensor, converted once at the boundary
+when a list is given; index tensors reach the device through one pinned async
+transfer instead of several pageable syncing ones (8 → 4 per step, list form;
+7 → 2, tensor form).
+
+**Which construct is legal inside a capture was measured first**, and it changed
+the design: pinned memory *allocated inside* the region still fails. Only a
+**pre-allocated** pinned source with `non_blocking=True` is capturable, so the
+staging lives in a persistent per-device arena.
+
+The arena answers the reuse hazard the pinned-staging entry below already names
+— *"a `non_blocking=True` copy is not ordered against the host writes of the next
+call"* — with the event that entry prescribes: the bump pointer rewinds only when
+the stream is not capturing **and** the event recorded after the last hand-out has
+completed, so the host can never overwrite bytes a pending DMA has not yet read.
+
+**Capturability is a precondition, not a speedup**, and no number here is
+reported as one. MoE routing changes every step, so a replayed graph replays the
+metadata it captured; making a captured graph *usable* needs a padding or
+bucketing scheme with its own registration. Scope registered pre-data in
+[`kernel/prereg_capturability_scope.json`](kernel/prereg_capturability_scope.json);
+full write-up in
+[`RESULTS-capturability.md`](bench/phase1/results/dequant_forward/RESULTS-capturability.md).
+
+### Benchmark harness: two standing defaults
+
+* **Every leg reports its measurement class.** The GPU-busy fraction now runs in
+  every leg beside the self-pair rather than as an after-the-fact probe. A cell
+  where **either** arm is below 50% GPU-busy is a `step_ratio`, not a kernel
+  measurement, and is labelled that way
+  ([`kernel/prereg_gpu_busy_labelling.json`](kernel/prereg_gpu_busy_labelling.json)).
+  Backfilled onto legs 2 and 3 — the numbers stay, the framing changes.
+* **Real prose is the fixture default**; random token ids are opt-in and
+  understate the fused advantage by 1.6–1.7×. Routing occupancy, cv, and the
+  fixture's *name* land in every receipt.
+
 ## 0.12.0 — 2026-08-14
 
 ### The package would not import at all on a platform it declares support for

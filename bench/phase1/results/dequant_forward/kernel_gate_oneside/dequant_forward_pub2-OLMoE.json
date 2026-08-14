@@ -1,0 +1,321 @@
+{
+ "leg": "training axis vs dequant-on-forward",
+ "TIER": "see PREREG-dequant-forward.md",
+ "baseline_source": {
+  "module": "QuantizedNaiveMoe",
+  "repo": "https://github.com/genonai/nf4moe",
+  "writeup": "https://huggingface.co/mncai/nf4moe",
+  "quant": {
+   "quant_type": "nf4",
+   "blocksize": 64
+  }
+ },
+ "gpu": "NVIDIA GeForce RTX 4090",
+ "capability": "8.9",
+ "torch": "2.8.0+cu128",
+ "rank": 16,
+ "scaling": 1.0,
+ "grad_checkpointing": "OFF in every arm (single-projection cell)",
+ "routing_weights": "not applied by any arm (projection boundary)",
+ "regimes": [
+  "tokbudget_4096"
+ ],
+ "block_ms": 250.0,
+ "rows": [
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "gate_up",
+   "regime": "tokbudget_4096",
+   "N": 2048,
+   "K": 2048,
+   "E": 64,
+   "top_k": 8,
+   "groups": 64,
+   "rows": 32768,
+   "rank": 16,
+   "routing": {
+    "fixture": "tokbudget_4096",
+    "hit_experts": 64,
+    "of": 64,
+    "occupancy": 1.0,
+    "total_rows": 32768,
+    "min_rows": 512,
+    "max_rows": 512,
+    "mean_rows": 512.0,
+    "cv": 0.0
+   },
+   "gate": {
+    "deq_calls_D": 64,
+    "nonempty_groups": 64,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0016979305102048814,
+   "b_rel_D": 0.002226093153469789,
+   "b_rel_G_over_D": 0.7627400980764593,
+   "mem_transient_d_over_g": 1.3611989212698536,
+   "mem": {
+    "G": {
+     "peak_bytes": 2364312064,
+     "resident_before_bytes": 877954048,
+     "transient_bytes": 1486358016
+    },
+    "D": {
+     "peak_bytes": 2901182976,
+     "resident_before_bytes": 877954048,
+     "transient_bytes": 2023228928
+    },
+    "D_routed": {
+     "peak_bytes": 3035662848,
+     "resident_before_bytes": 877954048,
+     "transient_bytes": 2157708800
+    }
+   },
+   "warm_s": 1.5,
+   "iters": 20,
+   "g_selfpair": 1.0001631836973846,
+   "d_over_g": 1.8544375481602124,
+   "d_selfpair": 1.0001081426104177,
+   "dr_over_g": 2.190231964617465,
+   "dr_over_d": 1.1776081084275212,
+   "g_drift": 0.9982409196007671,
+   "lora_floor_frac_of_g": 0.3129680912199233,
+   "ms": {
+    "g_a": 28.233216285705566,
+    "g_b": 28.237823486328125,
+    "d_a": 52.36528015136719,
+    "d_b": 52.37094306945801,
+    "g_c": 28.157952308654785,
+    "dr_a": 61.672447204589844,
+    "g_end": 28.183551788330078,
+    "lora_floor": 8.836095809936523
+   },
+   "gpu_busy": {
+    "G": {
+     "wall_per_step_ms": 27.982487498472135,
+     "gpu_busy_per_step_ms": 25.77942479999991,
+     "busy_fraction": 0.9212699479060782
+    },
+    "D": {
+     "wall_per_step_ms": 53.31252977872888,
+     "gpu_busy_per_step_ms": 49.216974199999726,
+     "busy_fraction": 0.9231783673420195
+    }
+   },
+   "measurement_class": "kernel",
+   "min_busy_fraction": 0.9212699479060782,
+   "measurement_class_note": "gpu_busy_fraction = summed CUDA kernel self-time per step / wall per step, no syncs between steps. A cell where EITHER arm is below 50% is labelled step_ratio: a real wall-clock step ratio, NOT a kernel measurement.",
+   "status": "ok"
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "down",
+   "regime": "tokbudget_4096",
+   "N": 2048,
+   "K": 1024,
+   "E": 64,
+   "top_k": 8,
+   "groups": 64,
+   "rows": 32768,
+   "rank": 16,
+   "routing": {
+    "fixture": "tokbudget_4096",
+    "hit_experts": 64,
+    "of": 64,
+    "occupancy": 1.0,
+    "total_rows": 32768,
+    "min_rows": 512,
+    "max_rows": 512,
+    "mean_rows": 512.0,
+    "cv": 0.0
+   },
+   "gate": {
+    "deq_calls_D": 64,
+    "nonempty_groups": 64,
+    "deq_calls_ok": true,
+    "routed_max_rel": 0.0,
+    "routed_rows_differing": 0,
+    "routed_matches_D": true,
+    "lora_A_grad_expected_zero_at_init": true,
+    "grad_G": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "grad_D_routed": {
+     "a": {
+      "finite": true,
+      "nonzero": true
+     },
+     "lora_A": {
+      "finite": true,
+      "nonzero": false
+     },
+     "lora_B": {
+      "finite": true,
+      "nonzero": true
+     }
+    },
+    "gradA_at_nonzero_B_G": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    },
+    "gradA_at_nonzero_B_D_routed": {
+     "present": true,
+     "finite": true,
+     "nonzero": true
+    }
+   },
+   "fid_rows_per_group": 16,
+   "fid_max_groups": 32,
+   "b_rel_G": 0.0016973971251322906,
+   "b_rel_D": 0.002226840711338128,
+   "b_rel_G_over_D": 0.7622445182045867,
+   "mem_transient_d_over_g": 1.189418958587364,
+   "mem": {
+    "G": {
+     "peak_bytes": 1869384192,
+     "resident_before_bytes": 452232192,
+     "transient_bytes": 1417152000
+    },
+    "D": {
+     "peak_bytes": 2137819648,
+     "resident_before_bytes": 452232192,
+     "transient_bytes": 1685587456
+    },
+    "D_routed": {
+     "peak_bytes": 2272299520,
+     "resident_before_bytes": 452232192,
+     "transient_bytes": 1820067328
+    }
+   },
+   "warm_s": 1.5,
+   "iters": 20,
+   "g_selfpair": 0.999914428027411,
+   "d_over_g": 1.8403810548141464,
+   "d_selfpair": 1.0004182172453484,
+   "dr_over_g": 2.7568616042723377,
+   "dr_over_d": 1.4975617975855424,
+   "g_drift": 0.9999641384918962,
+   "lora_floor_frac_of_g": 0.42523728364528635,
+   "ms": {
+    "g_a": 19.625823974609375,
+    "g_b": 19.624144554138184,
+    "d_a": 36.11590385437012,
+    "d_b": 36.13100814819336,
+    "g_c": 19.626816749572754,
+    "dr_a": 54.10841751098633,
+    "g_end": 19.625120162963867,
+    "lora_floor": 8.345632076263428
+   },
+   "gpu_busy": {
+    "G": {
+     "wall_per_step_ms": 19.172781550635893,
+     "gpu_busy_per_step_ms": 16.06633556666668,
+     "busy_fraction": 0.8379762489983524
+    },
+    "D": {
+     "wall_per_step_ms": 32.742966866741575,
+     "gpu_busy_per_step_ms": 27.699520699999898,
+     "busy_fraction": 0.8459685651801908
+    }
+   },
+   "measurement_class": "kernel",
+   "min_busy_fraction": 0.8379762489983524,
+   "measurement_class_note": "gpu_busy_fraction = summed CUDA kernel self-time per step / wall per step, no syncs between steps. A cell where EITHER arm is below 50% is labelled step_ratio: a real wall-clock step ratio, NOT a kernel measurement.",
+   "status": "ok"
+  }
+ ],
+ "bitsandbytes": "0.50.1"
+}

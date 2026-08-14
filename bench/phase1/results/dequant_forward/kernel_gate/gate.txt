@@ -1,0 +1,30 @@
+=== cells present in all three sweeps: 4 ===
+
+=== per-cell gates (P1 premise, and the leg's own self-pair) ===
+  OLMoE-1B-7B-0924         down     busy(min) pub1=90% cap=92% pub2=90%  graded
+  OLMoE-1B-7B-0924         gate_up  busy(min) pub1=96% cap=97% pub2=96%  graded
+  Qwen3-30B-A3B            down     busy(min) pub1=83% cap=85% pub2=83%  graded
+  Qwen3-30B-A3B            gate_up  busy(min) pub1=93% cap=94% pub2=93%  graded
+
+--- P2 INSTRUMENT  pub2/pub1 of ms.g_a (same code twice) ---
+  OLMoE-1B-7B-0924         down     1.0100
+  OLMoE-1B-7B-0924         gate_up  1.0230
+  Qwen3-30B-A3B            down     1.0057
+  Qwen3-30B-A3B            gate_up  1.0008
+  median 1.0079   n=4
+
+--- P3 GATE        cap/pub1 of ms.g_a (the change) ---
+  OLMoE-1B-7B-0924         down     0.9382   <-- OUTSIDE BAND
+  OLMoE-1B-7B-0924         gate_up  0.9857
+  Qwen3-30B-A3B            down     0.8786   <-- OUTSIDE BAND
+  Qwen3-30B-A3B            gate_up  0.9313   <-- OUTSIDE BAND
+  median 0.9347   n=4
+
+--- secondary, NOT graded: d_over_g cap/pub1 (partially cancels) ---
+  OLMoE-1B-7B-0924         down     1.0316
+  OLMoE-1B-7B-0924         gate_up  1.0045
+  Qwen3-30B-A3B            down     1.1169   <-- OUTSIDE BAND
+  Qwen3-30B-A3B            gate_up  1.0630   <-- OUTSIDE BAND
+  median 1.0473   n=4
+
+VERDICT: GATE FAILED — P3. 3/4 cells outside 0.967-1.032 (worst 0.8786). The change moved throughput at a kernel-bound size; per the stop rule it is reverted.

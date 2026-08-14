@@ -62,10 +62,16 @@ import hashlib
 import json
 import os
 import statistics as st
+import sys
 import time
 from pathlib import Path
 
 import torch
+
+# The GPU-busy label rule (C4) lives in the harness so every leg applies the
+# same bar. This driver sits beside it.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import harness as H  # noqa: E402
 
 
 def _sha(t: torch.Tensor) -> str:
@@ -206,7 +212,89 @@ class RoutingTap:
 
 
 # ----------------------------------------------------------------- arm -----
-def run_arm(model, arm, batches, lr, enable, disable, warmup, tap_E):
+def warm_gpu(seconds: float, device="cuda"):
+    """Wall-clock GPU-busy work before the FIRST timed arm of a mode.
+
+    THE CLOCK-RECOVERY LAW, applied at leg level. `--warmup N` drops the first N
+    STEPS of each arm. It does not cover the gap between a model load -- a long
+    CPU-bound stretch with the GPU idle -- and the first arm timed after it,
+    which reads the card boosting back up.
+
+    Measured, 2026-08-14 L40S capturability gate: the FIRST data mode of every
+    sweep blew the e2e prereg's G1 band (text 0.9564 / 0.9047) and worsened
+    monotonically to 0.8926, while the mode that ran SECOND was clean throughout
+    (1.0010-1.0453). Those cells were excluded and the gate could not close.
+
+    The fix is wall-clock, not more iterations -- the same one that took the 4090
+    from 9 void cells to 0 in the leg-1 re-run. More warm-up ITERATIONS do not
+    work: a per-arm warmup of 4 steps is over in a fraction of the time the card
+    needs to come back up.
+    """
+    if not torch.cuda.is_available() or seconds <= 0:
+        return 0.0
+    a = torch.randn(2048, 2048, device=device, dtype=torch.bfloat16)
+    b = torch.randn(2048, 2048, device=device, dtype=torch.bfloat16)
+    t0 = time.perf_counter()
+    while time.perf_counter() - t0 < seconds:
+        for _ in range(8):
+            c = a @ b          # noqa: F841 -- discarded; the point is the work
+    torch.cuda.synchronize()
+    el = time.perf_counter() - t0
+    del a, b
+    torch.cuda.empty_cache()
+    return el
+
+
+def busy_fraction(model, opt, ids, m=3):
+    """GPU-busy fraction of a real training step (C4), measured on this arm.
+
+    Same definition as everywhere else in the harness -- summed CUDA kernel
+    self-time per step over wall per step, back to back, no syncs between steps.
+
+    Kept OUT of the timed loop: it runs after the timed steps, on one batch, so
+    the profiler never touches the number the prereg grades.
+
+    BUDGET THIS. It costs `2 + 2m` steps per arm, and an e2e step is seconds,
+    not the milliseconds a microbench cell takes. At m=8 it added ~75% to the
+    step count of every arm -- 1080 extra steps across a three-sweep gate run --
+    and that overrun is what cost the 2026-08-14 capturability gate its final
+    sweep and left the run UNUSABLE. The fractions it produces are stable to the
+    percent (53/53, 34/34 across arms on the L40S), so m=3 buys the same label
+    at a third of the cost. Raise it with --busy-steps if a cell is borderline
+    against the 50% bar; do not raise it by default.
+    """
+    from torch.profiler import ProfilerActivity, profile
+
+    def one():
+        opt.zero_grad(set_to_none=False)
+        model(input_ids=ids, labels=ids).loss.backward()
+
+    for _ in range(2):
+        one()
+    torch.cuda.synchronize()
+    t0 = time.perf_counter()
+    for _ in range(m):
+        one()
+    torch.cuda.synchronize()
+    wall_ms = (time.perf_counter() - t0) * 1000.0 / m
+    with profile(activities=[ProfilerActivity.CUDA], record_shapes=False) as pr:
+        for _ in range(m):
+            one()
+        torch.cuda.synchronize()
+    us = 0.0
+    for e in pr.key_averages():
+        v = getattr(e, "self_device_time_total", None)
+        if v is None:
+            v = getattr(e, "self_cuda_time_total", 0.0)
+        us += float(v or 0.0)
+    busy_ms = us / 1000.0 / m
+    opt.zero_grad(set_to_none=True)
+    return {"wall_per_step_ms": wall_ms, "gpu_busy_per_step_ms": busy_ms,
+            "busy_fraction": (busy_ms / wall_ms) if wall_ms else None}
+
+
+def run_arm(model, arm, batches, lr, enable, disable, warmup, tap_E,
+            measure_busy=True, busy_steps=3):
     torch.cuda.empty_cache()
     torch.cuda.synchronize()
     resident = torch.cuda.memory_allocated()          # decomposition baseline
@@ -243,6 +331,9 @@ def run_arm(model, arm, batches, lr, enable, disable, warmup, tap_E):
 
     steady = per_step[warmup:] or per_step
     peak = torch.cuda.max_memory_allocated()
+    # AFTER the timed steps and after peak is read, so neither is perturbed.
+    busy = (busy_fraction(model, opt, batches[0], busy_steps)
+            if measure_busy and busy_steps else None)
     if disable:
         disable(model)
     return dict(
@@ -256,6 +347,7 @@ def run_arm(model, arm, batches, lr, enable, disable, warmup, tap_E):
         resident_gb=round(resident / 2**30, 3),
         transient_gb=round((peak - resident) / 2**30, 3),
         routing=routing,
+        gpu_busy=busy,
     ), first_grads
 
 
@@ -269,7 +361,23 @@ def main():
     ap.add_argument("--alpha", type=int, default=16)
     ap.add_argument("--lr", type=float, default=1e-4)
     ap.add_argument("--offload", type=int, default=1)
-    ap.add_argument("--data", default="both", choices=["text", "random", "both"])
+    # REAL TEXT IS THE DEFAULT (C5). Random ids are a fixture that flatters the
+    # dequant baseline by 1.6-1.7x on every matched pair, because MoE routing is
+    # content-dependent: random ids hit FEWER experts (occupancy 0.875 vs 0.984)
+    # and far more unevenly (cv 1.463 vs 0.687), so the baseline's python loop
+    # runs fewer iterations -- which is precisely the cost the fused path
+    # removes. They stay available for work that genuinely needs
+    # content-independence, and `both` still runs the matched pair, but a run
+    # that says nothing about its fixture now gets prose.
+    ap.add_argument("--data", default="text", choices=["text", "random", "both"])
+    ap.add_argument("--warm-s", type=float, default=1.5,
+                    help="wall-clock GPU-busy seconds before the first arm of "
+                         "each data mode (clock recovery). 0 disables it.")
+    ap.add_argument("--busy-steps", type=int, default=3,
+                    help="profiled steps per arm for the GPU-busy label (C4). "
+                         "Costs 2+2N steps per arm; 0 disables it and the cell "
+                         "is then measurement_class=unknown, which is NOT "
+                         "'kernel'.")
     ap.add_argument("--out", default=os.environ.get("DQF_OUT", "/root/dqf-out"))
     ap.add_argument("--tag", default="e2e")
     a = ap.parse_args()
@@ -355,7 +463,13 @@ def main():
                    frozen_tensors_hashed=len(frozen_before),
                    frozen_bytes_hashed=nbytes,
                    frozen_check_vacuous=bool(vacuous),
-                   integrity_applicable=integrity_applicable, cells={})
+                   integrity_applicable=integrity_applicable,
+                   data_default="text (C5); random ids are opt-in",
+                   clock_recovery_warm_s=a.warm_s,
+                   random_id_understatement=(
+                       "1.6-1.7x on every matched pair — any table citing a "
+                       "random-id cell states this factor beside it"),
+                   cells={})
     dest = Path(a.out)
     dest.mkdir(parents=True, exist_ok=True)
     art = dest / f"e2e_{a.tag}.json"
@@ -364,12 +478,20 @@ def main():
         print(f"\n########## data={mode} ##########", flush=True)
         batches = (text_batches(tok, a.steps, a.seq, "cuda") if mode == "text"
                    else random_batches(tok, a.steps, a.seq, "cuda"))
+        # Clock recovery, before the first arm of EVERY mode. Building batches
+        # is itself a CPU-bound stretch with the GPU idle -- `text_batches`
+        # tokenises wikitext -- so the mode that runs first is not the only one
+        # exposed, it is just the worst. Cheap enough to do unconditionally.
+        el = warm_gpu(a.warm_s)
+        print(f"clock-recovery warm-up: {el:.2f}s GPU-busy before arm 1",
+              flush=True)
         results, grads = {}, {}
         for name, en, dis in ARMS:
             restore(model, base_snap)
             print(f"--- arm {name} ({mode}) ---", flush=True)
             try:
-                res, g = run_arm(model, name, batches, a.lr, en, dis, a.warmup, n_exp)
+                res, g = run_arm(model, name, batches, a.lr, en, dis, a.warmup, n_exp,
+                                 busy_steps=a.busy_steps)
             except Exception as exc:
                 print(f"arm {name} FAILED: {type(exc).__name__}: {exc}", flush=True)
                 results[name] = dict(arm=name, failed=f"{type(exc).__name__}: {str(exc)[:300]}")
@@ -409,6 +531,13 @@ def main():
             if ref.get("losses") and r.get("losses"):
                 dl = sorted(abs(x - y) for x, y in zip(r["losses"], ref["losses"]))
                 r["loss_median_abs_delta"] = dl[len(dl) // 2]
+            # REGISTERED LABEL (C4): the speedup above is a kernel result only
+            # if BOTH arms in the pair are GPU-bound. Applied per arm, because
+            # the reference and the arm can sit on opposite sides of the bar.
+            (r["measurement_class"], r["min_busy_fraction"],
+             _fr) = H.measurement_class({"reference": ref.get("gpu_busy"),
+                                         name: r.get("gpu_busy")})
+        payload["measurement_class_note"] = H.MEASUREMENT_CLASS_NOTE
         payload["cells"][mode] = results
         art.write_text(json.dumps(payload, indent=1, default=str))
 
@@ -416,21 +545,27 @@ def main():
     for mode, results in payload["cells"].items():
         sp = results.get("reference_selfpair", {}).get("speedup_vs_reference")
         rt = (results.get("reference", {}) or {}).get("routing") or {}
-        print("data=%-7s SELF-PAIR %s   routing occ %s cv %s" % (
+        print("data=%-7s SELF-PAIR %s   routing occ %s cv %s%s" % (
             mode, ("%.4f" % sp) if sp else "n/a",
             ("%.3f" % rt["occupancy_median"]) if rt.get("occupancy_median") else "?",
-            ("%.3f" % rt["cv_median"]) if rt.get("cv_median") else "?"))
+            ("%.3f" % rt["cv_median"]) if rt.get("cv_median") else "?",
+            "   [RANDOM-ID FIXTURE: understates the fused advantage by "
+            "1.6-1.7x — state this factor beside any number below]"
+            if mode == "random" else ""))
         for name, r in results.items():
             if "failed" in r:
                 print("  %-20s FAILED %s" % (name, r["failed"][:60]))
                 continue
-            print("  %-20s %8.4f s/step  %6sx  peak %6.3f GB (%sx)  transient %6.3f GB  gradΔ %s"
+            bf = (r.get("gpu_busy") or {}).get("busy_fraction")
+            print("  %-20s %8.4f s/step  %6sx  peak %6.3f GB (%sx)  transient %6.3f GB  gradΔ %s  busy %s  %s"
                   % (name, r["s_per_step"],
                      ("%.3f" % r["speedup_vs_reference"]) if r.get("speedup_vs_reference") else "-",
                      r["train_peak_gb"],
                      ("%.3f" % r["peak_vs_reference"]) if r.get("peak_vs_reference") else "-",
                      r["transient_gb"],
-                     ("%.1e" % r["grad_rel_mean"]) if r.get("grad_rel_mean") else "-"))
+                     ("%.1e" % r["grad_rel_mean"]) if r.get("grad_rel_mean") else "-",
+                     ("%3.0f%%" % (100 * bf)) if bf else "  ?",
+                     r.get("measurement_class", "unknown").upper()))
     print("E2E_DONE")
 
 

@@ -1,0 +1,42 @@
+{
+ "registered_utc": "2026-08-14T16:45:00Z",
+ "registers": "A SECOND, DIFFERENT GATE for the capturability change, on a GPU-BOUND cell. Written and stamped before any data from it exists.",
+
+ "why_a_second_gate": {
+  "the_first_one_cannot_be_adjudicated": "kernel/prereg_capturability_scope.json registers the gate on the e2e training ratios. That leg runs at 12-25% GPU-busy: it is HOST-bound, so on a shared rented pod its ratios track that host's CPU contention. Measured twice on rented L40S cards: run 1 UNUSABLE (truncated + first-mode drift), run 2 VOID -- the instrument self-pair, running the IDENTICAL published code twice, varied by 11.2% against a 3.3% band. The two columns (same-code, and the-change) had the same spread. More re-runs on that class of box cannot fix a quantity whose noise exceeds the band.",
+  "this_gate_measures_something_the_instrument_can_see": "At tokbudget_4096 both arms are expected GPU-bound, where this leg's self-pair has historically held 0.97-1.03. A call-path change that removes HOST work is being graded on a cell where the host is not the bottleneck -- which makes this a CONSERVATIVE test of it, not a flattering one: any host saving is largely invisible here, and what remains visible is any harm it does.",
+  "this_is_NOT_the_first_gate_met": "It answers 'did the fused path get slower at a kernel-bound size', not 'did the e2e training numbers move'. The scope prereg's gate stays OPEN and this does not close it. Both facts go in the results doc."
+ },
+
+ "design": {
+  "arms": "pub1 -> cap -> pub2, three sweeps, ONE card, run PER MODEL back to back so the cross-sweep span is minutes rather than the ~80 that defeated the e2e gate. `pub` = kernel/nf4_grouped.py + kernel/nf4_qlora.py at origin/main (pre-change); `cap` = the branch's versions. Nothing else differs, and the swap is asserted in both directions off `to_device_i32`, which exists only in the changed file.",
+  "cells": "OLMoE-1B-7B-0924 and Qwen3-30B-A3B, gate_up and down, regime tokbudget_4096 = 4 graded cells. Deliberately few: drift across sweeps is what voided the e2e gate, so each model's triple is kept short rather than maximising cell count.",
+  "driver": "bench/phase1/train_dequant_forward.py --regimes tokbudget_4096"
+ },
+
+ "graded_quantity": {
+  "primary": "ms.g_a -- the FUSED arm's per-step time. Absolute, compared cap/pub1.",
+  "why_not_d_over_g": "Both arms call the identical `lora_delta_grouped`, and this change touches that function too, so d_over_g PARTIALLY CANCELS the very thing under test. It is reported as a secondary, composed view and is not graded.",
+  "instrument": "pub2/pub1 of the same ms.g_a. Same code twice. Checked BEFORE the gate ratio is read, and it can VOID the run.",
+  "also_reported": "the leg's own per-cell g_selfpair (adjacent, within-cell), d_selfpair, g_drift, d_over_g, and the C4 gpu_busy/measurement_class for every cell."
+ },
+
+ "band": {
+  "value": [0.967, 1.032],
+  "provenance": "NOT invented for this run. It is the band already registered in kernel/prereg_capturability_scope.json, and it matches this leg's long-standing self-pair band (0.97-1.03, enforced in reduce_dequant_forward_floorfree.py). Carried over unchanged so that a pass here means the same thing a pass would have meant there."
+ },
+
+ "frozen_predictions": {
+  "P1_the_premise": "PREDICTED: every graded cell reports measurement_class = kernel, i.e. BOTH arms at or above 50% GPU-busy. FALSIFIER: any cell reporting step_ratio. That cell is then not graded, and if all four fail the premise of this gate is wrong and tokbudget_4096 is not the GPU-bound cell it was chosen to be.",
+  "P2_the_instrument": "PREDICTED: pub2/pub1 of ms.g_a lands INSIDE 0.967-1.032 on all four graded cells. This is the whole claim of the redesign -- that a GPU-bound cell carries a 3% band where the host-bound e2e leg could not. FALSIFIER: any cell outside. If this fails, the redesign fails too, the e2e gate's collapse was not special to that leg, and no gate of this shape is measurable on rented shared hardware.",
+  "P3_the_gate": "NO DIRECTION PREDICTED. cap/pub1 inside the band on all graded cells = throughput did not move at a kernel-bound size, and the change may merge on that basis with the e2e gate still recorded OPEN. Outside the band on any cell = it moved, and per the stop rule the change is reverted."
+ },
+
+ "stop_rule": "Whatever this shows is written into bench/phase1/results/dequant_forward/RESULTS-capturability.md verbatim, including a FAIL and including a second VOID. The band is not adjusted after seeing data; if the instrument cannot hold it, that is the result. No cell is re-run for a better number, and no cell is dropped except by the pre-committed rules above (g_selfpair out of band, or measurement_class != kernel).",
+
+ "what_a_pass_does_not_license": [
+  "It does not close kernel/prereg_capturability_scope.json's e2e gate, which stays OPEN and unmet.",
+  "It is not a speedup claim. Capturability remains a precondition, not a win, and this gate can only show absence of harm.",
+  "It says nothing about the host-bound decode band, where this change removes work that this cell is specifically constructed not to see."
+ ]
+}

@@ -1,0 +1,8 @@
+NVIDIA RTX A2000 12GB 2.8.0+cu128
+pageable_torch_tensor FAIL AcceleratorError: CUDA error: operation failed due to a previous error during capture
+pin_inside_then_to FAIL AcceleratorError: CUDA error: operation failed due to a previous error during capture
+prepinned_to OK
+prepinned_copy_into_preallocated OK
+prepinned_copy_blocking FAIL AcceleratorError: CUDA error: operation failed due to a previous error during capture
+device_arange_only OK
+pin_memory_call_only OK

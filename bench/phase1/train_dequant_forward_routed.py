@@ -123,6 +123,12 @@ def measure(stack, spec, groups, args):
                            if out["G"]["gpu_ms"] else None)
     out["d_over_g_gap"] = (out["D"]["gap_ms"] / out["G"]["gap_ms"]
                            if out["G"]["gap_ms"] else None)
+    # REGISTERED LABEL (C4): either arm below the bar makes this fixture's
+    # ratios step ratios, not kernel measurements. This leg already measured
+    # busy_fraction; what was missing was applying the rule to it and printing
+    # the verdict beside the numbers.
+    out["measurement_class"], out["min_busy_fraction"], _ = H.measurement_class(
+        {k: out[k] for k in ("G", "D")})
     out["groups"] = len(groups)
     out["total_rows"] = int(sum(sizes))
     del a_cat

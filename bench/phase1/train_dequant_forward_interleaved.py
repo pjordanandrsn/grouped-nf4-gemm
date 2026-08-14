@@ -90,7 +90,9 @@ def cell(spec, regime, device, args, stack):
     row = {"model": spec.model, "proj": spec.proj, "regime": regime,
            "N": spec.N, "K": spec.K, "E": spec.E, "top_k": spec.top_k,
            "groups": len(groups), "rows": a_cat.shape[0], "rank": RANK,
-           "pairing": "iteration-level interleaved, order alternating"}
+           "pairing": "iteration-level interleaved, order alternating",
+           # C5: the fixture's routing behaviour in every receipt.
+           "routing": H.routing_summary(sizes, spec.E, fixture=regime)}
 
     lora_A = (torch.randn(spec.E, RANK, spec.K, device=device,
                           dtype=torch.bfloat16) * 0.01).requires_grad_(True)
@@ -196,6 +198,17 @@ def cell(spec, regime, device, args, stack):
                 row["j_ratio_dbase_over_gbase"] = (
                     en["D_base"]["j_per_step"] / en["G_base"]["j_per_step"])
             row["energy"] = en
+
+        # ---- GPU-busy fraction, beside the self-pair (C4) -------------------
+        # This leg's F1 was the criterion the retrospective probe demoted. It
+        # now carries its own label rather than acquiring one afterwards.
+        if not args.no_busy:
+            busy = {k: H.gpu_busy_fraction(step[k], args.busy_steps)
+                    for k in ("G_base", "D_base")}
+            row["gpu_busy"] = busy
+            (row["measurement_class"], row["min_busy_fraction"],
+             _fr) = H.measurement_class(busy)
+            row["measurement_class_note"] = H.MEASUREMENT_CLASS_NOTE
         row["status"] = "ok"
     except Exception as e:  # pragma: no cover
         row.update({"status": "skipped",
@@ -213,6 +226,11 @@ def main():
     ap.add_argument("--target-ms", type=float, default=500.0,
                     help="device work per interleaved collection; sets pairs")
     ap.add_argument("--warm-s", type=float, default=1.5)
+    ap.add_argument("--busy-steps", type=int, default=50,
+                    help="steps per arm for the GPU-busy fraction (C4)")
+    ap.add_argument("--no-busy", action="store_true",
+                    help="skip it; the cell is then measurement_class=unknown, "
+                         "which is NOT 'kernel'")
     ap.add_argument("--energy", action="store_true")
     ap.add_argument("--energy-s", type=float, default=1.5)
     ap.add_argument("--fid-rows", type=int, default=16)
