@@ -226,11 +226,14 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
 
     dev = a_cat.device
     from nf4_grouped import to_device_i32
-    if torch.is_tensor(expert_ids):
+    if torch.is_tensor(expert_ids) and expert_ids.is_cuda:
         # Select the surviving groups ON DEVICE. One index_select, no round trip.
         sz_i32, nz_i = to_device_i32((rows, nz), dev)
         eid = expert_ids[nz_i.to(torch.int64)].to(torch.int64)
     else:
+        # Host data: a list, or a CPU tensor (Bugbot, PR #85 — the old
+        # per-element path accepted CPU tensors and indexing one with the CUDA
+        # `nz_i` above raises). `int(expert_ids[g])` is host-only for both.
         sz_i32, eid_i32 = to_device_i32((rows, [int(expert_ids[g]) for g in nz]),
                                         dev)
         eid = eid_i32.to(torch.int64)

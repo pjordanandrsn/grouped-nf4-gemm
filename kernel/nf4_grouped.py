@@ -252,9 +252,11 @@ def to_device_i32(seqs, device):
         off = 0
         for s, n in zip(seqs, lens):
             if n:
-                # torch.as_tensor on a list is a host-side build; the write into
-                # `host` is a CPU->CPU copy into pinned memory, no CUDA call.
-                host[off:off + n] = torch.as_tensor(list(s), dtype=torch.int32)
+                # torch.as_tensor handles both host sequences and host TENSORS
+                # (a CPU tensor is host data and takes this path too — Bugbot,
+                # PR #85). Either way the write into `host` is a CPU->CPU copy
+                # into pinned memory, no CUDA call, so it stays capture-legal.
+                host[off:off + n] = torch.as_tensor(s, dtype=torch.int32).reshape(-1)
             off += n
         # non_blocking is REQUIRED, not an optimisation: the blocking form is
         # `cudaMemcpyAsync` + `cudaStreamSynchronize`, and the sync is what is
@@ -663,13 +665,15 @@ def gemm_4bit_grouped(
             f"use dequant_ref(packed, absmax, N, K) — the pure-torch reference the property "
             f"suite pins the kernel against."
         )
-    # A device tensor passes straight through; a list is converted ONCE here, at
-    # the boundary, through a pinned transfer (to_device_i32). It used to be a
-    # pageable `torch.tensor(list, device=dev)`, which syncs and is not
-    # capturable.
+    # A CUDA tensor passes straight through; anything HOST — a list, or a CPU
+    # tensor (Bugbot, PR #85: `torch.tensor([...])` with no device= used to work
+    # via the per-element path and must keep working) — is converted ONCE here,
+    # at the boundary, through a pinned transfer (to_device_i32). It used to be
+    # a pageable `torch.tensor(list, device=dev)`, which syncs and is not
+    # capturable; a CPU tensor handed to the launch below would not work at all.
     eids = (
         expert_ids
-        if torch.is_tensor(expert_ids)
+        if torch.is_tensor(expert_ids) and expert_ids.is_cuda
         else to_device_i32((expert_ids,), dev)[0]
     ).to(torch.int32)
     out = torch.empty(T, N, dtype=torch.bfloat16, device=dev)
@@ -1009,12 +1013,12 @@ def dgrad_4bit_grouped(grad_out, B, absmax, sizes, expert_ids, config=None):
             "fall back should check dgrad_eligible() first rather than catching this."
         )
     t_row0, t_rows, t_group = build_group_tiles(sizes, block_m, dev)
-    # Same boundary conversion as the forward's: pass a device tensor through,
-    # convert a list once through a pinned transfer. `ctx` hands this a device
-    # tensor whenever the caller supplied one.
+    # Same boundary conversion as the forward's: a CUDA tensor passes through,
+    # anything host (list or CPU tensor) converts once through a pinned
+    # transfer. `ctx` hands this whatever the caller supplied, unchanged.
     eids = (
         expert_ids
-        if torch.is_tensor(expert_ids)
+        if torch.is_tensor(expert_ids) and expert_ids.is_cuda
         else to_device_i32((expert_ids,), dev)[0]
     ).to(torch.int32)
     out = torch.empty(T, K, dtype=torch.bfloat16, device=dev)
