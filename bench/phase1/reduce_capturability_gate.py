@@ -98,6 +98,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("evidence", type=Path)
     ap.add_argument("--out", type=Path, default=None)
+    ap.add_argument("--harm-bound-only", action="store_true",
+                    help="Grade the gate one-sided per kernel/prereg_"
+                         "capturability_scope_amendment1.json: cap/pub1 of "
+                         "speedup_vs_reference must be >= %.3f on every clean "
+                         "cell (higher speedup is better, so harm is BELOW the "
+                         "floor); a faster cap is compliant at any magnitude. "
+                         "P2 (the instrument) stays two-sided." % BAND[0])
     a = ap.parse_args()
 
     sweeps = {l: load(a.evidence, l) for l in ("pub1", "cap", "pub2")}
@@ -141,7 +148,12 @@ def main():
               inst_drift)
 
     inst_bad = {k: v for k, v in inst.items() if not BAND[0] <= v <= BAND[1]}
-    gate_bad = {k: v for k, v in gate.items() if not BAND[0] <= v <= BAND[1]}
+    if a.harm_bound_only:
+        # One-sided: speedup_vs_reference ratios, higher is better — only a
+        # cell BELOW the floor is harm. Amendment 1 to the scope prereg.
+        gate_bad = {k: v for k, v in gate.items() if v < BAND[0]}
+    else:
+        gate_bad = {k: v for k, v in gate.items() if not BAND[0] <= v <= BAND[1]}
     worst = lambda d: max(d.values(), key=lambda x: abs(1 - x))  # noqa: E731
 
     # ORDER MATTERS. Emptiness is checked BEFORE the band, on both comparisons,
@@ -165,14 +177,24 @@ def main():
              f"The box drifted; cap/pub1 is not readable, and this is NOT a "
              f"statement about the change.")
     elif gate_bad:
-        v = (f"VERDICT: GATE FAILED — {len(gate_bad)}/{len(gate)} cells outside "
-             f"{BAND[0]}-{BAND[1]} (worst {worst(gate_bad):.4f}). The "
-             f"capturability change moved throughput; per the registered stop "
-             f"rule it is reverted.")
+        v = ((f"VERDICT: GATE FAILED — harm bound. {len(gate_bad)}/{len(gate)} "
+              f"cells with cap/pub1 speedup BELOW {BAND[0]} (worst "
+              f"{worst(gate_bad):.4f}). The change costs e2e throughput; per "
+              f"the registered stop rule it is reverted.") if a.harm_bound_only
+             else
+             (f"VERDICT: GATE FAILED — {len(gate_bad)}/{len(gate)} cells outside "
+              f"{BAND[0]}-{BAND[1]} (worst {worst(gate_bad):.4f}). The "
+              f"capturability change moved throughput; per the registered stop "
+              f"rule it is reverted."))
     else:
-        v = (f"VERDICT: GATE PASSED — all {len(gate)} cells inside "
-             f"{BAND[0]}-{BAND[1]} (median {st.median(gate.values()):.4f}), "
-             f"instrument self-pair clean on all {len(inst)}.")
+        v = ((f"VERDICT: GATE PASSED — all {len(gate)} clean cells at or above "
+              f"the {BAND[0]} harm floor (median {st.median(gate.values()):.4f}), "
+              f"instrument clean on all {len(inst)}. Cells above {BAND[1]} are "
+              f"reported as observed, NOT as a registered speedup claim.")
+             if a.harm_bound_only else
+             (f"VERDICT: GATE PASSED — all {len(gate)} cells inside "
+              f"{BAND[0]}-{BAND[1]} (median {st.median(gate.values()):.4f}), "
+              f"instrument self-pair clean on all {len(inst)}."))
     print("\n" + v)
     if a.out:
         a.out.write_text(json.dumps(

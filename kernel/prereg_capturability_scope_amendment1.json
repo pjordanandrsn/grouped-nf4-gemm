@@ -1,0 +1,23 @@
+{
+ "registered_utc": "2026-08-14T19:05:00Z",
+ "amends": "kernel/prereg_capturability_scope.json",
+ "registers": "AMENDMENT 1 to the e2e regression gate: (a) the hardware class it may be graded on, and (b) the sidedness of its band -- BOTH fixed before the bare-metal run whose data this grades exists. The original registration stands for what it was: two rented-shared-pod runs graded under it returned UNUSABLE and VOID, and those verdicts are not re-read.",
+
+ "a_hardware": {
+  "finding_that_forces_this": "The gate's quantity is host-bound (12-25% GPU-busy, measured and labelled by the C4 instrument), so on a shared pod it tracks the HOST's CPU contention: the instrument self-pair -- identical published code run twice -- varied 11.2% against a 3.3% band (L40S, run 2), while the same pod class holds 2.3% on a GPU-bound cell. Two runs, ~$3.80, same conclusion.",
+  "rule": "This gate is graded ONLY on a machine whose CPU is not shared with another tenant: bare metal, or a whole-machine rental where every core of the host is allocated to this instance (cpu_cores_effective == cpu_cores). The run records the provider, machine class, and core allocation in the receipt.",
+  "planned_instance": "Vast.ai whole-machine single-GPU host (gpu_frac = 1.0), on-demand, verified, reliability >= 0.98. The card class is immaterial to the within-run A/B and is recorded, not chosen for speed."
+ },
+
+ "b_sidedness": {
+  "lesson_applied_before_the_run_this_time": "The GPU-bound gate's two-sided band read a 6.5%-faster result as GATE FAILED (RESULTS-capturability.md section 9); the correction was a one-sided re-registration graded on a fresh run (section 10). This amendment applies that lesson to the e2e gate BEFORE its bare-metal run rather than after.",
+  "P2_instrument_TWO_sided_unchanged": "pub2/pub1 of speedup_vs_reference within 0.967-1.032 on every clean cell. Identical code twice has no legitimate direction; any cell outside VOIDS the run before the gate is read. Per-sweep G1 self-pairs (1.00 +/- 0.05) and the drift-exclusion rules of the committed reducer apply unchanged.",
+  "P3_harm_bound_ONE_sided": "cap/pub1 of speedup_vs_reference >= 0.967 on EVERY clean cell, for fast_train and fast_train_dgrad. Higher speedup is better, so harm is the ratio falling BELOW the band floor; there is no upper bound, and a faster cap is compliant at any magnitude and is reported as observed, not claimed."
+ },
+
+ "secondary_observable_registered_not_graded": "The first-data-mode drift: on shared pods the `text` mode's reference self-pair blew G1 in every sweep of both runs (0.84-0.96) and worsened monotonically, while `random`, always second, stayed clean; a wall-clock GPU warm-up made it WORSE, falsifying the clock-recovery reading. PREDICTION, falsifiable: if the drift is CPU contention it vanishes on a whole machine (text self-pairs land inside G1); if it persists, it is a property of the driver's first mode -- likely host-side cache/allocator warm-up that contention only amplified -- and the harness needs a first-mode discard, not more warm-up. Either outcome is written down; neither voids the gate on its own (the G1 rule already handles a drifted cell by excluding it).",
+
+ "unchanged_from_the_original": "Arms, cells (text/random x offload 1/0), driver (e2e_train_arms.py, published wheels, two swapped files asserted in both directions), graded arms (fast_train, fast_train_dgrad), the committed reducer with --harm-bound-only extended to it, frozen-storage integrity rules, and the stop rule: the verdict is written into RESULTS-capturability.md verbatim -- pass, harm, VOID, or UNUSABLE -- with no post-hoc band adjustment and no re-runs for a better number.",
+
+ "what_a_pass_closes": "The scope prereg's e2e gate, on the hardware class it can actually be measured on. It does not convert any observed speedup into a claim, and it does not retroactively grade the two shared-pod runs."
+}
