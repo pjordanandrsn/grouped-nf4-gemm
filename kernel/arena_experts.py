@@ -90,6 +90,10 @@ class ArenaExpertSource:
         self._keepalive = [k for _mv, k in pairs]
         self._qd = qd
         self._pin = pin
+        # Per-segment host staging, allocated on first use and reused. Keyed by
+        # expert count because routing is top-k and that count is stable, so in
+        # steady state this allocates once. See `_staging`.
+        self._stage: dict = {}
 
     # -- geometry ---------------------------------------------------------
     @property
@@ -115,22 +119,72 @@ class ArenaExpertSource:
             t = t.view(dt)
         return t.reshape(*g["shape_per_expert"])
 
+    def _staging(self, n: int) -> dict:
+        """``{suffix: [n, length] uint8}`` host staging, PINNED when a device is
+        in play, allocated once per expert count and reused.
+
+        This is the `nvme_residency.segment_into` shape applied here: a
+        destination the reader's bytes are copied into ONCE, laid out so the
+        transfer to the device is a single contiguous DMA per segment.
+        """
+        got = self._stage.get(n)
+        if got is None:
+            want_pin = str(self.device) != "cpu" and torch.cuda.is_available()
+            got = {}
+            for s, g in self.segments.items():
+                t = torch.empty(n, g["length"], dtype=torch.uint8)
+                # Pinned only for a real H2D. `pin_memory()` on a CPU-target
+                # source buys nothing and costs page-locking.
+                got[s] = t.pin_memory() if want_pin else t
+            self._stage[n] = got
+        return got
+
     def fetch_raw(self, layer: int, expert_ids: Sequence[int]) -> dict:
         """``{suffix: [E, *shape_per_expert]}`` for the given experts, stacked
-        in the order given — the caller's routing order, not sorted."""
+        in the order given — the caller's routing order, not sorted.
+
+        One host copy per segment per expert, straight from the landing buffer
+        into pinned staging, then ONE transfer per segment. The previous form
+        copied every byte three times before the device saw it —
+        ``bytearray(mv[...])`` per segment (the landing buffer is reused, so a
+        copy is required, but it was a Python-level one), then ``torch.stack``,
+        then a pageable ``.to()``. Measured effect of that: **~0.72 GB/s
+        regardless of the device**, identical on a 6.88 and a 22.71 GB/s NVMe,
+        i.e. a host ceiling rather than a read limit (#73).
+
+        The transfer is **synchronous on purpose.** Staging is reused across
+        calls, and a `non_blocking=True` copy is not ordered against the *host*
+        writes of the next call — the CPU could overwrite staging while the DMA
+        is still reading it. Making it async needs an event recorded here and
+        waited on before the next reuse; it is not free correctness.
+        """
         # Routing hands ids as a device tensor; row_offset keys on plain ints,
         # and a 0-dim tensor key misses the map with an opaque KeyError.
         ids = [int(e) for e in expert_ids]
-        out = {s: [] for s in self.segments}
-        for base in range(0, len(ids), self._qd):
+        n = len(ids)
+        stage = self._staging(n)
+        for base in range(0, n, self._qd):
             chunk = ids[base:base + self._qd]
             futs = [self.reader.read_row(layer, e, self._landing[i])
                     for i, e in enumerate(chunk)]
             for i, f in enumerate(futs):
                 f.result()
-                for s in self.segments:
-                    out[s].append(self._slice(self._landing[i], s))
-        return {s: torch.stack(v).to(self.device) for s, v in out.items()}
+                # Aliases the landing buffer — no copy here. The copy_ below is
+                # the single one, and it must happen before this landing slot is
+                # reused by the next chunk, which the serial loop guarantees.
+                src = torch.frombuffer(self._landing[i], dtype=torch.uint8)
+                row = base + i
+                for s, g in self.segments.items():
+                    off, ln = g["seg_off"], g["length"]
+                    stage[s][row].copy_(src[off:off + ln])
+        out = {}
+        for s, g in self.segments.items():
+            t = stage[s].to(self.device)
+            dt = _torch_dtype(g["dtype"])
+            if dt is not torch.uint8:
+                t = t.view(dt)
+            out[s] = t.reshape(n, *g["shape_per_expert"])
+        return out
 
     def fused_stacks(self, layer: int, expert_ids: Sequence[int],
                      proj: str = "gate", *, raw: dict | None = None):
