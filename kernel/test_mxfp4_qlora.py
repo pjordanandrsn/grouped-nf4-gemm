@@ -131,6 +131,9 @@ def test_bf16_decode_equals_fp32_downcast():
 def test_apply_gate_matches_transformers():
     """Epilogue parity on shared inputs — interleaved split, clamps, alpha."""
     from types import SimpleNamespace
+    # `transformers` is not a dependency of this package (not even an extra);
+    # this test is parity against ITS reference, so skip where it is absent.
+    pytest.importorskip("transformers", reason="parity test needs transformers")
     from transformers.models.gpt_oss.modeling_gpt_oss import GptOssExperts
     cfg = SimpleNamespace(hidden_size=64, intermediate_size=64, num_local_experts=2)
     ref = GptOssExperts(cfg)

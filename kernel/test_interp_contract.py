@@ -21,6 +21,11 @@ os.environ.setdefault("TRITON_INTERPRET", "1")
 import pytest
 import torch
 
+# Interpreter mode IS a triton feature -- with no triton there is nothing to
+# interpret. triton is a Linux-only dependency here (see `_triton_shim`), so on
+# a platform without it this gate SKIPS rather than failing on a stub attribute.
+pytest.importorskip("triton", reason="interpreter mode needs triton (Linux-only dependency)")
+
 from nf4_grouped import (BLOCKSIZE, dequant_ref, gemm_4bit_grouped)
 from nf4_pack_ref import make_stack
 
