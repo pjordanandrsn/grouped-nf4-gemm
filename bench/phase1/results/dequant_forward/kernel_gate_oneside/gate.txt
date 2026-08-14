@@ -1,0 +1,32 @@
+=== cells present in all three sweeps: 4 ===
+
+=== per-cell gates (P1 premise, and the leg's own self-pair) ===
+  OLMoE-1B-7B-0924         down     busy(min) pub1=84% cap=86% pub2=84%  graded
+  OLMoE-1B-7B-0924         gate_up  busy(min) pub1=92% cap=94% pub2=92%  graded
+  Qwen3-30B-A3B            down     busy(min) pub1=65% cap=63% pub2=66%  graded
+  Qwen3-30B-A3B            gate_up  busy(min) pub1=86% cap=91% pub2=86%  graded
+
+--- P2 INSTRUMENT  pub2/pub1 of ms.g_a (same code twice) ---
+  OLMoE-1B-7B-0924         down     1.0035
+  OLMoE-1B-7B-0924         gate_up  1.0083
+  Qwen3-30B-A3B            down     1.0005
+  Qwen3-30B-A3B            gate_up  0.9928
+  median 1.0020   n=4
+
+--- P3 HARM BOUND  cap/pub1 of ms.g_a (one-sided: <= 1.032) ---
+  OLMoE-1B-7B-0924         down     0.8375   <-- OUTSIDE BAND
+  OLMoE-1B-7B-0924         gate_up  0.9327   <-- OUTSIDE BAND
+  Qwen3-30B-A3B            down     0.7328   <-- OUTSIDE BAND
+  Qwen3-30B-A3B            gate_up  0.8568   <-- OUTSIDE BAND
+  median 0.8471   n=4
+
+--- secondary, NOT graded: d_over_g cap/pub1 (partially cancels) ---
+  OLMoE-1B-7B-0924         down     1.0603   <-- OUTSIDE BAND
+  OLMoE-1B-7B-0924         gate_up  1.0581   <-- OUTSIDE BAND
+  Qwen3-30B-A3B            down     1.3118   <-- OUTSIDE BAND
+  Qwen3-30B-A3B            gate_up  1.1500   <-- OUTSIDE BAND
+  median 1.1051   n=4
+
+grading against: kernel/prereg_capturability_gate_oneside.json
+
+VERDICT: GATE PASSED — all 4 graded cells at or under the 1.032 harm bound (median 0.8471), instrument clean on all 4 (median 1.0020). Cells faster than 0.967 are reported as observed, NOT as a registered speedup claim. Does NOT close the e2e gate, which stays OPEN.

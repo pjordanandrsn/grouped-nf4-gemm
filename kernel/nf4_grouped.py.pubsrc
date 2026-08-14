@@ -26,8 +26,12 @@ from __future__ import annotations
 import os
 
 import torch
-import triton
-import triton.language as tl
+# ``triton`` is a Linux-only dependency (pyproject marks it
+# ``platform_system == 'Linux'``), so a supported macOS install has none and a
+# bare ``import triton`` here made the whole module unimportable there. The shim
+# binds the real thing when it exists — this file is unchanged below in that
+# case — and otherwise lets the kernels still DEFINE while a launch raises.
+from _triton_shim import tl, triton  # noqa: F401  (re-exported names)
 
 #: ``tl.gather`` arrived in triton 3.3. Bind it ONCE here rather than naming it
 #: inside a kernel, because triton's JIT walks the whole kernel AST to build its

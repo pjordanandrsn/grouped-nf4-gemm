@@ -21,9 +21,14 @@ not returned, the register is genuinely pre-data for the one number it grades.
 > A third gate, on a GPU-BOUND cell (§9), **worked as an instrument** —
 > same-code self-pair 2.3% where the e2e leg gave 11.2% — and measured the
 > change **6.5% FASTER** (median, 4 cells, none slower). Its registered band
-> was two-sided, so that reads as **GATE FAILED** and the stop rule says
-> revert. The band was mis-specified by me; it is not reinterpreted here.
-> This change does not merge on the strength of §§1–6 alone.
+> was two-sided, so that reads as **GATE FAILED**; the band was mis-specified
+> by me and is not reinterpreted.
+>
+> **The mis-specification was corrected the legitimate way: a one-sided
+> harm-bound re-registration, stamped pre-data, graded on a FRESH run (§10) —
+> GATE PASSED.** All 4 cells ≤ the 1.032 bound (median 0.8471, observed ~15%
+> faster, reported not claimed), instrument clean to 0.2%. §9's FAILED verdict
+> stands in the record beside it. **Throughput: verified not harmed.**
 
 [`FINDING-host-bound-small-batch.md`](FINDING-host-bound-small-batch.md)
 recorded a structural asymmetry: the dequant-on-forward baseline captures into a
@@ -440,6 +445,56 @@ capturability, and is 6.5% faster at a kernel-bound size on a clean instrument.
 Resolving that is an operator decision, and closing it cleanly needs a one-sided
 gate (*"must not be slower than the band"*) stamped pre-data and graded on a
 fresh run — not this run re-read under a rule written after seeing it.
+
+That gate is §10, and it was run.
+
+## 10 · The one-sided re-registration — GATE PASSED on a fresh run
+
+**RTX 4090 (sm_89), SECURE, 2026-08-14, 8.5 min, ~$0.10.** Grades
+[`kernel/prereg_capturability_gate_oneside.json`](../../../../kernel/prereg_capturability_gate_oneside.json)
+— written and OTS-stamped **before this run's data existed** (commit `ef0a8ba`),
+with the reducer's `--harm-bound-only` flag verified beforehand to reproduce
+§9's two-sided verdict unchanged without it. Receipts in
+[`kernel_gate_oneside/`](kernel_gate_oneside/). Design identical to §9; P3
+becomes the bound its purpose always was: **`cap/pub1` of the fused arm's own
+time ≤ 1.032 on every graded cell, no lower bound.** §9's `GATE FAILED` under
+the two-sided band is *not* re-graded and stands in the record beside this.
+
+Two things make this run stronger than a formality:
+
+* **`pub` is current `origin/main`** — the branch was rebased first, so the A/B
+  tests exactly the diff the PR merges, including upstream's `_triton_shim` on
+  both sides.
+* **It ran on a third card class for this gate family** (4090/sm_89, where §9
+  was A6000/sm_86), and the within-run design carries across unchanged.
+
+| | P1 (kernel-class) | P2 instrument (two-sided) | P3 harm bound (≤ 1.032) |
+|---|---|---|---|
+| OLMoE `gate_up` | ✓ | 1.0083 | 0.9327 |
+| OLMoE `down` | ✓ | 1.0035 | 0.8375 |
+| Qwen3-30B `gate_up` | ✓ | 0.9928 | 0.8568 |
+| Qwen3-30B `down` | ✓ | 1.0005 | **0.7328** |
+| median | — | **1.0020** | **0.8471** |
+
+**VERDICT: GATE PASSED** — every graded cell far under the harm bound, on an
+instrument whose same-code self-pair is clean to 0.2% at the median. The
+observed direction: `cap` is **15.3% faster at the median** on this card
+(**27% on Qwen3 `down`**), larger than §9's 6.5% on the A6000 — consistent with
+the sync-removal mechanism, since the faster card finishes its GPU work sooner
+and the ~8 removed `cudaStreamSynchronize` calls were a larger share of its
+step. The secondary `d_over_g` view agrees (median 1.105).
+
+**Per the registration, that speed is reported as observed, NOT claimed**: this
+gate can only certify absence of harm, and a registered speedup claim would need
+its own prereg with a predicted band. The e2e gate
+([`prereg_capturability_scope.json`](../../../../kernel/prereg_capturability_scope.json))
+stays OPEN — measured twice to be unadjudicable on shared rented pods — and
+nothing here closes it.
+
+**With §10 green, the throughput question for this branch is closed under a rule
+whose sidedness matches its registered purpose**: the change does not harm
+throughput at a kernel-bound size, on two card classes, with clean instruments,
+and every output bitwise identical.
 
 ## What this does not license
 
