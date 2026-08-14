@@ -132,6 +132,22 @@ No kernel source, no tiling constant, no dispatch threshold, no dtype moves.
   event recorded after the last hand-out has completed, so no slice is ever
   reused while a copy off it could still be in flight, and the several call sites
   inside one step each get distinct bytes.
+
+  **The arena must not grow inside a capture**, because growing means allocating
+  pinned memory in the region, which is the construct measured to fail in §2.
+  Inside a capture nothing completes, so the bump pointer never rewinds and one
+  capture consumes the *sum* of every call in it — a whole-model step is
+  hundreds of calls, not the handful a single-projection cell makes. The first
+  version of this fix sized the arena for the cell it was tested on, which would
+  have passed every test here and broken on a real step. It now defaults to
+  1 Mi int32 (4 MiB pinned, once per device) and **refuses to grow while
+  capturing, naming itself**, rather than producing the opaque error this whole
+  change exists to remove.
+
+  In practice the guard is a backstop and not the mechanism: warm-up runs
+  *outside* the capture, where growth is legal, so a real step has already sized
+  the arena before capture begins. That is also why the negative control below
+  has to hit the guard directly — a step-shaped control cannot reach it.
 * **`build_group_tiles`** — one transfer instead of three.
 * **`gemm_4bit_grouped` / `dgrad_4bit_grouped`** — a device tensor passes
   straight through; a list is converted **once, at the boundary**.
@@ -150,10 +166,17 @@ and async** (list form), **7 → 2** (device-tensor form).
 
 | gate | result |
 |---|---|
-| capture, shipped path, no probe patches | **5 / 5** — `G_base` and `G_full`, both `expert_ids` forms, and `D_base` still captures |
+| capture, shipped path, no probe patches | **6 / 6** — `G_base` and `G_full` in both `expert_ids` forms, a 48-call `G_stack`, and `D_base` still captures |
+| 48 fused+LoRA calls in ONE capture | **CAPTURED**, 144 pinned transfers, 0 hazards |
+| arena exhaustion guard (negative control) | **REFUSED BY NAME** — not an opaque capture error |
 | `pytest` compiled path | **145 passed** |
 | `pytest` interpreter contract (separate process) | **18 passed** |
 | bitwise A/B, pre-change vs post-change | **26 / 26 tensors bit-identical** |
+
+`G_stack` exists because the single-projection cells the original probe used
+cannot distinguish an arena sized for a cell from one sized for a step. It runs
+48 fused+LoRA calls inside one capture — a large model's layer count, and still a
+floor, since a real step makes two or three projection calls per layer.
 
 The A/B ([`ab_capturability_bitexact.py`](../../ab_capturability_bitexact.py))
 covers both `expert_ids` forms across `gemm_4bit_grouped`, `dgrad_4bit_grouped`,

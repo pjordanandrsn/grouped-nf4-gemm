@@ -126,12 +126,28 @@ class _PinnedIndexArena:
     replay the values it was captured with.
 
     Growth keeps the old arena alive rather than freeing it, for the same
-    reason. Arenas are a few kilobytes; the default holds 4096 int32.
+    reason.
+
+    THE ARENA MUST NOT GROW DURING A CAPTURE, and that is why the default is
+    generous. Inside a capture nothing completes, so the bump pointer never
+    rewinds and one capture consumes the SUM of every call in it -- a whole-model
+    step is hundreds of calls, not the handful a single-projection cell makes.
+    Growing would allocate pinned memory inside the region, which is measured to
+    break capture (the `pin_inside_then_to` row above). So growth is refused
+    while capturing, with a named error, rather than producing the opaque
+    "previous error during capture" this whole change exists to eliminate.
+
+    The default holds 1 Mi int32 = 4 MiB of pinned host memory, allocated once
+    per device on first use. That is enough for a very large model step; raise it
+    with ``GNF4_PIN_ARENA_INTS`` if a capture ever reports exhaustion.
     """
 
-    def __init__(self, device, n: int = 4096):
+    DEFAULT_INTS = int(os.environ.get("GNF4_PIN_ARENA_INTS", 1 << 20))
+
+    def __init__(self, device, n: int | None = None):
         self.device = device
-        self.host = torch.empty(n, dtype=torch.int32, pin_memory=True)
+        self.host = torch.empty(n or self.DEFAULT_INTS, dtype=torch.int32,
+                                pin_memory=True)
         self.off = 0
         self.evt = torch.cuda.Event()
         self._retired: list = []
@@ -148,6 +164,17 @@ class _PinnedIndexArena:
         if not capturing and self.off and self.evt.query():
             self.off = 0
         if self.off + n > self.host.numel():
+            if capturing:
+                raise RuntimeError(
+                    "grouped-nf4: the pinned index arena (%d int32) was exhausted "
+                    "%d ints into a CUDA graph capture. Growing it here would "
+                    "allocate pinned memory inside the capture region, which is "
+                    "not capturable — so this refuses instead of failing later "
+                    "with an opaque 'previous error during capture'. Set "
+                    "GNF4_PIN_ARENA_INTS to at least %d and re-run; the arena is "
+                    "int32, so that is %.1f MiB of pinned host memory."
+                    % (self.host.numel(), self.off, 2 * (self.off + n),
+                       2 * (self.off + n) * 4 / 2**20))
             self._retired.append(self.host)          # may still be in flight
             self.host = torch.empty(max(2 * self.host.numel(), self.off + n),
                                     dtype=torch.int32, pin_memory=True)

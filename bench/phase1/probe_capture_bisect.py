@@ -83,6 +83,10 @@ import harness as H  # noqa: E402
 
 RANK = 16
 PATCHES = ("ctx", "gemm", "tiles", "dgrad")
+# Fused calls per step in the `G_stack` arm. 48 is a large model's layer count;
+# a real step makes 2-3 projection calls per layer on top of that, so this is a
+# floor on how many index transfers one capture has to hold, not a ceiling.
+STACK_CALLS = 48
 
 
 # ------------------------------------------------------------------ removals
@@ -327,6 +331,26 @@ def build_step(arm, eids_form, spec, regime, device="cuda"):
         d = lora_delta_grouped(a_cat, lora_A, lora_B, sizes, eids_list, 1.0)
         (out + d.to(out.dtype)).float().pow(2).mean().backward()
 
+    def g_stack():
+        """MANY calls in one captured step — the shape a whole-model step has.
+
+        REGRESSION TEST for the pinned arena's sizing. Inside a capture nothing
+        completes, so the arena's bump pointer never rewinds and one capture
+        consumes the SUM of every call in it. A single-projection cell needs a
+        few dozen int32 and would pass with an arena far too small to survive a
+        real step; this makes the difference visible. Growing the arena mid-
+        capture is itself uncapturable, which is why the arena refuses to and
+        says so by name."""
+        zero_inplace()
+        acc = None
+        for _ in range(STACK_CALLS):
+            o = gemm_4bit_grouped_train(a_cat, B_pack, A_scale, sizes, eids,
+                                        dgrad_kernel=True)
+            d = lora_delta_grouped(a_cat, lora_A, lora_B, sizes, eids_list, 1.0)
+            o = o + d.to(o.dtype)
+            acc = o if acc is None else acc + o
+        acc.float().pow(2).mean().backward()
+
     def d_base():
         zero_inplace()
         outs, row = [], 0
@@ -338,12 +362,56 @@ def build_step(arm, eids_form, spec, regime, device="cuda"):
             row += n
         torch.cat(outs).float().pow(2).mean().backward()
 
-    step = {"G_base": g_base, "G_full": g_full, "D_base": d_base}[arm]
+    step = {"G_base": g_base, "G_full": g_full, "D_base": d_base,
+            "G_stack": g_stack}[arm]
     return step, {"groups": len(groups), "rows": a_cat.shape[0],
-                  "sizes_max": max(sizes)}
+                  "sizes_max": max(sizes),
+                  "calls_per_step": STACK_CALLS if arm == "G_stack" else 1}
+
+
+def arena_guard_control():
+    """NEGATIVE CONTROL for the pinned arena's exhaustion guard.
+
+    Growing the arena inside a capture would allocate pinned memory in the
+    region, which is measured NOT to be capturable, so the arena refuses and
+    names itself. This asserts the refusal directly rather than trying to
+    starve the arena through a real step: warm-up runs OUTSIDE the capture,
+    where growth is legal, so by capture time a real step has already sized the
+    arena it needs. That is the behaviour we want and it is exactly why a
+    step-shaped control cannot reach the guard — the guard is a backstop, and a
+    backstop has to be tested directly.
+    """
+    import nf4_grouped as NG
+
+    dev = torch.device("cuda")
+    ar = NG._arena(dev)
+    cap = ar.host.numel()
+    torch.ones(8, device=dev).sum().item()      # context warm, nothing in flight
+    g = torch.cuda.CUDAGraph()
+    note, fired = "", False
+    try:
+        with torch.cuda.graph(g):
+            NG.to_device_i32((list(range(cap + 16)),), dev)
+    except RuntimeError as e:
+        note, fired = str(e)[:300], "pinned index arena" in str(e)
+    except Exception as e:
+        note = f"{type(e).__name__}: {str(e)[:260]}"
+    print("RESULT " + json.dumps({
+        "arm": "arena_guard", "eids_form": "-", "patches": [],
+        "captured": False, "note": note or "NO EXCEPTION RAISED",
+        "arena_capacity_ints": cap, "requested_ints": cap + 16,
+        "guard_fired_by_name": fired,
+        "census_warm": {}, "census_cold": {}, "census_selftest": {}}))
 
 
 def run_one(model, regime, proj, arm, eids_form, patch_csv):
+    if arm == "arena_guard":
+        return arena_guard_control()
+    # `<patches>:tinyarena` is a NEGATIVE CONTROL, not a patch: the parent sets
+    # GNF4_PIN_ARENA_INTS in the child's environment so the arena cannot hold
+    # the step, and the expected outcome is a refusal naming the arena rather
+    # than an opaque capture error.
+    patch_csv = patch_csv.split(":")[0]
     names = [] if patch_csv in ("", "none") else patch_csv.split(",")
     for n in names:
         if n not in PATCHES:
@@ -419,6 +487,10 @@ SHIPPED = [
     ("G_base", "devtensor", "none", "shipped fused path, eids as a device tensor"),
     ("G_full", "list", "none", "shipped + LoRA delta, eids as a list"),
     ("G_full", "devtensor", "none", "shipped + LoRA delta, eids as a device tensor"),
+    ("G_stack", "devtensor", "none",
+     f"{STACK_CALLS} fused+LoRA calls in ONE capture (arena sizing)"),
+    ("arena_guard", "-", "none:negctl",
+     "NEGATIVE CONTROL — over-size request inside a capture must refuse BY NAME"),
 ]
 
 
@@ -463,11 +535,15 @@ def main():
     print(f"{out['gpu']}  torch {out['torch']}  triton {out['triton']}  "
           f"{args.model} {args.proj} {args.regime}\n")
     for arm, form, patches, why in ladder:
+        tiny = patches.endswith(":negctl")
+        env = {**os.environ, "DQF_REPO": str(_ROOT)}
+        if tiny:
+            # Small arena so the over-size request is cheap to build.
+            env["GNF4_PIN_ARENA_INTS"] = "256"
         p = subprocess.run(
             [sys.executable, __file__, "--child", args.model, args.regime,
              args.proj, arm, form, patches],
-            capture_output=True, text=True, timeout=1800,
-            env={**os.environ, "DQF_REPO": str(_ROOT)})
+            capture_output=True, text=True, timeout=1800, env=env)
         res = None
         for line in p.stdout.splitlines():
             if line.startswith("RESULT "):
@@ -479,12 +555,19 @@ def main():
                    "note": "child died: " + (tail[-1][:250] if tail else
                                              f"rc={p.returncode}")}
         res["why"] = why
+        if tiny:
+            # PASS here means "refused, by name". Anything else means the guard
+            # did not fire and a real exhaustion would die the opaque way.
+            res["negative_control_passed"] = bool(res.get("guard_fired_by_name"))
+            res["verdict"] = ("REFUSED BY NAME" if res["negative_control_passed"]
+                              else "GUARD DID NOT FIRE")
         out["attempts"].append(res)
         art.write_text(json.dumps(out, indent=1, default=str))
         cen = res.get("census_warm", {})
         print("%-7s %-10s %-22s %s  %s" % (
             res["arm"], res["eids_form"], patches,
-            "CAPTURED" if res["captured"] else "FAIL    ", why))
+            res["verdict"] if tiny else
+            ("CAPTURED" if res["captured"] else "FAIL    "), why))
         print("        warm hazards: %-44s syncs: %s   (legal pinned H2D: %s)" % (
             ",".join(cen.get("h2d_sites") or []) or "-", cen.get("syncs", "?"),
             cen.get("legal_h2d_calls", "?")))
@@ -503,11 +586,18 @@ def main():
         print("!! POSITIVE CONTROL FAILED — D_base did not capture. Every FAIL "
               "above is uninterpretable; fix the instrument first.")
     if args.mode == "shipped":
-        bad = [a for a in out["attempts"] if not a["captured"]]
+        pos = [a for a in out["attempts"] if "negative_control_passed" not in a]
+        neg = [a for a in out["attempts"] if "negative_control_passed" in a]
+        bad = [a for a in pos if not a["captured"]]
         print("SHIPPED VERDICT: %d/%d captured%s" % (
-            len(out["attempts"]) - len(bad), len(out["attempts"]),
+            len(pos) - len(bad), len(pos),
             "" if not bad else "  — STILL FAILING: " + ", ".join(
                 f"{a['arm']}({a['eids_form']})" for a in bad)))
+        for a in neg:
+            print("NEGATIVE CONTROL: %s — %s" % (
+                a["verdict"], "as expected" if a["negative_control_passed"]
+                else "the arena guard did not fire; a too-small arena would "
+                     "fail the opaque way instead"))
     print("CAPTURE_BISECT_DONE  ->", art)
 
 
