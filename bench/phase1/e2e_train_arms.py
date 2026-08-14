@@ -212,15 +212,23 @@ class RoutingTap:
 
 
 # ----------------------------------------------------------------- arm -----
-def busy_fraction(model, opt, ids, m=8):
+def busy_fraction(model, opt, ids, m=3):
     """GPU-busy fraction of a real training step (C4), measured on this arm.
 
     Same definition as everywhere else in the harness -- summed CUDA kernel
     self-time per step over wall per step, back to back, no syncs between steps.
-    Cheap here (8 steps) because an e2e step is ~100x a microbench cell.
 
     Kept OUT of the timed loop: it runs after the timed steps, on one batch, so
     the profiler never touches the number the prereg grades.
+
+    BUDGET THIS. It costs `2 + 2m` steps per arm, and an e2e step is seconds,
+    not the milliseconds a microbench cell takes. At m=8 it added ~75% to the
+    step count of every arm -- 1080 extra steps across a three-sweep gate run --
+    and that overrun is what cost the 2026-08-14 capturability gate its final
+    sweep and left the run UNUSABLE. The fractions it produces are stable to the
+    percent (53/53, 34/34 across arms on the L40S), so m=3 buys the same label
+    at a third of the cost. Raise it with --busy-steps if a cell is borderline
+    against the 50% bar; do not raise it by default.
     """
     from torch.profiler import ProfilerActivity, profile
 
@@ -253,7 +261,7 @@ def busy_fraction(model, opt, ids, m=8):
 
 
 def run_arm(model, arm, batches, lr, enable, disable, warmup, tap_E,
-            measure_busy=True):
+            measure_busy=True, busy_steps=3):
     torch.cuda.empty_cache()
     torch.cuda.synchronize()
     resident = torch.cuda.memory_allocated()          # decomposition baseline
@@ -291,7 +299,8 @@ def run_arm(model, arm, batches, lr, enable, disable, warmup, tap_E,
     steady = per_step[warmup:] or per_step
     peak = torch.cuda.max_memory_allocated()
     # AFTER the timed steps and after peak is read, so neither is perturbed.
-    busy = busy_fraction(model, opt, batches[0]) if measure_busy else None
+    busy = (busy_fraction(model, opt, batches[0], busy_steps)
+            if measure_busy and busy_steps else None)
     if disable:
         disable(model)
     return dict(
@@ -328,6 +337,11 @@ def main():
     # content-independence, and `both` still runs the matched pair, but a run
     # that says nothing about its fixture now gets prose.
     ap.add_argument("--data", default="text", choices=["text", "random", "both"])
+    ap.add_argument("--busy-steps", type=int, default=3,
+                    help="profiled steps per arm for the GPU-busy label (C4). "
+                         "Costs 2+2N steps per arm; 0 disables it and the cell "
+                         "is then measurement_class=unknown, which is NOT "
+                         "'kernel'.")
     ap.add_argument("--out", default=os.environ.get("DQF_OUT", "/root/dqf-out"))
     ap.add_argument("--tag", default="e2e")
     a = ap.parse_args()
@@ -432,7 +446,8 @@ def main():
             restore(model, base_snap)
             print(f"--- arm {name} ({mode}) ---", flush=True)
             try:
-                res, g = run_arm(model, name, batches, a.lr, en, dis, a.warmup, n_exp)
+                res, g = run_arm(model, name, batches, a.lr, en, dis, a.warmup, n_exp,
+                                 busy_steps=a.busy_steps)
             except Exception as exc:
                 print(f"arm {name} FAILED: {type(exc).__name__}: {exc}", flush=True)
                 results[name] = dict(arm=name, failed=f"{type(exc).__name__}: {str(exc)[:300]}")

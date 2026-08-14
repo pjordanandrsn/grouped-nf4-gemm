@@ -53,12 +53,23 @@ def load(evid: Path, label: str):
         except Exception as e:
             problems.append(f"{p.name}: {type(e).__name__}: {e}")
             continue
+        # `frozen_changed` is a COUNT, and it is only meaningful when the driver
+        # says so. Under expert offload the weights are staged and `.data` is
+        # reassigned, so the receipt sets integrity_applicable=False /
+        # frozen_check_vacuous=True and the count reads a constant 2 in every
+        # arm of every sweep -- a property of offload, not of any arm. Reading it
+        # as a boolean failure flagged 30 healthy cells; the resident cells,
+        # where the check IS applicable, read 0 everywhere including `cap`.
+        applicable = bool(d.get("integrity_applicable")) and not d.get(
+            "frozen_check_vacuous")
         for mode, arms in (d.get("cells") or {}).items():
             for name, r in arms.items():
                 if r.get("INVALID_no_modules_patched"):
                     problems.append(f"{label}/{mode}/{name}: patched 0 modules")
-                if r.get("frozen_changed"):
-                    problems.append(f"{label}/{mode}/{name}: frozen bytes CHANGED")
+                if applicable and r.get("frozen_changed"):
+                    problems.append(
+                        f"{label}/{mode}/{name}: frozen bytes CHANGED "
+                        f"({r['frozen_changed']} tensors, check IS applicable)")
                 if name in ARMS and r.get("speedup_vs_reference"):
                     speed[(mode, off, name)] = r["speedup_vs_reference"]
             sp = (arms.get("reference_selfpair") or {}).get("speedup_vs_reference")

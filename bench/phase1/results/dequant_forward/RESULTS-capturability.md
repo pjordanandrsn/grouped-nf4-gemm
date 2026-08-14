@@ -11,6 +11,11 @@ not returned, the register is genuinely pre-data for the one number it grades.
 > **CAPTURABILITY IS A PRECONDITION, NOT A SPEEDUP.** Nothing in this document
 > is a performance claim, and capture success must not be reported as one. See
 > [What this does not license](#what-this-does-not-license).
+>
+> **STATUS: capture-verified, correctness-verified, NOT throughput-verified.**
+> The registered regression gate ran on an L40S and returned **UNUSABLE** — it
+> did not close. §7 says why, and this change does not merge on the strength of
+> §§1–6 alone.
 
 [`FINDING-host-bound-small-batch.md`](FINDING-host-bound-small-batch.md)
 recorded a structural asymmetry: the dequant-on-forward baseline captures into a
@@ -189,18 +194,89 @@ values, and the `_PAD_WASTE_LIMIT` skew fallback. `torch.equal`, not a
 tolerance: this change may move no value, so a tolerance would hide exactly the
 mistake it could make.
 
-## 7 · Still open — the throughput regression gate
+## 7 · The throughput regression gate — RAN, and did NOT CLOSE
 
-**The registered hard gate is NOT yet met.** `fast_train` and `fast_train_dgrad`
-must reproduce their measured e2e ratios within the registered self-pair band
-**0.967–1.032** on at least one device before this merges. That is a *timing*
-measurement, and the A2000 is a correctness testbed on which no timing claim can
-be made, so it needs a rented card. Until it runs, this work is
-**capture-verified and correctness-verified, not throughput-verified.**
+**RTX L40S (sm_89), SECURE on-demand, 2026-08-14 · torch 2.8.0+cu128 · e4b
+0.18.0 published wheel · OLMoE-1B-7B-0924, seq 512, 24 steps/arm, 4 dropped ·
+$2.42 billed.** Reduced by
+[`reduce_capturability_gate.py`](../../reduce_capturability_gate.py); receipts in
+[`capturability_gate/`](capturability_gate/).
 
-The change should be neutral-to-positive — it strictly removes transfers and
-syncs — but "should be" is not a measurement, and a capturability fix that costs
-throughput is not a fix.
+Three sweeps on ONE card in one session — `pub1` (published wheel) → `cap` (the
+same wheel with only `nf4_grouped.py` and `nf4_qlora.py` replaced) → `pub2`
+(published restored). The swap is asserted in both directions off a symbol that
+exists only in the changed file, so the A/B cannot silently compare the wheel
+against itself. **`pub2/pub1` is the instrument's own self-pair** and it spans
+the *whole* run, where `cap/pub1` spans half — so it is a conservative bound on
+drift, and it is checked before the gate is read.
+
+### VERDICT: UNUSABLE — this run cannot grade the change
+
+Not a pass and not a fail. Three things stacked up:
+
+1. **`pub2` offload=0 was truncated** by the puller's 140-minute deadline
+   mid-`random`, so the instrument comparison covers 6 of 8 cells.
+2. **Every `text` cell drifted, in all three sweeps**, blowing the e2e prereg's
+   own G1 band (1.00 ± 0.05) — and *monotonically worsening* across the run:
+
+   | sweep | text, offload=1 | text, offload=0 |
+   |---|---:|---:|
+   | pub1 | 0.9564 | 0.9047 |
+   | cap  | 0.9353 | 0.9271 |
+   | pub2 | **0.8926** | **0.8778** |
+
+   `random` — which runs *second* in every sweep — is clean throughout
+   (1.0010–1.0453). That position dependence is this program's own
+   **clock-recovery law**: the first timed cell after a fixture build reads the
+   card boosting back up. `--warmup 4` drops steps per *arm*; there is no
+   wall-clock warm-up before the *first* arm. Those cells are excluded by a rule
+   that already existed, not by one invented here.
+3. That leaves **2 clean instrument-vouched arm-cells** (`random`, offload=1),
+   where the instrument resolves ±1.5% (0.9869 / 1.0157) but the two arms
+   disagree by **8%** (`fast_train` 1.0594, `fast_train_dgrad` 0.9801). A
+   uniform call-path change moves both arms the same way. Two cells that
+   disagree by more than the instrument's noise do not grade anything.
+
+**Direction of the unclosed evidence, stated because withholding it would be
+selective:** across the four non-drifted cells the gate median is **1.0424** —
+`cap` reads *faster*, and no cell reads slower than 0.9801. Nothing here
+suggests a regression. **That is not a claim of a speedup**: the band exists
+precisely to stop a directional read from four cells with an incomplete
+instrument, and a fix that "looks fine" is not a fix that passed.
+
+### What DID pass, cleanly
+
+**Frozen-storage integrity, on every resident cell of every sweep including
+`cap`: 32 tensors hashed, `frozen_changed = 0`.** The check is applicable there
+(`integrity_applicable: true`, non-vacuous), so this is a real result: **the
+change does not mutate frozen quantized bytes.** Under offload the driver marks
+the check vacuous and the count reads a constant 2 in `pub1`, `cap` and `pub2`
+alike — a property of offload staging, not of any arm.
+
+**The leg replicates.** `pub1` text/resident `fast_train_dgrad` reads **4.582**
+against the published 4.504 (4090) and 4.746 (H100) — a third architecture and
+two e4b minor versions later.
+
+### Two errors of mine this run caught
+
+1. **The reducer read `frozen_changed` as a boolean when it is a COUNT**, and
+   flagged 30 healthy offload cells as integrity failures. The receipt carries
+   `integrity_applicable` for exactly this reason and the first version ignored
+   it. A gate that cries wolf on healthy cells is as bad as one that passes sick
+   ones.
+2. **The GPU-busy probe's cost was never budgeted, and it cost this run its last
+   sweep.** At `m=8` it added `2+2m = 18` steps per arm — ~1080 extra steps
+   across three sweeps, roughly 23 minutes — on a run that then missed its
+   deadline by less than that. The fractions are stable to the percent, so the
+   default is now `m=3` with `--busy-steps` to raise it. **C4 is not free, and
+   the leg that folds it in has to pay for it in its wall-clock budget.**
+
+### What would close it
+
+One more card, with: `--busy-steps 3` (already the default), a wall-clock
+warm-up before the first arm so the first mode is not measuring clock recovery,
+and a deadline sized for three full sweeps. The two changes are in the harness;
+the run is not, and this document does not claim the gate as met until it is.
 
 ## What this does not license
 
