@@ -201,3 +201,84 @@ def test_unknown_segment_names_what_is_present(arena):
     _path, index = arena
     with pytest.raises(KeyError, match="not in this arena"):
         segment_geometry(index, "nf4.nope")
+
+
+# ------------------------------------------- V4's own dtype labels
+# Lives here, not in test_nvme_residency.py, because that file is allowlisted
+# "needs CUDA" in test_packaging_covers_kernel._NOT_IN_CI and so is never
+# invoked by ci.yml — a regression test parked there could not fail. This file
+# is in CI and is the staging seam that actually broke.
+def _relabel(index, dtype, match="scale"):
+    """A copy of `index` with the matching segments labelled `dtype`.
+
+    Relabelling rather than re-baking is the point: the BYTES are identical and
+    only the safetensors tag differs, which is exactly the difference between a
+    DeepSeek-V4 checkpoint and a Kimi K3 one.
+    """
+    import copy
+    out = copy.deepcopy(index)
+    for g in out["segments"]:
+        if match in g["suffix"]:
+            g["dtype"] = dtype
+    return out
+
+
+def test_segment_geometry_reads_v4s_f8_e8m0_scale_label(arena):
+    """DeepSeek-V4 labels its MXFP4 scales `F8_E8M0`; Kimi K3 labels them `U8`.
+
+    Same bytes, different tag. `_ST_TO_TORCH` knew only the K3 spelling, so a
+    real V4 arena raised `KeyError: 'F8_E8M0'` here — after the 149 GB download
+    and the 147 GB bake that produced it. `nvme_bake_nf4` accepts the tag and
+    `mxfp4_residency` serves from it, so this table was the only thing in the way.
+    """
+    path, index = arena
+    v4 = _relabel(index, "F8_E8M0")
+    assert any(g["dtype"] == "F8_E8M0" for g in v4["segments"]), "relabel did nothing"
+    for g in v4["segments"]:
+        dt, shape, off, ln = segment_geometry(v4, g["suffix"])
+        if g["dtype"] == "F8_E8M0":
+            assert dt is torch.uint8, f"{g['suffix']}: e8m0 must read back as bytes, got {dt}"
+        assert shape == tuple(g["shape_per_expert"])
+    # A relabel must not move a byte: everything but the dtype is unchanged.
+    for g, h in zip(index["segments"], v4["segments"]):
+        assert segment_geometry(index, g["suffix"])[1:] == segment_geometry(v4, h["suffix"])[1:]
+
+
+def test_v4_labelled_segments_still_read_the_same_bytes(arena):
+    """The tag must change the DTYPE and nothing else.
+
+    `segment_tensor` on a relabelled index has to return the identical bytes it
+    returns for the `U8` spelling — reinterpreted, never converted. A mapping to
+    `float8_e8m0fnu` would satisfy the KeyError and fail this.
+    """
+    path, index = arena
+    v4 = _relabel(index, "F8_E8M0")
+    suffix = next(g["suffix"] for g in v4["segments"] if g["dtype"] == "F8_E8M0")
+    with _tier(path, index) as t:
+        a = segment_tensor(t, index, 0, PICK, suffix)
+    with _tier(path, v4) as t:
+        b = segment_tensor(t, v4, 0, PICK, suffix)
+    assert a.dtype == b.dtype == torch.uint8
+    assert torch.equal(a, b), "relabelling the dtype tag changed the bytes"
+
+
+def test_the_byte_dtype_tables_do_not_drift_apart():
+    """The root cause was three tables and only two of them kept current.
+
+    `mxfp4_residency._PACKED_BYTE_DTYPES` and `nvme_bake_nf4._MXFP4_BYTE_DTYPES`
+    both listed `F8_E8M0`; `_ST_TO_TORCH` did not — so an arena this package can
+    bake and serve could not be staged. Containment, not a fixed set, so adding a
+    tag in either of those places fails here until it is added here too.
+    """
+    from nvme_residency import _ST_TO_TORCH
+    missing = []
+    for mod, name in (("mxfp4_residency", "_PACKED_BYTE_DTYPES"),
+                      ("nvme_bake_nf4", "_MXFP4_BYTE_DTYPES")):
+        try:
+            tags = getattr(__import__(mod), name)
+        except Exception:                                  # pragma: no cover
+            continue
+        missing += [f"{mod}.{name}:{d}" for d in tags if d not in _ST_TO_TORCH]
+    assert not missing, (
+        "these dtype tags are accepted elsewhere in the package but cannot be read "
+        f"back by segment_geometry/segment_tensor: {sorted(set(missing))}")
