@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.13.0 — 2026-08-14
 
 ### The fused training path can now be CUDA-graphed — five hazards, three never named
 
