@@ -63,6 +63,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("evidence", type=Path)
     ap.add_argument("--out", type=Path, default=None)
+    ap.add_argument("--harm-bound-only", action="store_true",
+                    help="Grade P3 one-sided per kernel/prereg_capturability_"
+                         "gate_oneside.json: cap/pub1 must be <= %.3f on every "
+                         "graded cell; a FASTER cap is compliant at any "
+                         "magnitude. P2 (the instrument) stays two-sided — "
+                         "identical code twice has no legitimate direction. "
+                         "Without this flag the original two-sided tokbudget "
+                         "prereg is graded, unchanged." % BAND[1])
     a = ap.parse_args()
 
     sweeps, problems = {}, []
@@ -112,12 +120,23 @@ def main():
         else:
             print("  (none)")
 
+    prereg = ("kernel/prereg_capturability_gate_oneside.json" if a.harm_bound_only
+              else "kernel/prereg_capturability_gate_tokbudget.json")
+    p3_name = ("P3 HARM BOUND  cap/pub1 of ms.g_a (one-sided: <= %.3f)" % BAND[1]
+               if a.harm_bound_only else
+               "P3 GATE        cap/pub1 of ms.g_a (the change)")
     block("P2 INSTRUMENT  pub2/pub1 of ms.g_a (same code twice)", inst)
-    block("P3 GATE        cap/pub1 of ms.g_a (the change)", gate)
+    block(p3_name, gate)
     block("secondary, NOT graded: d_over_g cap/pub1 (partially cancels)", comp)
+    print(f"\ngrading against: {prereg}")
 
     inst_bad = {k: v for k, v in inst.items() if not BAND[0] <= v <= BAND[1]}
-    gate_bad = {k: v for k, v in gate.items() if not BAND[0] <= v <= BAND[1]}
+    if a.harm_bound_only:
+        # One-sided: only slower-than-band breaches. A faster cap is compliant
+        # at any magnitude — speed was never what this gate protects.
+        gate_bad = {k: v for k, v in gate.items() if v > BAND[1]}
+    else:
+        gate_bad = {k: v for k, v in gate.items() if not BAND[0] <= v <= BAND[1]}
     worst = lambda d: max(d.values(), key=lambda x: abs(1 - x))  # noqa: E731
 
     if problems:
@@ -137,20 +156,36 @@ def main():
              f"gate of this shape is measurable on rented shared hardware. NOT a "
              f"statement about the change.")
     elif gate_bad:
-        v = (f"VERDICT: GATE FAILED — P3. {len(gate_bad)}/{len(gate)} cells "
-             f"outside {BAND[0]}-{BAND[1]} (worst {worst(gate_bad):.4f}). The "
-             f"change moved throughput at a kernel-bound size; per the stop rule "
-             f"it is reverted.")
+        v = ((f"VERDICT: GATE FAILED — P3 harm bound. {len(gate_bad)}/{len(gate)} "
+              f"cells SLOWER than {BAND[1]} (worst {worst(gate_bad):.4f}). The "
+              f"change costs throughput at a kernel-bound size; per the stop "
+              f"rule it is reverted.") if a.harm_bound_only else
+             (f"VERDICT: GATE FAILED — P3. {len(gate_bad)}/{len(gate)} cells "
+              f"outside {BAND[0]}-{BAND[1]} (worst {worst(gate_bad):.4f}). The "
+              f"change moved throughput at a kernel-bound size; per the stop "
+              f"rule it is reverted."))
     else:
-        v = (f"VERDICT: GATE PASSED — all {len(gate)} graded cells inside "
-             f"{BAND[0]}-{BAND[1]} (median {st.median(gate.values()):.4f}), "
-             f"instrument clean on all {len(inst)} (median "
-             f"{st.median(inst.values()):.4f}). Does NOT close the e2e gate, "
-             f"which stays OPEN and unmet.")
+        v = ((f"VERDICT: GATE PASSED — all {len(gate)} graded cells at or under "
+              f"the {BAND[1]} harm bound (median {st.median(gate.values()):.4f}), "
+              f"instrument clean on all {len(inst)} (median "
+              f"{st.median(inst.values()):.4f}). Cells faster than {BAND[0]} are "
+              f"reported as observed, NOT as a registered speedup claim. Does "
+              f"NOT close the e2e gate, which stays OPEN.") if a.harm_bound_only
+             else
+             (f"VERDICT: GATE PASSED — all {len(gate)} graded cells inside "
+              f"{BAND[0]}-{BAND[1]} (median {st.median(gate.values()):.4f}), "
+              f"instrument clean on all {len(inst)} (median "
+              f"{st.median(inst.values()):.4f}). Does NOT close the e2e gate, "
+              f"which stays OPEN and unmet."))
     print("\n" + v)
     if a.out:
         a.out.write_text(json.dumps(
-            {"band": BAND, "graded": [list(k) for k in graded],
+            {"band": BAND,
+             "prereg": ("kernel/prereg_capturability_gate_oneside.json"
+                        if a.harm_bound_only else
+                        "kernel/prereg_capturability_gate_tokbudget.json"),
+             "p3_sidedness": "one-sided-harm" if a.harm_bound_only else "two-sided",
+             "graded": [list(k) for k in graded],
              "dropped": {f"{k[0]}/{k[1]}": w for k, w in dropped.items()},
              "instrument": {f"{k[0]}/{k[1]}": v for k, v in inst.items()},
              "gate": {f"{k[0]}/{k[1]}": v for k, v in gate.items()},

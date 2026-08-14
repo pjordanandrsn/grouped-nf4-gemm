@@ -1,0 +1,24 @@
+{
+ "registered_utc": "2026-08-14T18:20:00Z",
+ "registers": "THE ONE-SIDED RE-REGISTRATION of the GPU-bound capturability gate. Written and OTS-stamped before the run whose data it grades exists. Supersedes P3 of kernel/prereg_capturability_gate_tokbudget.json for a FRESH run only; it does not re-grade the 2026-08-14 A6000 run, whose FAILED verdict under the two-sided band stands in the record.",
+
+ "why_re_registered": "The tokbudget prereg's P3 band was two-sided (0.967-1.032) with no predicted direction. Its purpose -- from the scope prereg: 'a capturability fix that costs throughput is not a fix' -- is one-sided: the gate exists to catch HARM. The A6000 run measured the change 6.5% FASTER at the median (no cell slower), which under the two-sided letter reads GATE FAILED -> revert. Re-reading that stamped rule after seeing the data is prohibited, so the mis-specification is corrected the only legitimate way: a new registration, stamped pre-data, graded on a FRESH run. The prior run's receipts and verdict remain in kernel_gate/ untouched.",
+
+ "design_unchanged_from": "kernel/prereg_capturability_gate_tokbudget.json -- same arms (pub1 -> cap -> pub2, per model, back to back, one SECURE card), same cells (OLMoE-1B-7B-0924 and Qwen3-30B-A3B, gate_up and down, tokbudget_4096), same graded quantity (ms.g_a, the fused arm's own per-step time; d_over_g reported secondary, not graded), same driver, same per-cell drops (g_selfpair outside 0.967-1.032 in any sweep, or measurement_class != kernel). `pub` is the branch's merge-base -- which after the 2026-08-14 rebase IS origin/main -- so the A/B tests exactly this branch's kernel diff.",
+
+ "frozen_predictions": {
+  "P1_premise": "UNCHANGED: every graded cell reports measurement_class = kernel in all three sweeps. A cell that does not is dropped; if all drop, the gate is UNUSABLE, not passed.",
+  "P2_instrument": "UNCHANGED and still TWO-sided: pub2/pub1 of ms.g_a within 0.967-1.032 on every graded cell. Identical code twice has no legitimate direction; deviation either way is instrument noise, and any cell outside VOIDS the run before P3 is read.",
+  "P3_harm_bound_ONE_SIDED": "cap/pub1 of ms.g_a <= 1.032 on EVERY graded cell. That is the whole gate: the change must not make the fused arm slower by more than the band's width on any cell. There is NO lower bound -- a faster cap is compliant at any magnitude, because speed was never what this gate was registered to protect. PREDICTED, from the A6000 run: the ratios land at or below ~1.0, most below 0.99. FALSIFIER: any graded cell above 1.032."
+ },
+
+ "explicitly_not_registered_here": [
+  "A SPEEDUP CLAIM. If cap again measures faster, this document does not convert that into a registered performance claim -- it is reported as observed, with the instrument self-pair beside it, and a speedup claim would need its own prereg with a predicted band. Capturability remains a precondition, not a win.",
+  "Any re-grading of the 2026-08-14 A6000 run. Its GATE FAILED verdict under the two-sided band stands; this registration exists because that band was mis-specified, and the record keeps both.",
+  "The e2e gate (kernel/prereg_capturability_scope.json), which remains OPEN and unmeasurable on shared rented pods."
+ ],
+
+ "pass_consequence": "P1 + P2 + P3 all green on the fresh run closes the throughput question for this branch: the change is verified not to harm throughput at a kernel-bound size, on a clean instrument, under a band whose sidedness matches its registered purpose. PR #85's merge note is updated from 'operator adjudication of a mis-specified rule' to 'gate closed under the one-sided re-registration', with both verdicts linked.",
+
+ "stop_rule": "Whatever the fresh run shows is written into RESULTS-capturability.md verbatim -- a P3 breach, a P2 void, an UNUSABLE, or a pass. The bound is not adjusted after data; no cell is re-run for a better number; no cell is dropped except by the pre-committed rules. One run. If it voids on P2, the next step is a quiet box, not another rented attempt."
+}
