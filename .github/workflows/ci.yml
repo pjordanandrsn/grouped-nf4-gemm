@@ -111,6 +111,16 @@ jobs:
       - name: CPU-reachable suites that CI never ran
         run: cd kernel && python -m pytest test_arena_moe_patch.py test_k3_oracle.py test_moonshot_gather.py test_mxfp4_arena_layout.py test_mxfp4_oracle.py test_mxfp4_provenance.py test_group_tiles_readonly.py test_mxfp4_interp.py test_mxfp4_v4.py test_triton_shim.py -q
 
+      # The GPU-labelled files. `_NOT_IN_CI` excluded these by FILE while the
+      # skip markers inside them are per TEST, so 57 CPU-reachable tests rode
+      # along into the exclusion and CI never ran them -- including the arena
+      # suites that were the only check on #74-#77. Running the files here means
+      # the device-bound tests skip (legibly, with their own reasons) and the
+      # CPU-reachable ones execute. The gap cannot recur, because nothing is
+      # excluded by file any more.
+      - name: GPU-labelled files, for the CPU-reachable tests inside them
+        run: cd kernel && python -m pytest test_arena_equivalence.py test_arena_experts.py test_mxfp4_qlora.py test_mxfp4_residency.py test_nf4_qlora_grad.py test_nvme_residency.py test_nf4_grouped.py test_mxfp4_grouped.py test_mxfp4_pipelined.py -q
+
       - name: packaging allowlist + test-wiring guard
         run: cd kernel && python -m pytest test_packaging_covers_kernel.py test_check_readme_links.py -q
 
