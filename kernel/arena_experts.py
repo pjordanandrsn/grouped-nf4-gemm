@@ -108,17 +108,6 @@ class ArenaExpertSource:
         return tuple(self.segments[suffix]["shape_per_expert"])
 
     # -- reads ------------------------------------------------------------
-    def _slice(self, mv: memoryview, suffix: str) -> torch.Tensor:
-        g = self.segments[suffix]
-        off, ln = g["seg_off"], g["length"]
-        # copy out of the landing buffer: it is reused by the next expert, and
-        # torch.frombuffer would alias it.
-        t = torch.frombuffer(bytearray(mv[off:off + ln]), dtype=torch.uint8)
-        dt = _torch_dtype(g["dtype"])
-        if dt is not torch.uint8:
-            t = t.view(dt)
-        return t.reshape(*g["shape_per_expert"])
-
     def _staging(self, n: int) -> dict:
         """``{suffix: [n, length] uint8}`` host staging, PINNED when a device is
         in play, allocated once per expert count and reused.
