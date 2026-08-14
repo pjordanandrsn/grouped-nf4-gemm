@@ -36,6 +36,7 @@ cannot be reviewed, only believed.
 - [ ] `python -m pytest test_readme_cpu_block.py test_cpu_refusal.py -q` passes (CPU-only)
 - [ ] No private-lane paths or markers (the pre-push guard and `private-marker-guard.yml` scan for these; do not `guard-allow` your way past one without saying why)
 - [ ] Commit messages say **why**, and correct anything they supersede rather than quietly dropping it
+- [ ] **`Cursor Bugbot` reads `pass`, not `skipping`** — on this repo `skipping` means Bugbot found something and is withholding the green, not that it declined to run. Neither state shows as a failure in `gh pr checks`, so "nothing is red" is not the same as clean; read the Bugbot line itself before merging
 
 <!-- If work was drafted with an AI assistant, keep the Co-Authored-By and
      AI-disclosure trailers. That is this project's default, not an apology. -->
