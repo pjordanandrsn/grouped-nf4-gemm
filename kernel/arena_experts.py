@@ -119,14 +119,94 @@ class ArenaExpertSource:
         got = self._stage.get(n)
         if got is None:
             want_pin = str(self.device) != "cpu" and torch.cuda.is_available()
-            got = {}
+            align = self.index["align"]
+            got, keep = {}, []
             for s, g in self.segments.items():
-                t = torch.empty(n, g["length"], dtype=torch.uint8)
-                # Pinned only for a real H2D. `pin_memory()` on a CPU-target
-                # source buys nothing and costs page-locking.
-                got[s] = t.pin_memory() if want_pin else t
+                ln = g["length"]
+                # OVER-ALLOCATE and hand back an aligned sub-view. A pinned
+                # tensor is NOT reliably page-aligned: torch's caching host
+                # allocator suballocates and has been measured 1024 B off
+                # (see nvme_reader.alloc_landing). The scatter path DMAs
+                # O_DIRECT bytes straight into these rows, so an unaligned base
+                # is an EINVAL -- and worse, it depends on what else has been
+                # pinned, so it passes in a fresh process and fails in a real
+                # one.
+                t = torch.empty(n * ln + align, dtype=torch.uint8)
+                if want_pin:
+                    t = t.pin_memory()
+                pad = (-t.data_ptr()) % align
+                view = t[pad:pad + n * ln].view(n, ln)
+                assert view.data_ptr() % align == 0, "aligned sub-view is not aligned"
+                got[s] = view
+                keep.append(t)          # the view aliases it; it must outlive
             self._stage[n] = got
+            self._stage_keep = getattr(self, "_stage_keep", [])
+            self._stage_keep.append(keep)
         return got
+
+    def _scatter_ok(self, stage: dict, n: int) -> bool:
+        """Is a scattering read legal for THIS staging, right now?
+
+        The layout check is about the arena's geometry; this is about the
+        addresses actually allocated. Both must hold, and a failure here must
+        FALL BACK rather than raise -- an allocator that hands back an
+        unaligned block is not a reason to fail a fetch.
+        """
+        if self._scatter_layout() is None:
+            return False
+        align = self.index["align"]
+        for s, g in self.segments.items():
+            t = stage[s]
+            if t.data_ptr() % align or (g["length"] % align):
+                return False
+        return True
+
+    def _scatter_layout(self):
+        """``[(suffix|None, length)]`` covering a whole row in file order, or
+        ``None`` when a scattering read would not be legal here.
+
+        ``None`` entries are gaps or trailing padding that must be absorbed by
+        scratch, because `preadv` fills its iovec sequentially and cannot skip.
+
+        Refused, explicitly, when:
+          * a segment length is not ``align``-aligned — O_DIRECT would EINVAL;
+          * a gap or the padding is not ``align``-aligned, which would push
+            every following destination off alignment.
+
+        Both hold for K3 (all six lengths are multiples of 4096 and
+        ``row_stride == row_bytes``) and NEITHER is guaranteed in general, so
+        this returns None rather than guessing. A silent fallback would be a
+        silent ~6x regression, so `fetch_raw` records which path it took.
+        """
+        if getattr(self, "_layout_cache", "unset") != "unset":
+            return self._layout_cache
+        align = self.index["align"]
+        segs = sorted(self.segments.values(), key=lambda g: g["seg_off"])
+        plan, cur, ok = [], 0, True
+        for g in segs:
+            gap = g["seg_off"] - cur
+            if gap:
+                plan.append((None, gap))
+                ok &= gap % align == 0
+            plan.append((g["suffix"], g["length"]))
+            ok &= g["length"] % align == 0
+            cur = g["seg_off"] + g["length"]
+        pad = self.row_stride - cur
+        if pad:
+            plan.append((None, pad))
+            ok &= pad % align == 0
+        self._layout_cache = plan if ok else None
+        return self._layout_cache
+
+    def _scatter_views(self, stage: dict, row: int, scratch: dict):
+        layout = self._scatter_layout()
+        views = []
+        for suffix, ln in layout:
+            if suffix is None:
+                views.append(memoryview(scratch[ln]))
+            else:
+                views.append(memoryview(stage[suffix][row].numpy()))
+        return views
 
     def fetch_raw(self, layer: int, expert_ids: Sequence[int]) -> dict:
         """``{suffix: [E, *shape_per_expert]}`` for the given experts, stacked
@@ -152,6 +232,20 @@ class ArenaExpertSource:
         ids = [int(e) for e in expert_ids]
         n = len(ids)
         stage = self._staging(n)
+
+        if self._scatter_ok(stage, n):
+            # DMA straight into staging: the CPU never touches these bytes, so
+            # neither the memcpy nor the dirty-page penalty on the H2D exists.
+            scratch = self._scratch()
+            futs = [self.reader.read_row_scatter(
+                        layer, e, self._scatter_views(stage, r, scratch))
+                    for r, e in enumerate(ids)]
+            for f in futs:
+                f.result()
+            self.last_fetch_path = "scatter"
+            return self._to_device(stage, n)
+
+        self.last_fetch_path = "copy"
         for base in range(0, n, self._qd):
             chunk = ids[base:base + self._qd]
             futs = [self.reader.read_row(layer, e, self._landing[i])
@@ -166,6 +260,22 @@ class ArenaExpertSource:
                 for s, g in self.segments.items():
                     off, ln = g["seg_off"], g["length"]
                     stage[s][row].copy_(src[off:off + ln])
+        return self._to_device(stage, n)
+
+    def _scratch(self) -> dict:
+        """One aligned throwaway buffer per distinct gap/padding size."""
+        got = getattr(self, "_scratch_cache", None)
+        if got is None:
+            got = {}
+            for suffix, ln in (self._scatter_layout() or []):
+                if suffix is None and ln not in got:
+                    mv, keep = alloc_landing(ln)
+                    got[ln] = mv
+                    self._keepalive.append(keep)
+            self._scratch_cache = got
+        return got
+
+    def _to_device(self, stage: dict, n: int) -> dict:
         out = {}
         for s, g in self.segments.items():
             src = stage[s]

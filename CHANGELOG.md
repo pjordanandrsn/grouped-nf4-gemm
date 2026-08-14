@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+### `preadv` scatter: rows land in per-segment staging by DMA, no host copy
+
+`fetch_raw` now issues ONE scattering read per row — `os.preadv` takes an iovec list, so the
+kernel writes each segment straight into its staging slot. The CPU never touches the bytes.
+
+That matters twice over. Profiling a layer fetch found the host memcpy at **39.7%** of it,
+and — separately — that a CPU write to pinned memory makes the FOLLOWING H2D **~6x slower**
+(70.5 ms vs 11.65 ms for the same 281 MB, same tensors, same process). A host copy is
+charged once to make and once as a penalty on the transfer. Both are gone.
+
+Measured on a real K3 layer (896 experts, top-16 decode, 281 MB):
+
+| | per layer | achieved | of device |
+|---|---|---|---|
+| original | 1113.1 ms | 0.757 GB/s | 11% |
+| + single fetch (#74) | 387.3 ms | 0.725 GB/s | — |
+| + pinned staging (#76) | 111.4 ms | 2.52 GB/s | 11% |
+| **+ scatter** | **54.3 ms** | **5.17 GB/s** | **75%** |
+
+`scatter == copy` **bitwise on real released K3 bytes**, checked on the pod, not only against
+toy fixtures.
+
+**It refuses rather than guesses.** O_DIRECT needs every iovec base and length
+`align`-aligned, and `preadv` fills sequentially so inter-segment gaps and row padding need
+scratch. `_scatter_layout()` returns None unless every segment length and every gap is
+align-aligned, and `fetch_raw` records `last_fetch_path` so a fallback is visible — a silent
+one would be a silent multi-x regression. K3 qualifies (all six lengths are multiples of
+4096, `row_stride == row_bytes`); the shared toy fixture does NOT, which is why the scatter
+tests carry their own aligned fixture and assert the path taken.
+
+Short reads resume INSIDE the buffer they stopped in (`_advance`), not at the next one —
+getting that wrong would drop or duplicate a segment's bytes and produce a plausible tensor.
+
 ### `ArenaExpertSource.fetch_raw` lands rows in pinned staging — 3.5x
 
 `fetch_raw` copied every byte on the host **three times** before the device saw it:
