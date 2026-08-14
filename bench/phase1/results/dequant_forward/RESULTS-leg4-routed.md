@@ -244,3 +244,32 @@ router. That bias makes the baseline look worse than it is.
 The quality cost of discarding 12–47% of routed work is **not measured here and
 cannot be** — that needs a training run and an eval, not a timer.
 
+#### Measured, both cards
+
+Every timing below carries its drop rate in the same row, per the amendment's
+binding rule. `d/g` > 1 means the fused path is faster.
+
+| cf | discards | H100 | RTX 4090 |
+|---:|---:|---:|---:|
+| 1.00 | 38.6% | 1.206 (0.748–2.077) | 1.856 (1.218–4.280) |
+| **1.25** | **29.7%** | **1.391** (0.753–2.148) | **2.211** (1.747–5.466) |
+| 1.50 | 23.9% | 1.478 (0.759–2.494) | 2.961 (1.769–6.499) |
+| 2.00 | 16.7% | 1.647 (0.772–3.189) | 3.703 (1.873–8.561) |
+
+(Drop rates are medians over both models, so they sit between OLMoE's 12.5% and
+Qwen's 47.0% at cf=1.25.)
+
+**The bound this establishes, and the only one.** Even when the baseline is
+handed a CUDA graph the fused path cannot have *and* excused 16.7–38.6% of the
+routed work, the fused path is still faster in the median on both cards. So the
+margin in the table above is not an artifact of denying the baseline its
+standard optimisation. **This is not a speed result** and is not quoted as one:
+the two arms are not computing the same thing.
+
+Note the curve runs the way it must: the race ratio *rises* with `cf`, because
+more capacity means more rows the baseline actually computes. The baseline only
+gets faster by discarding more. And the H100's minima dip below 1 (0.748–0.772)
+— cells where the graphed, work-skipping baseline wins — while the 4090 has no
+such cell. Those are reported for the same reason every losing cell in this leg
+is.
+
