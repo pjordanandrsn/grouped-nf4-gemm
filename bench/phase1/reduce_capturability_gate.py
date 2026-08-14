@@ -35,6 +35,7 @@ import sys
 from pathlib import Path
 
 BAND = (0.967, 1.032)          # kernel/prereg_capturability_scope.json
+SWEEP_SELFPAIR_BAND = (0.95, 1.05)   # kernel/prereg_dequant_forward_e2e.json G1
 ARMS = ("fast_train", "fast_train_dgrad")
 MIN_CELLS = 4                  # 2 data modes x 2 offload settings, per arm
 
@@ -97,10 +98,36 @@ def main():
             print(f"  {lbl:<5} {mode:<7} offload={off} "
                   f"{'None' if v is None else format(v, '.4f')}")
 
-    inst = ratios(sweeps["pub1"][0], sweeps["pub2"][0])
-    gate = ratios(sweeps["pub1"][0], sweeps["cap"][0])
+    # A (mode, offload) whose OWN sweep self-pair blew G1 in any of the three
+    # sweeps is drifted, and its cells are reported separately rather than mixed
+    # into the verdict. This is the e2e prereg's existing rule, applied here
+    # rather than re-derived: a cell whose reference moved 5% between the two
+    # ends of its own sweep cannot carry a 3% gate.
+    drifted = set()
+    for lbl, (_, sp, _) in sweeps.items():
+        for k, v in sp.items():
+            if v is None or not (SWEEP_SELFPAIR_BAND[0] <= v <= SWEEP_SELFPAIR_BAND[1]):
+                drifted.add(k)
+    if drifted:
+        print("\n!! DRIFTED cells (sweep self-pair outside "
+              f"{SWEEP_SELFPAIR_BAND}): {sorted(drifted)}")
+        print("   Their gate ratios are reported but EXCLUDED from the verdict.")
+
+    def split(d):
+        clean = {k: v for k, v in d.items() if (k[0], k[1]) not in drifted}
+        dirty = {k: v for k, v in d.items() if (k[0], k[1]) in drifted}
+        return clean, dirty
+
+    inst_all = ratios(sweeps["pub1"][0], sweeps["pub2"][0])
+    gate_all = ratios(sweeps["pub1"][0], sweeps["cap"][0])
+    inst, inst_drift = split(inst_all)
+    gate, gate_drift = split(gate_all)
     block("INSTRUMENT self-pair  pub2/pub1 (same code twice)", inst)
     block("GATE  cap/pub1 (the capturability change)", gate)
+    if gate_drift:
+        block("gate ratios in DRIFTED cells — reported, not counted", gate_drift)
+        block("instrument ratios in DRIFTED cells — reported, not counted",
+              inst_drift)
 
     inst_bad = {k: v for k, v in inst.items() if not BAND[0] <= v <= BAND[1]}
     gate_bad = {k: v for k, v in gate.items() if not BAND[0] <= v <= BAND[1]}
@@ -109,12 +136,18 @@ def main():
     # ORDER MATTERS. Emptiness is checked BEFORE the band, on both comparisons,
     # because "no cells were outside the band" is trivially true of no cells and
     # would otherwise read as a pass.
+    want = MIN_CELLS * len(ARMS)
     if problems:
         v = f"VERDICT: UNUSABLE — {len(problems)} receipt problem(s): {problems[:4]}"
-    elif len(inst) < MIN_CELLS * len(ARMS) or len(gate) < MIN_CELLS * len(ARMS):
-        v = (f"VERDICT: UNUSABLE — expected {MIN_CELLS * len(ARMS)} comparable "
-             f"cells per comparison, got instrument={len(inst)} gate={len(gate)}. "
+    elif len(inst_all) < want or len(gate_all) < want:
+        v = (f"VERDICT: UNUSABLE — expected {want} comparable cells per "
+             f"comparison, got instrument={len(inst_all)} gate={len(gate_all)}. "
              f"An empty or partial comparison is not a pass.")
+    elif len(inst) < want // 2 or len(gate) < want // 2:
+        v = (f"VERDICT: UNUSABLE — only {len(gate)} of {want} cells survived the "
+             f"sweep self-pair gate ({len(drifted)} (mode, offload) combination(s) "
+             f"drifted). Too few clean cells to grade a {BAND[0]}-{BAND[1]} band; "
+             f"this is a statement about the CARD, not about the change.")
     elif inst_bad:
         v = (f"VERDICT: VOID — the INSTRUMENT self-pair left the band on "
              f"{len(inst_bad)}/{len(inst)} cells (worst {worst(inst_bad):.4f}). "
