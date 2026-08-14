@@ -1,0 +1,45 @@
+{
+ "band": [
+  0.967,
+  1.032
+ ],
+ "graded": [
+  [
+   "OLMoE-1B-7B-0924",
+   "down"
+  ],
+  [
+   "OLMoE-1B-7B-0924",
+   "gate_up"
+  ],
+  [
+   "Qwen3-30B-A3B",
+   "down"
+  ],
+  [
+   "Qwen3-30B-A3B",
+   "gate_up"
+  ]
+ ],
+ "dropped": {},
+ "instrument": {
+  "OLMoE-1B-7B-0924/down": 1.0100451899675804,
+  "OLMoE-1B-7B-0924/gate_up": 1.023033936493878,
+  "Qwen3-30B-A3B/down": 1.0056859432615333,
+  "Qwen3-30B-A3B/gate_up": 1.0007550377125607
+ },
+ "gate": {
+  "OLMoE-1B-7B-0924/down": 0.9382069455776484,
+  "OLMoE-1B-7B-0924/gate_up": 0.9857485296851209,
+  "Qwen3-30B-A3B/down": 0.8786354567402604,
+  "Qwen3-30B-A3B/gate_up": 0.9312798488216156
+ },
+ "d_over_g_secondary": {
+  "OLMoE-1B-7B-0924/down": 1.031622363462218,
+  "OLMoE-1B-7B-0924/gate_up": 1.0044920761210356,
+  "Qwen3-30B-A3B/down": 1.116885602126871,
+  "Qwen3-30B-A3B/gate_up": 1.062999502273916
+ },
+ "problems": [],
+ "verdict": "VERDICT: GATE FAILED \u2014 P3. 3/4 cells outside 0.967-1.032 (worst 0.8786). The change moved throughput at a kernel-bound size; per the stop rule it is reverted."
+}

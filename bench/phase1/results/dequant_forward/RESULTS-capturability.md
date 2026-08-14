@@ -18,6 +18,11 @@ not returned, the register is genuinely pre-data for the one number it grades.
 > instrument self-pair — identical code, twice — varied by 11%, against a band
 > of 3.3%. **The e2e leg is host-bound (12–25% GPU-busy), so this gate cannot be
 > adjudicated on a shared rented pod at all.** §8 lists what would close it.
+> A third gate, on a GPU-BOUND cell (§9), **worked as an instrument** —
+> same-code self-pair 2.3% where the e2e leg gave 11.2% — and measured the
+> change **6.5% FASTER** (median, 4 cells, none slower). Its registered band
+> was two-sided, so that reads as **GATE FAILED** and the stop rule says
+> revert. The band was mis-specified by me; it is not reinterpreted here.
 > This change does not merge on the strength of §§1–6 alone.
 
 [`FINDING-host-bound-small-batch.md`](FINDING-host-bound-small-batch.md)
@@ -357,6 +362,84 @@ correctness-verified, not throughput-verified**, and does not merge.
 
 **Spend across both attempts: ~$3.80** (run 1 $2.42, run 2 $1.35, plus wedged
 pods that never started a container and were destroyed 404-verified).
+
+---
+
+## 9 · The GPU-bound gate — the instrument works, and the change is FASTER
+
+**RTX A6000 (sm_86), SECURE, 2026-08-14, 8.5 min, $0.08.** Grades
+[`kernel/prereg_capturability_gate_tokbudget.json`](../../../../kernel/prereg_capturability_gate_tokbudget.json)
+(OTS-stamped **before** this data existed). Receipts in
+[`kernel_gate/`](kernel_gate/). `pub` is this branch's merge-base, not current
+`origin/main` — main has since moved 8 commits ahead, and using it would have
+folded unrelated upstream work into the A/B.
+
+### P1 CONFIRMED — the cell is GPU-bound
+
+All four cells `measurement_class = kernel`, minimum busy fraction 83–97% across
+every sweep. `tokbudget_4096` is the kernel-bound cell it was chosen to be.
+
+### P2 CONFIRMED — and this is the methodological result
+
+The instrument self-pair, **identical code run twice**:
+
+| cell | pub2/pub1 |
+|---|---:|
+| OLMoE `down` | 1.0100 |
+| OLMoE `gate_up` | 1.0230 |
+| Qwen3-30B `down` | 1.0057 |
+| Qwen3-30B `gate_up` | 1.0008 |
+| median | **1.0079** |
+
+All four inside 0.967–1.032, worst deviation 2.3%. **The same rented-pod class
+that produced 11.2% noise on the host-bound e2e leg produces 2.3% here.** The
+diagnosis in §8 was right: the problem was never the hardware, it was grading a
+host-bound quantity on a shared host. A GPU-bound cell carries the band.
+
+### P3 FAILED — and the direction is the opposite of harm
+
+| cell | cap/pub1 of `ms.g_a` | reading |
+|---|---:|---|
+| OLMoE `down` | **0.9382** | 6.2% faster |
+| OLMoE `gate_up` | 0.9857 | 1.4% faster |
+| Qwen3-30B `down` | **0.8786** | 12.1% faster |
+| Qwen3-30B `gate_up` | **0.9313** | 6.9% faster |
+| median | **0.9347** | **6.5% faster** |
+
+Ratio is cap-time over pub-time, so **below 1.0 means the changed path is
+faster**. Three of four cells are outside the band, every one of them on the
+fast side, and no cell is slower. The secondary `d_over_g` view agrees
+independently (1.0045–1.1169, median 1.047 — the fused arm gaining on the
+baseline).
+
+The effect is far outside the instrument's 2.3% noise, so it is real. And it is
+**~20× larger than I predicted**: the prereg estimated 0.1–0.3%, reasoning that
+a few small transfers are negligible against a ~150 ms step. That reasoning
+counted bytes and ignored the mechanism. Each pageable transfer is
+`cudaMemcpyAsync` **plus `cudaStreamSynchronize`** — at these shapes the step
+carries roughly eight of them (three tile tensors × two call sites, plus the
+`expert_ids` conversions), and each one drains the pipeline and stops CPU
+run-ahead. Removing the syncs, not the bytes, is what bought the time.
+
+### The verdict stands as registered, and the rule was mine to get wrong
+
+**P3 registered a TWO-SIDED band with no predicted direction, so a 6.5% median
+improvement reads as FAILED, and the stop rule says revert.** That is what the
+reducer printed and it is written here verbatim, as the stop rule requires.
+
+**The rule is mis-specified, and that is my error, not a result to be
+reinterpreted after the fact.** The purpose it serves — from the scope prereg,
+*"a capturability fix that costs throughput is not a fix"* — is one-sided: it
+exists to catch harm. I registered it symmetrically anyway. Reading a FAILED
+verdict as a pass because the sign is convenient is exactly the move this
+program's rules exist to prevent, so it is not made here.
+
+**What this means concretely:** the letter of a stamped gate says revert; the
+measured facts say the change is bitwise-identical in output, fixes
+capturability, and is 6.5% faster at a kernel-bound size on a clean instrument.
+Resolving that is an operator decision, and closing it cleanly needs a one-sided
+gate (*"must not be slower than the band"*) stamped pre-data and graded on a
+fresh run — not this run re-read under a rule written after seeing it.
 
 ## What this does not license
 

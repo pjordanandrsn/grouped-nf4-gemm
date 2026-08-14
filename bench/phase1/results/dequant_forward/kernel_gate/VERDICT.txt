@@ -1,0 +1,1 @@
+VERDICT: GATE FAILED — P3. 3/4 cells outside 0.967-1.032 (worst 0.8786). The change moved throughput at a kernel-bound size; per the stop rule it is reverted.
