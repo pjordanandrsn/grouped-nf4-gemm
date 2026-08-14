@@ -27,17 +27,23 @@ _DELIBERATELY_UNPACKAGED: dict[str, str] = {}
 # Everything CPU-reachable was wired into ci.yml instead of being listed here;
 # what remains needs a GPU, which the CI runner does not have. Adding an entry
 # is a decision that has to be written down, not a silent gap.
-_NOT_IN_CI: dict[str, str] = {
-    "test_arena_equivalence.py": "needs CUDA — arena-fed vs memory-fed GEMM equality on device",
-    "test_arena_experts.py": "needs CUDA — reconstructs expert tensors on device",
-    "test_mxfp4_grouped.py": "needs CUDA — the fused MXFP4 kernel",
-    "test_mxfp4_pipelined.py": "needs CUDA — pipelined engine, device k-slot store",
-    "test_mxfp4_qlora.py": "needs CUDA — differentiable path on device",
-    "test_mxfp4_residency.py": "needs CUDA — residency engine gathers to device",
-    "test_nf4_grouped.py": "needs CUDA — the fused NF4 kernel",
-    "test_nf4_qlora_grad.py": "needs CUDA — gradient checks on device",
-    "test_nvme_residency.py": "needs CUDA — cold tier stages to device",
-}
+_NOT_IN_CI: dict[str, str] = {}
+# Empty, and that is the point. It previously held nine "needs CUDA" files, but
+# the exclusion is per FILE while every skip marker inside them is per TEST, so
+# 57 CPU-reachable tests were excluded as collateral -- 17 in
+# test_nvme_residency, 15 in test_mxfp4_residency, 11 in test_arena_experts, 10
+# in test_nf4_qlora_grad, 3 in test_arena_equivalence, 1 in test_mxfp4_qlora.
+# Nothing ran them but a developer's laptop; the arena pair among them was the
+# only coverage on #74-#77.
+#
+# Naming a file here reads as "CI cannot run this", but the truthful statement
+# was "CI cannot run PART of this", and there was no way to say so. ci.yml now
+# invokes all nine: device-bound tests skip with their own reasons, which is
+# both cheaper and more honest than an allowlist asserting it from outside.
+#
+# So an entry here now means a file pytest cannot even COLLECT on a CPU runner.
+# If you add one, say why, and expect to be asked whether a skip marker inside
+# the file would do the job instead.
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
 
