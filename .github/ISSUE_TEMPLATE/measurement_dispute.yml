@@ -1,0 +1,68 @@
+name: A published number does not reproduce
+description: You ran one of this repo's measured claims and got something else.
+title: "[measurement] "
+labels: ["measurement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        This repo publishes measured claims with committed receipts, so
+        "it does not reproduce" is one of the most useful issues you can file —
+        it is treated as evidence, not as a complaint. Claims here have been
+        retracted before on exactly this basis.
+
+
+        Fill in what you have. A partial report with a real number beats a
+        careful report with none.
+  - type: input
+    id: claim
+    attributes:
+      label: Which claim
+      description: The doc and the line, or paste the sentence.
+      placeholder: "README 'Benchmark this on real text' — 4.50x on RTX 4090"
+    validations:
+      required: true
+  - type: textarea
+    id: measured
+    attributes:
+      label: What you measured
+      description: Your number, and the command that produced it.
+      placeholder: |
+        2.1x, from:
+        python examples/dequant_tax.py
+    validations:
+      required: true
+  - type: input
+    id: selfpair
+    attributes:
+      label: Self-pair
+      description: >-
+        The same arm timed against itself. This is the single most useful field:
+        a difference smaller than the instrument's own spread is not a
+        difference. The shipped examples print one.
+      placeholder: "1.03 (or: didn't run one)"
+    validations:
+      required: false
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware and versions
+      description: >-
+        GPU and compute capability, driver, torch, triton, grouped-nf4-gemm,
+        and experts4bit-qlora if it is in the loop.
+      placeholder: |
+        RTX 4090 (sm_89), driver 560.x
+        torch 2.8.0+cu128, triton 3.4, grouped-nf4-gemm 0.10.0
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything that might explain the gap
+      description: >-
+        Shared GPU, thermal throttling, a different model or sequence length,
+        random token ids instead of real text (that one is worth 1.6-1.7x on
+        MoE routing by itself), offload on or off.
+    validations:
+      required: false

@@ -1,0 +1,13 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/pjordanandrsn/grouped-nf4-gemm/security/policy
+    about: >-
+      Do not open a public issue for a vulnerability. Report it privately —
+      see SECURITY.md for the disclosure process and timelines.
+  - name: Question, or "does this fit my hardware?"
+    url: https://github.com/pjordanandrsn/grouped-nf4-gemm/discussions
+    about: >-
+      Usage questions, sizing help, and "which entry point do I want" go to
+      Discussions. Issues here are for defects, disputed measurements, and
+      hardware offers.
