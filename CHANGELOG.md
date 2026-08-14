@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+### `moe_layer_forward` read every expert row three times
+
+A row carries all six segments, but `moe_layer_forward` called `fused_stacks`
+once per projection and each call independently ran `fetch_raw` — reading the
+whole row, returning two segments, discarding four. Measured on a real 1-layer
+K3 slice (896 experts, 17.5 MB rows, top-16 decode): **842 MB read where 281 MB
+is needed**, confirmed to the byte by the reader's own counter.
+
+One `fetch_raw` now serves all three projections. `fused_stacks` gained
+`raw=` so a caller wanting more than one projection can fetch once; passing it
+is what removes the amplification, and single-projection callers are unchanged.
+
+Measured alongside it and NOT fixed here: the path achieves **0.757 GB/s against
+6.88 GB/s** available on the same file, same pod, same queue depth — a further
+9.1x that is neither the amplification nor the device (gnf4#73).
+
+The gate lives in its own `test_arena_fetch_amplification.py` rather than in
+`test_arena_experts.py`, which the packaging guard allowlists as "needs CUDA" and
+CI therefore never runs. It stubs the GEMM, because the question is how many
+times the bytes are read, not what the kernel computes.
+
 ## 0.11.0 — 2026-08-13
 
 ### `bake_nf4 --absmax-dtype bf16`: 5.6% off every arena row, bitwise lossless
