@@ -139,6 +139,53 @@ class ArenaExpertSource:
             self._stage[n] = got
         return got
 
+    def _scatter_layout(self):
+        """``[(suffix|None, length)]`` covering a whole row in file order, or
+        ``None`` when a scattering read would not be legal here.
+
+        ``None`` entries are gaps or trailing padding that must be absorbed by
+        scratch, because `preadv` fills its iovec sequentially and cannot skip.
+
+        Refused, explicitly, when:
+          * a segment length is not ``align``-aligned — O_DIRECT would EINVAL;
+          * a gap or the padding is not ``align``-aligned, which would push
+            every following destination off alignment.
+
+        Both hold for K3 (all six lengths are multiples of 4096 and
+        ``row_stride == row_bytes``) and NEITHER is guaranteed in general, so
+        this returns None rather than guessing. A silent fallback would be a
+        silent ~6x regression, so `fetch_raw` records which path it took.
+        """
+        if getattr(self, "_layout_cache", "unset") != "unset":
+            return self._layout_cache
+        align = self.index["align"]
+        segs = sorted(self.segments.values(), key=lambda g: g["seg_off"])
+        plan, cur, ok = [], 0, True
+        for g in segs:
+            gap = g["seg_off"] - cur
+            if gap:
+                plan.append((None, gap))
+                ok &= gap % align == 0
+            plan.append((g["suffix"], g["length"]))
+            ok &= g["length"] % align == 0
+            cur = g["seg_off"] + g["length"]
+        pad = self.row_stride - cur
+        if pad:
+            plan.append((None, pad))
+            ok &= pad % align == 0
+        self._layout_cache = plan if ok else None
+        return self._layout_cache
+
+    def _scatter_views(self, stage: dict, row: int, scratch: dict):
+        layout = self._scatter_layout()
+        views = []
+        for suffix, ln in layout:
+            if suffix is None:
+                views.append(memoryview(scratch[ln]))
+            else:
+                views.append(memoryview(stage[suffix][row].numpy()))
+        return views
+
     def fetch_raw(self, layer: int, expert_ids: Sequence[int]) -> dict:
         """``{suffix: [E, *shape_per_expert]}`` for the given experts, stacked
         in the order given — the caller's routing order, not sorted.
@@ -163,6 +210,20 @@ class ArenaExpertSource:
         ids = [int(e) for e in expert_ids]
         n = len(ids)
         stage = self._staging(n)
+
+        if self._scatter_layout() is not None:
+            # DMA straight into staging: the CPU never touches these bytes, so
+            # neither the memcpy nor the dirty-page penalty on the H2D exists.
+            scratch = self._scratch()
+            futs = [self.reader.read_row_scatter(
+                        layer, e, self._scatter_views(stage, r, scratch))
+                    for r, e in enumerate(ids)]
+            for f in futs:
+                f.result()
+            self.last_fetch_path = "scatter"
+            return self._to_device(stage, n)
+
+        self.last_fetch_path = "copy"
         for base in range(0, n, self._qd):
             chunk = ids[base:base + self._qd]
             futs = [self.reader.read_row(layer, e, self._landing[i])
@@ -177,6 +238,22 @@ class ArenaExpertSource:
                 for s, g in self.segments.items():
                     off, ln = g["seg_off"], g["length"]
                     stage[s][row].copy_(src[off:off + ln])
+        return self._to_device(stage, n)
+
+    def _scratch(self) -> dict:
+        """One aligned throwaway buffer per distinct gap/padding size."""
+        got = getattr(self, "_scratch_cache", None)
+        if got is None:
+            got = {}
+            for suffix, ln in (self._scatter_layout() or []):
+                if suffix is None and ln not in got:
+                    mv, keep = alloc_landing(ln)
+                    got[ln] = mv
+                    self._keepalive.append(keep)
+            self._scratch_cache = got
+        return got
+
+    def _to_device(self, stage: dict, n: int) -> dict:
         out = {}
         for s, g in self.segments.items():
             src = stage[s]

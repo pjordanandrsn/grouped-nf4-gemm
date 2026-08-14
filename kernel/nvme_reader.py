@@ -177,6 +177,67 @@ class ArenaReader:
             self.bytes_read += done
         return done
 
+    @staticmethod
+    def _advance(views, done):
+        """The suffix of an iovec after ``done`` bytes have landed.
+
+        `preadv` may return short, and the retry must resume INSIDE the buffer
+        it stopped in — not at the start of the next one. Getting this wrong
+        silently duplicates or drops a segment's bytes, which is the kind of
+        corruption that reads as a plausible tensor.
+        """
+        out = []
+        for v in views:
+            if done >= len(v):
+                done -= len(v)
+                continue
+            out.append(v[done:] if done else v)
+            done = 0
+        return out
+
+    def _readv(self, offset: int, views) -> int:
+        fd = self._fd()
+        done = 0
+        while done < self.row_stride:
+            rest = self._advance(views, done)
+            got = os.preadv(fd, rest, offset + done)
+            if got <= 0:
+                raise EOFError(f"arena short read at {offset + done}")
+            done += got
+        with self._stats_lock:
+            self.reads += 1
+            self.bytes_read += done
+        return done
+
+    def read_row_scatter(self, layer: int, expert: int, views):
+        """Async: read one row, SCATTERING it across ``views`` in file order.
+
+        The kernel writes each destination by DMA, so a caller that wants the
+        row split by segment never copies it on the CPU. That matters more than
+        it sounds: a CPU write to pinned memory makes the FOLLOWING H2D ~6x
+        slower (measured 70.5 ms vs 11.65 ms for the same 281 MB), so a host
+        copy is charged twice — once to make it, once as a penalty on the
+        transfer (#73).
+
+        ``views`` must cover exactly ``row_stride`` bytes; pad with scratch if
+        the segments do not. Under O_DIRECT every base and length must be
+        ``align``-aligned, which is checked here rather than left to EINVAL.
+        """
+        total = sum(len(v) for v in views)
+        if total != self.row_stride:
+            raise ValueError(
+                f"scatter views cover {total} B but a row is {self.row_stride} B; "
+                "include scratch for inter-segment gaps and trailing padding")
+        if self.mode == "O_DIRECT":
+            for i, v in enumerate(views):
+                check_aligned(v, self.align)
+                if len(v) % self.align:
+                    raise ValueError(
+                        f"scatter view {i} is {len(v)} B, not a multiple of "
+                        f"{self.align}; O_DIRECT would EINVAL")
+        off = row_offset(self.index, layer, expert)
+        return self._pool.submit(self._readv, off, list(views))
+
     def read_row(self, layer: int, expert: int, dst: memoryview):
         """Async: returns a Future resolving to bytes read (== row_stride).
         dst must be page-aligned and >= row_stride long; bytes land in
