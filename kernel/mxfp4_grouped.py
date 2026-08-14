@@ -23,8 +23,12 @@ first; starved-grid split is an occupancy optimization, added post-gate).
 from __future__ import annotations
 
 import torch
-import triton
-import triton.language as tl
+# ``triton`` is a Linux-only dependency (pyproject marks it
+# ``platform_system == 'Linux'``), so a supported macOS install has none and a
+# bare ``import triton`` here made the whole module unimportable there. The shim
+# binds the real thing when it exists — this file is unchanged below in that
+# case — and otherwise lets the kernels still DEFINE while a launch raises.
+from _triton_shim import tl, triton  # noqa: F401  (re-exported names)
 
 # e2m1 codebook (verbatim transformers FP4_VALUES; Phase-1 verified).
 FP4_VALUES = [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0,

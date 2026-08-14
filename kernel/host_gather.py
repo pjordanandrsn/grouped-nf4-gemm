@@ -22,8 +22,12 @@ on the pod validates this primitive before any expensive build.
 from __future__ import annotations
 
 import torch
-import triton
-import triton.language as tl
+# ``triton`` is a Linux-only dependency (pyproject marks it
+# ``platform_system == 'Linux'``), so a supported macOS install has none and a
+# bare ``import triton`` here made the whole module unimportable there. The shim
+# binds the real thing when it exists — this file is unchanged below in that
+# case — and otherwise lets the kernels still DEFINE while a launch raises.
+from _triton_shim import tl, triton  # noqa: F401  (re-exported names)
 
 
 @triton.jit

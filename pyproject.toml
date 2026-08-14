@@ -53,6 +53,7 @@ markers = [
 [tool.setuptools]
 package-dir = { "" = "kernel" }
 py-modules = [
+    "_triton_shim",
     "nf4_grouped", "nf4_pack_ref", "host_gather",
     "mxfp4_pack_ref", "mxfp4_grouped", "mxfp4_loader", "mxfp4_pipelined",
     "mxfp4_qlora", "mxfp4_native_load", "moonshot_gather", "arena_experts", "arena_moe_patch", "verify_provenance",
