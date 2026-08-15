@@ -1,0 +1,46 @@
+=== per-sweep reference self-pairs (drift inside each sweep) ===
+  pub1  random  offload=0 0.9890
+  pub1  random  offload=1 1.0077
+  pub1  text    offload=0 0.8849
+  pub1  text    offload=1 0.8790
+  cap   random  offload=0 1.0257
+  cap   random  offload=1 0.9805
+  cap   text    offload=0 0.8683
+  cap   text    offload=1 0.8940
+  pub2  random  offload=0 0.9982
+  pub2  random  offload=1 1.0058
+  pub2  text    offload=0 0.8585
+  pub2  text    offload=1 0.9019
+
+!! DRIFTED cells (sweep self-pair outside (0.95, 1.05)): [('text', 0), ('text', 1)]
+   Their gate ratios are reported but EXCLUDED from the verdict.
+
+--- INSTRUMENT self-pair  pub2/pub1 (same code twice) ---
+  random  offload=0 fast_train         0.9976
+  random  offload=0 fast_train_dgrad   0.9928
+  random  offload=1 fast_train         1.0126
+  random  offload=1 fast_train_dgrad   0.9783
+  median 0.9952   n=4
+
+--- GATE  cap/pub1 (the capturability change) ---
+  random  offload=0 fast_train         0.9601   <-- OUTSIDE BAND
+  random  offload=0 fast_train_dgrad   0.9842
+  random  offload=1 fast_train         0.9829
+  random  offload=1 fast_train_dgrad   0.9816
+  median 0.9822   n=4
+
+--- gate ratios in DRIFTED cells — reported, not counted ---
+  text    offload=0 fast_train         0.9673
+  text    offload=0 fast_train_dgrad   0.9604   <-- OUTSIDE BAND
+  text    offload=1 fast_train         1.0167
+  text    offload=1 fast_train_dgrad   1.0497   <-- OUTSIDE BAND
+  median 0.9920   n=4
+
+--- instrument ratios in DRIFTED cells — reported, not counted ---
+  text    offload=0 fast_train         0.9474   <-- OUTSIDE BAND
+  text    offload=0 fast_train_dgrad   0.9620   <-- OUTSIDE BAND
+  text    offload=1 fast_train         0.9429   <-- OUTSIDE BAND
+  text    offload=1 fast_train_dgrad   0.9838
+  median 0.9547   n=4
+
+VERDICT: GATE FAILED — harm bound. 1/4 cells with cap/pub1 speedup BELOW 0.967 (worst 0.9601). The change costs e2e throughput; per the registered stop rule it is reverted.

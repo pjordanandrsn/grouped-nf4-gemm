@@ -1,0 +1,1 @@
+VERDICT: UNUSABLE — 8 receipt problem(s): ['cap/text/off0: no reference self-pair', 'cap/random/fast_train: patched 0 modules', 'cap/random/fast_train_dgrad: patched 0 modules', 'cap/random/batched: patched 0 modules']

@@ -1,0 +1,1 @@
+VERDICT: GATE PASSED — all 4 clean cells at or above the 0.967 harm floor (median 1.0040), instrument clean on all 4. Cells above 1.032 are reported as observed, NOT as a registered speedup claim.

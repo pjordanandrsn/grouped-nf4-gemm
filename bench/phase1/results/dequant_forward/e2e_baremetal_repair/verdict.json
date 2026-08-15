@@ -1,0 +1,29 @@
+{
+ "band": [
+  0.967,
+  1.032
+ ],
+ "instrument_selfpair": {
+  "('random', 0, 'fast_train')": 0.4670468656579129,
+  "('random', 0, 'fast_train_dgrad')": 0.4826623001348488,
+  "('random', 1, 'fast_train')": 1.001000263227165,
+  "('random', 1, 'fast_train_dgrad')": 0.9789103690685412
+ },
+ "gate": {
+  "('random', 0, 'fast_train')": 0.4553189532263257,
+  "('random', 0, 'fast_train_dgrad')": 0.4754382585243691,
+  "('random', 1, 'fast_train')": 1.0161095025006581,
+  "('random', 1, 'fast_train_dgrad')": 0.9950377338984803
+ },
+ "problems": [
+  "cap/text/off0: no reference self-pair",
+  "cap/random/fast_train: patched 0 modules",
+  "cap/random/fast_train_dgrad: patched 0 modules",
+  "cap/random/batched: patched 0 modules",
+  "pub2/text/off0: no reference self-pair",
+  "pub2/random/fast_train: patched 0 modules",
+  "pub2/random/fast_train_dgrad: patched 0 modules",
+  "pub2/random/batched: patched 0 modules"
+ ],
+ "verdict": "VERDICT: UNUSABLE \u2014 8 receipt problem(s): ['cap/text/off0: no reference self-pair', 'cap/random/fast_train: patched 0 modules', 'cap/random/fast_train_dgrad: patched 0 modules', 'cap/random/batched: patched 0 modules']"
+}

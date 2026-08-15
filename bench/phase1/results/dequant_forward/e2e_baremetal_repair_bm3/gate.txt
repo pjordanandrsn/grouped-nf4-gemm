@@ -1,0 +1,49 @@
+=== per-sweep reference self-pairs (drift inside each sweep) ===
+  pub1  random  offload=0 0.9931
+  pub1  random  offload=1 0.9933
+  pub1  text    offload=0 0.9245
+  pub1  text    offload=1 0.9112
+  cap   random  offload=0 1.0143
+  cap   random  offload=1 0.9825
+  cap   text    offload=0 0.9234
+  cap   text    offload=1 0.9045
+  pub2  random  offload=0 1.0063
+  pub2  random  offload=1 0.9926
+  pub2  text    offload=0 0.8864
+  pub2  text    offload=1 0.9063
+
+!! DRIFTED cells (sweep self-pair outside (0.95, 1.05)): [('text', 0), ('text', 1)]
+   Their gate ratios are reported but EXCLUDED from the verdict.
+
+--- INSTRUMENT self-pair  pub2/pub1 (same code twice) ---
+  random  offload=0 fast_train         1.0196
+  random  offload=0 fast_train_dgrad   1.0007
+  random  offload=1 fast_train         1.0057
+  random  offload=1 fast_train_dgrad   1.0257
+  median 1.0127   n=4
+
+--- GATE  cap/pub1 (the capturability change) ---
+  random  offload=0 fast_train         0.9920
+  random  offload=0 fast_train_dgrad   0.9997
+  random  offload=1 fast_train         1.0084
+  random  offload=1 fast_train_dgrad   1.0182
+  median 1.0040   n=4
+
+--- gate ratios in DRIFTED cells — reported, not counted ---
+  text    offload=0 fast_train         0.9916
+  text    offload=0 fast_train_dgrad   0.9813
+  text    offload=1 fast_train         0.9912
+  text    offload=1 fast_train_dgrad   1.0053
+  median 0.9914   n=4
+
+--- instrument ratios in DRIFTED cells — reported, not counted ---
+  text    offload=0 fast_train         0.9828
+  text    offload=0 fast_train_dgrad   0.9886
+  text    offload=1 fast_train         0.9992
+  text    offload=1 fast_train_dgrad   0.9873
+  median 0.9880   n=4
+
+VERDICT: GATE PASSED — all 4 clean cells at or above the 0.967 harm floor (median 1.0040), instrument clean on all 4. Cells above 1.032 are reported as observed, NOT as a registered speedup claim.
+--- SPOT CHECK (reported): fused-arm g_a, cap/pub and pub2/pub ---
+  down     cap/pub=1.0033  pub2/pub=1.0083  class=kernel
+  gate_up  cap/pub=1.0233  pub2/pub=1.0250  class=kernel
