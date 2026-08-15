@@ -101,3 +101,39 @@ after I printed the impossible zero without noticing; the receipts stay as
 produced, this note marks the field, and the readout is fixed for future runs.
 A second latent defect (fidelity `not_run` rows vetoing the race gate via a
 missing key) is fixed in the same commit; it never fired in these runs.
+
+## The HBM3 half (shared H100, ~$0.25 across two pods)
+
+Grades [`kernel/prereg_graphed_buckets_hbm3.json`](../../../../kernel/prereg_graphed_buckets_hbm3.json)
+(stamped pre-data). Receipts in [`graphed_buckets_hbm3/`](graphed_buckets_hbm3/).
+F2 re-passed **8/8** on the H100 before racing — a third card class.
+
+| cell | F3 `D_g/G_g` [0.9–1.4] | F4 [2–20] | replay self-pairs |
+|---|---:|---:|---|
+| gate_up T=32 | 1.245 ✓ | 1.15 ✗ | 0.980 / 0.997 |
+| gate_up T=128 | 1.147 ✓ | 0.52 ✗ | 0.992 / 1.001 |
+| down T=32 | **1.695 — ABOVE band** | 1.22 ✗ | 0.972 / 1.002 |
+| down T=128 | 1.178 ✓ | 0.60 ✗ | 0.971 / 0.990 |
+
+**F3: 3/4 inside the parity band** — HBM3 absorbs the dequant round-trip's
+extra traffic, as leg 4's GPU split predicted — **with one cell above it**:
+`down` at T=32 keeps a 1.695× fused advantage even on fast memory. Per the
+registered falsifier that cell says the advantage is not purely
+memory-class-bound; the smallest per-expert GEMM in the census is where
+per-launch and occupancy effects would show, and naming the mechanism there
+needs its own registered work, not this paragraph.
+
+**F4: falsified 4/4 — and the second falsification names the real defect.**
+The band was calibrated from the host-heavy probe/e2e drivers (9–33% GPU-busy
+eager steps); the harness's own eager comparator is a lean pre-built loop with
+almost no host work to remove. The registered premise never applied to the arm
+that was graded. F4 across both card classes now reads: graphing the fused
+step buys nothing against a lean eager loop, ~1.2× at best at T=32, and loses
+at T=128 where the 8× padded rows cost elementwise work.
+
+**Shared-pod immunity: falsified as registered.** Self-pairs read 0.971–1.002
+against the registered [0.99, 1.01]: per-replay staging still touches the
+host, so graphs REDUCE contention sensitivity (~±3% vs the eager e2e's ±11%)
+but do not eliminate it. The standing rule refines rather than falls: **shared
+pods are valid for graphed bands wider than ~±3%; whole machines remain the
+rule for anything tighter.**

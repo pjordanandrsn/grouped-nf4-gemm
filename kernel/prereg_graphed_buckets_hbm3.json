@@ -1,0 +1,14 @@
+{
+ "registered_utc": "2026-08-15T18:05:00Z",
+ "registers": "The fast-memory half of the graphed race, which RESULTS-graphed-buckets.md explicitly does not license until a registered run exists: F3 on HBM3, a fast-GPU F4 with its own band, and the SHARED-POD IMMUNITY prediction. Stamped before any H100 is rented.",
+ "extends": "kernel/prereg_graphed_buckets.json + amendments 1-3. Scheme, fidelity gates, waste accounting, reducer and stop rule unchanged; only the device class and its bands are new.",
+
+ "frozen_predictions": {
+  "F3_HBM3": "D_graphed/G_graphed wall at the decode band on an H100 (HBM3), band [0.9, 1.4] — leg 4 measured the GPU-time split at parity there (d/g_gpu median 1.114): HBM3 absorbs the dequant round-trip's extra traffic. FALSIFIER above 1.4: the fused advantage is NOT memory-class-bound and the leg-4 mechanism needs revisiting; below 0.9: the fused kernel loses under graphs on fast memory, which no measurement has ever suggested.",
+  "F4_H100": "G_graphed vs shipped eager fused at T=32, band [2.0, 20.0] — leg 4 measured the H100 eager decode step at 9-33% GPU-busy, so the host floor graphing removes is large there, the exact opposite of the 3060 result. FALSIFIER below 2.0: the fast-GPU host-floor reading of the GDDR6 F4 falsification is itself wrong, and F4 fails everywhere for a reason not yet named.",
+  "SHARED_POD_IMMUNITY": "Replay self-pairs within [0.99, 1.01] on a SHARED RunPod pod — deliberately not a whole machine. A replayed graph takes the host out of the measurement loop, so the CPU contention that voided this program's e2e gates (11.2% same-code noise) should not touch graphed arms. If this holds, cheap shared pods become valid instruments for graphed racing program-wide; if it fails, the whole-machine rule extends to graphed work and that is written down."
+ },
+
+ "hardware": "RunPod SECURE H100 (shared host, on purpose — the immunity prediction requires it). The eager-arm F4 comparator IS host-sensitive; its number is reported with the pod's contention caveat and only the [2.0, 20.0] band is graded, wide enough that contention cannot fake a pass across it.",
+ "stop_rule": "Unchanged from the parent registration: verbatim write-up, no post-hoc bands, F2 re-verified on the race card before any racing."
+}
