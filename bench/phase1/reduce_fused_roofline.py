@@ -81,8 +81,11 @@ def main() -> int:
         "ratio": ratio, "band": [BANDS["control_lo"], BANDS["control_hi"]],
         "pass": p3}
 
-    # --- P2: R-flatness per projection on the new card.
-    p2_all = True
+    # --- P2: R-flatness per projection on the new card. A projection that
+    # fails is VOID for P1 (registered falsifier), so its cells are EXCLUDED
+    # from P1's median rather than merely annotated — a note beside a verdict
+    # is still a published verdict (Bugbot, PR #96).
+    p2_all, live_projs = True, []
     for proj in sorted({c["proj"] for c in new_c}):
         vals = {c["R"]: c["fused_gbs"] for c in new_c if c["proj"] == proj}
         if len(vals) < 2:
@@ -96,10 +99,17 @@ def main() -> int:
         report["verdicts"][f"P2_flat_{proj}"] = {
             "by_R": vals, "spread": spread, "pass": ok}
         p2_all &= ok
+        if ok:
+            live_projs.append(proj)
 
-    # --- P1: the discriminator, read ONLY if the control held.
-    med = st.median(c["fused_gbs"] for c in new_c)
-    if not p3:
+    # --- P1: the discriminator, read ONLY if the control held AND only over
+    # projections that survived P2.
+    graded = [c for c in new_c if c["proj"] in live_projs]
+    med = st.median(c["fused_gbs"] for c in graded) if graded else float("nan")
+    if not graded:
+        p1 = {"verdict": "VOID — every projection failed P2; nothing to read",
+              "excluded_projs": sorted({c["proj"] for c in new_c})}
+    elif not p3:
         p1 = {"median_gbs": med,
               "verdict": "UNINTERPRETABLE — the positive control failed"}
     elif BANDS["issue_lo"] <= med <= BANDS["issue_hi"]:
@@ -109,8 +119,10 @@ def main() -> int:
     else:
         p1 = {"median_gbs": med,
               "verdict": "UNRESOLVED — falsifies both hypotheses as registered"}
-    if not p2_all:
-        p1["note"] = "at least one projection VOID on P2; see rows"
+    if not p2_all and graded:
+        p1["excluded_projs"] = sorted(
+            {c["proj"] for c in new_c} - set(live_projs))
+        p1["graded_over"] = live_projs
     report["verdicts"]["P1_binding_constraint"] = p1
 
     print("\n=== VERDICTS ===")
