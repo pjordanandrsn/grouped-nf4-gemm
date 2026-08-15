@@ -342,6 +342,42 @@ reported. All eight self-pairs landed in 0.967–1.032. One model, 24 steps, seq
 512 — steps are cheaper, which is not a claim that the adapter trains to a
 better model.
 
+**And the caveat that costs the most: that baseline is not CUDA-graphed.** A
+large part of what the fused kernel removes at small batch is Python launch
+overhead, and a user can remove it themselves — the per-expert loop captures
+cleanly, the fused path needed work in 0.13.1 before it could. Racing a
+*graphed* baseline instead, at the same routing-faithful fixture
+([leg 4](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.13.2/bench/phase1/results/dequant_forward/RESULTS-leg4-routed.md),
+prereg stamped pre-data), the picture changes and is reported here rather than
+left in the receipts:
+
+| | RTX 4090 (sm_89) | H100 (sm_90) |
+|---|---:|---:|
+| decode band, T=32, ungraphed → **graphed** | 11.71 → **0.949** | 6.76 → **0.858** |
+| training shape, T=2048, ungraphed → **graphed** | 2.94 → **1.489** | 1.63 → **1.059** |
+
+**At the decode band the fused path loses to a graphed baseline on both cards,
+and no speed claim there survives.** What survives is the memory-traffic
+component, which graphing cannot touch: **1.489× at training shape on the
+4090**, against parity (1.059) on the H100.
+
+That split is now explained rather than merely observed. The fused kernel runs
+at a roughly fixed, issue-limited rate — measured at ~168 GB/s on an H100
+(≈5% of HBM3 peak) and ~214 GB/s on a 4090 (≈21% of its peak), R-flat on both
+— while the baseline it replaces dequantises **one expert at a time**, a
+4.2–8.4 MB working set that sits inside 50–72 MB of L2 and largely never pays
+DRAM for its extra bytes (its apparent rate exceeds the 4090's physical peak,
+which is how that was caught). **So the fewer-bytes thesis converts into speed
+in proportion to how starved the baseline's memory system actually is** —
+substantially on consumer GDDR6/GDDR6X, barely on HBM3 with a cache-resident
+per-expert working set. Cross-architecture receipts and the falsified bands
+behind that sentence are in
+[`RESULTS-graphed-buckets.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.13.2/bench/phase1/results/dequant_forward/RESULTS-graphed-buckets.md).
+
+The position this package holds is therefore unchanged and deliberately
+narrow: **competitive at equal VRAM, and it wins when VRAM binds** — plus a
+real speed win at training shape on bandwidth-limited cards.
+
 ## The NVMe tier: compute on packed bytes that never fit in RAM (0.2.5 / 0.2.6)
 
 `nvme_arena` relocates a checkpoint's per-expert tensors into an expert-major
