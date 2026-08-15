@@ -1,0 +1,36 @@
+{
+ "registered_utc": "2026-08-15T22:35:00Z",
+ "registers": "WHY the fused NF4 kernel wins or loses: is it memory-bound-but-inefficient, or issue/ALU-bound on the NF4 unpack? Stamped before the discriminating card is rented and before any new data exists. NOTE ON EVIDENCE (see kernel/ATTESTATION-TIMELINE-2026-08-15.md): the Bitcoin anchor for this file will land after the run; the pre-data evidence is this commit's public push receipt, which must precede the creation of the first pod.",
+
+ "what_the_merged_receipts_already_show": {
+  "source": "graphed_rscan_h100_attempt2/graphed_rscan_rs.json (public, merged in PR #94). Used to FORM the hypotheses; every graded number below comes from a new run on a new card.",
+  "computation": "Weight bytes are analytic: E=64 experts, gate_up N=K=2048, down N=2048 K=1024; NF4 = 0.5 B/param, bf16 = 2 B/param. The fused arm streams the packed stack twice per replay (forward, dgrad). The baseline dequantizes once (read NF4, write bf16) and its GEMMs read the bf16 stack twice. Kernel self-time comes from the profiler's per-family aggregation.",
+  "achieved_bandwidth_H100_SXM": {"fused_triton": "161-174 GB/s across both projections and R in {8,32}", "bnb_dequant": "1287-1578 GB/s", "cublas_gemm": "876-1510 GB/s", "card_peak": "~3350 GB/s"},
+  "the_cancellation": "The fused arm moves 6.5x fewer weight bytes and runs 6.2-8.8x less bandwidth-efficient. Traffic advantage and efficiency deficit nearly cancel, which is why the SIGN of the comparison flips by projection: gate_up (deficit 8.5-8.8x > advantage 6.5x) LOSES at R<=8, down (deficit 6.2x < advantage 6.5x) WINS everywhere. It also explains the HBM3 parity band and is consistent with this program's standing Ampere-only Marlin result (Triton NF4 GEMV loses on H100 at 0.82x).",
+  "the_open_question": "~5% of peak is far below any plausible memory-bound inefficiency, and the figure is R-FLAT (161-174 across a 4x change in rows). That points away from bandwidth and toward a per-byte issue cost, but the receipts cannot separate the two on ONE card."
+ },
+
+ "hypotheses": {
+  "H_issue": "The kernel is issue/ALU-bound on the NF4 unpack (LUT lookup + scale application per 4-bit element), so achieved weight-bandwidth scales with SM count x clock and is nearly independent of the card's peak memory bandwidth.",
+  "H_bw": "The kernel is memory-bound but inefficient (access pattern, poor coalescing or insufficient outstanding loads), so achieved weight-bandwidth scales with the card's PEAK bandwidth."
+ },
+
+ "design": {
+  "discriminator": "Run the merged, unmodified bench/phase1/graphed_rscan.py on an RTX 4090: 128 SMs vs the H100 SXM's 132 (0.97x) but 1008 GB/s vs 3350 GB/s peak (0.30x). The two hypotheses predict achieved bandwidths that differ by ~4.6x on this card, which no instrument ambiguity at this scale can bridge.",
+  "scaling_arithmetic": "Issue capacity ratio 4090/H100 = (128 SMs x 2.52 GHz)/(132 x 1.755 GHz) = 1.39. H_issue therefore predicts 4090 achieved ~= 1.39 x 172 = ~239 GB/s (24% of the 4090's peak, so not itself capped). H_bw predicts 172 x (1008/3350) = ~52 GB/s.",
+  "measurement": "Identical code path: uniform-full draws, lora=False, E=64, the profiler pass at R in {8,32} for both projections, positive control unchanged. Achieved GB/s computed from analytic weight bytes and the profiler's fused_triton self-time, exactly as the H100 figures above were computed.",
+  "hardware": "One SECURE on-demand RTX 4090, shared host allowed (every band below is >=40% wide; the refined shared-pod rule from PR #93). Standing teardown discipline, hard $35 cap, expected <$0.30."
+ },
+
+ "graded_bands": {
+  "P1_which_hypothesis": "Achieved fused GB/s on the 4090, median over the four profiled cells: H_ISSUE CONFIRMED if in [140, 340]; H_BW CONFIRMED if <= 80; anything in (80, 140) or > 340 falsifies BOTH as stated and is reported as UNRESOLVED, not resolved toward whichever is nearer.",
+  "P2_R_flatness_replicates": "Achieved fused GB/s at R=8 vs R=32 within +-10% per projection. FALSIFIER: outside that, the weight-streaming premise does not hold on this card and P1 is VOID for that projection rather than reinterpreted.",
+  "P3_the_baseline_scales_with_bandwidth": "The bnb dequant kernel's achieved GB/s on the 4090, relative to its H100 value (1287-1578), must fall in [0.20, 0.60] of it -- i.e. it tracks the 0.30x peak-bandwidth ratio. This is the POSITIVE CONTROL for the whole comparison: it establishes that this instrument CAN see a bandwidth-bound kernel behave as bandwidth-bound on this card. FALSIFIER: outside that range, the cross-card comparison is not trustworthy and P1 is reported as uninterpretable."
+ },
+
+ "reported_not_graded": ["achieved GB/s as a FRACTION of each card's peak, both arms", "the cublas GEMM family's achieved GB/s", "wall d/g per cell (comparability with the merged R-scan)", "whether the gate_up R<=8 loss reproduces on the 4090 (the merged GDDR6 race says fused wins there at padded R=32, a different quantity)"],
+
+ "stop_rule": "Verbatim write-up of P1/P2/P3 including UNRESOLVED and VOID outcomes. No band adjustment after data; no re-run for a better number; instrument voids follow the registered self-pair rule only. If P3 fails, P1 is not interpreted at all.",
+
+ "what_a_pass_licenses": "Naming the binding constraint of the shipped fused kernel and, if H_issue, a concrete optimisation target (unpack throughput) plus a predictive rule for WHERE the kernel pays: it pays when the baseline is bandwidth-starved and not otherwise. It licenses no new throughput claim and does not revisit any merged verdict."
+}
