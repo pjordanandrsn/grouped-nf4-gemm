@@ -488,8 +488,11 @@ the register-LUT M-tile mainloop, adjudicated on the instance-robust paired
 rewrite ratio after the dress rehearsal exposed the dequant baseline's
 host lottery). The preregs,
 amendments, evidence JSONs, sweeps, and mechanical reducers are all
-committed; `.ots` files anchor the protocols to Bitcoin before the data
-existed.
+committed; `.ots` files anchor the protocols to Bitcoin. An anchor proves the
+registered bytes existed before its block — an upper bound, so for runs that
+finish faster than Bitcoin confirms, the pre-data evidence is the public push
+receipt instead; the 2026-08-15 protocols are audited timestamp-by-timestamp
+in [`kernel/ATTESTATION-TIMELINE-2026-08-15.md`](kernel/ATTESTATION-TIMELINE-2026-08-15.md).
 
 ## Flagship: a 235B MoE decoding at the PCIe physical limit on ≤16 GB of VRAM
 
