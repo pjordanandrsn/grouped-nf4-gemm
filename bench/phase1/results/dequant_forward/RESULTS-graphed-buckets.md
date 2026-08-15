@@ -137,3 +137,77 @@ host, so graphs REDUCE contention sensitivity (~±3% vs the eager e2e's ±11%)
 but do not eliminate it. The standing rule refines rather than falls: **shared
 pods are valid for graphed bands wider than ~±3%; whole machines remain the
 rule for anything tighter.**
+
+## The mechanism scan (why down/T=32 sat above the parity band)
+
+Grades [`kernel/prereg_graphed_rscan.json`](../../../../kernel/prereg_graphed_rscan.json)
++ [amendment 1](../../../../kernel/prereg_graphed_rscan_amendment1.json), both
+stamped pre-data. Uniform-full R-scan (proj × R ∈ {1…128}, E=64, lora=False,
+zero padding), shared SECURE H100 — the refined shared-pod rule's second
+deliberate use, and it held. Receipts:
+[attempt 1](graphed_rscan_h100/) (REFUSED, 12/16 void) and
+[attempt 2](graphed_rscan_h100_attempt2/) (16/16 live). Two pods ≈ $0.37;
+three additional creates wedged at uptime 0 and were destroyed verified-404.
+
+**The refusal was the instrument, and its repair generalizes a shipped law.**
+Every attempt-1 void was the G-arm self-pair on the cell's FIRST timed block
+(0.923–0.964) with the D-arm at 0.997–1.001 in all 16 cells; ~300 ms blocks
+still voided, so block length was not the story — the first block reads a
+settling ramp lasting about a full block, the e2e ten-drift law at block
+scale. One full UNTIMED primer block per arm (the first-mode discard,
+translated) took the scan from 4/16 to 16/16 live, self-pairs 0.996–1.003.
+
+| R | gate_up d/g | down d/g | gate_up excess ms | down excess ms |
+|---:|---:|---:|---:|---:|
+| 1 | 1.081 | 1.586 | 0.112 | 0.444 |
+| 2 | 0.952 | 1.431 | −0.076 | 0.369 |
+| 4 | 0.967 | 1.440 | −0.053 | 0.379 |
+| 8 | 0.992 | 1.458 | −0.013 | 0.400 |
+| 16 | 1.080 | 1.490 | 0.131 | 0.440 |
+| 32 | **1.212** | **1.593** | 0.363 | 0.569 |
+| 64 | 1.076 | 1.296 | 0.205 | 0.443 |
+| 128 | 1.106 | 1.098 | 0.493 | 0.258 |
+
+**P1 FALSIFIED, both projections** (Spearman −0.40 down, **+0.5 gate_up**
+against ≤ −0.7): the ratio is non-monotone with a peak at R=32 in both
+projections, and at gate_up R=2–8 the per-expert dequant+cuBLAS loop BEATS
+the fused kernel outright. The floor-dilution reading of the race's four
+points is dead. **P2 CONFIRMED**: the flip replicates — down's excess is
+1.567× gate_up's at R=32 (band ≥ 1.1); the anomaly is real. **P4 CONFIRMED**:
+D-arm elasticity R=1→8 is 0.027/0.030 — at small R both arms are pure
+weight-streaming (the profile agrees: the fused kernel is R-FLAT, 1544 µs at
+R=8 → 1559 µs at R=32 on gate_up — it streams the full expert stack every
+replay regardless of R).
+
+**P3, by the registered rules: NO RULE FIRES — unattributed as registered.**
+(a) GEMM kernel counts are EQUAL (128/replay = 2 per expert, both
+projections; the splitk/reduce name matches are the same two loss-reduction
+kernels in both tables); (b) down's per-GEMM mean is 4.79 µs vs gate_up's
+5.93 µs — LOWER, not ≥, and 4× the 1.20 µs floor-probe yardstick; (c) the
+excess does not sit outside the GEMM family — GEMM scales worst. Both
+attempts' profiles agree bit-for-bit on structure.
+
+**Post-hoc localization (reported, NOT graded)** — the excess is a compound
+no single registered hypothesis owned:
+1. an inter-kernel gap of ~115–123 µs/replay in the ~400-kernel base graph
+   (wall exceeds summed device time 8.8–8.9%) vs ~0 in the 23-kernel fused
+   graph — a true kernel-count cost, but EQUAL across projections, so it
+   cannot produce the flip;
+2. the projection flip lives in device time: going gate_up→down (half the
+   bytes), the fused kernel scales 0.53× (byte-proportional) while the base's
+   GEMM family scales only 0.81× (fwd nvjet_64x8 0.85×, dgrad nvjet_64x16
+   0.76×) — the per-expert cuBLAS path streams down's [1024,2048] expert
+   weights less efficiently per byte than gate_up's [2048,2048];
+3. the R=32 peak in both projections: the base's 212-kernel elementwise chain
+   grows ~4.4× faster with R in absolute µs than the fused arm's 22-kernel
+   one (gate_up: +437 µs vs +98 µs from R=8→32), and above R=32 real GEMM
+   growth dilutes it again.
+
+**What this closes and opens.** The race's above-band cell is explained by
+(2)+(3) at its exact operating point, sitting on top of (1); uniform-full
+R=32 reads 1.593 vs the race's padded 1.695 (residual = real-row loss/index
+work). It licenses no throughput claim. Two engineering targets fall out,
+each needing its own registration if pursued: the fused kernel LOSES to
+dequant+cuBLAS at gate_up R≤8 on H100 (headroom at large-K, tiny-R shapes),
+and the base arm's elementwise chain — not its GEMMs — is what makes it a
+bad graphed baseline at mid R.
