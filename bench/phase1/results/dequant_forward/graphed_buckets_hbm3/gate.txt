@@ -1,0 +1,5 @@
+gate_up T=32: F3=1.245 F4=1.15x OUT self=0.980/0.997 waste_rows=8.00
+gate_up T=128: F3=1.147 F4=0.52x OUT self=0.992/1.001 waste_rows=8.00
+down T=32: F3=1.695 OUT F4=1.22x OUT self=0.972/1.002 waste_rows=8.00
+down T=128: F3=1.178 F4=0.60x OUT self=0.971/0.990 waste_rows=8.00
+VERDICT: BAND MISS — a registered band was falsified (see rows)

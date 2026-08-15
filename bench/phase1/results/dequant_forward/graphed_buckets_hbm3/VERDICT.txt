@@ -1,0 +1,1 @@
+VERDICT: BAND MISS — a registered band was falsified (see rows)
