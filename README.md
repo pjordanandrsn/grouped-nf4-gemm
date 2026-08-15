@@ -491,8 +491,8 @@ amendments, evidence JSONs, sweeps, and mechanical reducers are all
 committed; `.ots` files anchor the protocols to Bitcoin. An anchor proves the
 registered bytes existed before its block — an upper bound, so for runs that
 finish faster than Bitcoin confirms, the pre-data evidence is the public push
-receipt instead; the 2026-08-15 protocols are audited timestamp-by-timestamp
-in [`kernel/ATTESTATION-TIMELINE-2026-08-15.md`](kernel/ATTESTATION-TIMELINE-2026-08-15.md).
+receipt instead; `kernel/ATTESTATION-TIMELINE-2026-08-15.md` audits that day's
+protocols timestamp by timestamp.
 
 ## Flagship: a 235B MoE decoding at the PCIe physical limit on ≤16 GB of VRAM
 
