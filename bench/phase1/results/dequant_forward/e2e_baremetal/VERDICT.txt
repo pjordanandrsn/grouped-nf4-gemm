@@ -1,0 +1,1 @@
+VERDICT: GATE FAILED — harm bound. 1/4 cells with cap/pub1 speedup BELOW 0.967 (worst 0.9601). The change costs e2e throughput; per the registered stop rule it is reverted.

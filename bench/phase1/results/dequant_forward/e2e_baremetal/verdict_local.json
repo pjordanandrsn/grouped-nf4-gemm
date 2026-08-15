@@ -1,0 +1,20 @@
+{
+ "band": [
+  0.967,
+  1.032
+ ],
+ "instrument_selfpair": {
+  "('random', 0, 'fast_train')": 0.997574995509251,
+  "('random', 0, 'fast_train_dgrad')": 0.9927949290893338,
+  "('random', 1, 'fast_train')": 1.0125611325611326,
+  "('random', 1, 'fast_train_dgrad')": 0.9782865355987885
+ },
+ "gate": {
+  "('random', 0, 'fast_train')": 0.9601221483743488,
+  "('random', 0, 'fast_train_dgrad')": 0.984176205025309,
+  "('random', 1, 'fast_train')": 0.9828571428571429,
+  "('random', 1, 'fast_train_dgrad')": 0.981623119963041
+ },
+ "problems": [],
+ "verdict": "VERDICT: GATE FAILED \u2014 harm bound. 1/4 cells with cap/pub1 speedup BELOW 0.967 (worst 0.9601). The change costs e2e throughput; per the registered stop rule it is reverted."
+}
