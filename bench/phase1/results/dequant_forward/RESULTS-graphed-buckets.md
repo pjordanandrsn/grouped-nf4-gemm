@@ -211,3 +211,69 @@ each needing its own registration if pursued: the fused kernel LOSES to
 dequant+cuBLAS at gate_up R≤8 on H100 (headroom at large-K, tiny-R shapes),
 and the base arm's elementwise chain — not its GEMMs — is what makes it a
 bad graphed baseline at mid R.
+
+## The roofline question: why the byte advantage does not convert
+
+Grades [`kernel/prereg_fused_roofline.json`](../../../../kernel/prereg_fused_roofline.json)
+(stamped, and pushed at 23:04:09Z — before the pod existed at 23:06:12Z) via
+[`reduce_fused_roofline.py`](../../reduce_fused_roofline.py), which was itself
+committed while the card was still running. Receipts:
+[`graphed_rscan_4090_roofline/`](graphed_rscan_4090_roofline/). One 4090,
+~3 minutes, ≈\$0.04, torn down verified-404.
+
+Weight bytes are analytic, so the merged H100 profile already answered *why*
+the comparison flips sign by projection:
+
+| card | fused Triton | bnb dequant | cuBLAS | fused as % of peak |
+|---|---:|---:|---:|---:|
+| H100 SXM (3350 GB/s) | 161–174 GB/s | 1288–1578 | 876–1510 | **~5%** |
+| RTX 4090 (1008 GB/s) | 211–219 GB/s | 1083–1401 | 408–811 | **~21%** |
+
+The fused arm moves **6.5× fewer weight bytes** and runs **6.2–8.8× less
+efficient per byte**. Those nearly cancel; the residue is the sign of the
+result, which is why `gate_up` (deficit 8.8× > advantage 6.5×) loses at R≤8
+while `down` (6.2× < 6.5×) wins everywhere.
+
+### P3, the positive control, FAILED — and it caught a defect in my own model
+
+The control required bnb's dequant kernel to track peak bandwidth across the
+two cards (ratio in [0.20, 0.60], matching the 0.30× peak ratio). It measured
+**0.87**, and the reason is visible in the table: **1401 GB/s on a card whose
+physical peak is 1008 GB/s.** Logical bytes over kernel time exceeded what the
+DRAM can deliver, which is arithmetically impossible as DRAM traffic and is
+therefore proof that those bytes never reached DRAM.
+
+The working sets say why. The baseline touches **one expert at a time** —
+8.4 MB (gate_up) or 4.2 MB (down) of bf16 — against 50 MB of L2 on the H100
+and 72 MB on the 4090, and PyTorch's allocator recycles the same block for the
+next expert. **The baseline's "extra" traffic is largely L2-resident and never
+pays DRAM for it.** The fused kernel has no such luxury: it streams the whole
+134 MB packed stack, which fits in neither card's L2.
+
+**Per the registered rule, P1 is UNINTERPRETABLE and is not read.** For the
+record and explicitly *not* as confirmation: the fused median landed at
+**214 GB/s**, inside the registered `H_issue` band [140, 340] and 4.1× above
+the `H_bw` prediction of ~52 GB/s — it is **1.27× higher on the card with 30%
+of the bandwidth**, against the 1.39× predicted by issue-capacity scaling.
+That is what `H_issue` looks like, but the control that licenses reading it
+did not hold, so it earns no verdict here.
+
+**P2 CONFIRMED** both projections on the new card (R-flat to 2.4–2.8%), so the
+weight-streaming premise itself replicates on a third architecture.
+
+### What this changes
+
+The likeliest account of the whole graphed-buckets arc is now **cache
+residency, not raw bandwidth**: gnf4's fewer-bytes thesis converts only when
+the baseline's per-expert working set genuinely misses cache. Big-L2, fast-HBM
+cards are exactly where it does not. That is a hypothesis formed *after* the
+data and it grades nothing — testing it needs its own registration and an
+instrument that measures DRAM traffic (hardware counters) rather than logical
+bytes.
+
+**Instrument law earned here: an "achieved bandwidth" computed from logical
+bytes is not DRAM bandwidth — check every such figure against the card's
+physical peak. A value above peak is not a fast kernel, it is proof the
+comparison is measuring cache.** The H100 alone never exposed this (1578 of
+3350 GB/s looks plausible); the second card did, which is the two-card rule
+paying for itself again.
