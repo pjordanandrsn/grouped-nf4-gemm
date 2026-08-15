@@ -1,0 +1,17 @@
+{
+ "registered_utc": "2026-08-15T19:55:00Z",
+ "amends": "kernel/prereg_graphed_rscan.json",
+ "registers": "AMENDMENT 1: the timing instrument, repaired after attempt 1 REFUSED — and the refusal is recorded, not erased. Stamped before the amended instrument produces a single number. Bands, gates, decision rules, card class and design are UNTOUCHED.",
+
+ "what_attempt_1_measured": "12 of 16 cells VOID (receipts graphed_rscan_h100/, pod v5wzecr6wnvjp6, torn down GET=404). EVERY void is the G-arm self-pair (g_b/g_a = 0.923-0.964); the D-arm self-pair reads 0.997-1.001 in ALL 16 cells. The voided block is always g_a — the FIRST timed block of each cell. The same signature sits milder in the merged GBH race (g self-pairs 0.971-0.992, longer blocks). gate_up blocks were ~300 ms and still voided, so block length is not the story: the first block after the cell's captures reads a settling ramp that lasts roughly A FULL BLOCK — the same 'settling ~= a full mode' law the e2e driver's ten-drift finding established (PR #89), reproduced at block scale. The instrument failed; the quantity was never read.",
+
+ "amended_instrument": {
+  "primer_blocks": "Per cell, per arm, immediately before that arm's timed blocks: ONE FULL UNTIMED BLOCK (the same n replays as a timed block) — the first-mode-discard remedy translated to cell scale. Short burn-ins were falsified at mode scale and are not attempted here. Primer receipts (n, wall) recorded under an auditable 'primer' key per row.",
+  "block_length_floor": "n per cell = clamp(ceil(0.25 s / per-replay estimate from a 5-replay pilot), 200, 2000), so no timed block is shorter than ~0.25 s even at tiny R. The pilot's estimate is recorded per row.",
+  "unchanged": "Block order (g_a, g_b, d_a, d_b), the replay-only graded quantity, the reported load-inclusive quantity, self-pair void band [0.967, 1.033], P1/P2/P4 bands, P3 decision rules, the profiler positive control, the floor probe, uniform-full draws, lora=False, sm_90+HBM3 assert."
+ },
+
+ "attempt_1_evidence_that_remains_valid": "The profile pass ran post-warm with its positive control PASSED (21 kernels/step on the eager control; floor probe 1.19 us/kernel) and does not depend on self-pairs. It is already decisive on two registered questions and is carried into the record verbatim: kernel COUNTS are equal across projections (128 GEMM kernels = 2/expert, both; splitk_names empty in every table), so P3 rule (a)'s count/splitK form cannot fire; and both arms are weight-traffic-bound at small R (the fused kernel's per-replay time is R-FLAT: it streams the full expert stack every replay regardless of R). P3 will be GRADED on attempt 2's profile, but attempt 2 is expected to reproduce these; a disagreement between the two profiles would itself be reported.",
+
+ "stop_rule": "As before, verbatim write-up including refusals and falsifications; no band adjustment after data; no re-runs for a better number. Attempt 1's receipts stay in the record as the refusal they are."
+}

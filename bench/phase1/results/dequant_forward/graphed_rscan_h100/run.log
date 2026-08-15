@@ -1,0 +1,91 @@
++ PY=
++ for c in python3.12 python3.11 python3 python
++ command -v python3.12
++ python3.12 -c 'import torch'
++ PY=python3.12
++ break
++ '[' -z python3.12 ']'
++ python3.12 -c 'import torch;print('\''GPU'\'',torch.cuda.get_device_name(0))'
+GPU NVIDIA H100 80GB HBM3
++ command -v gcc
++ TGZ=
++ for t in /root/dqf_rscan.tgz /root/dqf_gbh.tgz /root/dqf_cap.tgz /root/dqf_bm.tgz
++ '[' -f /root/dqf_rscan.tgz ']'
++ TGZ=/root/dqf_rscan.tgz
++ break
++ '[' -z /root/dqf_rscan.tgz ']'
++ cd /root
++ rm -rf gnf4
++ mkdir gnf4
++ tar xzf /root/dqf_rscan.tgz -C gnf4
++ python3.12 -m pip install -q --no-cache-dir bitsandbytes
++ tail -2
+[notice] A new release of pip is available: 26.1.2 -> 26.2.1
+[notice] To update, run: python3.12 -m pip install --upgrade pip
++ cd /root/gnf4
++ export DQF_REPO=/root/gnf4
++ DQF_REPO=/root/gnf4
++ python3.12 -
++ python3.12 bench/phase1/graphed_rscan.py --models OLMoE --steps 200 --out /root/dqf-out --tag rs
++ tail -30
+F2 down     R=32  PASS
+F2 down     R=128 PASS
+RS down     R=1   d/g 1.536 excess 0.421ms (self 0.945/0.997)  VOID
+RS down     R=2   d/g 1.385 excess 0.340ms (self 0.938/0.999)  VOID
+RS down     R=4   d/g 1.397 excess 0.353ms (self 0.939/0.999)  VOID
+RS down     R=8   d/g 1.408 excess 0.369ms (self 0.933/0.998)  VOID
+RS down     R=16  d/g 1.436 excess 0.407ms (self 0.923/1.000)  VOID
+RS down     R=32  d/g 1.547 excess 0.541ms (self 0.945/1.000)  VOID
+RS down     R=64  d/g 1.267 excess 0.409ms (self 0.954/1.000)  VOID
+RS down     R=128 d/g 1.083 excess 0.221ms (self 0.970/1.001)
+VERDICTS: {
+ "P1_spearman_gate_up": {
+  "refusal": "only 3 live points (< 6)"
+ },
+ "P4_elasticity_gate_up": {
+  "refusal": "R=1 or R=8 cell not live"
+ },
+ "P1_spearman_down": {
+  "refusal": "only 1 live points (< 6)"
+ },
+ "P4_elasticity_down": {
+  "refusal": "R=1 or R=8 cell not live"
+ },
+ "P2_flip_at_R32": {
+  "refusal": "an R=32 cell is not live"
+ },
+ "ALL_GRADED_PASS": false,
+ "refusal": "no graded rows at all \u2014 absence is not a pass"
+}
+GRAPHED_RSCAN_DONE -> /root/dqf-out/graphed_rscan_rs.json
++ RC=0
++ '[' 0 -ne 0 ']'
++ python3.12 - /root/dqf-out/graphed_rscan_rs.json
++ tee /root/dqf-out/gate.txt
+gate_up R=1: d/g 1.046 excess 0.066ms with_load 1.119 self 0.944/1.000 VOID
+gate_up R=2: d/g 0.932 excess -0.110ms with_load 0.955 self 0.957/1.000 VOID
+gate_up R=4: d/g 0.953 excess -0.076ms with_load 0.947 self 0.973/1.000
+gate_up R=8: d/g 0.971 excess -0.047ms with_load 0.971 self 0.961/1.000 VOID
+gate_up R=16: d/g 0.973 excess -0.045ms with_load 1.000 self 0.964/1.000 VOID
+gate_up R=32: d/g 1.189 excess 0.330ms with_load 1.210 self 0.962/1.000 VOID
+gate_up R=64: d/g 1.064 excess 0.176ms with_load 1.071 self 0.977/1.001
+gate_up R=128: d/g 1.099 excess 0.461ms with_load 1.103 self 0.984/1.000
+down R=1: d/g 1.536 excess 0.421ms with_load 1.574 self 0.945/0.997 VOID
+down R=2: d/g 1.385 excess 0.340ms with_load 1.427 self 0.938/0.999 VOID
+down R=4: d/g 1.397 excess 0.353ms with_load 1.432 self 0.939/0.999 VOID
+down R=8: d/g 1.408 excess 0.369ms with_load 1.456 self 0.933/0.998 VOID
+down R=16: d/g 1.436 excess 0.407ms with_load 1.487 self 0.923/1.000 VOID
+down R=32: d/g 1.547 excess 0.541ms with_load 1.574 self 0.945/1.000 VOID
+down R=64: d/g 1.267 excess 0.409ms with_load 1.286 self 0.954/1.000 VOID
+down R=128: d/g 1.083 excess 0.221ms with_load 1.097 self 0.970/1.001
+profiler control: PASS (21 kernels/step)  floor 1.19 us/kernel
+P1_spearman_down {"refusal": "only 1 live points (< 6)"}
+P1_spearman_gate_up {"refusal": "only 3 live points (< 6)"}
+P2_flip_at_R32 {"refusal": "an R=32 cell is not live"}
+P4_elasticity_down {"refusal": "R=1 or R=8 cell not live"}
+P4_elasticity_gate_up {"refusal": "R=1 or R=8 cell not live"}
+VERDICT: REFUSAL — a registered gate lacked its live cells (see rows)
++ sync
++ echo OK
++ echo DQF_ALL_DONE
+DQF_ALL_DONE

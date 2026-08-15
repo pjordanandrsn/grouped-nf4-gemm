@@ -218,7 +218,19 @@ def scan_cell(stack, spec, R, args, device="cuda"):
                    "warm_gpu", None)
     if warm:
         warm(1.0)
-    n = args.steps
+    # AMENDMENT 1: attempt 1 voided 12/16 cells, every void the g_a block —
+    # the first timed block of a cell reads a settling ramp that lasts about a
+    # full block (the e2e ten-drift law at block scale; short burn-ins were
+    # falsified there and are not attempted here). Remedy = the first-mode
+    # discard translated: one full UNTIMED block per arm before its timed
+    # pair, plus a 0.25 s wall floor on block length from a 5-replay pilot.
+    pilot_ms = timed_replay_pure(arms["base"], 5)
+    n = max(200, min(2000, math.ceil(250.0 / max(pilot_ms, 1e-3))))
+    primer = {}
+    for name in ("fused", "base"):
+        t0 = time.perf_counter()
+        timed_replay_pure(arms[name], n)
+        primer[name] = {"n": n, "wall_s": time.perf_counter() - t0}
     t = {"g_a": timed_replay_pure(arms["fused"], n),
          "g_b": timed_replay_pure(arms["fused"], n),
          "d_a": timed_replay_pure(arms["base"], n),
@@ -227,6 +239,7 @@ def scan_cell(stack, spec, R, args, device="cuda"):
          "d_with_load": timed_replay_with_load(arms["base"], min(n, 100))}
     row = {
         "proj": spec.proj, "R": R, "T_real": T_real, "ms": t,
+        "n": n, "pilot_ms": pilot_ms, "primer": primer,
         "g_selfpair": t["g_b"] / t["g_a"], "d_selfpair": t["d_b"] / t["d_a"],
         "d_over_g": (t["d_a"] + t["d_b"]) / (t["g_a"] + t["g_b"]),
         "excess_ms": (t["d_a"] + t["d_b"]) / 2 - (t["g_a"] + t["g_b"]) / 2,
