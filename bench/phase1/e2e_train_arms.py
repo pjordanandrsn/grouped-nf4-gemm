@@ -212,6 +212,29 @@ class RoutingTap:
 
 
 # ----------------------------------------------------------------- arm -----
+def plan_modes(data: str, discard_first: bool):
+    """The run's data-mode schedule as (mode, is_burnin) pairs.
+
+    TEN consecutive runs across THREE hosts (two shared L40S pods, a
+    whole-machine 3060 Ti, a whole-machine A4000) drifted the FIRST data mode's
+    reference self-pair below G1 (0.859–0.924) while the mode that ran second
+    stayed clean — with zero CPU neighbours, so it is a property of this driver,
+    not contention. A wall-clock GPU warm-up made it WORSE, and the drift spans
+    the whole first mode (~120 steps), so a short burn-in is falsified too:
+    settling takes about a mode.
+
+    Hence the registered remedy (scope amendment 1): run the first mode TWICE
+    and DISCARD the first pass. The burn-in pass runs the full arm set — the
+    settling comes from doing the work — and its receipts land under a separate
+    `burnin` key so no reducer can mistake them for cells.
+    """
+    modes = ["text", "random"] if data == "both" else [data]
+    plan = [(m, False) for m in modes]
+    if discard_first and plan:
+        plan.insert(0, (plan[0][0], True))
+    return plan
+
+
 def warm_gpu(seconds: float, device="cuda"):
     """Wall-clock GPU-busy work before the FIRST timed arm of a mode.
 
@@ -373,6 +396,12 @@ def main():
     ap.add_argument("--warm-s", type=float, default=1.5,
                     help="wall-clock GPU-busy seconds before the first arm of "
                          "each data mode (clock recovery). 0 disables it.")
+    ap.add_argument("--discard-first-mode", type=int, default=1,
+                    help="run the first data mode twice and DISCARD the first "
+                         "pass (default 1). Ten consecutive first modes drifted "
+                         "below G1 across three hosts; settling takes ~a full "
+                         "mode, so this is the registered remedy. 0 restores "
+                         "the old single-pass behaviour.")
     ap.add_argument("--busy-steps", type=int, default=3,
                     help="profiled steps per arm for the GPU-busy label (C4). "
                          "Costs 2+2N steps per arm; 0 disables it and the cell "
@@ -453,7 +482,7 @@ def main():
         ("reference_selfpair", None, None),
     ]
 
-    modes = ["text", "random"] if a.data == "both" else [a.data]
+    plan = plan_modes(a.data, bool(a.discard_first_mode))
     payload = dict(probe="end-to-end QLoRA training, fused vs per-expert dequant loop",
                    prereg="kernel/prereg_dequant_forward_e2e.json",
                    adapted_from="experts4bit-qlora/bench/dgrad-gate/dgrad_gate.py",
@@ -474,10 +503,18 @@ def main():
     dest.mkdir(parents=True, exist_ok=True)
     art = dest / f"e2e_{a.tag}.json"
 
-    for mode in modes:
-        print(f"\n########## data={mode} ##########", flush=True)
-        batches = (text_batches(tok, a.steps, a.seq, "cuda") if mode == "text"
-                   else random_batches(tok, a.steps, a.seq, "cuda"))
+    payload["mode_plan"] = [f"{m}{'(burnin,discarded)' if b else ''}"
+                            for m, b in plan]
+    payload.setdefault("burnin", {})
+    _batches_cache = {}
+    for mode, is_burnin in plan:
+        print(f"\n########## data={mode}{' BURN-IN (discarded)' if is_burnin else ''} ##########",
+              flush=True)
+        if mode not in _batches_cache:
+            _batches_cache[mode] = (
+                text_batches(tok, a.steps, a.seq, "cuda") if mode == "text"
+                else random_batches(tok, a.steps, a.seq, "cuda"))
+        batches = _batches_cache[mode]
         # Clock recovery, before the first arm of EVERY mode. Building batches
         # is itself a CPU-bound stretch with the GPU idle -- `text_batches`
         # tokenises wikitext -- so the mode that runs first is not the only one
@@ -538,7 +575,12 @@ def main():
              _fr) = H.measurement_class({"reference": ref.get("gpu_busy"),
                                          name: r.get("gpu_busy")})
         payload["measurement_class_note"] = H.MEASUREMENT_CLASS_NOTE
-        payload["cells"][mode] = results
+        if is_burnin:
+            # Discarded by REGISTRATION, not by judgement: these receipts exist
+            # so the burn-in is auditable, under a key no reducer reads.
+            payload["burnin"][mode] = results
+        else:
+            payload["cells"][mode] = results
         art.write_text(json.dumps(payload, indent=1, default=str))
 
     print("\n=== SUMMARY ===")
