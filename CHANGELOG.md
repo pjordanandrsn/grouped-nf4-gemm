@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.13.2 — 2026-08-15
+
+### Expert stacks past 2 GiB no longer fault — int64 offset arithmetic
+
+`gemm_4bit_grouped` (and `dgrad_4bit_grouped`) raised an illegal memory access
+whenever the packed stack `B` exceeded 2^31 bytes: `eid * stride_be` was
+signed-int32, so a stack of exactly 2 GiB was the last one that worked. The
+boundary was measured exactly on two shapes (256 × 8 MiB passes, 257 faults;
+128 × 16 MiB predicted from the stride math and hit) — it hard-capped the
+batch/arena path at DeepSeek-class expert counts.
+
+`eid` is promoted to int64 at load in all four kernels, so every downstream
+stride product promotes. Verified: the new boundary test fails on 0.13.1's
+kernels and passes on these (experts sampled both sides of 2^31, plus one
+grouped call touching both sides in a single launch, against `dequant_ref`);
+**26/26 tensors bitwise identical below the boundary**; capture ladder 6/6
+with the arena guard's named refusal intact.
+
 ## 0.13.1 — 2026-08-15
 
 ### Index transfers are capture-conditional (the §11 repair)

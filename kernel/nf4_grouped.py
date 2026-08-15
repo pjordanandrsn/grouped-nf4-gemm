@@ -393,6 +393,10 @@ def _gemm_nf4_grouped(
     rows = tl.load(t_rows_ptr + pid_m)
     grp = tl.load(t_group_ptr + pid_m)
     eid = tl.load(expert_ids_ptr + grp)
+    # int64 BEFORE any stride product: eid * stride_be overflows signed int32
+    # the moment the packed stack passes 2^31 bytes — measured exactly at the
+    # boundary (256 x 8 MiB passes, 257 faults; 128 x 16 MiB predicted, hit).
+    eid = eid.to(tl.int64)
 
     offs_m = tl.arange(0, BLOCK_M)
     offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
@@ -481,6 +485,9 @@ def _gemv_nf4_grouped(
     g = tl.program_id(0)
     pid_n = tl.program_id(1)
     eid = tl.load(expert_ids_ptr + g)
+    # int64 before the stride product — see the boundary note in the M-tile
+    # kernel; same signed-int32 overflow, same fix.
+    eid = eid.to(tl.int64)
 
     offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
     n_mask = offs_n < N
@@ -536,6 +543,9 @@ def _gemv_nf4_grouped_splitk(
     pid_n = tl.program_id(1)
     pid_k = tl.program_id(2)
     eid = tl.load(expert_ids_ptr + g)
+    # int64 before the stride product — see the boundary note in the M-tile
+    # kernel; same signed-int32 overflow, same fix.
+    eid = eid.to(tl.int64)
 
     offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
     n_mask = offs_n < N
@@ -968,6 +978,10 @@ def _dgrad_nf4_grouped(
     rows = tl.load(t_rows_ptr + pid_m)
     grp = tl.load(t_group_ptr + pid_m)
     eid = tl.load(expert_ids_ptr + grp)
+    # int64 BEFORE any stride product: eid * stride_be overflows signed int32
+    # the moment the packed stack passes 2^31 bytes — measured exactly at the
+    # boundary (256 x 8 MiB passes, 257 faults; 128 x 16 MiB predicted, hit).
+    eid = eid.to(tl.int64)
 
     offs_m = tl.arange(0, BLOCK_M)
     offs_k = pid_k * BLOCK_K + tl.arange(0, BLOCK_K)
