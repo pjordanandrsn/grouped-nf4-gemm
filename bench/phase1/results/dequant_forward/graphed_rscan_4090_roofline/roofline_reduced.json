@@ -1,0 +1,78 @@
+{
+ "ref_gpu": "NVIDIA H100 80GB HBM3",
+ "new_gpu": "NVIDIA GeForce RTX 4090",
+ "cells": [
+  {
+   "proj": "gate_up",
+   "R": 8,
+   "E": 64,
+   "d_over_g": 1.958641098697998,
+   "fused_gbs": 215.6378854533541,
+   "dequant_gbs": 1401.1049520743418,
+   "cublas_gbs": 613.5172077531265,
+   "traffic_adv": 6.5
+  },
+  {
+   "proj": "gate_up",
+   "R": 32,
+   "E": 64,
+   "d_over_g": 1.8335294456868563,
+   "fused_gbs": 210.641198456025,
+   "dequant_gbs": 1397.9838638558854,
+   "cublas_gbs": 811.2183243432316,
+   "traffic_adv": 6.5
+  },
+  {
+   "proj": "down",
+   "R": 8,
+   "E": 64,
+   "d_over_g": 2.7987274288838773,
+   "fused_gbs": 219.23550165956675,
+   "dequant_gbs": 1096.2909203380038,
+   "cublas_gbs": 407.66801010935774,
+   "traffic_adv": 6.5
+  },
+  {
+   "proj": "down",
+   "R": 32,
+   "E": 64,
+   "d_over_g": 2.310469887118632,
+   "fused_gbs": 213.1633390543489,
+   "dequant_gbs": 1082.739825042025,
+   "cublas_gbs": 560.153895379409,
+   "traffic_adv": 6.5
+  }
+ ],
+ "verdicts": {
+  "P3_control_dequant_tracks_bandwidth": {
+   "ref_median_gbs": 1435.7000419172662,
+   "new_median_gbs": 1247.1373920969445,
+   "ratio": 0.868661527955024,
+   "band": [
+    0.2,
+    0.6
+   ],
+   "pass": false
+  },
+  "P2_flat_down": {
+   "by_R": {
+    "8": 219.23550165956675,
+    "32": 213.1633390543489
+   },
+   "spread": 0.02848596119837314,
+   "pass": true
+  },
+  "P2_flat_gate_up": {
+   "by_R": {
+    "8": 215.6378854533541,
+    "32": 210.641198456025
+   },
+   "spread": 0.023721318687674728,
+   "pass": true
+  },
+  "P1_binding_constraint": {
+   "median_gbs": 214.4006122538515,
+   "verdict": "UNINTERPRETABLE \u2014 the positive control failed"
+  }
+ }
+}
