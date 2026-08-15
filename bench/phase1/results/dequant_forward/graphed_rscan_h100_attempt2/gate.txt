@@ -1,0 +1,23 @@
+gate_up R=1: d/g 1.081 excess 0.112ms with_load 1.120 self 0.998/1.000
+gate_up R=2: d/g 0.952 excess -0.076ms with_load 0.958 self 1.000/1.000
+gate_up R=4: d/g 0.967 excess -0.053ms with_load 0.971 self 1.000/1.001
+gate_up R=8: d/g 0.992 excess -0.013ms with_load 0.997 self 1.000/1.000
+gate_up R=16: d/g 1.080 excess 0.131ms with_load 1.083 self 1.000/1.000
+gate_up R=32: d/g 1.212 excess 0.363ms with_load 1.208 self 0.998/1.001
+gate_up R=64: d/g 1.076 excess 0.205ms with_load 1.074 self 0.996/1.001
+gate_up R=128: d/g 1.106 excess 0.493ms with_load 1.100 self 0.998/1.001
+down R=1: d/g 1.586 excess 0.444ms with_load 1.584 self 0.997/1.000
+down R=2: d/g 1.431 excess 0.369ms with_load 1.426 self 0.999/1.001
+down R=4: d/g 1.440 excess 0.379ms with_load 1.435 self 0.999/1.001
+down R=8: d/g 1.458 excess 0.400ms with_load 1.449 self 0.999/1.001
+down R=16: d/g 1.490 excess 0.440ms with_load 1.480 self 1.003/1.000
+down R=32: d/g 1.593 excess 0.569ms with_load 1.568 self 0.997/1.001
+down R=64: d/g 1.296 excess 0.443ms with_load 1.286 self 0.998/1.001
+down R=128: d/g 1.098 excess 0.258ms with_load 1.087 self 0.997/1.002
+profiler control: PASS (21 kernels/step)  floor 1.20 us/kernel
+P1_spearman_down {"rho": -0.40476190476190477, "n_live": 8, "pass": false}
+P1_spearman_gate_up {"rho": 0.5, "n_live": 8, "pass": false}
+P2_flip_at_R32 {"excess_down_over_gate_up": 1.5673171680011722, "excess_ms": {"gate_up": 0.3632544307038188, "down": 0.5693349055945873}, "pass": true}
+P4_elasticity_down {"elasticity_1_to_8": 0.027149312423500747, "pass": true}
+P4_elasticity_gate_up {"elasticity_1_to_8": 0.029675211040926935, "pass": true}
+VERDICT: BAND MISS — a registered band was falsified (see rows)
