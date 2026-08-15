@@ -1,0 +1,18 @@
+{
+ "registered_utc": "2026-08-15T15:05:00Z",
+ "amends": "kernel/prereg_graphed_buckets.json",
+ "registers": "AMENDMENT 1: the F2 fidelity gate for the LoRA path, corrected after the original gate was measured FALSIFIED — and the falsification is recorded, not erased. Stamped before the amended gate's data exists.",
+
+ "what_was_measured": "F2 as originally registered (bitwise vs the unbucketed shipped path) PASSED for the base path on both projections — outputs, a-grads, and replay==eager, all torch.equal — and FAILED for the LoRA path on everything including FORWARD outputs (A2000, receipts graphed_buckets_a2000-f2.json). Per the stop rule the race did not run.",
+
+ "why_the_original_lora_gate_was_wrong": "A forward-output mismatch cannot be padding leakage: the delta is row-independent and zeroed padding rows contribute exactly zero. The mechanism is cuBLAS batch-matmul KERNEL SELECTION varying with batch shape — the bucketed call is [E, R, ...] where the unbucketed one is [G, widest, ...] — changing the in-row reduction order at bf16. The same mechanism is already in this program's record (leg 1: cuBLAS picks a different, less accurate F.linear kernel on Ada for some large-M shapes). Decisive: the unbucketed LoRA path does not equal ITSELF across routing draws, because its own bmm shape changes every step. An oracle that is not self-consistent under the variation being tested is not an oracle.",
+
+ "amended_F2_lora": {
+  "a_leak_test_BITWISE": "Padding must not touch real rows: fill the padding slots with GARBAGE instead of zeros, forward only — real-row outputs must equal the zero-fill run bitwise (torch.equal). This isolates cross-row leakage from kernel-choice numerics, which shape-identical runs share.",
+  "b_grad_zero_fill_BITWISE": "The zero-fill's whole claim: with padding zeroed, lora_A/lora_B grads must equal a second zero-fill run bitwise (determinism of the bucketed path itself), and the garbage-fill run's grads must DIFFER — a positive control that the leak test can see contamination at all.",
+  "c_value_agreement_vs_unbucketed_TOLERANCE": "Real-row outputs and all grads vs the unbucketed shipped path within the repo's bf16 noise floor: relative error <= 6.5e-3 (the floor lora_delta_grouped's own batched-vs-loop test uses). This is a numerics-equivalence claim between two shapes of the same math, which is all two different cuBLAS kernels can promise.",
+  "unchanged": "The BASE path's gate stays BITWISE as originally registered, and it already passed. F1 capture, F3/F4 bands, waste accounting, hardware rule and stop rule are untouched."
+ },
+
+ "stop_rule": "As before: verbatim write-up; if the amended F2 fails in any part, the race does not run and the next move is diagnosis, not tolerance-widening."
+}
