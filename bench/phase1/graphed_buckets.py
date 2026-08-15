@@ -353,8 +353,12 @@ def race_cell(stack, spec, tokens, lora, args, device="cuda"):
         "F3_d_over_g_graphed": t["d_a"] / t["g_b"],
         "F4_graphed_speedup_vs_shipped_eager": t["fused_eager"] / t["g_b"],
     })
-    row["arena_owned_ints"] = getattr(
-        __import__("nf4_grouped")._ARENAS.get(str(torch.device(device))), "off", 0)
+    # Sum over every arena key: live tensors key the dict as "cuda:0" while
+    # str(torch.device("cuda")) is "cuda" — the mismatched lookup reported 0 on
+    # every cell of the committed receipts, a blind-metric null this program's
+    # own rules exist to catch and Bugbot caught instead (PR #90).
+    row["arena_owned_ints"] = sum(
+        a.off for a in __import__("nf4_grouped")._ARENAS.values())
     return row
 
 
@@ -407,8 +411,12 @@ def main():
                     flush=True)
                 art.write_text(json.dumps(out, indent=1, default=str))
             if not args.fidelity_only:
-                if not all(f.get("F2_pass") for f in out["fidelity"]
-                           if f.get("tokens") == tokens):
+                graded = [f for f in out["fidelity"]
+                          if f.get("tokens") == tokens and "F2_pass" in f]
+                # `not_run` rows carry no F2_pass; they must not veto models
+                # whose own fidelity passed (Bugbot, PR #90). No graded rows at
+                # all is still a refusal — absence of fidelity is not a pass.
+                if not graded or not all(f["F2_pass"] for f in graded):
                     print("F2 failed — the race does not run (stop rule)")
                     continue
                 r = race_cell(stack, spec, tokens, False, args)

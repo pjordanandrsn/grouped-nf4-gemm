@@ -91,3 +91,13 @@ would need its own registration; nothing here licenses one.
   stands); any claim that graphing accelerates the fused path on this device
   class (F4 falsified it); anything at all on HBM3 until a registered run
   exists there.
+
+## Errata (receipts, reported fields)
+
+`arena_owned_ints` reads **0 in every committed race receipt** and is WRONG —
+the readout keyed `_ARENAS` with `"cuda"` while live tensors key it `"cuda:0"`,
+so a reported-not-graded field silently nulled. Caught by Bugbot on PR #90
+after I printed the impossible zero without noticing; the receipts stay as
+produced, this note marks the field, and the readout is fixed for future runs.
+A second latent defect (fidelity `not_run` rows vetoing the race gate via a
+missing key) is fixed in the same commit; it never fired in these runs.
