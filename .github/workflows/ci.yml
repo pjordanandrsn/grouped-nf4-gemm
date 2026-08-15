@@ -121,6 +121,12 @@ jobs:
       - name: GPU-labelled files, for the CPU-reachable tests inside them
         run: cd kernel && python -m pytest test_arena_equivalence.py test_arena_experts.py test_mxfp4_qlora.py test_mxfp4_residency.py test_nf4_qlora_grad.py test_nvme_residency.py test_nf4_grouped.py test_mxfp4_grouped.py test_mxfp4_pipelined.py test_eids_forms.py test_arena_capture_semantics.py -q
 
+      # Harness schedule logic (bench/phase1) — pure functions, no GPU. The
+      # e2e driver's burn-in plan is the registered remedy for the ten-run
+      # first-mode drift; this keeps a refactor from silently dropping it.
+      - name: harness unit tests
+        run: cd bench/phase1 && python -m pytest test_plan_modes.py -q
+
       - name: packaging allowlist + test-wiring guard
         run: cd kernel && python -m pytest test_packaging_covers_kernel.py test_check_readme_links.py -q
 
