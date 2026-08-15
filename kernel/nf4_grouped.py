@@ -204,8 +204,15 @@ def _arena(device) -> _PinnedIndexArena:
 
 
 def to_device_i32(seqs, device):
-    """One PINNED, async host-to-device transfer for a batch of small host-side
-    integer sequences. Returns one int32 device view per input, in order.
+    """Small host-side integer sequences to device, in one transfer whose KIND
+    depends on whether the stream is capturing. Returns one int32 device view
+    per input, in order — identical values on every path.
+
+    UNDER CAPTURE: one pinned, async transfer staged from the persistent arena
+    (a pageable build syncs, and a sync invalidates the capture). OTHERWISE:
+    the plain pageable build the pre-capturability code used — measured 1.8%
+    cheaper at the median on the host-bound e2e step (§11), because outside a
+    capture the sync costs nothing while the extra host work does.
 
     Why this exists, and why it is batched
     --------------------------------------
@@ -240,15 +247,46 @@ def to_device_i32(seqs, device):
     dev = torch.device(device)
     # The staging arena needs a CUDA context; the interpreter/CPU contract path
     # has none, and there is nothing to make capturable there either.
-    pinned = dev.type == "cuda" and torch.cuda.is_available()
+    cuda = dev.type == "cuda" and torch.cuda.is_available()
     if total == 0:
         return [torch.empty(0, dtype=torch.int32, device=dev) for _ in seqs]
-    if not pinned:
-        packed = torch.tensor([v for s in seqs for v in s], dtype=torch.int32,
-                              device=dev)
-    else:
+    # CAPTURE-CONDITIONAL, and this conditional is the whole repair for a
+    # measured regression (RESULTS-capturability.md §11). The pinned-arena
+    # transfer exists to be legal INSIDE a CUDA graph capture; outside one it is
+    # strictly extra host work — staging writes, event queries, arena
+    # bookkeeping — bought to remove syncs that cost nothing while the GPU is
+    # idle. Measured on a whole-machine 3060 Ti (instrument clean to 2.2%): the
+    # unconditional arena path priced the host-bound e2e step 1.8% down at the
+    # median. So: the arena serves capture, the pre-change pageable build serves
+    # everything else, and the branch below is the pre-change path restored by
+    # construction.
+    capturing = False
+    if cuda:
+        try:
+            capturing = torch.cuda.is_current_stream_capturing()
+        except Exception:
+            capturing = False
+        # The arena must EXIST before capture starts — pinned allocation inside
+        # a capture region is the measured-illegal construct this whole file is
+        # about. Touching it here, on every CUDA call including the pageable
+        # ones, guarantees any later capture finds it already allocated (the
+        # capture discipline always runs warm-up steps uncaptured first).
         ar = _arena(dev)
-        host, _capturing = ar.take(total)
+        if capturing and ar.host.numel() < total:
+            raise RuntimeError(
+                "grouped-nf4: the pinned index arena (%d int32) is smaller than "
+                "this capture needs (%d so far in one call) and growing it "
+                "inside a capture is not capturable. Set GNF4_PIN_ARENA_INTS "
+                "and re-run; warm-up outside capture sizes it automatically."
+                % (ar.host.numel(), total))
+    if not capturing:
+        # Not capturing (or not CUDA): the PRE-CHANGE transfer. A pageable
+        # build syncs, and on the host-bound paths that reach here the sync is
+        # free — the pipeline it would drain is idle.
+        packed = torch.tensor([int(v) for s in seqs for v in s],
+                              dtype=torch.int32, device=dev)
+    else:
+        host, _ = ar.take(total)
         off = 0
         for s, n in zip(seqs, lens):
             if n:
