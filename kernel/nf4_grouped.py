@@ -116,17 +116,20 @@ class _PinnedIndexArena:
     INSIDE the capture region still fails. The staging buffer has to already
     exist when capture starts, which is what this arena is for.
 
-    NO SLICE IS EVER REUSED WHILE A COPY OFF IT COULD STILL BE IN FLIGHT. The
-    bump pointer only rewinds when (a) the stream is not capturing and (b) the
-    event recorded after the last hand-out has completed, so the host can never
-    overwrite bytes a pending async copy has not yet read. Inside a capture it
-    never rewinds at all, so the several call sites in one step -- forward
-    M-tile, forward eids, backward dgrad tiles, backward dgrad eids, and the two
-    LoRA tables -- each get distinct bytes, which is what makes a captured graph
-    replay the values it was captured with.
+    SLICES TAKEN DURING A CAPTURE ARE PERMANENT: `off` is monotone and never
+    rewinds. A captured graph's H2D nodes RE-READ their pinned host slices on
+    EVERY replay, for as long as the graph lives -- so reusing those bytes for
+    anything else would silently corrupt later replays. (The pre-0.13.1 design
+    rewound on an event fence once transfers completed; that fence proves the
+    COPY finished, not that no graph still reads the bytes -- a latent replay
+    hazard, found while fixing the Bugbot report on PR #88, closed by
+    permanence.) Since 0.13.1 `take` runs only under capture, so everything
+    ever taken is capture-owned and permanence costs exactly the bytes the
+    process's captures consumed: with the 1 Mi-int default, hundreds of
+    captured whole-model steps.
 
-    Growth keeps the old arena alive rather than freeing it, for the same
-    reason.
+    Growth keeps the old arena alive rather than freeing it -- retired buffers
+    may still be read by live graphs.
 
     THE ARENA MUST NOT GROW DURING A CAPTURE, and that is why the default is
     generous. Inside a capture nothing completes, so the bump pointer never
@@ -159,36 +162,56 @@ class _PinnedIndexArena:
             return False
 
     def take(self, n: int):
-        """A pinned int32 host view of length ``n`` that nothing else is using."""
+        """A pinned int32 host view of length ``n``, permanently owned by the
+        capture that takes it. Never rewinds -- see the class docstring."""
         capturing = self._capturing()
-        if not capturing and self.off and self.evt.query():
-            self.off = 0
         if self.off + n > self.host.numel():
             if capturing:
                 raise RuntimeError(
-                    "grouped-nf4: the pinned index arena (%d int32) was exhausted "
-                    "%d ints into a CUDA graph capture. Growing it here would "
-                    "allocate pinned memory inside the capture region, which is "
-                    "not capturable — so this refuses instead of failing later "
-                    "with an opaque 'previous error during capture'. Set "
-                    "GNF4_PIN_ARENA_INTS to at least %d and re-run; the arena is "
-                    "int32, so that is %.1f MiB of pinned host memory."
-                    % (self.host.numel(), self.off, 2 * (self.off + n),
+                    "grouped-nf4: the pinned index arena (%d int32, %d already "
+                    "owned by this process's captures) cannot hold %d more ints, "
+                    "and growing it would allocate pinned memory inside the "
+                    "capture region, which is not capturable — so this refuses "
+                    "instead of failing later with an opaque 'previous error "
+                    "during capture'. Slices taken under capture are permanent "
+                    "(replays re-read them), so set GNF4_PIN_ARENA_INTS to at "
+                    "least %d (int32: %.1f MiB pinned) and re-run, or call "
+                    "reserve() outside capture."
+                    % (self.host.numel(), self.off, n, 2 * (self.off + n),
                        2 * (self.off + n) * 4 / 2**20))
-            self._retired.append(self.host)          # may still be in flight
-            self.host = torch.empty(max(2 * self.host.numel(), self.off + n),
-                                    dtype=torch.int32, pin_memory=True)
-            self.off = 0
-            if len(self._retired) > 8:
-                self._retired.pop(0)
+            self._grow(self.off + n)
         view = self.host[self.off:self.off + n]
         self.off += n
         return view, capturing
 
+    def _grow(self, need: int):
+        """Replace the staging buffer with a larger one, OUTSIDE capture only.
+        The old buffer is retired, never freed eagerly: live graphs may still
+        read slices of it on replay, and `off` keeps counting in the new buffer
+        from where the old one left off (owned bytes stay owned)."""
+        self._retired.append(self.host)
+        new_n = max(2 * self.host.numel(), need)
+        fresh = torch.empty(new_n, dtype=torch.int32, pin_memory=True)
+        # Owned prefix carries over so pre-capture reservation composes with
+        # slices already owned by earlier captures in this process.
+        fresh[: self.off] = self.host[: self.off]
+        self.host = fresh
+
+    def reserve(self, n_more: int):
+        """Ensure ``n_more`` ints fit above the current watermark. Call OUTSIDE
+        capture (raises inside one); this is how a caller sizes the arena for an
+        upcoming capture instead of trusting the default."""
+        if self._capturing():
+            raise RuntimeError("reserve() inside a capture would allocate "
+                               "pinned memory in the region; call it before "
+                               "capturing.")
+        if self.off + n_more > self.host.numel():
+            self._grow(self.off + n_more)
+
     def mark(self):
-        """Record the fence the rewind above waits on. Never inside a capture:
-        an event recorded during capture becomes a graph node and querying it
-        afterwards is not valid."""
+        """Vestigial since permanence (nothing rewinds, so nothing waits on the
+        fence). Kept as a no-op-shaped hook so call sites need not churn; never
+        records inside a capture, where an event record becomes a graph node."""
         if not self._capturing():
             self.evt.record()
 
@@ -272,13 +295,13 @@ def to_device_i32(seqs, device):
         # ones, guarantees any later capture finds it already allocated (the
         # capture discipline always runs warm-up steps uncaptured first).
         ar = _arena(dev)
-        if capturing and ar.host.numel() < total:
+        if capturing and ar.off + total > ar.host.numel():
             raise RuntimeError(
-                "grouped-nf4: the pinned index arena (%d int32) is smaller than "
-                "this capture needs (%d so far in one call) and growing it "
+                "grouped-nf4: the pinned index arena (%d int32, %d owned by "
+                "prior captures) cannot hold this call's %d ints, and growing "
                 "inside a capture is not capturable. Set GNF4_PIN_ARENA_INTS "
-                "and re-run; warm-up outside capture sizes it automatically."
-                % (ar.host.numel(), total))
+                "to at least %d, or reserve() the arena before capturing."
+                % (ar.host.numel(), ar.off, total, 2 * (ar.off + total)))
     if not capturing:
         # Not capturing (or not CUDA): the PRE-CHANGE transfer. A pageable
         # build syncs, and on the host-bound paths that reach here the sync is
