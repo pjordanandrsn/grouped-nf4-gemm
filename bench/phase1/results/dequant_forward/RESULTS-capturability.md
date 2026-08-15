@@ -605,3 +605,88 @@ preserved. Not implemented here; the stop rule bars bolting it onto this run.
 * Not affected by this verdict: capturability (6/6), bitwise identity (26/26),
   frozen-storage integrity, the kernel-bound gates (§§9–10), and the memory
   results. The trade is real and now measured on both of its sides.
+
+## 12 · The capture-conditional repair — G1–G3 GREEN, and what it costs
+
+Grades
+[`kernel/prereg_capture_conditional_repair.json`](../../../../kernel/prereg_capture_conditional_repair.json)
+(OTS-stamped before the throughput data existed). The change:
+`to_device_i32` takes the pinned-arena path **only when
+`torch.cuda.is_current_stream_capturing()`**; otherwise it performs the
+pre-change pageable build. The arena is touched on every CUDA call so it exists
+before any capture; an oversized capture refuses by name.
+
+### G1 + G2 — capture and values (A2000)
+
+Capture ladder **6/6** with the arena guard refusing by name; bitwise A/B
+**26/26** vs `origin/main` (0.13.0); `test_eids_forms` **4/4**; 76 neighbours.
+The conditional reintroduced no hazard: the capture discipline's uncaptured
+warm-up is what sizes the arena, and `G_stack` exercises exactly that.
+
+### G3 — the e2e triple on a whole machine, PASSED
+
+Two attempts, both instructive:
+
+* **BM2 (3060 Ti 8 GB, ~$0.28): UNUSABLE — instrument casualty.** The
+  `batched` arm's ~6.95 GB peak fragmented the 8 GB card (6.43 GiB allocated +
+  628 MiB reserved-unallocated, OOM at 504 MiB), and the cascade corrupted
+  e4b's enable/disable pairing — caught by the driver's own `patched 0
+  modules` guard — and produced off0 artifacts the committed reducer refused.
+  The **clean off1 half** already read parity (gate 1.0161/0.9950 vs
+  instrument 1.0010/0.9789). Two harness notes recorded: Vast's create-body
+  `env` does not reach ssh-launched processes (the launcher now injects
+  `PYTORCH_CUDA_ALLOC_CONF` on the launch line itself), and the arm-set's peak
+  must fit the card with fragmentation margin.
+* **BM3 (A4000 16 GB, 16/16 cores, ~$0.12): PASSED.**
+
+| cell (random) | P2 instrument pub2/pub1 | P3 gate cap/pub1 |
+|---|---:|---:|
+| off=0, `fast_train` | 1.0196 | 0.9920 |
+| off=0, `fast_train_dgrad` | 1.0007 | 0.9997 |
+| off=1, `fast_train` | 1.0057 | 1.0084 |
+| off=1, `fast_train_dgrad` | 1.0257 | 1.0182 |
+| median | 1.0127 | **1.0040** |
+
+> VERDICT: GATE PASSED — all 4 clean cells at or above the 0.967 harm floor
+> (median 1.0040), instrument clean on all 4. Cells above 1.032 are reported
+> as observed, NOT as a registered speedup claim.
+
+The gate ratios sit **inside the instrument's own spread**: the repaired
+uncaptured path is the pre-change path, measured. The `text` first-mode drift
+appeared in all six sweeps on this third host too (0.886–0.924) — ten
+consecutive drifted first modes across three machines; the first-mode-discard
+harness fix is queued as follow-up work.
+
+**A reported nuance:** on the A4000's modern cores the offload=1 cells grade
+`measurement_class = kernel` (51–58% busy) where every Xeon-class host read
+12–25%. The leg's host-boundness is itself host-speed-dependent; the label
+now says so per cell, which is exactly what C4 exists for.
+
+### The registered price, paid knowingly — the kernel-bound claim re-scopes
+
+The spot-check (reported, pre-registered) on **both** cards:
+
+| card | cap/pub (`g_a`) | pub2/pub |
+|---|---|---|
+| 3060 Ti | 1.0020 / 1.0043 | 1.0018 / 1.0021 |
+| A4000 | 1.0033 / 1.0233 | 1.0083 / 1.0250 |
+
+Uncaptured, the repaired path is the pre-change path **everywhere** — which
+means **the +6.5–15% uncaptured kernel-bound win of §§9–10 is forfeited by
+this repair**, exactly as its mechanism requires. Per the registration, the
+kernel-gate result is hereby **re-scoped to captured execution**: under
+capture and in graph replay the arena path still runs and §§9–10's mechanism
+applies there; outside capture, 0.13.1 behaves as 0.12.0 did. The operator
+chose this trade explicitly with the forfeit on the table: e2e integrity as
+the default, the win where graphs actually run.
+
+### Net position at 0.13.1
+
+* Capturability: **intact** (6/6, arena guard named).
+* Values: **bitwise identical** on every path and every `expert_ids` form.
+* e2e throughput: **parity with pre-change, gate-verified** on a whole machine
+  (median 1.0040 against a 1.27%-noise instrument).
+* Kernel-bound speed: **re-scoped to captured execution**; uncaptured =
+  pre-change.
+* §11's FAILED verdict stands in the record; this section is its registered
+  constructive close.

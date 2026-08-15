@@ -1,0 +1,49 @@
+=== per-sweep reference self-pairs (drift inside each sweep) ===
+  pub1  random  offload=0 0.9789
+  pub1  random  offload=1 0.9724
+  pub1  text    offload=0 0.8621
+  pub1  text    offload=1 0.8810
+  cap   random  offload=0 0.9513
+  cap   random  offload=1 0.9936
+  cap   text    offload=0 None
+  cap   text    offload=1 0.8799
+  pub2  random  offload=0 0.9880
+  pub2  random  offload=1 0.9911
+  pub2  text    offload=0 None
+  pub2  text    offload=1 0.8734
+
+!! DRIFTED cells (sweep self-pair outside (0.95, 1.05)): [('text', 0), ('text', 1)]
+   Their gate ratios are reported but EXCLUDED from the verdict.
+
+--- INSTRUMENT self-pair  pub2/pub1 (same code twice) ---
+  random  offload=0 fast_train         0.4670   <-- OUTSIDE BAND
+  random  offload=0 fast_train_dgrad   0.4827   <-- OUTSIDE BAND
+  random  offload=1 fast_train         1.0010
+  random  offload=1 fast_train_dgrad   0.9789
+  median 0.7308   n=4
+
+--- GATE  cap/pub1 (the capturability change) ---
+  random  offload=0 fast_train         0.4553   <-- OUTSIDE BAND
+  random  offload=0 fast_train_dgrad   0.4754   <-- OUTSIDE BAND
+  random  offload=1 fast_train         1.0161
+  random  offload=1 fast_train_dgrad   0.9950
+  median 0.7352   n=4
+
+--- gate ratios in DRIFTED cells — reported, not counted ---
+  text    offload=0 fast_train         1.0510   <-- OUTSIDE BAND
+  text    offload=0 fast_train_dgrad   0.9828
+  text    offload=1 fast_train         1.0030
+  text    offload=1 fast_train_dgrad   1.0148
+  median 1.0089   n=4
+
+--- instrument ratios in DRIFTED cells — reported, not counted ---
+  text    offload=0 fast_train         1.0402   <-- OUTSIDE BAND
+  text    offload=0 fast_train_dgrad   0.9179   <-- OUTSIDE BAND
+  text    offload=1 fast_train         1.0105
+  text    offload=1 fast_train_dgrad   0.9939
+  median 1.0022   n=4
+
+VERDICT: UNUSABLE — 8 receipt problem(s): ['cap/text/off0: no reference self-pair', 'cap/random/fast_train: patched 0 modules', 'cap/random/fast_train_dgrad: patched 0 modules', 'cap/random/batched: patched 0 modules']
+--- SPOT CHECK (reported): fused-arm g_a, cap/pub and pub2/pub ---
+  down     cap/pub=1.0043  pub2/pub=1.0021  class=kernel
+  gate_up  cap/pub=1.0020  pub2/pub=1.0018  class=kernel
