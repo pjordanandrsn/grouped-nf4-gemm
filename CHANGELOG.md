@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.13.1 — 2026-08-15
+
+### Index transfers are capture-conditional (the §11 repair)
+
+0.13.0's pinned-arena index transfers were unconditional. Measured on whole
+machines (instrument self-pair clean to ~2%): the arena path cost the
+host-bound e2e step **−1.8% median** — a registered gate failure
+([`RESULTS-capturability.md` §11](bench/phase1/results/dequant_forward/RESULTS-capturability.md))
+— because outside a capture the syncs it removes cost nothing while its
+per-call host work does.
+
+`to_device_i32` now takes the arena path **only while the current stream is
+capturing** and performs the pre-change pageable build otherwise. The arena is
+touched on every CUDA call so it exists before any capture; a capture larger
+than the arena refuses by name (`GNF4_PIN_ARENA_INTS`).
+
+Verified under a pre-stamped registration
+([`kernel/prereg_capture_conditional_repair.json`](kernel/prereg_capture_conditional_repair.json)):
+capture 6/6 with the named refusal; **26/26 tensors bitwise identical** to
+0.13.0 and all `expert_ids` forms equal; the e2e gate **PASSED** on a
+whole-machine A4000 (cap/pub1 median 1.0040, inside the instrument's own
+spread — parity with 0.12.0 by construction and now by measurement).
+
+**Scope change, stated plainly:** the +6.5–15% *uncaptured* kernel-bound win
+measured for 0.13.0 (§§9–10) is forfeited — uncaptured, 0.13.1 ≡ 0.12.0. That
+result is re-scoped to **captured execution**, where the arena path still
+runs. There is no knob; capturing is the switch.
+
 ## 0.13.0 — 2026-08-14
 
 ### The fused training path can now be CUDA-graphed — five hazards, three never named
