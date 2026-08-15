@@ -277,3 +277,46 @@ physical peak. A value above peak is not a fast kernel, it is proof the
 comparison is measuring cache.** The H100 alone never exposed this (1578 of
 3350 GB/s looks plausible); the second card did, which is the two-card rule
 paying for itself again.
+
+### The same 4090 run, graded out-of-sample against the R-scan's own bands
+
+The roofline run executed the full 16-cell scan, so its wall-clock cells can be
+graded against the bands registered in
+[`prereg_graphed_rscan.json`](../../../../kernel/prereg_graphed_rscan.json) —
+bands written for the H100 anomaly and applied here to a different
+architecture. That is the third rung of this program's evidence ladder
+(exploratory → published band → out-of-sample test), not a fresh registration,
+and it is labelled as such. **16/16 cells live** (self-pairs 0.999–1.002; the
+amendment-1 primer holds on a third card).
+
+| R | gate_up d/g | down d/g | | R | gate_up d/g | down d/g |
+|---:|---:|---:|---|---:|---:|---:|
+| 1 | 1.662 | 2.009 | | 16 | **2.090** | **2.908** |
+| 2 | 1.883 | 2.030 | | 32 | 1.834 | 2.310 |
+| 4 | 1.911 | 2.079 | | 64 | 1.480 | 1.673 |
+| 8 | 1.959 | 2.799 | | 128 | 1.611 | 1.226 |
+
+**P1 (Spearman ≤ −0.7) FAILS AGAIN — and the falsification replicates.**
+−0.381 gate_up, −0.238 down. Both cards are non-monotone with an interior
+peak; only its position moves, R=16 here against R=32 on the H100. The
+monotone-decline model is now dead on two architectures.
+
+**P2 (the projection flip) FAILS OUT-OF-SAMPLE — which is the informative
+result.** It reads **0.859** where the band wanted ≥1.1: on the 4090 `gate_up`
+carries the larger excess, the reverse of the H100's 1.567. The merged GDDR6
+receipts agree — the 3060 reads **0.642** on the same quantity. **Two consumer
+cards order the projections by bytes; the H100 inverts it.** The flip the
+R-scan confirmed is therefore an HBM3-class property, not a property of the
+kernels, exactly as the roofline section's cache-residency account implies.
+
+**P4 (elasticity ≤ 0.35) CONFIRMED** — 0.156 gate_up, 0.221 down. Both arms
+are still weight-streaming-bound at small R, though visibly less so than the
+H100's 0.027/0.030: on a card with a third of the bandwidth, rows start to
+cost something.
+
+**The pre-registered "reported, not graded" question is answered, and the
+answer is no:** the H100's `gate_up` R≤8 loss does **not** reproduce here. The
+fused path wins every one of the sixteen cells (1.23–2.91×). Its
+issue-limited ~214 GB/s is a losing rate against 3350 GB/s of HBM3 and a
+winning one against 1008 GB/s of GDDR6X — the saturation law of this program's
+own leg 1, arriving on the training path.
