@@ -51,7 +51,7 @@ import routing_fixture as rf  # noqa: E402
 from nf4_qlora import fused_grouped_lora  # noqa: E402
 
 RESULTS = _ROOT / "bench" / "phase1" / "results"
-BUCKETS = (1, 2, 4, 8, 16, 32)
+BUCKETS = (1, 2, 4, 8, 16, 32, 64, 128)   # extended by amendment 3
 RANK, SCALING = 16, 2.0
 
 

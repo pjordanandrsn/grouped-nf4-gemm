@@ -1,0 +1,15 @@
+{
+ "registered_utc": "2026-08-15T14:55:00Z",
+ "amends": "kernel/prereg_graphed_buckets_amendment2.json",
+ "registers": "AMENDMENT 3: the bucket set, extended after the registration's own cell list and bucket set were measured MUTUALLY INCONSISTENT — T=128 faithful OLMoE routing puts 76 rows on its hottest expert, over the {1..32} cap, and the code refused by name rather than guessing (the refusal is the designed behaviour and it fired). Stamped before the completion run exists.",
+
+ "the_change": "Bucket set becomes {1, 2, 4, 8, 16, 32, 64, 128}. The scheme's economics are unchanged where it matters: at T=128/R=128 the padded tile count is E*ceil(128/128) = 64 against ~64 real tiles (~1.0x), while rows read 8x — the same rows-vs-tiles split the original registration required reporting.",
+
+ "state_of_the_gates_going_into_the_completion_run": {
+  "F2": "GREEN on the A2000 and re-confirmed on the race card (both LoRA forms), through amendments 1-2.",
+  "F3": "IN BAND at T=32 gate_up on GDDR6: 1.647 against [1.4, 2.8], replay self-pairs 1.000/1.000. The completion run adds T=128 and the down projection; each cell is graded against the same band.",
+  "F4": "FALSIFIED at T=32 gate_up: 0.91x against [2.0, 15.0]. Per its own registered falsifier this is the recorded result and additional cells cannot un-falsify it; they are REPORTED to complete the picture. Registered interpretation, fixed now: the 2-15x band was calibrated from fast-GPU/host-floor measurements (H100-class, ~90% host at the decode band); on a slow GPU the eager step is already GPU-dominated and there is no host floor to remove — the decode-band host floor is a fast-GPU phenomenon, and F4's claim is expected to be device-class-dependent. A future fast-GPU run would need its own registration to grade it there."
+ },
+
+ "stop_rule": "Unchanged. The completion run's verdict is written verbatim; a BAND MISS line caused by the already-falsified F4 is the expected verdict text and does not void F3's grading."
+}
