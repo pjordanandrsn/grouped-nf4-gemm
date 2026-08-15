@@ -1,0 +1,15 @@
+{
+ "registered_utc": "2026-08-15T15:25:00Z",
+ "amends": "kernel/prereg_graphed_buckets_amendment1.json",
+ "registers": "AMENDMENT 2: the LoRA-path positive control, corrected after amendment 1's control was measured UNSATISFIABLE — because the mechanism claim behind it was wrong, and the control did its job by falsifying it. Stamped before the amended control's data exists.",
+
+ "what_was_measured": "Under amendment 1 every substantive check passed (leak bitwise-clean, zero-fill deterministic bitwise, replay==eager bitwise, value agreement 1.4e-4..1.5e-3 vs a 6.5e-3 floor) and ONLY the positive control failed: garbage padding did NOT change the LoRA grads (A2000, graphed_buckets_a2000-f2b.json).",
+
+ "the_falsified_claim": "The original prereg said the zero-fill is load-bearing because parameter gradients accumulate over rows. FALSE for this loss: the loss covers real rows only, so grad_out is exactly zero on every padded row, and every padding term in both LoRA grad sums carries that zero factor — ordinary garbage cannot contaminate them. A control that demands the impossible is not a control.",
+
+ "the_true_load_bearing_role_of_the_zero_fill": "NaN poisoning. Uninitialized or stale padding bytes can hold Inf/NaN patterns, and 0 * Inf = NaN propagates through the same reductions the zero factor otherwise protects. The zero-fill guarantees finite padded activations, which is what actually keeps the grads clean.",
+
+ "amended_positive_control": "Fill the padding slots with NaN (forward + backward, loss over real rows as always): the LoRA grads MUST become non-finite — proving the poisoning channel exists and the instrument can see it — while the zero-fill run's grads are finite and bitwise deterministic. Everything else from amendment 1 is unchanged: leak bitwise, determinism bitwise, replay bitwise, value agreement <= 6.5e-3, base path fully bitwise.",
+
+ "stop_rule": "Unchanged: verbatim write-up; any amended-F2 failure means no race and diagnosis, not tolerance-widening."
+}

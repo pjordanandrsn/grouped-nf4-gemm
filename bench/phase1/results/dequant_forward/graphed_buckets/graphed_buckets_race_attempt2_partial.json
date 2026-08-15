@@ -1,0 +1,64 @@
+{
+ "probe": "dense-groups bucketing: fidelity + graphed-vs-graphed race",
+ "prereg": "kernel/prereg_graphed_buckets.json",
+ "gpu": "NVIDIA GeForce RTX 3060",
+ "capability": "8.6",
+ "torch": "2.8.0+cu128",
+ "fidelity": [
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "gate_up",
+   "tokens": 32,
+   "lora": false,
+   "out_bitwise": true,
+   "agrad_bitwise": true,
+   "replay_eq_eager_bitwise": true,
+   "R": 32,
+   "rows_padded_over_real": 8.0,
+   "tiles_padded_over_real": 1.0847457627118644,
+   "F2_pass": true
+  },
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "gate_up",
+   "tokens": 32,
+   "lora": true,
+   "leak_fwd_bitwise": true,
+   "grad_zerofill_deterministic_bitwise": true,
+   "nan_padding_poisons_grads_positive_control": true,
+   "zerofill_grads_finite": true,
+   "out_rel": 0.0001593411434441805,
+   "agrad_rel": 0.0003694525803439319,
+   "loraA_rel": 0.0009791719494387507,
+   "loraB_rel": 0.0009352372144348919,
+   "value_agreement_pass": true,
+   "replay_eq_eager_bitwise": true,
+   "R": 32,
+   "rows_padded_over_real": 8.0,
+   "tiles_padded_over_real": 1.0847457627118644,
+   "F2_pass": true
+  }
+ ],
+ "race": [
+  {
+   "model": "allenai/OLMoE-1B-7B-0924",
+   "proj": "gate_up",
+   "tokens": 32,
+   "R": 32,
+   "lora": false,
+   "rows_padded_over_real": 8.0,
+   "ms": {
+    "g_a": 8.406063197180629,
+    "g_b": 8.405651533976197,
+    "d_a": 13.847797424532473,
+    "d_b": 13.849422249477357,
+    "fused_eager": 7.689708370404939
+   },
+   "g_selfpair": 0.9999510278242294,
+   "d_selfpair": 1.0001173345402934,
+   "F3_d_over_g_graphed": 1.6474389128027451,
+   "F4_graphed_speedup_vs_shipped_eager": 0.9148259762283306,
+   "arena_owned_ints": 0
+  }
+ ]
+}

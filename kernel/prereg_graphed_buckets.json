@@ -1,0 +1,28 @@
+{
+ "registered_utc": "2026-08-15T14:35:00Z",
+ "registers": "THE PAYOFF EXPERIMENT capturability was a precondition for: a static-shape bucketing scheme that makes the fused training step REPLAYABLE under a CUDA graph at the decode band, its fidelity gate, its padding-waste accounting, and the graphed-vs-graphed race the earlier probes said would need exactly this registration. Stamped before any implementation is verified and before any card is rented.",
+
+ "lineage": "FINDING-host-bound-small-batch.md measured the decode band ~90% host on both arms; probe_graphed_race.py showed the GRAPHED baseline collapses 8.6-12.5x there and beats the shipped fused path, killing the leg-4 speed headline; RESULTS-capturability.md sections 1-6 made the fused path capturable; its section-C3 scope register and every doc since said a throughput claim from graphing needs its own prereg, padding scheme and fidelity gate. This is that document.",
+
+ "the_scheme_DENSE_GROUPS": {
+  "shape": "G_pad = E groups, every group padded to the SAME row count R, eids = arange(E) as a device tensor, sizes = [R]*E. Tile tables and every launch grid are then step-invariant, which is the whole requirement. R is chosen per step class from the bucket set {1, 2, 4, 8, 16, 32} as next_pow2(max real group size); one graph per (R, T_real) class, captured once, replayed thereafter.",
+  "why_it_is_cheap_at_the_decode_band": "GPU work scales with tile count = E * ceil(R/block_m). Faithful OLMoE routing at T=32 hits ~58 of 64 experts with sizes 1-17, i.e. ~58-70 real tiles; dense groups at R=16 make exactly 64. The padding that looks 4-8x in ROWS is ~1.0-1.3x in TILES, and tiles are what cost. Both ratios are REPORTED per cell (rows_padded/rows_real, tiles_padded/tiles_real); nothing is hidden in the scheme.",
+  "step_update_pattern": "Standard graph-with-dynamic-data: per step the host computes routing, writes the token->slot index buffer and the token activations into PERSISTENT device buffers (pinned staging, outside the graph), then replays. The graph itself: ZERO the padded activation buffer, scatter real rows to their slots, fused_grouped_lora forward, loss over REAL rows only (their count is constant = T*top_k), backward.",
+  "the_zero_fill_is_load_bearing": "Parameter gradients accumulate over ROWS. A padded row with stale contents contributes garbage to lora_A/lora_B grads; a ZEROED one contributes exactly zero to both (x=0 kills the A-grad term and makes Ax=0 kill the B-grad term). The zero-fill therefore runs INSIDE the graph, before the scatter, every replay. The fidelity gate below is what makes this claim checkable rather than argued."
+ },
+
+ "frozen_gates": {
+  "F1_capture": "The bucketed step captures and replays on the A2000, for every R in the bucket set exercised by the cells below. Boolean; a failure is a failure.",
+  "F2_fidelity_BITWISE": "torch.equal, no tolerance: (a) real-row OUTPUTS of the bucketed eager step == the unbucketed shipped path on identical inputs; (b) lora_A and lora_B GRADIENTS likewise; (c) replayed-graph outputs == bucketed eager outputs. Any mismatch fails the gate — padding that changes any real value is not padding.",
+  "F3_the_race_graphed_vs_graphed": "Both arms bucketed under the SAME dense-groups scheme and both replayed from graphs — the fair fight probe_graphed_race.py defined. Cells: OLMoE-1B-7B gate_up and down, faithful routing (routing_fixture) at T=32 and T=128, whole-machine GDDR6-class card, instrument = same-graph replay self-pair. REGISTERED BAND, from leg 4's measured GPU-time split on GDDR6X (d/g_gpu median 2.062): D_graphed/G_graphed wall in [1.4, 2.8] at T=32. FALSIFIER: below 1.4 means the fused kernel's memory-traffic advantage does not survive graphing on consumer memory and the leg-4 mechanism story is wrong on its remaining leg. HBM3 parity (0.9-1.4) is RECORDED as the expectation for a future H100 run; it is not graded here.",
+  "F4_the_payoff_graphed_vs_shipped_eager": "G_graphed vs the SHIPPED eager fused path at T=32, same card, same fixture: registered band [2.0, 15.0] wall speedup — the eager step is ~60-90% host at this band and a replay is one launch. FALSIFIER: below 2.0 means replay+staging overhead ate the host floor and graphing does not pay at the decode band even for the fused path; that is written down as the result."
+ },
+
+ "reported_not_graded": ["rows_padded/rows_real and tiles_padded/tiles_real per cell", "per-step host time of the update+replay pattern (staging write + replay call)", "graph count and capture time per bucket", "the arena's owned bytes after all captures (the permanence accounting)"],
+
+ "hardware_rule": "Correctness (F1, F2) on the A2000 for free. The race (F3, F4) on a whole machine only — cpu_cores_effective == cpu_cores asserted from the API readback — per amendment 1's standing rule; GDDR6-class card for this run so F3's band applies as registered.",
+
+ "stop_rule": "Verbatim write-up of whatever F1-F4 show, including a falsified band. No band adjustment after data, no re-runs for a better number, no cell drops except by pre-committed instrument rules (replay self-pair outside 0.967-1.032 voids a cell). If F2 fails, F3/F4 are not run — a race between paths that compute different values is not a race.",
+
+ "what_a_pass_licenses": "A decode-band throughput claim FOR GRAPHED EXECUTION with the padding waste stated beside it — the claim the leg-4 headline wanted and could not have. It does NOT revive the eager small-batch claim (the graphed-race verdict against it stands), does not apply to models whose routing exceeds the bucket set without re-registration, and is scoped to the memory class it was measured on until a second class is run."
+}
