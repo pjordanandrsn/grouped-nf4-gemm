@@ -299,7 +299,6 @@ def grade(out):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--models", nargs="*", default=["OLMoE"])
-    ap.add_argument("--steps", type=int, default=200)
     ap.add_argument("--steps-pool", type=int, default=8)
     ap.add_argument("--profile-R", type=int, nargs="*", default=[8, 32])
     ap.add_argument("--fidelity-only", action="store_true")
@@ -324,7 +323,7 @@ def main():
         stack = H.QuantStack(spec, "cuda")
         # F2 spot: the merged bitwise gate on uniform-full draws (base path).
         for R in (1, 32, 128):
-            fc = {"proj": spec.proj, "R_requested": R}
+            fc = {"model": spec.model, "proj": spec.proj, "R_requested": R}
             fc.update(gb.fidelity_cell(stack, spec,
                                        uniform_groups(spec, R, "cuda", seed=0),
                                        lora=False))
@@ -339,7 +338,8 @@ def main():
             torch.cuda.empty_cache()
             continue
         if not all(f["F2_pass"] for f in out["fidelity"]
-                   if f["proj"] == spec.proj):
+                   if f["model"] == spec.model
+                   and f["proj"] == spec.proj):
             print("F2 failed — the scan does not run (stop rule)")
             del stack
             torch.cuda.empty_cache()
