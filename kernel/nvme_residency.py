@@ -264,6 +264,7 @@ class ColdTier:
         first_err = None
         if reserved:
             t_fill = time.monotonic_ns()
+            landed: set = set()
             fut_of = {self.reader.read_row(layer, k[1], self._slot_view(s)):
                       (k, s) for k, s in reserved}
             for fut in as_completed(fut_of):
@@ -274,6 +275,7 @@ class ColdTier:
                     if first_err is None:
                         first_err = exc
                     continue
+                landed.add((key, slot))
                 with self._lock:
                     self._key_of[slot] = key
                     self._slot_of[key] = slot
@@ -286,15 +288,25 @@ class ColdTier:
                 else:
                     self.demand_fill_ns += dt
                 if first_err is not None:
-                    for key, slot in reserved:    # reclaim whatever never landed
-                        if self._slot_of.get(key) != slot:
-                            self._key_of[slot] = None
-                            self._reserved.discard(slot)
-                            if slot not in self._free:
-                                self._free.append(slot)
-                            ev = self._pending.pop(key, None)
-                            if ev is not None:
-                                ev.set()          # wake waiters; they refetch
+                    # Reclaim EXACTLY the rows this batch reserved that never
+                    # landed — tracked explicitly, never inferred from the
+                    # maps. (Inferring via `_slot_of.get(key) != slot` freed
+                    # slots that a concurrent ensure had already evicted and
+                    # legitimately re-reserved after a published sibling was
+                    # unreserved: two fills into one "free" slot.) These
+                    # slots are still in _reserved (only a publish removes
+                    # them), so nobody else can be holding them.
+                    for key, slot in reserved:
+                        if (key, slot) in landed:
+                            continue
+                        self._key_of[slot] = None
+                        self._reserved.discard(slot)
+                        self._demand_protected.discard(slot)
+                        if slot not in self._free:
+                            self._free.append(slot)
+                        ev = self._pending.pop(key, None)
+                        if ev is not None:
+                            ev.set()              # wake waiters; they refetch
         if first_err is not None:
             raise first_err
         if speculative:
