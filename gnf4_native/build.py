@@ -110,6 +110,14 @@ def _typed(lib: ctypes.CDLL) -> ctypes.CDLL:
     ]
     lib.gnf4_gemv_mxfp4_grouped.restype = c.c_int
     lib.gnf4_gemv_mxfp4_grouped.argtypes = lib.gnf4_gemv_nf4_grouped.argtypes
+    # dgrad shares the gemv signature (g swaps in for a, out is [R, K]).
+    # Registering argtypes is LOAD-BEARING: the int64 N/K params read the
+    # full register, and ctypes' bare-int default is a 32-bit c_int whose
+    # upper half is garbage — wild pointer arithmetic, not a wrong answer.
+    lib.gnf4_dgrad_nf4_grouped.restype = c.c_int
+    lib.gnf4_dgrad_nf4_grouped.argtypes = lib.gnf4_gemv_nf4_grouped.argtypes
+    lib.gnf4_dgrad_mxfp4_grouped.restype = c.c_int
+    lib.gnf4_dgrad_mxfp4_grouped.argtypes = lib.gnf4_gemv_nf4_grouped.argtypes
     lib.gnf4_route_epilogue_bf16.restype = None
     lib.gnf4_route_epilogue_bf16.argtypes = [
         c.c_void_p, c.c_int64, c.c_int64, c.c_int64, c.c_int, c.c_int,

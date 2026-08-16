@@ -203,3 +203,130 @@ def test_bad_calls_raise():
         cg.gemv_nf4_grouped_cpu(ta, tp, tm, [1, 1, 1], EIDS)   # rows mismatch
     with pytest.raises(ValueError):
         cg.gemv_nf4_grouped_cpu(ta, tp, tm, SIZES, [0, 1, 99])  # eid range
+
+
+# --------------------------------------------------------------------------- #
+# grouped dgrad (hybrid Phase 5): gi = g @ W on the same packed bytes
+# --------------------------------------------------------------------------- #
+
+def _dgrad_nf4_stack(seed=7, n=N, k=K, sizes=None):
+    g = np.random.default_rng(seed)
+    packed = g.integers(0, 256, size=(E, n, k // 2), dtype=np.uint8)
+    absmax = g.random(size=(E, n, k // 64), dtype=np.float32) + 0.5
+    rows = sum(sizes or SIZES)
+    grad = g.standard_normal((rows, n), dtype=np.float32)
+    return grad, packed, absmax
+
+
+def _dgrad_mx_stack(seed=8, n=N, k=K, sizes=None, weird_scales=False):
+    g = np.random.default_rng(seed)
+    packed = g.integers(0, 256, size=(E, n, k // 2), dtype=np.uint8)
+    scales = g.integers(100, 140, size=(E, n, k // 32), dtype=np.uint8)
+    if weird_scales:
+        scales[0, 0, 0] = 0xFF
+        scales[0, 0, 1] = 0
+        scales[2, 5, 2] = 0xFF
+    rows = sum(sizes or SIZES)
+    grad = g.standard_normal((rows, n), dtype=np.float32)
+    return grad, packed, scales
+
+
+@needs_native
+@pytest.mark.parametrize("threads", [0, 3])
+def test_dgrad_nf4_matches_spec_exactly(threads):
+    grad, packed, absmax = _dgrad_nf4_stack()
+    want = cg.ordered_dgrad_ref(grad, packed, absmax, SIZES, EIDS, fmt="nf4")
+    got = cg.dgrad_nf4_grouped_cpu(
+        torch.from_numpy(grad), torch.from_numpy(packed),
+        torch.from_numpy(absmax), SIZES, EIDS, threads=threads)
+    assert np.array_equal(got.numpy(), want), "dgrad chain is not the spec's"
+
+
+@needs_native
+def test_dgrad_mxfp4_matches_spec_exactly_including_ldexp_edges():
+    grad, packed, scales = _dgrad_mx_stack(weird_scales=True)
+    want = cg.ordered_dgrad_ref(grad, packed, scales, SIZES, EIDS, fmt="mxfp4")
+    got = cg.dgrad_mxfp4_grouped_cpu(
+        torch.from_numpy(grad), torch.from_numpy(packed),
+        torch.from_numpy(scales), SIZES, EIDS)
+    assert np.array_equal(got.numpy(), want)
+
+
+@needs_native
+def test_dgrad_is_the_forward_transpose_within_fp32():
+    """Independent math check (the spec could share a wrong-axis bug):
+    gi must equal g @ W_dequant to normal fp32 tolerance."""
+    grad, packed, absmax = _dgrad_nf4_stack(seed=11)
+    got = cg.dgrad_nf4_grouped_cpu(
+        torch.from_numpy(grad), torch.from_numpy(packed),
+        torch.from_numpy(absmax), SIZES, EIDS)
+    r = 0
+    for gi, e in enumerate(EIDS):
+        w = np.stack([cg.dequant_row_nf4(packed[e, n], absmax[e, n])
+                      for n in range(N)])          # [N, K] fp64 accumulate
+        for _ in range(SIZES[gi]):
+            want = grad[r].astype(np.float64) @ w.astype(np.float64)
+            np.testing.assert_allclose(got.numpy()[r], want, rtol=2e-5,
+                                       atol=2e-5)
+            r += 1
+
+
+@needs_native
+def test_dgrad_training_size_groups_are_legal_and_exact():
+    """The whole point of the tile scratch: sizes far beyond the decode
+    contract's 1..8, exact to the spec."""
+    sizes, eids = [12, 1, 20], [1, 3, 0]
+    grad, packed, absmax = _dgrad_nf4_stack(seed=13, sizes=sizes)
+    want = cg.ordered_dgrad_ref(grad, packed, absmax, sizes, eids, fmt="nf4")
+    got = cg.dgrad_nf4_grouped_cpu(
+        torch.from_numpy(grad), torch.from_numpy(packed),
+        torch.from_numpy(absmax), sizes, eids)
+    assert np.array_equal(got.numpy(), want)
+
+
+@needs_native
+@pytest.mark.parametrize("k", [64, 192, 320])
+def test_dgrad_k_tail_tiles_are_exact(k):
+    """K % 128 == 64 leaves a half-width tail tile; every K tile must chain
+    identically to the spec."""
+    grad, packed, absmax = _dgrad_nf4_stack(seed=17, k=k)
+    want = cg.ordered_dgrad_ref(grad, packed, absmax, SIZES, EIDS, fmt="nf4")
+    got = cg.dgrad_nf4_grouped_cpu(
+        torch.from_numpy(grad), torch.from_numpy(packed),
+        torch.from_numpy(absmax), SIZES, EIDS)
+    assert np.array_equal(got.numpy(), want)
+
+
+@needs_native
+def test_dgrad_thread_and_pool_invariance():
+    """Work units own disjoint (group, k-tile) outputs, so thread count and
+    dispatch mechanism (OpenMP vs executor pool) must not move one bit."""
+    grad, packed, absmax = _dgrad_nf4_stack(seed=19, sizes=[9, 2, 4])
+    args = (torch.from_numpy(grad), torch.from_numpy(packed),
+            torch.from_numpy(absmax), [9, 2, 4], EIDS)
+    one = cg.dgrad_nf4_grouped_cpu(*args, threads=1)
+    four = cg.dgrad_nf4_grouped_cpu(*args, threads=4)
+    assert torch.equal(one, four)
+    n = cg.pool_start(2)
+    try:
+        pooled = cg.dgrad_nf4_grouped_cpu(*args)
+    finally:
+        cg.pool_stop()
+    assert n >= 1 and torch.equal(one, pooled)
+
+
+@needs_native
+def test_dgrad_rejects_contract_violations():
+    grad, packed, absmax = _dgrad_nf4_stack()
+    tg, tp, ta = (torch.from_numpy(grad), torch.from_numpy(packed),
+                  torch.from_numpy(absmax))
+    with pytest.raises(TypeError, match="fp32"):
+        cg.dgrad_nf4_grouped_cpu(tg.double(), tp, ta, SIZES, EIDS)
+    with pytest.raises(ValueError, match="rows"):
+        cg.dgrad_nf4_grouped_cpu(tg[:-1], tp, ta, SIZES, EIDS)
+    with pytest.raises(ValueError, match="columns"):
+        cg.dgrad_nf4_grouped_cpu(tg[:, :-2].contiguous(), tp, ta, SIZES, EIDS)
+    with pytest.raises(ValueError, match="out of range"):
+        cg.dgrad_nf4_grouped_cpu(tg, tp, ta, SIZES, [2, 0, 99])
+    with pytest.raises(ValueError, match="< 1"):
+        cg.dgrad_nf4_grouped_cpu(tg[:2], tp, ta, [1, 0, 1], EIDS)

@@ -114,6 +114,34 @@ def ref_gemv_grouped(a32, packed, scales, sizes, expert_ids, *, fmt):
     return out
 
 
+def ordered_dgrad_ref(g32, packed, scales, sizes, expert_ids, *, fmt):
+    """Executable spec for the grouped dgrad (hybrid Phase 5).
+
+    ``gi[t, k] = sum_n g[t, n] * w[n, k]`` with the LOCKED order the native
+    kernel implements: for each (t, k) the fold runs over rows n STRICTLY
+    ASCENDING, one mul+add per n (``w = LUT[code]*scale; p = w*g; acc += p``
+    — numpy's elementwise ops apply exactly that chain per k). Slow — test
+    sizes only.
+    """
+    assert fmt in ("nf4", "mxfp4")
+    n_cols = packed.shape[1]
+    k = packed.shape[2] * 2
+    rows = g32.shape[0]
+    assert g32.shape[1] == n_cols
+    out = np.zeros((rows, k), dtype=np.float32)
+    r = 0
+    for g, e in enumerate(expert_ids):
+        for _ in range(sizes[g]):
+            for n in range(n_cols):
+                if fmt == "nf4":
+                    w32 = dequant_row_nf4(packed[e, n], scales[e, n])
+                else:
+                    w32 = dequant_row_mxfp4(packed[e, n], scales[e, n])
+                out[r] += w32 * np.float32(g32[r, n])
+            r += 1
+    return out
+
+
 # --------------------------------------------------------------------------- #
 # native wrappers
 # --------------------------------------------------------------------------- #
@@ -199,6 +227,88 @@ def gemv_mxfp4_grouped_cpu(a, packed, scales, sizes, expert_ids, *, threads=0):
         raise ValueError("K mismatch or K % 32 != 0")
     return _run("gnf4_gemv_mxfp4_grouped", a, packed, scales, sizes,
                 expert_ids, threads)
+
+
+def _check_dgrad(g, packed, scales, sizes, expert_ids):
+    import torch
+    if g.dtype != torch.float32:
+        raise TypeError(f"grad rows must be fp32, got {g.dtype}")
+    for t, name in ((g, "g"), (packed, "packed"), (scales, "scales")):
+        if t.device.type != "cpu":
+            raise ValueError(f"{name} must be a CPU tensor (device {t.device})")
+        if not t.is_contiguous():
+            raise ValueError(f"{name} must be contiguous")
+    if len(sizes) != len(expert_ids):
+        raise ValueError("sizes and expert_ids length mismatch")
+    if sum(sizes) != g.shape[0]:
+        raise ValueError(f"sum(sizes)={sum(sizes)} != rows={g.shape[0]}")
+    if g.shape[1] != packed.shape[1]:
+        raise ValueError(f"g has {g.shape[1]} columns, stack has "
+                         f"{packed.shape[1]} rows per expert")
+    for s in sizes:
+        # deliberately NO 1..8 cap: a training microbatch parks many rows
+        # on one expert, and scratch reuse makes large groups cheap
+        if s < 1:
+            raise ValueError(f"group size {s} < 1")
+
+
+def _run_dgrad(fn_name, g, packed, scales, sizes, expert_ids, threads):
+    import ctypes
+
+    import torch
+
+    import gnf4_native
+
+    lib = gnf4_native.load()
+    e_ids = torch.as_tensor(expert_ids, dtype=torch.int64).contiguous()
+    if int(e_ids.max()) >= packed.shape[0] or int(e_ids.min()) < 0:
+        raise ValueError("expert id out of range")
+    sz = torch.as_tensor(sizes, dtype=torch.int32).contiguous()
+    k = packed.shape[2] * 2
+    # the kernel ACCUMULATES into caller-zeroed rows (per-(t,k) chains span
+    # every n-tile pass) — zeros here are part of the contract
+    out = torch.zeros(g.shape[0], k, dtype=torch.float32)
+    rc = getattr(lib, fn_name)(
+        ctypes.c_void_p(g.data_ptr()), ctypes.c_void_p(packed.data_ptr()),
+        ctypes.c_void_p(scales.data_ptr()), ctypes.c_void_p(e_ids.data_ptr()),
+        ctypes.c_void_p(sz.data_ptr()), len(sizes), packed.shape[1], k,
+        ctypes.c_void_p(out.data_ptr()), threads,
+    )
+    if rc != 0:
+        raise ValueError(f"{fn_name} rejected the call (rc={rc}) — shape "
+                         f"contract violated")
+    return out
+
+
+def dgrad_nf4_grouped_cpu(g, packed, absmax, sizes, expert_ids, *, threads=0):
+    """Grouped NF4 dgrad on packed bytes: ``gi = g @ W`` per group, fp32.
+
+    g [R, N] fp32 grad rows sorted by group · packed [E, N, K//2] u8 ·
+    absmax [E, N, K//64] f32 · sizes per-group row counts (>= 1, no upper
+    cap) · expert_ids [G]. Returns [R, K] fp32. The exact-but-slow path is
+    ``ordered_dgrad_ref``.
+    """
+    import torch
+    _check_dgrad(g, packed, absmax, sizes, expert_ids)
+    if absmax.dtype != torch.float32:
+        raise TypeError("absmax must be fp32")
+    if (packed.shape[2] * 2) % 64:
+        raise ValueError("K % 64 != 0")
+    return _run_dgrad("gnf4_dgrad_nf4_grouped", g, packed, absmax, sizes,
+                      expert_ids, threads)
+
+
+def dgrad_mxfp4_grouped_cpu(g, packed, scales, sizes, expert_ids, *,
+                            threads=0):
+    """MXFP4 variant: scales [E, N, K//32] u8 e8m0."""
+    import torch
+    _check_dgrad(g, packed, scales, sizes, expert_ids)
+    if scales.dtype != torch.uint8:
+        raise TypeError("scales must be u8 e8m0")
+    if (packed.shape[2] * 2) % 32:
+        raise ValueError("K % 32 != 0")
+    return _run_dgrad("gnf4_dgrad_mxfp4_grouped", g, packed, scales, sizes,
+                      expert_ids, threads)
 
 
 def pool_start(nthreads: int = 0) -> int:
