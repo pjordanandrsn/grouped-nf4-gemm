@@ -760,6 +760,296 @@ EXPORT int gnf4_gemv_mxfp4_grouped(const float *a, const uint8_t *B,
     return gemv_common(&c, G, threads, mx_range, row_off);
 }
 
+/* ------------------------------------------------- grouped dgrad (CPU) -- */
+
+/* Backward of the grouped GEMV for a FROZEN quantized base (hybrid Phase 5):
+ *
+ *     gi[t, k] = sum_n g[t, n] * w[n, k]
+ *
+ * — the same packed rows the forward read, consumed with TRANSPOSED access.
+ * Each work item owns one (group, 128-column K-tile): a row's 128-element
+ * slice is 64 packed NF4 bytes = exactly one cache line, so walking rows
+ * within a K-tile reads whole lines with zero waste. Rows are dequantized
+ * once into an L1-resident scratch tile ([DG_NTILE][DG_KTILE] fp32, 8 KB)
+ * and every token in the group accumulates from that scratch — the packed
+ * bytes are read ONCE however many tokens the group carries, and no
+ * transposed copy of the weights ever exists (one-artifact invariant).
+ *
+ * Locked reduction order, mirrored by the executable spec
+ * (`cpu_grouped.ordered_dgrad_ref`): for each (t, k) the contributions are
+ * folded over n STRICTLY ASCENDING — n-tiles ascend, rows ascend inside a
+ * tile, K-tiles are disjoint — one mul+add per n, never FMA:
+ *     w = LUT[code] * scale;  p = w * g[t, n];  acc += p
+ * (the scratch holds w, so reuse across tokens repeats the same fp32
+ * values and the chain is unchanged).
+ *
+ * Group sizes are NOT capped at 8 here: a training microbatch parks many
+ * rows on one expert, and the scratch reuse is precisely what makes large
+ * T cost the same packed-byte traffic as T=1. */
+
+#define DG_KTILE 128
+#define DG_NTILE 16
+
+typedef struct {
+    const float *g;                        /* [R_total, N] grouped rows */
+    const uint8_t *B;
+    const float *absmax;                   /* nf4: [E, N, K/64] */
+    const uint8_t *scales;                 /* mxfp4: [E, N, K/32] u8 e8m0 */
+    const int64_t *eids;
+    const int32_t *sizes;
+    const int64_t *row_off;
+    int64_t N, K, tiles_k;
+    float *out;                            /* [R_total, K], caller-zeroed */
+    int use512;
+} DgradCtx;
+
+/* one row's K-tile slice -> scratch (kw fp32 values), NF4 */
+static inline void dg_row_nf4(const uint8_t *w_row, const float *am_row,
+                              int64_t k0, int kw, float *dst, int use512) {
+#if defined(__AVX512F__)
+    if (use512) {
+        __m512 lutv = _mm512_loadu_ps(NF4_LUT);
+        for (int b = 0; b < kw / 64; b++) {
+            int64_t blk = k0 / 64 + b;
+            __m512 slut = _mm512_mul_ps(lutv, _mm512_set1_ps(am_row[blk]));
+            const uint8_t *p = w_row + blk * 32;
+            __m512i c0, c1, c2, c3;
+            unpack32_avx512(p, 1, &c0, &c1);
+            unpack32_avx512(p + 16, 1, &c2, &c3);
+            _mm512_storeu_ps(dst + b * 64, _mm512_permutexvar_ps(c0, slut));
+            _mm512_storeu_ps(dst + b * 64 + 16,
+                             _mm512_permutexvar_ps(c1, slut));
+            _mm512_storeu_ps(dst + b * 64 + 32,
+                             _mm512_permutexvar_ps(c2, slut));
+            _mm512_storeu_ps(dst + b * 64 + 48,
+                             _mm512_permutexvar_ps(c3, slut));
+        }
+        return;
+    }
+#else
+    (void)use512;
+#endif
+    {
+        uint8_t codes[64];
+        for (int b = 0; b < kw / 64; b++) {
+            int64_t blk = k0 / 64 + b;
+            float sc = am_row[blk];
+            unpack32(w_row + blk * 32, 1, codes);
+            unpack32(w_row + blk * 32 + 16, 1, codes + 32);
+            for (int i = 0; i < 64; i++)
+                dst[b * 64 + i] = NF4_LUT[codes[i]] * sc;
+        }
+    }
+}
+
+/* MXFP4 variant: 32-element e8m0 blocks; e==0xFF keeps the oracle's ldexp
+ * semantics (w = ldexpf(LUT[c], 128); zeros stay zero) exactly like the
+ * forward cell's scalar path. */
+static inline void dg_row_mx(const uint8_t *w_row, const uint8_t *sc_row,
+                             int64_t k0, int kw, float *dst, int use512) {
+    for (int b = 0; b < kw / 32; b++) {
+        int64_t blk = k0 / 32 + b;
+        uint8_t e = sc_row[blk];
+        const uint8_t *p = w_row + blk * 16;
+        if (e == 0xFF) {
+            uint8_t codes[32];
+            unpack32(p, 0, codes);
+            for (int i = 0; i < 32; i++)
+                dst[b * 32 + i] = ldexpf(FP4_LUT[codes[i]], 128);
+            continue;
+        }
+#if defined(__AVX512F__)
+        if (use512) {
+            __m512 slut = _mm512_mul_ps(_mm512_loadu_ps(FP4_LUT),
+                                        _mm512_set1_ps(e8m0_scale(e)));
+            __m512i c0, c1;
+            unpack32_avx512(p, 0, &c0, &c1);
+            _mm512_storeu_ps(dst + b * 32, _mm512_permutexvar_ps(c0, slut));
+            _mm512_storeu_ps(dst + b * 32 + 16,
+                             _mm512_permutexvar_ps(c1, slut));
+            continue;
+        }
+#else
+        (void)use512;
+#endif
+        {
+            uint8_t codes[32];
+            float sc = e8m0_scale(e);
+            unpack32(p, 0, codes);
+            for (int i = 0; i < 32; i++)
+                dst[b * 32 + i] = FP4_LUT[codes[i]] * sc;
+        }
+    }
+}
+
+/* out_rows[t][k0..k0+kw) += sum over this n-tile's rows of
+ * scratch[n] * g[t][n0+n]; ascending n, mul+add (contract=off holds). */
+static void dg_accum(const float *scratch, int rows, int64_t n0,
+                     const float *g_rows, int64_t T, int64_t N,
+                     float *out_rows, int64_t K, int64_t k0, int kw,
+                     int use512) {
+#if defined(__AVX512F__)
+    if (use512 && kw == DG_KTILE) {
+        for (int64_t t = 0; t < T; t++) {
+            float *o = out_rows + t * K + k0;
+            const float *gr = g_rows + t * N + n0;
+            __m512 a0 = _mm512_loadu_ps(o);
+            __m512 a1 = _mm512_loadu_ps(o + 16);
+            __m512 a2 = _mm512_loadu_ps(o + 32);
+            __m512 a3 = _mm512_loadu_ps(o + 48);
+            __m512 a4 = _mm512_loadu_ps(o + 64);
+            __m512 a5 = _mm512_loadu_ps(o + 80);
+            __m512 a6 = _mm512_loadu_ps(o + 96);
+            __m512 a7 = _mm512_loadu_ps(o + 112);
+            for (int n = 0; n < rows; n++) {
+                __m512 gb = _mm512_set1_ps(gr[n]);
+                const float *s = scratch + (int64_t)n * DG_KTILE;
+                a0 = _mm512_add_ps(a0, _mm512_mul_ps(_mm512_loadu_ps(s), gb));
+                a1 = _mm512_add_ps(a1,
+                        _mm512_mul_ps(_mm512_loadu_ps(s + 16), gb));
+                a2 = _mm512_add_ps(a2,
+                        _mm512_mul_ps(_mm512_loadu_ps(s + 32), gb));
+                a3 = _mm512_add_ps(a3,
+                        _mm512_mul_ps(_mm512_loadu_ps(s + 48), gb));
+                a4 = _mm512_add_ps(a4,
+                        _mm512_mul_ps(_mm512_loadu_ps(s + 64), gb));
+                a5 = _mm512_add_ps(a5,
+                        _mm512_mul_ps(_mm512_loadu_ps(s + 80), gb));
+                a6 = _mm512_add_ps(a6,
+                        _mm512_mul_ps(_mm512_loadu_ps(s + 96), gb));
+                a7 = _mm512_add_ps(a7,
+                        _mm512_mul_ps(_mm512_loadu_ps(s + 112), gb));
+            }
+            _mm512_storeu_ps(o, a0);
+            _mm512_storeu_ps(o + 16, a1);
+            _mm512_storeu_ps(o + 32, a2);
+            _mm512_storeu_ps(o + 48, a3);
+            _mm512_storeu_ps(o + 64, a4);
+            _mm512_storeu_ps(o + 80, a5);
+            _mm512_storeu_ps(o + 96, a6);
+            _mm512_storeu_ps(o + 112, a7);
+        }
+        return;
+    }
+#else
+    (void)use512;
+#endif
+    for (int64_t t = 0; t < T; t++) {
+        float *o = out_rows + t * K + k0;
+        const float *gr = g_rows + t * N + n0;
+        for (int n = 0; n < rows; n++) {
+            float gv = gr[n];
+            const float *s = scratch + (int64_t)n * DG_KTILE;
+            for (int i = 0; i < kw; i++)
+                o[i] += s[i] * gv;
+        }
+    }
+}
+
+static void dg_range_nf4(int64_t lo, int64_t hi, void *argp) {
+    DgradCtx *c = (DgradCtx *)argp;
+    float scratch[DG_NTILE * DG_KTILE];
+    for (int64_t u = lo; u < hi; u++) {
+        int gidx = (int)(u / c->tiles_k);
+        int64_t k0 = (u % c->tiles_k) * DG_KTILE;
+        int kw = (int)(k0 + DG_KTILE > c->K ? c->K - k0 : DG_KTILE);
+        int64_t e = c->eids[gidx];
+        int64_t T = c->sizes[gidx];
+        const uint8_t *w_e = c->B + e * c->N * (c->K / 2);
+        const float *am_e = c->absmax + e * c->N * (c->K / 64);
+        const float *g_rows = c->g + c->row_off[gidx] * c->N;
+        float *out_rows = c->out + c->row_off[gidx] * c->K;
+        for (int64_t n0 = 0; n0 < c->N; n0 += DG_NTILE) {
+            int rows = (int)(n0 + DG_NTILE > c->N ? c->N - n0 : DG_NTILE);
+            for (int r = 0; r < rows; r++)
+                dg_row_nf4(w_e + (n0 + r) * (c->K / 2),
+                           am_e + (n0 + r) * (c->K / 64), k0, kw,
+                           scratch + (int64_t)r * DG_KTILE, c->use512);
+            dg_accum(scratch, rows, n0, g_rows, T, c->N, out_rows, c->K,
+                     k0, kw, c->use512);
+        }
+    }
+}
+
+static void dg_range_mx(int64_t lo, int64_t hi, void *argp) {
+    DgradCtx *c = (DgradCtx *)argp;
+    float scratch[DG_NTILE * DG_KTILE];
+    for (int64_t u = lo; u < hi; u++) {
+        int gidx = (int)(u / c->tiles_k);
+        int64_t k0 = (u % c->tiles_k) * DG_KTILE;
+        int kw = (int)(k0 + DG_KTILE > c->K ? c->K - k0 : DG_KTILE);
+        int64_t e = c->eids[gidx];
+        int64_t T = c->sizes[gidx];
+        const uint8_t *w_e = c->B + e * c->N * (c->K / 2);
+        const uint8_t *sc_e = c->scales + e * c->N * (c->K / 32);
+        const float *g_rows = c->g + c->row_off[gidx] * c->N;
+        float *out_rows = c->out + c->row_off[gidx] * c->K;
+        for (int64_t n0 = 0; n0 < c->N; n0 += DG_NTILE) {
+            int rows = (int)(n0 + DG_NTILE > c->N ? c->N - n0 : DG_NTILE);
+            for (int r = 0; r < rows; r++)
+                dg_row_mx(w_e + (n0 + r) * (c->K / 2),
+                          sc_e + (n0 + r) * (c->K / 32), k0, kw,
+                          scratch + (int64_t)r * DG_KTILE, c->use512);
+            dg_accum(scratch, rows, n0, g_rows, T, c->N, out_rows, c->K,
+                     k0, kw, c->use512);
+        }
+    }
+}
+
+/* sizes have no 1..8 cap here — see the section comment */
+static int dgrad_common(DgradCtx *c, int G, int threads, pool_fn range,
+                        int64_t *row_off_buf) {
+    int64_t r0 = 0;
+    for (int g = 0; g < G; g++) {
+        if (c->sizes[g] <= 0) return -1;
+        row_off_buf[g] = r0;
+        r0 += c->sizes[g];
+    }
+    c->row_off = row_off_buf;
+    c->tiles_k = (c->K + DG_KTILE - 1) / DG_KTILE;
+    int64_t total = (int64_t)G * c->tiles_k;
+    if (P.n) {
+        pool_run(range, c, total);
+        return 0;
+    }
+#ifdef _OPENMP
+    omp_set_num_threads(threads > 0 ? threads : omp_get_max_threads());
+#endif
+#pragma omp parallel for schedule(static)
+    for (int64_t u = 0; u < total; u++)
+        range(u, u + 1, c);
+    return 0;
+}
+
+/* g        [R_total, N] fp32, rows sorted by group
+ * B        [E, N, K/2] u8 · absmax [E, N, K/64] fp32
+ * out      [R_total, K] fp32, ZERO-INITIALIZED by the caller
+ * returns 0, or -1 on bad shape */
+EXPORT int gnf4_dgrad_nf4_grouped(const float *g, const uint8_t *B,
+                                  const float *absmax, const int64_t *eids,
+                                  const int32_t *sizes, int G, int64_t N,
+                                  int64_t K, float *out, int threads) {
+    if (K % 64 || N <= 0 || G <= 0 || G > 512) return -1;
+    int64_t row_off[512];
+    DgradCtx c = { .g = g, .B = B, .absmax = absmax, .scales = NULL,
+                   .eids = eids, .sizes = sizes, .N = N, .K = K, .out = out,
+                   .use512 = (gnf4_cpu_features() & 16) != 0 };
+    return dgrad_common(&c, G, threads, dg_range_nf4, row_off);
+}
+
+EXPORT int gnf4_dgrad_mxfp4_grouped(const float *g, const uint8_t *B,
+                                    const uint8_t *scales,
+                                    const int64_t *eids, const int32_t *sizes,
+                                    int G, int64_t N, int64_t K, float *out,
+                                    int threads) {
+    if (K % 32 || N <= 0 || G <= 0 || G > 512) return -1;
+    int64_t row_off[512];
+    DgradCtx c = { .g = g, .B = B, .absmax = NULL, .scales = scales,
+                   .eids = eids, .sizes = sizes, .N = N, .K = K, .out = out,
+                   .use512 = (gnf4_cpu_features() & 16) != 0 };
+    return dgrad_common(&c, G, threads, dg_range_mx, row_off);
+}
+
 /* -------------------------------------------- router epilogue (gate G1) -- */
 
 /* fp32 -> bf16, round-to-nearest-even (torch semantics) */
