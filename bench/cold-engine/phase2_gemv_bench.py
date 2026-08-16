@@ -14,7 +14,6 @@
 #          [--experts 96] [--tokens 40] [--threads 8,16,32,48] [--out r.json]
 
 import argparse
-import ctypes
 import json
 import mmap
 import os
