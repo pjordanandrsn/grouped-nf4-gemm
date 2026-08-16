@@ -19,6 +19,7 @@ BATTERY = [
     "run_mxfp4_20b_qlora", "gate_native_load_20b",
     "nvme_arena", "nvme_bake_nf4", "nvme_reader", "arena_experts", "arena_moe_patch",
     "nf4_qlora",
+    "cpu_grouped", "gnf4_native",
 ]
 
 def main() -> int:

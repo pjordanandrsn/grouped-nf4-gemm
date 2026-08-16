@@ -1,0 +1,32 @@
+{
+  "fmt": "nf4",
+  "shape": "k3ish_gateup",
+  "N": 6144,
+  "K": 3584,
+  "dispatch": "pool",
+  "arena_pages": "thp-madvise",
+  "layers": 8,
+  "experts": 48,
+  "topk": 8,
+  "rows": 1,
+  "arena_gib": 4.43,
+  "per_call_mib": 94.5,
+  "features": {
+    "avx2": true,
+    "avx512f": true,
+    "avx512vbmi": true,
+    "avx512vnni": true,
+    "compiled_avx512": true,
+    "openmp": true
+  },
+  "thp": "always [madvise] never",
+  "sweep": [
+    {
+      "threads": 40,
+      "gbs": 283.3,
+      "ms_per_token_layerset": 2.8
+    }
+  ],
+  "best_gbs": 283.3,
+  "seed": 20260816
+}

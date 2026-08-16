@@ -1,0 +1,40 @@
+{
+  "fmt": "mxfp4",
+  "shape": "qwen3ish_gateup",
+  "N": 1536,
+  "K": 2048,
+  "layers": 24,
+  "experts": 96,
+  "topk": 8,
+  "rows": 1,
+  "arena_gib": 3.59,
+  "per_call_mib": 12.75,
+  "features": {
+    "avx2": true,
+    "avx512f": true,
+    "avx512vbmi": true,
+    "avx512vnni": true,
+    "compiled_avx512": true,
+    "openmp": true
+  },
+  "thp": "always [madvise] never",
+  "sweep": [
+    {
+      "threads": 16,
+      "gbs": 96.2,
+      "ms_per_token_layerset": 3.34
+    },
+    {
+      "threads": 24,
+      "gbs": 106.4,
+      "ms_per_token_layerset": 3.02
+    },
+    {
+      "threads": 32,
+      "gbs": 93.9,
+      "ms_per_token_layerset": 3.42
+    }
+  ],
+  "best_gbs": 106.4,
+  "seed": 20260816
+}

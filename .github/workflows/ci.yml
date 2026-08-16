@@ -111,6 +111,15 @@ jobs:
       - name: CPU-reachable suites that CI never ran
         run: cd kernel && python -m pytest test_arena_moe_patch.py test_k3_oracle.py test_moonshot_gather.py test_mxfp4_arena_layout.py test_mxfp4_oracle.py test_mxfp4_provenance.py test_group_tiles_readonly.py test_mxfp4_interp.py test_mxfp4_v4.py test_triton_shim.py -q
 
+      - name: hybrid CPU kernels (native build + exact-tree parity)
+        # PYTHONPATH carries the repo root so gnf4_native imports from the
+        # tree, and GNF4_REQUIRE_NATIVE turns an unavailable native build
+        # into a FAILURE — without both, every @needs_native test skipped
+        # and this gate was green about nothing (Bugbot)
+        env:
+          GNF4_REQUIRE_NATIVE: "1"
+        run: cd kernel && PYTHONPATH="$GITHUB_WORKSPACE" python -m pytest test_cpu_grouped.py -q
+
       # The GPU-labelled files. `_NOT_IN_CI` excluded these by FILE while the
       # skip markers inside them are per TEST, so 57 CPU-reachable tests rode
       # along into the exclusion and CI never ran them -- including the arena
