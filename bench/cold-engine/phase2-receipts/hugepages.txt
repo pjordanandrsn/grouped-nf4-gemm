@@ -1,0 +1,2 @@
+HugePages_Total:    8192
+HugePages_Free:     8192

@@ -201,6 +201,19 @@ def gemv_mxfp4_grouped_cpu(a, packed, scales, sizes, expert_ids, *, threads=0):
                 expert_ids, threads)
 
 
+def pool_start(nthreads: int = 0) -> int:
+    """Start the executor-owned worker pool (pinned, spin-then-sleep).
+    While running, the grouped GEMVs dispatch on it instead of OpenMP —
+    same static partition, bit-identical output. Returns worker count."""
+    import gnf4_native
+    return gnf4_native.load().gnf4_pool_start(nthreads)
+
+
+def pool_stop() -> None:
+    import gnf4_native
+    gnf4_native.load().gnf4_pool_stop()
+
+
 def route_epilogue_bf16(logits32, k, mode, norm, idx_out, wts_out):
     """Single-call deterministic top-k + softmax, writing into the caller's
     (possibly strided) int64 / bf16-as-uint16 landing rows. numpy arrays in;

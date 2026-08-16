@@ -52,9 +52,20 @@
  * decode latency is Phase-3 executor work, not Phase 2.
  */
 
+#define _GNU_SOURCE   /* cpu_set_t / CPU_SET / pthread_setaffinity_np / syscall */
+#include <stdatomic.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <pthread.h>
+#include <sched.h>
+#include <unistd.h>
+
+#if defined(__linux__)
+#include <linux/futex.h>
+#include <sys/syscall.h>
+#endif
 
 #if defined(__x86_64__)
 #include <immintrin.h>
@@ -66,6 +77,14 @@
 #endif
 
 #define EXPORT __attribute__((visibility("default")))
+
+static inline void cpu_relax(void) {
+#if defined(__x86_64__)
+    _mm_pause();
+#else
+    sched_yield();
+#endif
+}
 
 /* ------------------------------------------------------------ constants -- */
 
@@ -104,6 +123,163 @@ EXPORT int gnf4_cpu_features(void) {
     f |= 32;
 #endif
     return f;
+}
+
+/* -------------------------------------------------- persistent pool ------ */
+/* Executor-owned worker pool (Phase 3): pinned workers, spin-then-futex
+ * idle, one job at a time, static contiguous partition (deterministic —
+ * work items are independent, so partitioning cannot change bits). This
+ * replaces the per-call OpenMP region whose fork/join and unpinned
+ * placement were part of the G2 scaling wall. OpenMP remains the fallback
+ * when the pool is not started. */
+
+#define POOL_MAX 128
+
+typedef void (*pool_fn)(int64_t lo, int64_t hi, void *arg);
+
+static struct {
+    pthread_t th[POOL_MAX];
+    int cpu_of[POOL_MAX];
+    int n;
+    _Atomic uint32_t gen;
+    _Atomic int done;
+    _Atomic int stop;
+    pool_fn fn;
+    void *arg;
+    int64_t total;
+} P;
+
+static void futex_wait_u32(_Atomic uint32_t *addr, uint32_t val) {
+#if defined(__linux__)
+    syscall(SYS_futex, addr, FUTEX_WAIT_PRIVATE, val, NULL, NULL, 0);
+#else
+    (void)addr; (void)val;
+    sched_yield();
+#endif
+}
+
+static void futex_wake_all_u32(_Atomic uint32_t *addr) {
+#if defined(__linux__)
+    syscall(SYS_futex, addr, FUTEX_WAKE_PRIVATE, 0x7fffffff, NULL, NULL, 0);
+#else
+    (void)addr;
+#endif
+}
+
+/* minimal L3-domain topology (same sysfs source as the calibration bench):
+ * spread worker w across domains for memory-channel coverage */
+static int topo_spread_cpu(int w) {
+    static int cpus[POOL_MAX];
+    static int ncpu = -1;
+    static int dom_of[POOL_MAX];
+    static int ndom = 1;
+    if (ncpu < 0) {
+        char sigs[16][256];
+        int nsig = 0;
+        ncpu = 0;
+        for (int c = 0; c < POOL_MAX; c++) {
+            char path[128];
+            snprintf(path, sizeof path,
+                     "/sys/devices/system/cpu/cpu%d/cache/index3/shared_cpu_list", c);
+            FILE *f = fopen(path, "r");
+            if (!f) {
+                if (c >= (int)sysconf(_SC_NPROCESSORS_ONLN)) break;
+                cpus[ncpu] = c; dom_of[ncpu++] = 0;
+                continue;
+            }
+            char sig[256] = {0};
+            if (!fgets(sig, sizeof sig, f)) sig[0] = 0;
+            fclose(f);
+            int d = -1;
+            for (int i = 0; i < nsig; i++)
+                if (!strcmp(sigs[i], sig)) { d = i; break; }
+            if (d < 0 && nsig < 16) { d = nsig; snprintf(sigs[nsig++], 256, "%s", sig); }
+            cpus[ncpu] = c; dom_of[ncpu++] = d < 0 ? 0 : d;
+        }
+        ndom = nsig > 0 ? nsig : 1;
+        if (ncpu == 0) { cpus[0] = 0; ncpu = 1; }
+    }
+    int dom = w % ndom, idx = w / ndom, seen = 0;
+    for (int i = 0; i < ncpu; i++)
+        if (dom_of[i] == dom && seen++ == idx) return cpus[i];
+    return cpus[w % ncpu];
+}
+
+static void *pool_worker(void *idp) {
+    int wid = (int)(intptr_t)idp;
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    CPU_SET(P.cpu_of[wid], &set);
+    (void)pthread_setaffinity_np(pthread_self(), sizeof set, &set);
+    uint32_t seen = 0;
+    for (;;) {
+        uint32_t g = atomic_load_explicit(&P.gen, memory_order_acquire);
+        if (atomic_load(&P.stop)) break;
+        if (g == seen) {
+            int spins = 0;
+            while ((g = atomic_load_explicit(&P.gen, memory_order_acquire)) == seen
+                   && !atomic_load(&P.stop)) {
+                if (++spins > 20000) {          /* ~100 µs, then sleep */
+                    futex_wait_u32(&P.gen, seen);
+                    spins = 0;
+                }
+                cpu_relax();
+            }
+            if (atomic_load(&P.stop)) break;
+        }
+        seen = g;
+        int64_t per = (P.total + P.n - 1) / P.n;
+        int64_t lo = (int64_t)wid * per;
+        int64_t hi = lo + per > P.total ? P.total : lo + per;
+        if (lo < hi) P.fn(lo, hi, P.arg);
+        atomic_fetch_add_explicit(&P.done, 1, memory_order_release);
+    }
+    return NULL;
+}
+
+EXPORT int gnf4_pool_start(int nthreads) {
+    if (P.n) return P.n;                   /* already running */
+    if (nthreads <= 0 || nthreads > POOL_MAX)
+        nthreads = (int)sysconf(_SC_NPROCESSORS_ONLN);
+    if (nthreads > POOL_MAX) nthreads = POOL_MAX;
+    atomic_store(&P.stop, 0);
+    atomic_store(&P.gen, 0);
+    P.n = nthreads;
+    for (int w = 0; w < nthreads; w++) {
+        P.cpu_of[w] = topo_spread_cpu(w);
+        pthread_create(&P.th[w], NULL, pool_worker, (void *)(intptr_t)w);
+    }
+    return nthreads;
+}
+
+EXPORT void gnf4_pool_stop(void) {
+    if (!P.n) return;
+    atomic_store(&P.stop, 1);
+    atomic_fetch_add(&P.gen, 1);
+    futex_wake_all_u32(&P.gen);
+    for (int w = 0; w < P.n; w++) pthread_join(P.th[w], NULL);
+    P.n = 0;
+    atomic_store(&P.stop, 0);
+}
+
+EXPORT int gnf4_pool_size(void) { return P.n; }
+
+static int pool_run(pool_fn fn, void *arg, int64_t total) {
+    if (!P.n) return -1;
+    P.fn = fn; P.arg = arg; P.total = total;
+    atomic_store_explicit(&P.done, 0, memory_order_release);
+    atomic_fetch_add_explicit(&P.gen, 1, memory_order_release);
+    futex_wake_all_u32(&P.gen);
+    /* The caller must not displace a worker: at nthreads == ncores a
+     * hard-spinning caller costs one whole core and the job time goes
+     * ~10x (measured 190 -> 17 GB/s at 48/48 on metal). Yield
+     * periodically so the scheduler can run the worker underneath. */
+    int s = 0;
+    while (atomic_load_explicit(&P.done, memory_order_acquire) != P.n) {
+        if (++s > 2000) { sched_yield(); s = 0; }
+        cpu_relax();
+    }
+    return 0;
 }
 
 /* --------------------------------------------- portable exact inner core -- */
@@ -224,6 +400,55 @@ static float nf4_cell_t1_avx512(const float *a, int64_t K,
     return combine_acc(acc);
 }
 
+/* Two output columns per pass: the activation loads (the only operand both
+ * columns share) are issued once, and the two independent accumulator sets
+ * widen the ILP window. Same locked tree per column, exactly. */
+static void nf4_cell_t1_pair_avx512(const float *a, int64_t K,
+                                    const uint8_t *w0, const float *am0,
+                                    const uint8_t *w1, const float *am1,
+                                    float *o0, float *o1) {
+    __m512 a0 = _mm512_setzero_ps(), a1 = _mm512_setzero_ps();
+    __m512 a2 = _mm512_setzero_ps(), a3 = _mm512_setzero_ps();
+    __m512 b0 = _mm512_setzero_ps(), b1 = _mm512_setzero_ps();
+    __m512 b2 = _mm512_setzero_ps(), b3 = _mm512_setzero_ps();
+    const __m512 lutv = _mm512_loadu_ps(NF4_LUT);
+    int64_t nblk = K / 64;
+    for (int64_t b = 0; b < nblk; b++) {
+        __m512 s0 = _mm512_mul_ps(lutv, _mm512_set1_ps(am0[b]));
+        __m512 s1 = _mm512_mul_ps(lutv, _mm512_set1_ps(am1[b]));
+        __m512i c0, c1, c2, c3, d0, d1, d2, d3;
+        unpack32_avx512(w0 + b * 32, 1, &c0, &c1);
+        unpack32_avx512(w0 + b * 32 + 16, 1, &c2, &c3);
+        unpack32_avx512(w1 + b * 32, 1, &d0, &d1);
+        unpack32_avx512(w1 + b * 32 + 16, 1, &d2, &d3);
+        const float *ar = a + b * 64;
+        __m512 av;
+        av = _mm512_loadu_ps(ar);
+        a0 = _mm512_add_ps(a0, _mm512_mul_ps(_mm512_permutexvar_ps(c0, s0), av));
+        b0 = _mm512_add_ps(b0, _mm512_mul_ps(_mm512_permutexvar_ps(d0, s1), av));
+        av = _mm512_loadu_ps(ar + 16);
+        a1 = _mm512_add_ps(a1, _mm512_mul_ps(_mm512_permutexvar_ps(c1, s0), av));
+        b1 = _mm512_add_ps(b1, _mm512_mul_ps(_mm512_permutexvar_ps(d1, s1), av));
+        av = _mm512_loadu_ps(ar + 32);
+        a2 = _mm512_add_ps(a2, _mm512_mul_ps(_mm512_permutexvar_ps(c2, s0), av));
+        b2 = _mm512_add_ps(b2, _mm512_mul_ps(_mm512_permutexvar_ps(d2, s1), av));
+        av = _mm512_loadu_ps(ar + 48);
+        a3 = _mm512_add_ps(a3, _mm512_mul_ps(_mm512_permutexvar_ps(c3, s0), av));
+        b3 = _mm512_add_ps(b3, _mm512_mul_ps(_mm512_permutexvar_ps(d3, s1), av));
+    }
+    float acc[4][16];
+    _mm512_storeu_ps(acc[0], a0);
+    _mm512_storeu_ps(acc[1], a1);
+    _mm512_storeu_ps(acc[2], a2);
+    _mm512_storeu_ps(acc[3], a3);
+    *o0 = combine_acc(acc);
+    _mm512_storeu_ps(acc[0], b0);
+    _mm512_storeu_ps(acc[1], b1);
+    _mm512_storeu_ps(acc[2], b2);
+    _mm512_storeu_ps(acc[3], b3);
+    *o1 = combine_acc(acc);
+}
+
 /* returns 0 and writes *out, or 1 when a 0xFF block demands the exact
  * ldexp slow path (a sentinel VALUE cannot work — inf/NaN are legitimate
  * outputs of 0xFF blocks) */
@@ -326,6 +551,78 @@ static void nf4_cell(const float *a, int T, int64_t K, const uint8_t *w_row,
     }
 }
 
+/* shared driver context: one work item = (group, 32-column tile) */
+typedef struct {
+    const float *a;
+    const uint8_t *B;
+    const float *absmax;
+    const uint8_t *scales;
+    const int64_t *eids;
+    const int32_t *sizes;
+    const int64_t *row_off;
+    int64_t N, K, tiles_n;
+    float *out;
+    int use512;
+} GemvCtx;
+
+#define GEMV_TILE 32
+
+static void nf4_range(int64_t lo, int64_t hi, void *argp) {
+    GemvCtx *c = (GemvCtx *)argp;
+    for (int64_t u = lo; u < hi; u++) {
+        int g = (int)(u / c->tiles_n);
+        int64_t tn = (u % c->tiles_n) * GEMV_TILE;
+        int64_t tn_end = tn + GEMV_TILE > c->N ? c->N : tn + GEMV_TILE;
+        int64_t e = c->eids[g];
+        const uint8_t *w_e = c->B + e * c->N * (c->K / 2);
+        const float *am_e = c->absmax + e * c->N * (c->K / 64);
+        const float *a_g = c->a + c->row_off[g] * c->K;
+        float *out_g = c->out + c->row_off[g] * c->N;
+#if defined(__AVX512F__)
+        if (c->use512 && c->sizes[g] == 1) {
+            int64_t n = tn;
+            for (; n + 1 < tn_end; n += 2)
+                nf4_cell_t1_pair_avx512(
+                    a_g, c->K,
+                    w_e + n * (c->K / 2), am_e + n * (c->K / 64),
+                    w_e + (n + 1) * (c->K / 2), am_e + (n + 1) * (c->K / 64),
+                    &out_g[n], &out_g[n + 1]);
+            for (; n < tn_end; n++)
+                out_g[n] = nf4_cell_t1_avx512(a_g, c->K, w_e + n * (c->K / 2),
+                                              am_e + n * (c->K / 64));
+            continue;
+        }
+#endif
+        for (int64_t n = tn; n < tn_end; n++)
+            nf4_cell(a_g, c->sizes[g], c->K, w_e + n * (c->K / 2),
+                     am_e + n * (c->K / 64), out_g + n, c->N, c->use512);
+    }
+}
+
+static int gemv_common(GemvCtx *c, int G, int threads, pool_fn range,
+                       int64_t *row_off_buf) {
+    int64_t r0 = 0;
+    for (int g = 0; g < G; g++) {
+        if (c->sizes[g] <= 0 || c->sizes[g] > 8) return -1;
+        row_off_buf[g] = r0;
+        r0 += c->sizes[g];
+    }
+    c->row_off = row_off_buf;
+    c->tiles_n = (c->N + GEMV_TILE - 1) / GEMV_TILE;
+    int64_t total = (int64_t)G * c->tiles_n;
+    if (P.n) {                             /* executor pool, when started */
+        pool_run(range, c, total);
+        return 0;
+    }
+#ifdef _OPENMP
+    omp_set_num_threads(threads > 0 ? threads : omp_get_max_threads());
+#endif
+#pragma omp parallel for schedule(static)
+    for (int64_t u = 0; u < total; u++)
+        range(u, u + 1, c);
+    return 0;
+}
+
 /* a         [R_total, K] fp32, rows sorted by group
  * B         [E, N, K/2] u8
  * absmax    [E, N, K/64] fp32
@@ -336,45 +633,12 @@ EXPORT int gnf4_gemv_nf4_grouped(const float *a, const uint8_t *B,
                                  const float *absmax, const int64_t *eids,
                                  const int32_t *sizes, int G, int64_t N,
                                  int64_t K, float *out, int threads) {
-    if (K % 64 || N <= 0 || G <= 0) return -1;
-    int use512 = (gnf4_cpu_features() & 16) != 0;
+    if (K % 64 || N <= 0 || G <= 0 || G > 512) return -1;
     int64_t row_off[512];
-    if (G > 512) return -1;
-    int64_t r0 = 0;
-    for (int g = 0; g < G; g++) {
-        if (sizes[g] <= 0 || sizes[g] > 8) return -1;
-        row_off[g] = r0;
-        r0 += sizes[g];
-    }
-    const int64_t TILE = 32;               /* output columns per work item */
-    int64_t tiles_n = (N + TILE - 1) / TILE;
-    int64_t total = (int64_t)G * tiles_n;
-#ifdef _OPENMP
-    omp_set_num_threads(threads > 0 ? threads : omp_get_max_threads());
-#endif
-#pragma omp parallel for schedule(static)
-    for (int64_t u = 0; u < total; u++) {
-        int g = (int)(u / tiles_n);
-        int64_t tn = (u % tiles_n) * TILE;
-        int64_t tn_end = tn + TILE > N ? N : tn + TILE;
-        int64_t e = eids[g];
-        const uint8_t *w_e = B + e * N * (K / 2);
-        const float *am_e = absmax + e * N * (K / 64);
-        const float *a_g = a + row_off[g] * K;
-        float *out_g = out + row_off[g] * N;
-#if defined(__AVX512F__)
-        if (use512 && sizes[g] == 1) {
-            for (int64_t n = tn; n < tn_end; n++)
-                out_g[n] = nf4_cell_t1_avx512(a_g, K, w_e + n * (K / 2),
-                                              am_e + n * (K / 64));
-            continue;
-        }
-#endif
-        for (int64_t n = tn; n < tn_end; n++)
-            nf4_cell(a_g, sizes[g], K, w_e + n * (K / 2), am_e + n * (K / 64),
-                     out_g + n, N, use512);
-    }
-    return 0;
+    GemvCtx c = { .a = a, .B = B, .absmax = absmax, .scales = NULL,
+                  .eids = eids, .sizes = sizes, .N = N, .K = K, .out = out,
+                  .use512 = (gnf4_cpu_features() & 16) != 0 };
+    return gemv_common(&c, G, threads, nf4_range, row_off);
 }
 
 /* ----------------------------------------------------------- MXFP4 GEMV -- */
@@ -447,50 +711,43 @@ scalar_tail:;
     }
 }
 
+static void mx_range(int64_t lo, int64_t hi, void *argp) {
+    GemvCtx *c = (GemvCtx *)argp;
+    for (int64_t u = lo; u < hi; u++) {
+        int g = (int)(u / c->tiles_n);
+        int64_t tn = (u % c->tiles_n) * GEMV_TILE;
+        int64_t tn_end = tn + GEMV_TILE > c->N ? c->N : tn + GEMV_TILE;
+        int64_t e = c->eids[g];
+        const uint8_t *w_e = c->B + e * c->N * (c->K / 2);
+        const uint8_t *sc_e = c->scales + e * c->N * (c->K / 32);
+        const float *a_g = c->a + c->row_off[g] * c->K;
+        float *out_g = c->out + c->row_off[g] * c->N;
+#if defined(__AVX512F__)
+        if (c->use512 && c->sizes[g] == 1) {
+            for (int64_t n = tn; n < tn_end; n++)
+                if (mx_cell_t1_avx512(a_g, c->K, w_e + n * (c->K / 2),
+                                      sc_e + n * (c->K / 32), &out_g[n]))
+                    mx_cell(a_g, 1, c->K, w_e + n * (c->K / 2),
+                            sc_e + n * (c->K / 32), out_g + n, c->N, 0);
+            continue;
+        }
+#endif
+        for (int64_t n = tn; n < tn_end; n++)
+            mx_cell(a_g, c->sizes[g], c->K, w_e + n * (c->K / 2),
+                    sc_e + n * (c->K / 32), out_g + n, c->N, c->use512);
+    }
+}
+
 EXPORT int gnf4_gemv_mxfp4_grouped(const float *a, const uint8_t *B,
                                    const uint8_t *scales, const int64_t *eids,
                                    const int32_t *sizes, int G, int64_t N,
                                    int64_t K, float *out, int threads) {
     if (K % 32 || N <= 0 || G <= 0 || G > 512) return -1;
-    int use512 = (gnf4_cpu_features() & 16) != 0;
     int64_t row_off[512];
-    int64_t r0 = 0;
-    for (int g = 0; g < G; g++) {
-        if (sizes[g] <= 0 || sizes[g] > 8) return -1;
-        row_off[g] = r0;
-        r0 += sizes[g];
-    }
-    const int64_t TILE = 32;
-    int64_t tiles_n = (N + TILE - 1) / TILE;
-    int64_t total = (int64_t)G * tiles_n;
-#ifdef _OPENMP
-    omp_set_num_threads(threads > 0 ? threads : omp_get_max_threads());
-#endif
-#pragma omp parallel for schedule(static)
-    for (int64_t u = 0; u < total; u++) {
-        int g = (int)(u / tiles_n);
-        int64_t tn = (u % tiles_n) * TILE;
-        int64_t tn_end = tn + TILE > N ? N : tn + TILE;
-        int64_t e = eids[g];
-        const uint8_t *w_e = B + e * N * (K / 2);
-        const uint8_t *sc_e = scales + e * N * (K / 32);
-        const float *a_g = a + row_off[g] * K;
-        float *out_g = out + row_off[g] * N;
-#if defined(__AVX512F__)
-        if (use512 && sizes[g] == 1) {
-            for (int64_t n = tn; n < tn_end; n++)
-                if (mx_cell_t1_avx512(a_g, K, w_e + n * (K / 2),
-                                      sc_e + n * (K / 32), &out_g[n]))
-                    mx_cell(a_g, 1, K, w_e + n * (K / 2), sc_e + n * (K / 32),
-                            out_g + n, N, 0);
-            continue;
-        }
-#endif
-        for (int64_t n = tn; n < tn_end; n++)
-            mx_cell(a_g, sizes[g], K, w_e + n * (K / 2), sc_e + n * (K / 32),
-                    out_g + n, N, use512);
-    }
-    return 0;
+    GemvCtx c = { .a = a, .B = B, .absmax = NULL, .scales = scales,
+                  .eids = eids, .sizes = sizes, .N = N, .K = K, .out = out,
+                  .use512 = (gnf4_cpu_features() & 16) != 0 };
+    return gemv_common(&c, G, threads, mx_range, row_off);
 }
 
 /* -------------------------------------------- router epilogue (gate G1) -- */

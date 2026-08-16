@@ -89,6 +89,26 @@ def test_mxfp4_native_exactly_matches_ordered_ref():
 
 
 @needs_native
+def test_pool_mode_bits_identical():
+    """The persistent pool must produce the same bits as the OpenMP path
+    (same work items, different partitioner — independence makes any
+    difference a bug)."""
+    a, packed, absmax = _nf4_stack(seed=11)
+    ta, tp, tm = (torch.from_numpy(a), torch.from_numpy(packed),
+                  torch.from_numpy(absmax))
+    base = cg.gemv_nf4_grouped_cpu(ta, tp, tm, SIZES, EIDS)
+    n = cg.pool_start(4)
+    try:
+        assert n >= 1
+        pooled = cg.gemv_nf4_grouped_cpu(ta, tp, tm, SIZES, EIDS)
+    finally:
+        cg.pool_stop()
+    assert torch.equal(base, pooled)
+    after = cg.gemv_nf4_grouped_cpu(ta, tp, tm, SIZES, EIDS)  # omp again
+    assert torch.equal(base, after)
+
+
+@needs_native
 def test_threads_do_not_change_bits():
     a, packed, absmax = _nf4_stack(seed=7)
     t1 = cg.gemv_nf4_grouped_cpu(torch.from_numpy(a), torch.from_numpy(packed),

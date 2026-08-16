@@ -104,6 +104,12 @@ def _typed(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.gnf4_dense_gemv_f32.argtypes = [
         c.c_void_p, c.c_void_p, c.c_void_p, c.c_void_p, c.c_int64, c.c_int64,
     ]
+    lib.gnf4_pool_start.restype = c.c_int
+    lib.gnf4_pool_start.argtypes = [c.c_int]
+    lib.gnf4_pool_stop.restype = None
+    lib.gnf4_pool_stop.argtypes = []
+    lib.gnf4_pool_size.restype = c.c_int
+    lib.gnf4_pool_size.argtypes = []
     return lib
 
 

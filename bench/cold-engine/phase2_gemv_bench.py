@@ -33,16 +33,31 @@ SHAPES = {                      # (N, K) per projection, decode-relevant
 }
 
 
-def huge_alloc(nbytes):
+HUGETLB_STATE = {"mode": "thp-madvise"}
+
+
+def huge_alloc(nbytes, explicit=False):
+    """THP-madvise by default; --hugetlb asks for explicit 2 MiB pages
+    (MAP_HUGETLB — needs vm.nr_hugepages reserved; bare-metal root can
+    `sysctl vm.nr_hugepages=N`). Falls back with the state recorded."""
+    if explicit and hasattr(mmap, "MAP_HUGETLB"):
+        try:
+            m = mmap.mmap(-1, nbytes,
+                          flags=mmap.MAP_PRIVATE | mmap.MAP_ANONYMOUS
+                          | mmap.MAP_HUGETLB)
+            HUGETLB_STATE["mode"] = "hugetlb-2m"
+            return m
+        except OSError as e:
+            HUGETLB_STATE["mode"] = f"hugetlb-FAILED({e.errno})->thp"
     m = mmap.mmap(-1, nbytes)
     m.madvise(mmap.MADV_HUGEPAGE)
     return m
 
 
-def build_arena(fmt, L, E, N, K, seed):
+def build_arena(fmt, L, E, N, K, seed, explicit_huge=False):
     """One mmap'd arena per tensor kind, filled in parallel-ish (numpy)."""
     packed_b = L * E * N * (K // 2)
-    m_packed = huge_alloc(packed_b)
+    m_packed = huge_alloc(packed_b, explicit_huge)
     packed = np.frombuffer(m_packed, dtype=np.uint8).reshape(L, E, N, K // 2)
     rng = np.random.default_rng(seed)
     # fill by layer to bound temp memory; contents irrelevant to bandwidth
@@ -50,12 +65,12 @@ def build_arena(fmt, L, E, N, K, seed):
         packed[layer] = rng.integers(0, 256, size=(E, N, K // 2), dtype=np.uint8)
     if fmt == "nf4":
         sc_b = L * E * N * (K // 64) * 4
-        m_sc = huge_alloc(sc_b)
+        m_sc = huge_alloc(sc_b, explicit_huge)
         scales = np.frombuffer(m_sc, dtype=np.float32).reshape(L, E, N, K // 64)
         scales[:] = rng.random(size=scales.shape, dtype=np.float32) + 0.5
     else:
         sc_b = L * E * N * (K // 32)
-        m_sc = huge_alloc(sc_b)
+        m_sc = huge_alloc(sc_b, explicit_huge)
         scales = np.frombuffer(m_sc, dtype=np.uint8).reshape(L, E, N, K // 32)
         scales[:] = rng.integers(110, 130, size=scales.shape, dtype=np.uint8)
     return (m_packed, m_sc), packed, scales, packed_b + sc_b
@@ -73,6 +88,10 @@ def main():
     ap.add_argument("--warmup", type=int, default=5)
     ap.add_argument("--threads", default="8,16,32,48")
     ap.add_argument("--seed", type=int, default=20260816)
+    ap.add_argument("--pool", action="store_true",
+                    help="dispatch on the persistent pinned pool per point")
+    ap.add_argument("--hugetlb", action="store_true",
+                    help="explicit MAP_HUGETLB arena (else THP madvise)")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
@@ -84,7 +103,7 @@ def main():
           else cg.gemv_mxfp4_grouped_cpu)
 
     keep, packed, scales, arena_bytes = build_arena(
-        args.fmt, L, E, N, K, args.seed)
+        args.fmt, L, E, N, K, args.seed, explicit_huge=args.hugetlb)
     print(f"arena: {arena_bytes / 2**30:.2f} GiB "
           f"({L}L x {E}E x [{N},{K}] {args.fmt})", flush=True)
 
@@ -105,6 +124,10 @@ def main():
                               else K // 2 + K // 32)
     results = []
     for th in [int(x) for x in args.threads.split(",")]:
+        if args.pool:
+            cg.pool_stop()
+            got = cg.pool_start(th)
+            assert got == th, f"pool_start({th}) -> {got}"
         times = []
         for tok in range(args.tokens + args.warmup):
             t0 = time.perf_counter()
@@ -123,9 +146,13 @@ def main():
         print(f"threads {th:3d}: {gbs:7.1f} GB/s "
               f"({med * 1e3:.2f} ms per {L}-layer token)", flush=True)
 
+    if args.pool:
+        cg.pool_stop()
     best = max(r["gbs"] for r in results)
     out = {
         "fmt": args.fmt, "shape": args.shape, "N": N, "K": K,
+        "dispatch": "pool" if args.pool else "openmp",
+        "arena_pages": HUGETLB_STATE["mode"],
         "layers": L, "experts": E, "topk": k, "rows": args.rows,
         "arena_gib": round(arena_bytes / 2**30, 2),
         "per_call_mib": round(per_call_bytes / 2**20, 2),

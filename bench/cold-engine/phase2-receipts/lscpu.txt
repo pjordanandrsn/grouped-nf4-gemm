@@ -1,0 +1,10 @@
+Model name:                              AMD EPYC 9455 48-Core Processor
+BIOS Model name:                         AMD EPYC 9455 48-Core Processor                  CPU @ 3.1GHz
+Thread(s) per core:                      1
+Core(s) per socket:                      48
+Socket(s):                               1
+NUMA node(s):                            4
+NUMA node0 CPU(s):                       0-11
+NUMA node1 CPU(s):                       12-23
+NUMA node2 CPU(s):                       24-35
+NUMA node3 CPU(s):                       36-47

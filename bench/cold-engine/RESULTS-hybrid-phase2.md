@@ -89,3 +89,51 @@ of Phase 1's "unexplained model-arm math". Receipts:
 `g2_nf4_qwen.json` (Zen4 pre-fix), `g2_nf4_qwen_zen4.json` (Zen4 final),
 `g2_nf4_qwen_zen5.json` / `_zen5b.json` (Zen5 sweeps), `g2_mx_qwen_zen5.json`,
 `calib_p2.json` / `calib_zen5.json` (per-box triad/scatter denominators).
+
+## ADDENDUM — G2 on the definitive instrument (bare metal, same day)
+
+Latitude bare metal, single-socket Zen 5 EPYC (48 real cores, 4 NUMA nodes
+/ NPS4, 6-core CCDs visible), root: explicit 2 MiB hugepages granted,
+`numactl --interleave=all`, the new persistent pinned pool. Triad on this
+box: **344.9 GB/s** (gate bar = 241.4). Exactness: 8/8 including the pool
+bits-identical test, on real Zen 5 silicon.
+
+**G2 is SHAPE-DEPENDENT — and passes at the decode shapes of the models
+the tier exists for:**
+
+| shape (per-projection N×K) | GB/s | % of triad | verdict |
+|---|---|---|---|
+| gpt-oss-120b-class gate_up (5760×2880) | **257.8** | **74.8%** | **PASS** |
+| K3-class gate_up (6144×3584) | **283.3** | **82.1%** | **PASS** |
+| qwen3-30B-class gate_up (1536×2048) | 190.2 | 55.1% | MISS |
+| MXFP4, qwen3-30B-class shape | 196.8 | 57.1% | MISS |
+
+The small-shape fraction (~55%) reproduced within 0.4 points across three
+instruments (Zen 4 metal, Zen 5 VM, Zen 5 metal), so it is
+kernel-intrinsic: shorter K-streams amortize the per-row fixed costs
+(horizontal combine, absmax tail, call overhead) proportionally worse.
+Longer streams recover the roofline fraction.
+
+What the metal session attributed, in order found:
+
+1. **The bench arena was NUMA-naive** — single-threaded fill put every
+   page on node 0 of an NPS4 box; all threads then shared one node's
+   channels (~72–81 GB/s plateau, and the first scatter-below-triad
+   reading ever). `--interleave=all` is the honest stand-in; NUMA-local
+   *work binding* (worker reads its own node's rows) is the Phase-3
+   executor's tiling item, with this receipt as its justification.
+2. **The pool is worth +54% over per-call OpenMP regions** at equal
+   threads (183–190 vs 117–123 GB/s) — fork/join and unpinned placement
+   were half the earlier scaling wall.
+3. **A hard-spinning pool caller displaces a worker at full occupancy**
+   (48/48: 190 → 17 GB/s) — fixed with periodic yield in `pool_run`.
+4. Hugepages vs THP-madvise: neutral on this box once interleaved
+   (183.3 vs 181-ish class) — TLB was not the earlier wall.
+5. rows=4 at the winner config: 121.1 GB/s of unique-weight traffic
+   (total work ~4×) — the T>1 lanes remain ALU-bound as designed for
+   Phase-8's crossover test, not a decode concern.
+
+Receipts: `phase2-receipts/` (`g2_pool_huge_il.json`, `g2_gptoss.json`,
+`g2_k3.json`, `g2_mx.json`, `g2_rows4.json`, quadrant sweeps, `calib.json`,
+`lscpu.txt`/`l3.txt`/`hugepages.txt`). One billed hour; server destroyed
+and verified.
