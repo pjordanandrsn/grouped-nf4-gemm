@@ -338,3 +338,167 @@ def test_pinned_landing_is_aligned_even_when_the_allocator_suballocates():
         assert buffer_address(mv) % 4096 == 0, f"n={n} came back misaligned"
         del ka
     del keep
+
+
+# ------------------------------------- speculative / concurrent ensures --
+# The contract that lets a prefetcher overlap the serving thread. Two failure
+# classes were MEASURED at 235B before this structure existed: a prefetch
+# ensure evicting a row between the demand path's ensure and its row() reads
+# (KeyError 'not resident'), and demand fetches convoying behind speculative
+# disk time because fills ran under the tier lock (6.6x end-to-end).
+
+def test_speculative_ensure_never_evicts_the_demand_window(arena):
+    path, index, _ = arena
+    with _tier(path, index, E) as t:
+        t.ensure(0, range(E))                     # demand window = all 4 slots
+        assert t.ensure(1, [0, 1], speculative=True) is None
+        s = t.stats()
+        assert s["spec_misses"] == 0 and s["evictions"] == 0
+        for e in range(E):                        # the window survived intact
+            assert t.resident(0, e)
+            assert len(t.row(0, e)) == t.row_bytes
+
+
+def test_speculative_ensure_is_best_effort_partial(arena):
+    path, index, _ = arena
+    with _tier(path, index, E + 2) as t:
+        t.ensure(0, range(E))                     # 4 protected, 2 slots free
+        assert t.ensure(1, [0, 1, 2], speculative=True) is None
+        s = t.stats()
+        assert s["spec_misses"] == 2, s           # free slots only, then gave up
+        assert t.resident(1, 0) and t.resident(1, 1)
+        assert not t.resident(1, 2)
+        assert all(t.resident(0, e) for e in range(E))
+
+
+def test_demand_and_spec_counters_split_coherently(arena):
+    path, index, _ = arena
+    with _tier(path, index, E + 2) as t:
+        t.ensure(0, range(E))
+        t.ensure(1, [0], speculative=True)
+        t.ensure(1, [0], speculative=True)        # second time is a spec hit
+        s = t.stats()
+        assert s["demand_misses"] == E and s["spec_misses"] == 1
+        assert s["spec_hits"] == 1
+        assert s["demand_misses"] + s["spec_misses"] == s["misses"]
+
+
+def test_concurrent_duplicate_fetch_lands_in_one_slot(arena):
+    """Two ensures racing on the same cold key must produce ONE fill: a second
+    fill in a second slot lets one eviction delete the other's mapping."""
+    import threading
+    import time
+
+    path, index, _ = arena
+    with _tier(path, index, E) as t:
+        orig = t.reader.read_row
+
+        def slow(layer, expert, dst):
+            time.sleep(0.3)                       # hold the pending window open
+            return orig(layer, expert, dst)
+
+        t.reader.read_row = slow
+        out, errs = {}, []
+
+        def demand(name, delay):
+            try:
+                time.sleep(delay)
+                out[name] = t.ensure(2, [1])[0]
+            except Exception as exc:              # noqa: BLE001 - surfaced below
+                errs.append(exc)
+
+        a = threading.Thread(target=demand, args=("a", 0.0))
+        b = threading.Thread(target=demand, args=("b", 0.1))
+        a.start(); b.start(); a.join(); b.join()
+        t.reader.read_row = orig
+        assert not errs, errs
+        assert out["a"] == out["b"]
+        s = t.stats()
+        assert s["disk_reads"] == 1, "the racing ensure re-read the same row"
+        assert s["demand_waits"] == 1
+
+
+def test_demand_waits_out_speculative_reservations_instead_of_failing(arena):
+    """Every slot reserved by in-flight speculative fills is transient
+    pressure, not oversubscription: the demand path must wait for a fill to
+    publish and take a victim, never raise. (The serialized structure could
+    never produce this state, so raising would be a new failure mode.)"""
+    import threading
+    import time
+
+    path, index, _ = arena
+    with _tier(path, index, 2) as t:
+        orig = t.reader.read_row
+
+        def slow(layer, expert, dst):
+            time.sleep(0.3)
+            return orig(layer, expert, dst)
+
+        t.reader.read_row = slow
+        got, errs = {}, []
+
+        def spec():
+            try:
+                t.ensure(0, [0, 1], speculative=True)   # reserves BOTH slots
+            except Exception as exc:              # noqa: BLE001
+                errs.append(exc)
+
+        def demand():
+            try:
+                time.sleep(0.1)                   # arrive mid-reservation
+                got["slot"] = t.ensure(1, [0])[0]
+            except Exception as exc:              # noqa: BLE001
+                errs.append(exc)
+
+        a = threading.Thread(target=spec)
+        b = threading.Thread(target=demand)
+        a.start(); b.start(); a.join(); b.join()
+        t.reader.read_row = orig
+        assert not errs, errs
+        assert "slot" in got and t.resident(1, 0)
+
+
+def test_demand_window_survives_concurrent_spec_churn(arena):
+    """The 235B crash class, at toy scale: a spec thread churning ensures must
+    never invalidate a row between a demand ensure and its row() reads.
+
+    Time-bounded, not iteration-bounded: an unthrottled churn loop starves the
+    demand thread through the GIL (300 iterations took 510 s on a loaded box),
+    while a bounded run with a yielding churner races every demand ensure and
+    finishes in ~3 s everywhere."""
+    import random as _random
+    import threading
+    import time
+
+    path, index, _ = arena
+    stop = threading.Event()
+    errs = []
+    with _tier(path, index, E) as t:
+        def churn():
+            rng = _random.Random(97)
+            while not stop.is_set():
+                lay = rng.randrange(L)
+                ids = [rng.randrange(E) for _ in range(2)]
+                try:
+                    t.ensure(lay, ids, speculative=True)
+                except Exception as exc:          # noqa: BLE001
+                    errs.append(exc)
+                    return
+                time.sleep(0.001)                 # yield the GIL, keep racing
+
+        w = threading.Thread(target=churn)
+        w.start()
+        try:
+            rng = _random.Random(13)
+            deadline = time.monotonic() + 3.0
+            lay = 0
+            while time.monotonic() < deadline:
+                lay = (lay + 1) % L
+                ids = [rng.randrange(E) for _ in range(3)]
+                t.ensure(lay, ids)
+                for e in ids:                     # the crash line: read-after-ensure
+                    assert len(t.row(lay, e)) == t.row_bytes
+        finally:
+            stop.set()
+            w.join()
+        assert not errs, errs
