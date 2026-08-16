@@ -11,6 +11,11 @@ license = { text = "MIT" }
 requires-python = ">=3.9"
 authors = [{ name = "Jordan Anderson" }]
 dependencies = [
+    # numpy: load-bearing in nvme_reader (alloc_landing's memoryview) and in
+    # cpu_grouped/gnf4_native (the executable spec + zero-copy views over
+    # pinned buffers). Undeclared, it broke wheel-smoke the moment
+    # cpu_grouped imported it in a clean venv (Bugbot round).
+    "numpy",
     # The floor accepts PRE-RELEASES on purpose. Under PEP 440 a dev build
     # sorts BELOW its own release -- "2.8.0.dev20250319" does NOT satisfy
     # ">=2.8" -- so a plain ">=2.8" makes pip treat every nightly/dev CUDA

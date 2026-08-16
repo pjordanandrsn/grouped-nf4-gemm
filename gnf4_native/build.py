@@ -49,6 +49,21 @@ def _build() -> tuple[ctypes.CDLL | None, str | None]:
     if cc is None:
         return None, "no C compiler on PATH"
     src = _SRC.read_bytes()
+    # -march=native makes the binary CPU-specific: the cache key must carry
+    # the CPU identity or a shared/moved cache dir serves another ISA's
+    # binary (Bugbot). /proc/cpuinfo's model+flags is the honest identity.
+    try:
+        info = Path("/proc/cpuinfo").read_text()
+        cpu_id = ""
+        for line in info.splitlines():
+            if line.startswith(("model name", "flags")):
+                cpu_id += line
+                if cpu_id.count(":") >= 2:
+                    break
+    except OSError:
+        import platform
+        cpu_id = platform.processor() or platform.machine()
+    src = src + cpu_id.encode()
     # -ffp-contract=off is load-bearing: GCC's GNU-mode default contracts
     # mul+add into FMA, silently breaking the locked two-rounding summation
     # tree (caught by test_cpu_grouped exact-parity on first run). The

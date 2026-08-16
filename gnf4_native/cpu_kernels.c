@@ -244,12 +244,22 @@ EXPORT int gnf4_pool_start(int nthreads) {
     if (nthreads > POOL_MAX) nthreads = POOL_MAX;
     atomic_store(&P.stop, 0);
     atomic_store(&P.gen, 0);
-    P.n = nthreads;
+    P.n = nthreads;                        /* workers read P.n per job */
+    int created = 0;
     for (int w = 0; w < nthreads; w++) {
         P.cpu_of[w] = topo_spread_cpu(w);
-        pthread_create(&P.th[w], NULL, pool_worker, (void *)(intptr_t)w);
+        if (pthread_create(&P.th[w], NULL, pool_worker,
+                           (void *)(intptr_t)w) != 0)
+            break;                         /* out of threads/limits */
+        created++;
     }
-    return nthreads;
+    if (created != nthreads) {
+        /* a partial pool must not leave pool_run waiting on ghosts: shrink
+         * to what exists, or tear down entirely when nothing started */
+        P.n = created;
+        if (created == 0) return 0;
+    }
+    return P.n;
 }
 
 EXPORT void gnf4_pool_stop(void) {

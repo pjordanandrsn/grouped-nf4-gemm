@@ -22,6 +22,16 @@ needs_native = pytest.mark.skipif(
 )
 
 
+def test_native_required_when_promised():
+    """CI exports GNF4_REQUIRE_NATIVE=1: there, an unavailable native build
+    is a FAILURE, never a silent skip of the whole exactness gate."""
+    import os
+    if os.environ.get("GNF4_REQUIRE_NATIVE") == "1":
+        assert cg.cpu_kernels_available(), (
+            "GNF4_REQUIRE_NATIVE=1 but gnf4_native cannot build/import — "
+            "the exact-parity gate would silently skip")
+
+
 def _nf4_stack(seed=0):
     g = np.random.default_rng(seed)
     packed = g.integers(0, 256, size=(E, N, K // 2), dtype=np.uint8)
