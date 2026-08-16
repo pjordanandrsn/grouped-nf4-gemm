@@ -23,7 +23,12 @@ the slot it will be gathered from. No staging tier, no shadow copy.
 Eviction is LFU with an LRU tie-break: MoE routing is heavy-tailed, so a modest
 hot set covers most picks and frequency is the signal that exploits it. Rows
 placed for the *current* request are protected for its duration, so a request can
-never evict its own freshly-read rows.
+never evict its own freshly-read rows — and the rows of the latest *demand*
+request stay protected until the next demand request replaces them, so a
+concurrent ``ensure(..., speculative=True)`` (a prefetcher warming predicted
+rows) can never evict what the serving thread is about to read. Disk fills run
+outside the tier lock (reserved slots + pending-key events keep them safe), so
+speculative I/O overlaps demand I/O instead of convoying it.
 
 Usage::
 
@@ -77,57 +82,99 @@ class ColdTier:
         self._freq: Counter = Counter()
         self._clock = 0
         self._last_use: dict[tuple[int, int], int] = {}
+        # Concurrency state (see ensure's docstring for the contract):
+        self._reserved: set[int] = set()   # slots whose fill is in flight
+        self._pending: dict[tuple[int, int], threading.Event] = {}
+        self._demand_protected: set[int] = set()
 
         self.hits = 0
         self.misses = 0
         self.evictions = 0
         self.requests = 0
+        self.demand_misses = 0
+        self.spec_misses = 0
+        self.spec_hits = 0
+        self.demand_waits = 0
 
     # ---------------------------------------------------------------- slots --
     def _slot_view(self, slot: int) -> memoryview:
         lo = slot * self.row_stride
         return self.buffer[lo:lo + self.row_stride]
 
-    def _victim(self, protected: set) -> int:
-        """LFU, LRU tie-break, never a slot this request already claimed."""
+    def _victim(self, excluded: set) -> int:
+        """LFU, LRU tie-break, never a slot in ``excluded`` (this request's own
+        claims, in-flight reservations, and the current demand window)."""
         best, best_key = None, None
         for slot, key in enumerate(self._key_of):
-            if slot in protected or key is None:
+            if slot in excluded or slot in self._reserved or key is None:
                 continue
             k = (self._freq[key], self._last_use.get(key, 0))
             if best_key is None or k < best_key:
                 best, best_key = slot, k
         if best is None:
             raise RuntimeError(
-                f"hot_rows={self.hot_rows} too small: every slot is protected "
-                f"by the current request. Size hot_rows >= max routed experts "
-                f"per layer.")
+                f"hot_rows={self.hot_rows} too small: every slot is claimed by "
+                f"the current request, reserved by an in-flight fill, or "
+                f"protected by the current demand window. Size hot_rows >= max "
+                f"routed experts per layer (plus speculative headroom).")
         return best
 
     # -------------------------------------------------------------- the API --
-    def ensure(self, layer: int, experts) -> list:
-        """Make every (layer, expert) resident; return slot indices in order.
+    def ensure(self, layer: int, experts, *, speculative: bool = False):
+        """Make every (layer, expert) resident; return slot indices in order
+        (demand) or ``None`` (speculative — a warming call has no positional
+        contract because it is allowed to fetch a subset).
 
         Hits are free. Misses are submitted concurrently (bounded by the
         reader's queue depth) and land directly in the slot they will be
-        gathered from.
+        gathered from. Capacity is counted in UNIQUE rows: repeats in one
+        request share a slot, so ``ensure(l, [7, 7, 7])`` needs one row.
 
-        Capacity is counted in UNIQUE rows: repeats in one request share a slot,
-        so ``ensure(l, [7, 7, 7])`` needs one row, not three.
+        **Concurrency contract** (what lets a speculative prefetcher overlap a
+        demand path without a convoy — measured before this structure existed:
+        a prefetch thread serializing every demand fetch behind ~340 MB of its
+        own disk time was a 6.6x end-to-end slowdown at 235B):
 
-        A slot is *reserved* while its read is in flight and only PUBLISHED into
-        the residency maps once the fill lands. Nothing can observe a slot as
-        resident while it holds partial or stale bytes, and a failed batch drains
-        every in-flight read before reclaiming slots, so no read can still be
-        writing into a slot that has been handed to someone else.
+        - Slot state changes happen under the lock, but disk reads do NOT: the
+          plan phase reserves slots and registers pending keys, the lock drops
+          for the O_DIRECT fills, and a publish phase re-takes it. Reserved
+          slots are never victims and nothing observes a slot as resident
+          while it holds partial bytes.
+        - A key another ensure is already filling is never fetched twice
+          (two fills of one key would let one eviction delete the other's
+          mapping — map corruption, not just a wasted read). Demand callers
+          wait on the in-flight fill's event; speculative callers skip it.
+        - The rows of the LATEST demand ensure form the *demand window*:
+          they cannot be evicted by any concurrent ensure until the next
+          demand ensure replaces the window. This is what makes the caller's
+          ensure -> :meth:`row` read sequence safe with a concurrent
+          prefetcher and no external locking (the 235B crash class:
+          ``KeyError: not resident`` between a demand ensure and its reads).
+          One demand thread is assumed — the serving forward pass.
+        - Speculative ensures are best-effort: no free slot and no evictable
+          victim means that key is skipped, never an error. Speculative reads
+          land in whatever slots LFU would have reclaimed anyway.
+
+        A failed batch drains every in-flight read before reclaiming slots
+        (a read could still be landing bytes in a reclaimed slot), wakes any
+        waiters, and re-raises; woken waiters whose key never published fetch
+        it themselves.
         """
         experts = [int(e) for e in experts]
         keys = [(layer, e) for e in experts]
         uniq = list(dict.fromkeys(keys))          # order-preserving dedupe
-        if len(uniq) > self.hot_rows:
+        if not speculative and len(uniq) > self.hot_rows:
             raise ValueError(
                 f"request of {len(uniq)} unique rows exceeds "
                 f"hot_rows={self.hot_rows}")
+        return self._ensure(layer, keys, uniq, speculative,
+                            fresh_window=not speculative)
+
+    def _ensure(self, layer, keys, uniq, speculative, fresh_window):
+        resolved: dict = {}
+        reserved: list = []                       # (key, slot) awaiting fill
+        waits: list = []                          # (key, event) filled elsewhere
+        own: set = set()
         with self._lock:
             self.requests += 1
             self._clock += 1
@@ -135,58 +182,153 @@ class ColdTier:
             for key in keys:                      # frequency counts every pick
                 self._freq[key] += 1
                 self._last_use[key] = now
+            if fresh_window:
+                # the new demand request REPLACES the protected window; the
+                # previous layer's rows have been read and are fair game again
+                self._demand_protected = set()
 
-            resolved: dict = {}
-            reserved: list = []                   # (key, slot) awaiting fill
-            protected = set()
-
-            # Pass 1 — resolve hits and RESERVE slots for misses. Reserving
-            # before any read means a miss cannot evict a row this same request
-            # already hit or claimed.
+            # Plan — resolve hits, note keys already being filled, RESERVE
+            # slots for the misses this call will fill itself.
             for key in uniq:
                 slot = self._slot_of.get(key)
                 if slot is not None:
                     self.hits += 1
+                    if speculative:
+                        self.spec_hits += 1
                     resolved[key] = slot
-                    protected.add(slot)
+                    own.add(slot)
+                    if not speculative:
+                        self._demand_protected.add(slot)
+                    continue
+                ev = self._pending.get(key)
+                if ev is not None:
+                    if speculative:
+                        continue                  # already on its way
+                    self.demand_waits += 1
+                    waits.append((key, ev))
+                    continue
+                slot = self._claim_slot(own, speculative)
+                if slot is None:                  # speculative + nothing evictable
+                    break
+                # _claim_slot may have dropped the lock waiting for in-flight
+                # fills to publish; this key's state can have changed under us.
+                # Reserving without re-checking could start a SECOND fill of a
+                # key someone else now owns — the map-corruption case.
+                cur = self._slot_of.get(key)
+                if cur is not None:
+                    self.hits += 1
+                    if speculative:
+                        self.spec_hits += 1
+                    resolved[key] = cur
+                    own.add(cur)
+                    if not speculative:
+                        self._demand_protected.add(cur)
+                    self._free.append(slot)
+                    continue
+                ev = self._pending.get(key)
+                if ev is not None:
+                    self._free.append(slot)
+                    if speculative:
+                        continue
+                    self.demand_waits += 1
+                    waits.append((key, ev))
                     continue
                 self.misses += 1
-                if self._free:
-                    slot = self._free.pop()
+                if speculative:
+                    self.spec_misses += 1
                 else:
-                    slot = self._victim(protected)
-                    old = self._key_of[slot]
-                    if old is not None:
-                        del self._slot_of[old]
-                        self._key_of[slot] = None   # unpublish before refilling
-                        self.evictions += 1
-                protected.add(slot)
+                    self.demand_misses += 1
+                    self._demand_protected.add(slot)
+                self._reserved.add(slot)
+                self._pending[key] = threading.Event()
+                own.add(slot)
                 resolved[key] = slot
                 reserved.append((key, slot))
 
-            # Pass 2 — concurrent O_DIRECT fills, then publish. Every future is
-            # drained even on failure: returning early could hand a slot back to
-            # the free list while a read is still landing bytes in it.
-            futures = [(self.reader.read_row(layer, k[1], self._slot_view(s)), k, s)
-                       for k, s in reserved]
-            first_err = None
-            for fut, key, slot in futures:
-                try:
-                    fut.result()
-                except Exception as exc:          # noqa: BLE001 - re-raised below
-                    if first_err is None:
-                        first_err = exc
-                    continue
-                self._key_of[slot] = key          # publish only now
+        # Fill — disk reads run OUTSIDE the lock. Reservations make the slots
+        # unevictable and pending events make the keys unfetchable by anyone
+        # else, so concurrent ensures proceed instead of queueing behind I/O.
+        first_err = None
+        landed: list = []
+        futures = [(self.reader.read_row(layer, k[1], self._slot_view(s)), k, s)
+                   for k, s in reserved]
+        for fut, key, slot in futures:
+            try:
+                fut.result()
+                landed.append((key, slot))
+            except Exception as exc:              # noqa: BLE001 - re-raised below
+                if first_err is None:
+                    first_err = exc
+
+        # Publish — only now can another request observe these rows.
+        with self._lock:
+            for key, slot in landed:
+                self._key_of[slot] = key
                 self._slot_of[key] = slot
+                self._reserved.discard(slot)
+                self._pending.pop(key).set()
             if first_err is not None:
                 for key, slot in reserved:        # reclaim whatever never landed
                     if self._slot_of.get(key) != slot:
                         self._key_of[slot] = None
+                        self._reserved.discard(slot)
                         if slot not in self._free:
                             self._free.append(slot)
-                raise first_err
-            return [resolved[k] for k in keys]
+                        ev = self._pending.pop(key, None)
+                        if ev is not None:
+                            ev.set()              # wake waiters; they refetch
+        if first_err is not None:
+            raise first_err
+        if speculative:
+            return None
+
+        # Resolve keys someone else was filling. A set event does not prove
+        # the fill landed (it may have failed, or LFU may have already evicted
+        # the row) — re-check under the lock and refetch on a same-request
+        # window (fresh_window=False keeps THIS request's rows protected).
+        for key, ev in waits:
+            ev.wait()
+            with self._lock:
+                slot = self._slot_of.get(key)
+                if slot is not None:
+                    self.hits += 1
+                    resolved[key] = slot
+                    self._demand_protected.add(slot)
+                    continue
+            resolved[key] = self._ensure(layer, [key], [key], False,
+                                         fresh_window=False)[0]
+        return [resolved[k] for k in keys]
+
+    def _claim_slot(self, own: set, speculative: bool):
+        """A free or victimizable slot, or ``None`` for a speculative caller
+        with nothing evictable. A demand caller finding every candidate merely
+        RESERVED (in-flight speculative fills) waits for a fill to publish and
+        rescans rather than failing — reservations resolve at disk speed, and
+        raising there would turn transient speculative pressure into a serving
+        error the old serialized structure could never produce."""
+        while True:
+            if self._free:
+                return self._free.pop()
+            try:
+                slot = self._victim(own | self._demand_protected)
+            except RuntimeError:
+                if speculative:
+                    return None
+                blockers = [ev for k, ev in self._pending.items()]
+                if not blockers:
+                    raise                         # genuinely oversubscribed
+                self._lock.release()
+                try:
+                    blockers[0].wait(timeout=30.0)
+                finally:
+                    self._lock.acquire()
+                continue
+            old = self._key_of[slot]
+            if old is not None:
+                del self._slot_of[old]
+                self._key_of[slot] = None         # unpublish before refilling
+                self.evictions += 1
+            return slot
 
     def row(self, layer: int, expert: int) -> memoryview:
         """A resident row's bytes (``row_bytes``, excluding alignment padding).
@@ -245,6 +387,14 @@ class ColdTier:
             "hits": self.hits,
             "misses": self.misses,
             "hit_rate": (self.hits / total) if total else 0.0,
+            # hits/misses count EVERY ensure, speculative included — a
+            # prefetcher inflates both. The split below is what a stall
+            # metric must read: demand_misses are synchronous fetches on
+            # the caller's critical path; spec_misses are background warming.
+            "demand_misses": self.demand_misses,
+            "spec_misses": self.spec_misses,
+            "spec_hits": self.spec_hits,
+            "demand_waits": self.demand_waits,
             "evictions": self.evictions,
             "resident_rows": len(self._slot_of),
             "hot_rows": self.hot_rows,
