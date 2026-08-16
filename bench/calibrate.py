@@ -104,7 +104,12 @@ def gpu_fingerprint():
     smi = shutil.which("nvidia-smi")
     if not smi:
         return []
-    r = _run([smi, "--query-gpu=index,name,memory.total,power.limit,pcie.link.gen.current,pcie.link.width.current",
+    # capability = the MAX link the slot trained to; the CURRENT fields read
+    # the idle state (typically Gen1 on a parked card) and once wrote a false
+    # topology into a banked receipt — record both, labeled (Bugbot)
+    r = _run([smi, "--query-gpu=index,name,memory.total,power.limit,"
+                   "pcie.link.gen.max,pcie.link.width.max,"
+                   "pcie.link.gen.current,pcie.link.width.current",
               "--format=csv,noheader"])
     gpus = []
     for line in r.stdout.strip().splitlines():
@@ -112,8 +117,10 @@ def gpu_fingerprint():
         if len(parts) >= 4:
             gpus.append({"index": parts[0], "name": parts[1],
                          "vram": parts[2], "power_limit": parts[3],
-                         "pcie_gen": parts[4] if len(parts) > 4 else "?",
-                         "pcie_width": parts[5] if len(parts) > 5 else "?"})
+                         "pcie_gen_max": parts[4] if len(parts) > 4 else "?",
+                         "pcie_width_max": parts[5] if len(parts) > 5 else "?",
+                         "pcie_gen_idle": parts[6] if len(parts) > 6 else "?",
+                         "pcie_width_idle": parts[7] if len(parts) > 7 else "?"})
     return gpus
 
 
@@ -299,7 +306,9 @@ def main():
     blob["gate_g0"] = gate
     blob["wall_seconds"] = round(time.time() - t_start, 1)
 
-    tag = args.tag or platform.node() or "unknown"
+    # never let a hostname reach a committed filename — the blob already
+    # substitutes --tag for hostname; the default path must not undo it
+    tag = args.tag or "untagged"
     out = Path(args.out) if args.out else (HERE / "cold-engine" /
                                            f"receipts-hybrid-calib-{tag}.json")
     out.write_text(json.dumps(blob, indent=2) + "\n")
