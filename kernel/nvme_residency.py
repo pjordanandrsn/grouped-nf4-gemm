@@ -42,7 +42,9 @@ Usage::
 from __future__ import annotations
 
 import threading
+import time
 from collections import Counter
+from concurrent.futures import as_completed
 
 from nvme_reader import ArenaReader, alloc_landing, buffer_address
 
@@ -95,6 +97,13 @@ class ColdTier:
         self.spec_misses = 0
         self.spec_hits = 0
         self.demand_waits = 0
+        # Where wall-clock goes, attributable per path: time a demand ensure
+        # spends draining its own fills, time it spends waiting on fills it
+        # found in flight elsewhere, and speculative fill time (overlapped,
+        # so NOT critical-path — reported to make that checkable).
+        self.demand_fill_ns = 0
+        self.demand_wait_ns = 0
+        self.spec_fill_ns = 0
 
     # ---------------------------------------------------------------- slots --
     def _slot_view(self, slot: int) -> memoryview:
@@ -248,35 +257,44 @@ class ColdTier:
         # Fill — disk reads run OUTSIDE the lock. Reservations make the slots
         # unevictable and pending events make the keys unfetchable by anyone
         # else, so concurrent ensures proceed instead of queueing behind I/O.
+        # Each row PUBLISHES THE MOMENT ITS OWN READ LANDS (as_completed, a
+        # brief lock take per row): a waiter blocked on one key must wake at
+        # that row's landing, not at this whole batch's tail — batch-granular
+        # publish held demand waits hostage to speculative batch stragglers.
         first_err = None
-        landed: list = []
-        futures = [(self.reader.read_row(layer, k[1], self._slot_view(s)), k, s)
-                   for k, s in reserved]
-        for fut, key, slot in futures:
-            try:
-                fut.result()
-                landed.append((key, slot))
-            except Exception as exc:              # noqa: BLE001 - re-raised below
-                if first_err is None:
-                    first_err = exc
-
-        # Publish — only now can another request observe these rows.
-        with self._lock:
-            for key, slot in landed:
-                self._key_of[slot] = key
-                self._slot_of[key] = slot
-                self._reserved.discard(slot)
-                self._pending.pop(key).set()
-            if first_err is not None:
-                for key, slot in reserved:        # reclaim whatever never landed
-                    if self._slot_of.get(key) != slot:
-                        self._key_of[slot] = None
-                        self._reserved.discard(slot)
-                        if slot not in self._free:
-                            self._free.append(slot)
-                        ev = self._pending.pop(key, None)
-                        if ev is not None:
-                            ev.set()              # wake waiters; they refetch
+        if reserved:
+            t_fill = time.monotonic_ns()
+            fut_of = {self.reader.read_row(layer, k[1], self._slot_view(s)):
+                      (k, s) for k, s in reserved}
+            for fut in as_completed(fut_of):
+                key, slot = fut_of[fut]
+                try:
+                    fut.result()
+                except Exception as exc:          # noqa: BLE001 - re-raised below
+                    if first_err is None:
+                        first_err = exc
+                    continue
+                with self._lock:
+                    self._key_of[slot] = key
+                    self._slot_of[key] = slot
+                    self._reserved.discard(slot)
+                    self._pending.pop(key).set()
+            with self._lock:
+                dt = time.monotonic_ns() - t_fill
+                if speculative:
+                    self.spec_fill_ns += dt
+                else:
+                    self.demand_fill_ns += dt
+                if first_err is not None:
+                    for key, slot in reserved:    # reclaim whatever never landed
+                        if self._slot_of.get(key) != slot:
+                            self._key_of[slot] = None
+                            self._reserved.discard(slot)
+                            if slot not in self._free:
+                                self._free.append(slot)
+                            ev = self._pending.pop(key, None)
+                            if ev is not None:
+                                ev.set()          # wake waiters; they refetch
         if first_err is not None:
             raise first_err
         if speculative:
@@ -287,8 +305,10 @@ class ColdTier:
         # the row) — re-check under the lock and refetch on a same-request
         # window (fresh_window=False keeps THIS request's rows protected).
         for key, ev in waits:
+            t_wait = time.monotonic_ns()
             ev.wait()
             with self._lock:
+                self.demand_wait_ns += time.monotonic_ns() - t_wait
                 slot = self._slot_of.get(key)
                 if slot is not None:
                     self.hits += 1
@@ -395,6 +415,9 @@ class ColdTier:
             "spec_misses": self.spec_misses,
             "spec_hits": self.spec_hits,
             "demand_waits": self.demand_waits,
+            "demand_fill_ns": self.demand_fill_ns,
+            "demand_wait_ns": self.demand_wait_ns,
+            "spec_fill_ns": self.spec_fill_ns,
             "evictions": self.evictions,
             "resident_rows": len(self._slot_of),
             "hot_rows": self.hot_rows,
