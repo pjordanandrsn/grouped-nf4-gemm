@@ -51,7 +51,12 @@ markers = [
 ]
 
 [tool.setuptools]
-package-dir = { "" = "kernel" }
+# Flat modules ship from kernel/; gnf4_native is the ONE real package (the
+# compile-at-first-use CPU kernels), mapped from the repo root so its C
+# source rides as package data. This is the mechanism that would also let
+# backends/ ship one day (blocked today on its too-generic import name).
+package-dir = { "" = "kernel", "gnf4_native" = "gnf4_native" }
+packages = ["gnf4_native"]
 py-modules = [
     "_triton_shim",
     "nf4_grouped", "nf4_pack_ref", "host_gather",
@@ -68,4 +73,9 @@ py-modules = [
     "nf4_qlora",
     # The GGUF k-quant lane (Glimmer-era): reader + reference decoders.
     "gguf_reader", "kquant_ref",
+    # Hybrid tier Phase 2: torch-facing wrappers for the native CPU kernels.
+    "cpu_grouped",
 ]
+
+[tool.setuptools.package-data]
+gnf4_native = ["*.c"]
