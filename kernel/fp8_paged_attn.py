@@ -838,7 +838,15 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
             want = max(1, (11 * sms) // (5 * max(1, ctas_per)))
         else:
             want = max(1, (8 * sms) // max(1, ctas_per))
-        max_useful = max(1, (int(seq_lens.max()) + span - 1) // span)
+        # capacity from the block table, NOT seq_lens.max(): the max()
+        # is a device reduction + full sync PER CALL — measured ~12 us
+        # on a ~123 us kernel (every "shipped defaults" row before this
+        # fix paid ~10% harness-visible tax, and in a real decode loop
+        # the sync also breaks pipelining). Capacity over-estimates
+        # useful splits only for sequences far shorter than their table;
+        # empty splits exit at t_lo >= t_hi and cost a combine slot.
+        cap_tokens = int(block_table.shape[1]) * block_tokens
+        max_useful = max(1, (cap_tokens + span - 1) // span)
         n_split = int(min(32, want, max_useful))
 
     from fp8_kv import kv_block_bytes
