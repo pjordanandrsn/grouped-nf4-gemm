@@ -332,6 +332,7 @@ if _TRITON:
         NG_K: tl.constexpr,
         BLOCK_G: tl.constexpr,
         FUSE_COMBINE: tl.constexpr,
+        LAYOUT_HEADS: tl.constexpr,
     ):
         # FP8-tensor-core variant: the E4M3 payload is BITCAST and fed to
         # fp8 MMA units — no decode at all. The sweep surface demanded
@@ -411,7 +412,15 @@ if _TRITON:
         c_prev = 1.0
 
         offs_t = tl.arange(0, KTILE)
-        pay_row = (offs_t % BT)[:, None] * (H_KV * D) + h * D
+        # heads-major gives this CTA one PRIVATE contiguous BT*D-byte run
+        # per block (plus a contiguous scale run); tokens-major interleaves
+        # heads within each 512 B token line and leans on sibling CTAs
+        # hitting L2 — which layout wins depends on the kernel's
+        # bottleneck, so both exist and both are measured.
+        if LAYOUT_HEADS:
+            pay_row = h * (BT * D) + (offs_t % BT)[:, None] * D
+        else:
+            pay_row = (offs_t % BT)[:, None] * (H_KV * D) + h * D
         pay_v = pay_row + tl.max_contiguous(
             tl.multiple_of(offs_d, D), D)[None, :]
 
@@ -422,8 +431,12 @@ if _TRITON:
                           mask=t_mask, other=0)
 
             k_base = blk * k_row_bytes
-            ks_base = (k_base // 4 + BT * H_KV * D // 4
-                       + ((offs_t % BT) * H_KV + h) * NG_K)
+            if LAYOUT_HEADS:
+                ks_base = (k_base // 4 + BT * H_KV * D // 4
+                           + (h * BT + (offs_t % BT)) * NG_K)
+            else:
+                ks_base = (k_base // 4 + BT * H_KV * D // 4
+                           + ((offs_t % BT) * H_KV + h) * NG_K)
             s = _k_scored(q8_0, kpool_u8, kpool_f32, k_base, ks_base,
                           pay_row, offs_dg, 0 * DG, 0, t_mask)
             if NG_K >= 2:
@@ -447,8 +460,12 @@ if _TRITON:
                          mask=t_mask[:, None], other=0,
                          eviction_policy="evict_first")
             v8 = vu.to(tl.float8e4nv, bitcast=True)
+            if LAYOUT_HEADS:
+                vs_off = h * BT + (offs_t % BT)
+            else:
+                vs_off = (offs_t % BT) * H_KV + h
             vs = tl.load(vpool_f32 + v_base // 4 + BT * H_KV * D // 4
-                         + (offs_t % BT) * H_KV + h,
+                         + vs_off,
                          mask=t_mask, other=1.0)
             # masked-out lanes carry p == 0, so their vs value is inert;
             # exclude them from the range factor anyway (other=1.0 above
@@ -753,12 +770,15 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
                                n_kv_heads: int, head_dim: int,
                                block_tokens: int = 16,
                                k_groups: int = 1, v_groups: int = 1,
-                               ktile: int = 32, n_split: int | None = None,
+                               ktile: int | None = None,
+                               n_split: int | None = None,
                                sm_scale: float | None = None,
-                               num_warps: int = 2, num_stages: int = 3,
+                               num_warps: int | None = None,
+                               num_stages: int = 3,
                                pack_heads: bool = False,
                                compute: str = "f32",
-                               fuse_combine: bool = True):
+                               fuse_combine: bool = True,
+                               layout: str = "tokens"):
     """Decode attention over packed FP8 KV pool rows.
 
     q            [B, H_q, D] bf16/fp16 — ONE decode token per sequence.
@@ -789,6 +809,13 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
     B, Hq, D = q.shape
     assert D == head_dim and Hq % n_kv_heads == 0
     G = Hq // n_kv_heads
+    # per-mode measured defaults: the fp8 path wants bigger tiles and
+    # more warps (its per-element decode is gone; the f32 path is
+    # issue-bound and wants the opposite)
+    if ktile is None:
+        ktile = 64 if compute == "fp8" else 32
+    if num_warps is None:
+        num_warps = 4 if compute == "fp8" else 2
     block_g = max(16, triton.next_power_of_2(G))
     assert D % k_groups == 0 and D % v_groups == 0
     assert ktile % block_tokens == 0
@@ -804,9 +831,22 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
         sms = torch.cuda.get_device_properties(q.device).multi_processor_count
         ctas_per = B if pack_heads else B * n_kv_heads
         span = block_tokens if pack_heads else ktile
-        per_sm = 3 if compute == "fp8" else 8
-        want = max(1, (per_sm * sms) // max(1, ctas_per))
-        max_useful = max(1, (int(seq_lens.max()) + span - 1) // span)
+        # fp8: ~2.2 CTAs/SM — the qualified-box surface's winners land
+        # exactly there (B=32 -> 2 splits, B=25 -> 3, the non-pow2 split
+        # that fixed B=25's wave quantization, +6.9%)
+        if compute == "fp8":
+            want = max(1, (11 * sms) // (5 * max(1, ctas_per)))
+        else:
+            want = max(1, (8 * sms) // max(1, ctas_per))
+        # capacity from the block table, NOT seq_lens.max(): the max()
+        # is a device reduction + full sync PER CALL — measured ~12 us
+        # on a ~123 us kernel (every "shipped defaults" row before this
+        # fix paid ~10% harness-visible tax, and in a real decode loop
+        # the sync also breaks pipelining). Capacity over-estimates
+        # useful splits only for sequences far shorter than their table;
+        # empty splits exit at t_lo >= t_hi and cost a combine slot.
+        cap_tokens = int(block_table.shape[1]) * block_tokens
+        max_useful = max(1, (cap_tokens + span - 1) // span)
         n_split = int(min(32, want, max_useful))
 
     from fp8_kv import kv_block_bytes
@@ -818,6 +858,8 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
 
     if pack_heads:
         # combine expects the packed partial layout at H_KV=1, G=Hq
+        assert layout == "tokens", \
+            "packed variants read whole tokens-major lines by design"
         assert q.dtype == torch.bfloat16, "packed path loads q as bf16"
         block_q = max(16, triton.next_power_of_2(Hq))
         part = B * n_split * block_q
@@ -895,6 +937,7 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
         assert q.dtype in (torch.bfloat16, torch.float16)
         assert torch.cuda.get_device_capability(q.device) >= (8, 9), \
             "fp8 tensor-core dots need sm_89+"
+        assert layout in ("tokens", "heads")
         counters = _fuse_counters(B * n_kv_heads, q.device) \
             if fuse_combine else m_buf
         _fp8_paged_decode_split_f8dot[(B * n_kv_heads * n_split,)](
@@ -909,12 +952,16 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
             H_KV=n_kv_heads, G=G, D=D, BT=block_tokens, KTILE=ktile,
             NG_K=k_groups, BLOCK_G=block_g,
             FUSE_COMBINE=fuse_combine,
+            LAYOUT_HEADS=(layout == "heads"),
             num_warps=num_warps, num_stages=num_stages,
         )
         if fuse_combine:
             return o
     else:
         assert compute == "f32", f"unknown compute mode {compute!r}"
+        assert layout == "tokens", \
+            "the decode path keeps tokens-major (heads-major exists for " \
+            "the fp8 compute path, where the memory system is the wall)"
         _fp8_paged_decode_split[(B * n_kv_heads * n_split,)](
             q, k_pool, v_pool,
             k_pool.view(torch.float32), v_pool.view(torch.float32),
@@ -937,7 +984,8 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
 
 def paged_attn_ref(q, k_pool, v_pool, block_table, seq_lens, *,
                    n_kv_heads: int, head_dim: int, block_tokens: int = 16,
-                   k_groups: int = 1, v_groups: int = 1):
+                   k_groups: int = 1, v_groups: int = 1,
+                   layout: str = "tokens"):
     """Pure-torch oracle: unpack every block through the reference dequant,
     run fp32 attention per sequence. Slow — test sizes only."""
     from fp8_kv import dequant_kv_fp8_ref, unpack_kv_block_grouped
@@ -957,7 +1005,8 @@ def paged_attn_ref(q, k_pool, v_pool, block_table, seq_lens, *,
                              + block_tokens * n_kv_heads * groups * 4)
                 raw = pool[row * row_bytes:(row + 1) * row_bytes]
                 qq, ss = unpack_kv_block_grouped(
-                    raw, block_tokens, n_kv_heads, head_dim, groups)
+                    raw, block_tokens, n_kv_heads, head_dim, groups,
+                    layout=layout)
                 dst.append(dequant_kv_fp8_ref(qq, ss, dtype=torch.float32))
         k = torch.cat(ks)[:t].permute(1, 0, 2)    # [H_kv, t, D]
         v = torch.cat(vs)[:t].permute(1, 0, 2)

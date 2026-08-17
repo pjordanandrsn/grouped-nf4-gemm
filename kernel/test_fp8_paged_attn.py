@@ -33,7 +33,7 @@ BT = 16
 
 
 def _build(B, hq, hkv, d, seq_lens, k_groups=1, v_groups=1, seed=0,
-           permute=True):
+           permute=True, layout="tokens"):
     """Random sequences packed into pools through the REAL pack path, with
     a permuted block table so contiguity is never accidental."""
     g = torch.Generator().manual_seed(seed)
@@ -59,10 +59,12 @@ def _build(B, hq, hkv, d, seq_lens, k_groups=1, v_groups=1, seed=0,
             table[b, i] = row
             qk, sk = quantize_kv_fp8(kt[i * BT:(i + 1) * BT],
                                      group=d // k_groups)
-            pack_kv_block(qk, sk, k_pool[row * k_row:(row + 1) * k_row])
+            pack_kv_block(qk, sk, k_pool[row * k_row:(row + 1) * k_row],
+                          layout=layout)
             qv, sv = quantize_kv_fp8(vt[i * BT:(i + 1) * BT],
                                      group=d // v_groups)
-            pack_kv_block(qv, sv, v_pool[row * v_row:(row + 1) * v_row])
+            pack_kv_block(qv, sv, v_pool[row * v_row:(row + 1) * v_row],
+                          layout=layout)
             row_i += 1
     q = torch.randn(B, hq, d, generator=g, dtype=torch.float32) \
         .to(torch.bfloat16)
@@ -91,10 +93,12 @@ def _run_both(B, hq, hkv, d, seq_lens, mode_kw=None, **kw):
     got = fp8_paged_decode_attention(
         dev(q), dev(kp), dev(vp), dev(tab), dev(lens),
         n_kv_heads=hkv, head_dim=d, **(mode_kw or {}),
+        layout=kw.get("layout", "tokens"),
         k_groups=kw.get("k_groups", 1), v_groups=kw.get("v_groups", 1))
     want = paged_attn_ref(q, kp, vp, tab, lens, n_kv_heads=hkv, head_dim=d,
                           k_groups=kw.get("k_groups", 1),
-                          v_groups=kw.get("v_groups", 1))
+                          v_groups=kw.get("v_groups", 1),
+                          layout=kw.get("layout", "tokens"))
     return got.cpu().float(), want.float()
 
 
@@ -273,3 +277,41 @@ def test_f8dot_two_streams_concurrent_correct():
         want = paged_attn_ref(q, kp, vp, tab, lens, n_kv_heads=4,
                               head_dim=64, k_groups=2)
         _close(got.cpu().float(), want.float(), "f8dot")
+
+
+def test_heads_layout_roundtrips_bitwise():
+    """Heads-major rows must dequantize to exactly what tokens-major rows
+    hold — same bytes, different order; any drift is the permute math."""
+    from fp8_kv import kv_block_bytes
+    g = torch.Generator().manual_seed(11)
+    x = torch.randn(BT, 4, 128, generator=g) * 1.5
+    qk, sk = quantize_kv_fp8(x, group=32)
+    row_t = torch.zeros(kv_block_bytes(BT, 4, 128) + BT * 4 * 3 * 4,
+                        dtype=torch.uint8)
+    row_h = row_t.clone()
+    pack_kv_block(qk, sk, row_t, layout="tokens")
+    pack_kv_block(qk, sk, row_h, layout="heads")
+    assert not torch.equal(row_t, row_h), "layouts should differ on disk"
+    from fp8_kv import unpack_kv_block_grouped
+    qt, st = unpack_kv_block_grouped(row_t, BT, 4, 128, 4)
+    qh, sh = unpack_kv_block_grouped(row_h, BT, 4, 128, 4, layout="heads")
+    assert torch.equal(qt.view(torch.uint8), qh.view(torch.uint8))
+    assert torch.equal(st, sh)
+
+
+@needs_gpu
+@pytest.mark.skipif(not FP8_DOT_OK, reason="needs fp8 MMA (sm_89+)")
+@pytest.mark.parametrize("shape", [
+    (3, 16, 4, 64, [64, 128, 96], 2),
+    (4, 16, 4, 64, [17, 33, 1, 47], 1),
+    (2, 16, 4, 128, [96, 160], 4),
+    (2, 64, 4, 128, [200, 71], 4),
+])
+def test_f8dot_heads_layout_matches_reference(shape):
+    """The fp8 kernel over heads-major pools vs the oracle reading the
+    same heads-major bytes — permuted tables, ragged tails, grouped
+    scales."""
+    B, hq, hkv, d, lens, kg = shape
+    got, want = _run_both(B, hq, hkv, d, lens, k_groups=kg,
+                          layout="heads", mode_kw={"compute": "fp8"})
+    _close(got, want, "f8dot")

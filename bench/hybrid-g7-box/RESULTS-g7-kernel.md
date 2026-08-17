@@ -104,6 +104,18 @@ decode cannot be measured yet. The clause's arithmetic closes: at
 9.9 GiB KV + 19.7 GiB free, batch is not the binding constraint at 25
 sequences; the expert path is, which is Phase 8's gate.
 
+## Round 3 — refinement: the kernel clause PASSES (see `refine/RESULTS-g7-refine.md`)
+
+A post-merge refinement round found the split heuristic's
+`seq_lens.max()` was a per-call device sync that had serialized every
+"shipped defaults" measurement AND the 94-layer B_max loop. With it
+fixed: **serving-shaped kernel fraction 1417 GB/s = 90.0% of B_vram**
+(94 back-to-back layers, L2-cold, ±0.1% over process-fresh reps);
+isolated-launch sustained 70.3–70.6% (11 reps, worst 69.96%); defaults
+within ~2% of tuned; wall vs bf16 SDPA ×0.68–0.75. Heads-major layout
+re-tested under the fp8 regime and closed (still loses). **G7 = 3 of
+3.** The sections below record rounds 1–2 as measured at the time.
+
 ## Round 2 — the redesign pass ("hold and go")
 
 The 52.9% surface carried its own diagnosis: stages flat (not
