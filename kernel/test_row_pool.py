@@ -168,3 +168,13 @@ def test_demote_head_starts_at_the_enqueued_frontier(pool):
     n2 = pool.demote_head(0, 4, stream=side)   # BEFORE settle
     assert (n1, n2) == (2, 2), \
         "second demote must start at the in-flight frontier, never re-DMA"
+
+
+def test_device_is_pinned_to_a_concrete_index(pool):
+    if pool.device.type != "cuda":
+        pytest.skip("index pinning is a CUDA property")
+    assert pool.device.index is not None, \
+        "bare 'cuda' leaves index None, and current_stream(device) then " \
+        "resolves through the THREAD's current device — as blind as the " \
+        "bare call"
+    assert pool.dev.device == pool.device

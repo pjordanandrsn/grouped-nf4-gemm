@@ -56,6 +56,13 @@ class RowPool:
         self.row_bytes = row_bytes
         self.device = torch.device(device)
         self._cuda = self.device.type == "cuda"
+        if self._cuda and self.device.index is None:
+            # Pin a CONCRETE index now: bare `cuda` has index None, and
+            # current_stream(torch.device("cuda")) still resolves through
+            # the thread's current device — so the device-scoped stream
+            # query would be exactly as blind as the bare call it replaced.
+            # The pool's own storage is allocated here, on this device.
+            self.device = torch.device("cuda", torch.cuda.current_device())
 
         self.dev = torch.zeros(partitions, device_rows, row_bytes,
                                dtype=torch.uint8, device=self.device)
