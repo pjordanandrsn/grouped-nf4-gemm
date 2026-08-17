@@ -81,6 +81,7 @@ def _modes():
     modes = [("split", {}), ("packed", {"pack_heads": True})]
     if FP8_DOT_OK:
         modes.append(("f8dot", {"compute": "fp8"}))
+        modes.append(("pf8", {"pack_heads": True, "compute": "fp8"}))
     return modes
 
 
@@ -112,7 +113,7 @@ def _close(got, want, mode="split"):
     # test_f8dot_error_is_bounded_and_reported (invariant 4-prime;
     # storage quality was certified by the G7 oracle, fp8 COMPUTE
     # quality is owed separately if it becomes the default).
-    tol = 1.5e-1 if mode == "f8dot" else 2e-2
+    tol = 1.5e-1 if mode in ("f8dot", "pf8") else 2e-2
     torch.testing.assert_close(got, want, rtol=tol, atol=tol)
 
 
