@@ -1,42 +1,47 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
 """Paged decode attention over FP8 KV blocks (hybrid Stage 2, Phase 7).
 
-One Triton kernel: batch-decode attention reading E4M3 K/V straight from
-the paged pool's packed rows, dequantizing **in registers** (invariant 2 —
-no dequantized KV tensor exists in any memory tier), online-softmax
-accumulating in fp32. The gate it answers to (G7): sustain ≥70% of the
-box's measured ``B_vram`` while doing it.
+Flash-decode over the paged pool: E4M3 K/V read straight from packed rows,
+dequantized **in registers** (invariant 2 — no dequantized KV tensor exists
+in any memory tier), online softmax accumulated in fp32, sequences
+partitioned across SPLITS with a tiny combine kernel. The gate it answers
+to (G7): sustain ≥70% of the box's measured ``B_vram``.
 
-Three design decisions, each anchored to a measured precedent:
+Design decisions, each anchored to a measured fact:
 
-* **Grid over (sequence, KV head), never (sequence, query head).** GQA
-  shares one K/V head across G query heads; a per-query-head program
-  re-reads K/V G times (8–16x on the target models). The in-tree record
-  shows exactly this class of mistake producing a 19x-wrong baseline
-  (``kv_cache.py``, corrected 2026-07-25: repeat_interleave vs
-  ``enable_gqa=True``). Each program here loads a K/V tile once and
-  serves all G query heads of its group from registers.
-* **Manual E4M3 decode from uint8.** Six integer/float ops per element
-  (sign, exponent, mantissa, subnormal fold) rather than Triton's fp8
-  dtype path — portable to every sm_80+ box in the deployment class, and
-  free at a memory-bound operating point. This is also why FP8 can win
-  where the fused NF4 kernel lost 11.6x: byte→float bit math instead of
-  a 16-entry LUT gather per element.
-* **The quantizer cannot produce inf/NaN** (amax-derived scales, see
-  ``fp8_kv``), so the decode skips the NaN branch (0x7F/0xFF) instead of
-  spending ops on a case the writer cannot emit. The reference dequant
-  agrees by construction.
+* **Grid over (sequence, KV head, split), never (sequence, query head).**
+  GQA shares one K/V head across G query heads; a per-query-head program
+  re-reads K/V G times (8–16x on the target models) — the kernel form of
+  the ``enable_gqa`` mistake behind the in-tree 19x-wrong baseline
+  (``kv_cache.py``, corrected 2026-07-25). And without the split axis the
+  grid is B × H_kv programs — four CTAs at batch 1 — which measured
+  4.8 GB/s on a ~200 GB/s card: the first version of this kernel was
+  occupancy-starved, not bandwidth-bound. Splits are sized from the
+  device's SM count at launch.
+* **E4M3 decode is bit assembly, not arithmetic.** A normal's f32 bits are
+  ``sign | (exp+120)<<23 | man<<20``, one bitcast; subnormals are a
+  constant multiply. The first version used ``tl.exp2`` per element —
+  16K SFU ops per tile iteration in a kernel whose budget is memory.
+  This is also why FP8 can win where the fused NF4 kernel lost 11.6x:
+  bit math, not a 16-entry LUT gather per element. The amax-scaled
+  writer cannot emit inf/NaN (see ``fp8_kv``), so the NaN encodings are
+  deliberately not special-cased.
+* **Scales load at their natural [KTILE, NG] shape** and apply via a
+  register reshape — loading them expanded to [KTILE, D] (a D-wide
+  repeat) cost 32 KB of shared memory per tile and blew the sm_86 budget
+  at D=128.
 
 Block layout is the Phase-6/7 contract: 16-token rows, tokens-major
 ``[16, H_kv, D]`` E4M3 payload followed by fp32 scales — per (token,
-head) for V, optionally per (token, head, D//group) for K (the measured
-quality fix: grouped key scales are what pass the ≤0.5% clause on both
+head) for V, optionally per (token, head, D//group) for K (grouped key
+scales are the measured quality fix that passes the ≤0.5% clause on both
 probe models). K and V live in separate pool partitions; one block table
-indexes both.
+indexes both. Positions beyond a sequence's length are masked by token
+index — garbage bytes in a partial tail block are loaded and discarded,
+never scored.
 
-Positions beyond a sequence's length are masked by token index — garbage
-bytes in a partially-filled tail block are loaded and discarded, never
-scored.
+Reduction order is fixed per (config, split count) — the
+serving-tolerance side of the D0 determinism split.
 """
 from __future__ import annotations
 
@@ -58,40 +63,45 @@ if _TRITON:
 
     @triton.jit
     def _e4m3_to_f32(u):
-        """E4M3FN byte -> fp32. bias 7; subnormals are man/8 * 2^-6; the
-        NaN encodings (0x7F/0xFF) are unreachable from an amax-scaled
-        writer and are deliberately not special-cased."""
-        u = u.to(tl.uint32)
-        sign = tl.where((u & 0x80) != 0, -1.0, 1.0)
-        exp = (u >> 3) & 0xF
-        man = (u & 0x7).to(tl.float32)
-        norm = (1.0 + man / 8.0) * tl.exp2(exp.to(tl.float32) - 7.0)
-        sub = man / 8.0 * 0.015625            # 2^-6
-        return sign * tl.where(exp == 0, sub, norm)
+        u32 = u.to(tl.uint32)
+        exp = (u32 >> 3) & 0xF
+        man = u32 & 0x7
+        bits = ((u32 & 0x80) << 24) | ((exp + 120) << 23) | (man << 20)
+        norm = bits.to(tl.float32, bitcast=True)
+        sub = tl.where((u32 & 0x80) != 0, -1.0, 1.0) \
+            * (man.to(tl.float32) * 0.001953125)
+        return tl.where(exp == 0, sub, norm)
 
     @triton.jit
-    def _fp8_paged_decode(
-        q_ptr, o_ptr, kpool_u8, vpool_u8, kpool_f32, vpool_f32,
+    def _fp8_paged_decode_split(
+        q_ptr, kpool_u8, vpool_u8, kpool_f32, vpool_f32,
         table_ptr, seqlen_ptr,
-        stride_qb, stride_qh, stride_ob, stride_oh, stride_tb,
+        m_ptr, l_ptr, acc_ptr,
+        stride_qb, stride_qh, stride_tb,
         k_row_bytes, v_row_bytes,
-        sm_scale,
+        sm_scale, n_split,
         H_KV: tl.constexpr, G: tl.constexpr, D: tl.constexpr,
         BT: tl.constexpr, KTILE: tl.constexpr,
         NG_K: tl.constexpr, NG_V: tl.constexpr,
         BLOCK_G: tl.constexpr,
     ):
         pid = tl.program_id(0)
-        b = pid // H_KV
-        h = pid % H_KV
+        s_id = pid % n_split
+        bh = pid // n_split
+        b = bh // H_KV
+        h = bh % H_KV
 
         t_len = tl.load(seqlen_ptr + b)
+        # per-sequence, KTILE-aligned span for this split
+        n_tiles = (t_len + KTILE - 1) // KTILE
+        tiles_per = (n_tiles + n_split - 1) // n_split
+        t_lo = s_id * tiles_per * KTILE
+        t_hi = tl.minimum(t_len, (s_id + 1) * tiles_per * KTILE)
 
         offs_g = tl.arange(0, BLOCK_G)
         offs_d = tl.arange(0, D)
         g_mask = offs_g < G
 
-        # q rows for this KV group: heads h*G .. h*G+G-1
         q_ptrs = (q_ptr + b * stride_qb + (h * G + offs_g)[:, None]
                   * stride_qh + offs_d[None, :])
         q = tl.load(q_ptrs, mask=g_mask[:, None], other=0.0).to(tl.float32)
@@ -100,33 +110,29 @@ if _TRITON:
         l_i = tl.zeros([BLOCK_G], tl.float32)
         acc = tl.zeros([BLOCK_G, D], tl.float32)
 
-        offs_t = tl.arange(0, KTILE)              # tokens within a tile
-        # payload byte offset of (token, head, d) inside a block row
+        offs_t = tl.arange(0, KTILE)
+        # tokens-major payload [BT, H, D] — measured against a heads-major
+        # variant and KEPT: the H_kv programs of one sequence walk the
+        # same 512 B lines together, and that L2 cooperation beat
+        # per-CTA contiguity 86.3 to 74.2 GB/s at the same config.
+        # offs_d carries contiguity/alignment hints so the compiler can
+        # prove each row's D bytes form one aligned run THROUGH the
+        # gather and emit wide vector loads.
         pay_off = ((offs_t % BT)[:, None] * (H_KV * D) + h * D
-                   + offs_d[None, :])
+                   + tl.max_contiguous(tl.multiple_of(offs_d, D), D)[None, :])
         offs_gk = tl.arange(0, NG_K)
         offs_gv = tl.arange(0, NG_V)
 
-        for start in range(0, t_len, KTILE):
+        for start in range(t_lo, t_hi, KTILE):
             tok = start + offs_t
-            t_mask = tok < t_len
-            # gather block base rows through the table
+            t_mask = tok < t_hi
             blk = tl.load(table_ptr + b * stride_tb + tok // BT,
                           mask=t_mask, other=0)
 
-            # ---- K tile: [KTILE, D] fp8 -> f32, scaled ----
             k_base = blk * k_row_bytes
             ku = tl.load(kpool_u8 + k_base[:, None] + pay_off,
                          mask=t_mask[:, None], other=0)
             k = _e4m3_to_f32(ku)
-            # scale float32 index: (payload_bytes + ((t%BT)*H+h)*NG + d//gs)/4
-            # Scales load at their NATURAL [KTILE, NG] shape and apply via
-            # a register reshape — loading them expanded to [KTILE, D]
-            # (a D-wide repeat of NG values) cost 32 KB of shared memory
-            # per tile and blew the sm_86 budget at D=128. Every address
-            # term is kept 2-D: a bare 1-D base broadcasts along the LAST
-            # axis, which compiles whenever D == KTILE and silently reads
-            # scrambled scales (43% of outputs wrong before the [:, None]).
             ks_off = (k_base[:, None] // 4 + BT * H_KV * D // 4
                       + ((offs_t % BT) * H_KV + h)[:, None] * NG_K
                       + offs_gk[None, :])
@@ -135,7 +141,6 @@ if _TRITON:
             k = k * ks[:, :, None]
             k = tl.reshape(k, (KTILE, D))
 
-            # ---- scores [BLOCK_G, KTILE], masked beyond t_len ----
             s = tl.dot(q, tl.trans(k)) * sm_scale
             s = tl.where(t_mask[None, :], s, float("-inf"))
 
@@ -145,7 +150,6 @@ if _TRITON:
             l_i = l_i * alpha + tl.sum(p, axis=1)
             acc = acc * alpha[:, None]
 
-            # ---- V tile, same addressing with V's scale layout ----
             v_base = blk * v_row_bytes
             vu = tl.load(vpool_u8 + v_base[:, None] + pay_off,
                          mask=t_mask[:, None], other=0)
@@ -161,7 +165,48 @@ if _TRITON:
             acc += tl.dot(p.to(v.dtype), v)
             m_i = m_new
 
-        out = acc / l_i[:, None]
+        # partials: [B, H_KV, n_split, BLOCK_G(, D)], fp32
+        part = (bh * n_split + s_id) * BLOCK_G
+        tl.store(m_ptr + part + offs_g, m_i)
+        tl.store(l_ptr + part + offs_g, l_i)
+        tl.store(acc_ptr + part * D + offs_g[:, None] * D + offs_d[None, :],
+                 acc)
+
+    @triton.jit
+    def _fp8_combine(
+        m_ptr, l_ptr, acc_ptr, o_ptr,
+        stride_ob, stride_oh,
+        n_split,
+        H_KV: tl.constexpr, G: tl.constexpr, D: tl.constexpr,
+        BLOCK_G: tl.constexpr,
+    ):
+        bh = tl.program_id(0)
+        b = bh // H_KV
+        h = bh % H_KV
+        offs_g = tl.arange(0, BLOCK_G)
+        offs_d = tl.arange(0, D)
+        g_mask = offs_g < G
+
+        m_glob = tl.full([BLOCK_G], float("-inf"), tl.float32)
+        for s in range(0, n_split):
+            m_s = tl.load(m_ptr + (bh * n_split + s) * BLOCK_G + offs_g)
+            m_glob = tl.maximum(m_glob, m_s)
+        # an all-empty group (t_len 0) never occurs in decode; guard anyway
+        m_glob = tl.where(m_glob == float("-inf"), 0.0, m_glob)
+
+        l_tot = tl.zeros([BLOCK_G], tl.float32)
+        out = tl.zeros([BLOCK_G, D], tl.float32)
+        for s in range(0, n_split):
+            base = (bh * n_split + s) * BLOCK_G
+            m_s = tl.load(m_ptr + base + offs_g)
+            l_s = tl.load(l_ptr + base + offs_g)
+            a_s = tl.load(acc_ptr + base * D + offs_g[:, None] * D
+                          + offs_d[None, :])
+            w = tl.exp2((m_s - m_glob) * 1.4426950408889634)
+            l_tot += l_s * w
+            out += a_s * w[:, None]
+
+        out = out / l_tot[:, None]
         o_ptrs = (o_ptr + b * stride_ob + (h * G + offs_g)[:, None]
                   * stride_oh + offs_d[None, :])
         tl.store(o_ptrs, out.to(o_ptr.dtype.element_ty),
@@ -172,7 +217,9 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
                                n_kv_heads: int, head_dim: int,
                                block_tokens: int = 16,
                                k_groups: int = 1, v_groups: int = 1,
-                               ktile: int = 64, sm_scale: float | None = None):
+                               ktile: int = 64, n_split: int | None = None,
+                               sm_scale: float | None = None,
+                               num_warps: int = 4, num_stages: int = 3):
     """Decode attention over packed FP8 KV pool rows.
 
     q            [B, H_q, D] bf16/fp16 — ONE decode token per sequence.
@@ -181,10 +228,12 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
     block_table  [B, MAX_BLOCKS] int32 — row index per 16-token block;
                  one table serves both pools (lockstep appends).
     seq_lens     [B] int32 tokens per sequence.
+    n_split      sequence partitions per (seq, kv-head); default sizes the
+                 grid to ~4 CTAs per SM (the first version's B×H_kv grid
+                 was 4 CTAs total at batch 1 — occupancy, not bandwidth,
+                 was its 40x problem).
 
-    Returns [B, H_q, D] in q's dtype. Reduction order is fixed per config
-    (tile-sequential online softmax) — the serving-tolerance side of the
-    D0 determinism split.
+    Returns [B, H_q, D] in q's dtype.
     """
     assert paged_attn_available(), "needs CUDA + triton"
     B, Hq, D = q.shape
@@ -195,6 +244,11 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
     assert ktile % block_tokens == 0
     if sm_scale is None:
         sm_scale = D ** -0.5
+    if n_split is None:
+        sms = torch.cuda.get_device_properties(q.device).multi_processor_count
+        want = max(1, (4 * sms) // max(1, B * n_kv_heads))
+        max_useful = max(1, (int(seq_lens.max()) + ktile - 1) // ktile)
+        n_split = int(min(32, want, max_useful))
 
     from fp8_kv import kv_block_bytes
     k_row = kv_block_bytes(block_tokens, n_kv_heads, head_dim) \
@@ -204,17 +258,27 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
     assert k_pool.numel() % k_row == 0 and v_pool.numel() % v_row == 0
 
     o = torch.empty_like(q)
-    grid = (B * n_kv_heads,)
-    _fp8_paged_decode[grid](
-        q, o, k_pool, v_pool,
+    part = B * n_kv_heads * n_split * block_g
+    m_buf = torch.empty(part, dtype=torch.float32, device=q.device)
+    l_buf = torch.empty(part, dtype=torch.float32, device=q.device)
+    acc_buf = torch.empty(part * D, dtype=torch.float32, device=q.device)
+
+    _fp8_paged_decode_split[(B * n_kv_heads * n_split,)](
+        q, k_pool, v_pool,
         k_pool.view(torch.float32), v_pool.view(torch.float32),
         block_table, seq_lens.to(torch.int32),
-        q.stride(0), q.stride(1), o.stride(0), o.stride(1),
-        block_table.stride(0),
-        k_row, v_row, sm_scale,
+        m_buf, l_buf, acc_buf,
+        q.stride(0), q.stride(1), block_table.stride(0),
+        k_row, v_row, sm_scale, n_split,
         H_KV=n_kv_heads, G=G, D=D, BT=block_tokens, KTILE=ktile,
         NG_K=k_groups, NG_V=v_groups, BLOCK_G=block_g,
-        num_warps=4, num_stages=2,
+        num_warps=num_warps, num_stages=num_stages,
+    )
+    _fp8_combine[(B * n_kv_heads,)](
+        m_buf, l_buf, acc_buf, o,
+        o.stride(0), o.stride(1), n_split,
+        H_KV=n_kv_heads, G=G, D=D, BLOCK_G=block_g,
+        num_warps=4,
     )
     return o
 
@@ -223,7 +287,7 @@ def paged_attn_ref(q, k_pool, v_pool, block_table, seq_lens, *,
                    n_kv_heads: int, head_dim: int, block_tokens: int = 16,
                    k_groups: int = 1, v_groups: int = 1):
     """Pure-torch oracle: unpack every block through the reference dequant,
-    run fp32 SDPA per sequence. Slow — test sizes only."""
+    run fp32 attention per sequence. Slow — test sizes only."""
     from fp8_kv import dequant_kv_fp8_ref, unpack_kv_block_grouped
 
     B, Hq, D = q.shape

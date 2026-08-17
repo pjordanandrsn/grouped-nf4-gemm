@@ -127,16 +127,21 @@ def pack_kv_block(q: torch.Tensor, scale: torch.Tensor,
                   out: torch.Tensor) -> torch.Tensor:
     """Write ``q``/``scale`` for one block into a flat uint8 row.
 
-    Layout: the whole fp8 payload first, then the fp32 scales — payload
-    contiguity is what lets a kernel load a token's row as one run.
+    Layout: fp8 payload TOKENS-MAJOR (``[T, H, D]``, the caller's natural
+    order), then fp32 scales. Measured, not assumed — a heads-major
+    variant (one contiguous 2 KB run per head per block) was built and
+    swept, and LOST: 74.2 vs 86.3 GB/s at the same best config, because
+    tokens-major lets the H_kv programs of one sequence walk the same
+    cache lines together (each 512 B line serves four CTAs) and that L2
+    cooperation is worth more than per-CTA contiguity.
     """
     n = q.numel()
     if out.numel() < n + scale.numel() * 4:
         raise ValueError(f"row of {out.numel()} bytes too small for "
                          f"{n} payload + {scale.numel() * 4} scale bytes")
-    out.narrow(0, 0, n).copy_(q.reshape(-1).view(torch.uint8))
+    out.narrow(0, 0, n).copy_(q.reshape(-1).contiguous().view(torch.uint8))
     out.narrow(0, n, scale.numel() * 4).copy_(
-        scale.reshape(-1).float().view(torch.uint8))
+        scale.reshape(-1).contiguous().float().view(torch.uint8))
     return out
 
 
