@@ -121,3 +121,50 @@ def test_stats_vocabulary(pool):
               "host_read_bytes", "device_resident_rows"):
         assert k in s
     assert s["appends"] == 1 and s["device_resident_rows"] == 1
+
+
+def test_host_store_is_genuinely_pinned_under_cuda(pool):
+    if pool.device.type != "cuda":
+        pytest.skip("pinnedness is a CUDA property")
+    assert pool.host.is_pinned(), \
+        "host store must be REGISTERED pinned or non_blocking DMA silently " \
+        "degrades to synchronous (the frombuffer-wrap trap)"
+
+
+class _FakeEv:
+    def __init__(self, done):
+        self.done = done
+
+    def query(self):
+        return self.done
+
+
+def test_settle_is_strictly_fifo_per_partition():
+    pool = RowPool(1, 8, 16, RB, device="cpu")
+    for i in range(4):
+        _, v = pool.append(0)
+        _fill(v, seed=i)
+    # hand-built pending state: earlier batch NOT landed, later batch landed
+    e1, e2 = _FakeEv(False), _FakeEv(True)
+    pool._pending = [(0, 2, e1), (0, 4, e2)]
+    pool._frontier[0] = 4
+    assert pool.settle() == 0
+    assert pool.head[0] == 0 and pool.demoted[0] == 0, \
+        "a later completed batch must not free slots an earlier pending " \
+        "copy still reads"
+    e1.done = True
+    assert pool.settle() == 4
+    assert pool.head[0] == 4 and pool.demoted[0] == 4
+
+
+def test_demote_head_starts_at_the_enqueued_frontier(pool):
+    if pool.host is None:
+        pytest.skip("needs a host store")
+    side = (torch.cuda.Stream() if pool.device.type == "cuda" else None)
+    for i in range(DEV_ROWS):
+        _, v = pool.append(0)
+        _fill(v, seed=i)
+    n1 = pool.demote_head(0, 2, stream=side)
+    n2 = pool.demote_head(0, 4, stream=side)   # BEFORE settle
+    assert (n1, n2) == (2, 2), \
+        "second demote must start at the in-flight frontier, never re-DMA"

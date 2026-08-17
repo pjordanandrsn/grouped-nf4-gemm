@@ -60,14 +60,23 @@ class RowPool:
         self.dev = torch.zeros(partitions, device_rows, row_bytes,
                                dtype=torch.uint8, device=self.device)
         if host_rows > 0:
-            # alloc_landing hands back the ALIGNED sub-view (its whole point —
-            # the pinned allocator suballocates); frombuffer wraps that view
-            # zero-copy in either mode. Hold the keepalive for the lifetime.
-            mv, keep = alloc_landing(partitions * host_rows * row_bytes,
-                                     pinned=self._cuda)
+            n = partitions * host_rows * row_bytes
+            mv, keep = alloc_landing(n, pinned=self._cuda)
             self._host_keep = keep
-            self.host = torch.frombuffer(mv, dtype=torch.uint8).view(
-                partitions, host_rows, row_bytes)
+            if self._cuda:
+                # Slice the PINNED KEEPALIVE at the aligned offset (the
+                # ColdTier.pinned_tensor pattern) — a frombuffer wrap of the
+                # memoryview is a tensor torch does not KNOW is pinned, so
+                # copy_(non_blocking=True) silently degrades to synchronous
+                # and the publish-after-drain contract quietly dies (Bugbot).
+                from nvme_reader import buffer_address
+                pad = buffer_address(mv) - keep.data_ptr()
+                self.host = keep[pad:pad + n].view(
+                    partitions, host_rows, row_bytes)
+                assert self.host.is_pinned()
+            else:
+                self.host = torch.frombuffer(mv, dtype=torch.uint8).view(
+                    partitions, host_rows, row_bytes)
         else:
             self.host = None
             self._host_keep = None
@@ -76,6 +85,7 @@ class RowPool:
         self.head = [0] * partitions          # first row still device-resident
         self.tail = [0] * partitions          # next row to append
         self.demoted = [0] * partitions       # rows [0, demoted) live in host
+        self._frontier = [0] * partitions     # rows [0, frontier) enqueued
         self._pending: list[tuple[int, int, object]] = []  # (p, upto, event)
 
         self.appends = 0
@@ -137,7 +147,10 @@ class RowPool:
         device-readable until :meth:`settle` flips them."""
         if self.host is None:
             raise RuntimeError("RowPool built with host_rows=0 cannot demote")
-        lo = max(self.demoted[p], 0)
+        # start from the ENQUEUED frontier, not the settled cursor: a second
+        # demote before settle must never re-DMA rows an in-flight batch is
+        # already copying (Bugbot — overlapping copies on different streams)
+        lo = self._frontier[p]
         # only rows already appended, never past what host can hold
         upto = min(upto, self.tail[p])
         if upto <= lo:
@@ -160,17 +173,24 @@ class RowPool:
             ev = torch.cuda.Event()
             ev.record(stream if stream is not None
                       else torch.cuda.current_stream())
+        self._frontier[p] = upto
         self._pending.append((p, upto, ev))
         self.demotions += n
         return n
 
     def settle(self):
         """Flip ownership for every demotion batch whose copy has landed
-        (non-blocking event query — never a sync). Returns rows settled."""
+        (non-blocking event query — never a sync). Strictly FIFO per
+        partition: a later batch's completed event must NOT advance the
+        head past an earlier, still-pending batch — freeing those slots
+        would let appends overwrite rows the earlier copy still reads
+        (Bugbot). Returns rows settled."""
         done = 0
         keep = []
+        blocked: set[int] = set()
         for p, upto, ev in self._pending:
-            if ev is not None and not ev.query():
+            if p in blocked or (ev is not None and not ev.query()):
+                blocked.add(p)
                 keep.append((p, upto, ev))
                 continue
             if upto > self.demoted[p]:
