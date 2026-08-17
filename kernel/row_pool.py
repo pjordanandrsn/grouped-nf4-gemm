@@ -171,8 +171,11 @@ class RowPool:
         ev = None
         if self._cuda:
             ev = torch.cuda.Event()
+            # current_stream(SELF.DEVICE), never bare — a bare call reads the
+            # THREAD's current device, so on a multi-GPU host the event can
+            # record on a stream that has nothing to do with this pool
             ev.record(stream if stream is not None
-                      else torch.cuda.current_stream())
+                      else torch.cuda.current_stream(self.device))
         self._frontier[p] = upto
         self._pending.append((p, upto, ev))
         self.demotions += n
