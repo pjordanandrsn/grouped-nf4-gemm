@@ -30,6 +30,14 @@ Design decisions, each anchored to a measured fact:
   register reshape — loading them expanded to [KTILE, D] (a D-wide
   repeat) cost 32 KB of shared memory per tile and blew the sm_86 budget
   at D=128.
+* **Head-packed variant built, measured, default-off.** One CTA per
+  (sequence, split) consuming ALL kv heads reads every 512 B token line
+  whole — and still LOST to the split kernel on the class card, 574 vs
+  806 GB/s at B=25/T=4K: with a 96 MB L2 over a ~106 MB pool the
+  scattered sibling-quarter reads mostly hit L2 anyway, while packing
+  pays 4x tensor-core work and one heavyweight CTA's register pressure.
+  Kept behind ``pack_heads=`` (same format, launch-time choice) for
+  cards where the L2-to-pool ratio inverts the trade.
 
 Block layout is the Phase-6/7 contract: 16-token rows, tokens-major
 ``[16, H_kv, D]`` E4M3 payload followed by fp32 scales — per (token,
@@ -331,9 +339,9 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
                                n_kv_heads: int, head_dim: int,
                                block_tokens: int = 16,
                                k_groups: int = 1, v_groups: int = 1,
-                               ktile: int = 64, n_split: int | None = None,
+                               ktile: int = 32, n_split: int | None = None,
                                sm_scale: float | None = None,
-                               num_warps: int = 4, num_stages: int = 3,
+                               num_warps: int = 2, num_stages: int = 3,
                                pack_heads: bool = False):
     """Decode attention over packed FP8 KV pool rows.
 
@@ -363,10 +371,13 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
     if sm_scale is None:
         sm_scale = D ** -0.5
     if n_split is None:
+        # ~8 CTAs per SM: the class-card sweep's plateau. Fewer starves the
+        # serial tile loop (the B=1..8 latency pedestal); past ~2x this the
+        # per-split q reload + combine overhead wins (sp=32/64 declined).
         sms = torch.cuda.get_device_properties(q.device).multi_processor_count
         ctas_per = B if pack_heads else B * n_kv_heads
         span = block_tokens if pack_heads else ktile
-        want = max(1, (4 * sms) // max(1, ctas_per))
+        want = max(1, (8 * sms) // max(1, ctas_per))
         max_useful = max(1, (int(seq_lens.max()) + span - 1) // span)
         n_split = int(min(32, want, max_useful))
 
