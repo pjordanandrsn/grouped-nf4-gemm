@@ -1,0 +1,12 @@
+B=32 kt=128 w=4 st=3 sp=2: med  1103.0 min  1096.1 max  1104.3
+B=32 kt=128 w=4 st=4 sp=2: med  1106.6 min  1102.1 max  1108.0
+B=32 kt=128 w=8 st=3 sp=2: med   970.0 min   960.8 max   970.5
+B=32 kt=128 w=4 st=3 sp=3: med   971.1 min   966.3 max   994.5
+B=32 kt=256 w=4 st=3 sp=2: med   655.8 min   655.5 max   656.1
+B=32 kt= 64 w=4 st=3 sp=2: med  1111.7 min  1107.1 max  1113.2
+B=25 kt= 64 w=4 st=4 sp=3: med  1058.9 min  1047.8 max  1063.4
+B=25 kt=128 w=4 st=3 sp=3: med  1037.9 min  1037.1 max  1041.5
+B=25 kt=128 w=4 st=3 sp=2: med   942.5 min   938.2 max   942.8
+B=25 kt= 64 w=4 st=3 sp=3: med  1063.4 min  1061.9 max  1065.5
+B=25 kt= 64 w=4 st=4 sp=4: med   884.5 min   883.5 max   886.0
+B=25 kt=128 w=4 st=4 sp=3: med  1041.9 min  1036.9 max  1046.2
