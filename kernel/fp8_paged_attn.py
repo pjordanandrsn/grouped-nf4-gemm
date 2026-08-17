@@ -811,6 +811,8 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
         o = torch.empty_like(q)
         if compute == "fp8":
             assert v_groups == 1 and D // k_groups >= 32
+            assert k_groups in (1, 2, 4), \
+                f"fp8 compute unrolls k_groups in (1, 2, 4), got {k_groups}"
             assert block_tokens * n_kv_heads >= 32, \
                 "packed fp8 P.V dot reduces over BT*H_kv: needs >= 32"
             assert torch.cuda.get_device_capability(q.device) >= (8, 9)
@@ -866,6 +868,11 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
 
     if compute == "fp8":
         assert v_groups == 1, "fp8 compute folds V scales into P: per-row only"
+        # the kernels unroll one sub-dot per key scale group via constexpr
+        # guards — NG_K values outside the unroll would silently score only
+        # the first groups and drop the rest of the key (Bugbot, HIGH)
+        assert k_groups in (1, 2, 4), \
+            f"fp8 compute unrolls k_groups in (1, 2, 4), got {k_groups}"
         assert D // k_groups >= 32, "fp8 dot needs >=32-wide key scale groups"
         assert ktile >= 32, "fp8 P.V dot reduces over ktile: needs >= 32"
         assert q.dtype in (torch.bfloat16, torch.float16)

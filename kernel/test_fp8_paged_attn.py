@@ -215,3 +215,21 @@ def test_f8dot_error_is_bounded_and_reported():
     assert err.mean().item() < 5e-3
     assert q99 < 5e-2
     assert err.max().item() < 2e-1
+
+
+@needs_gpu
+@pytest.mark.skipif(not FP8_DOT_OK, reason="needs fp8 MMA (sm_89+)")
+def test_f8dot_refuses_unrolled_group_counts():
+    """k_groups=8 with head_dim=256 passes the >=32-wide check but is
+    outside the kernels' constexpr unroll — it must refuse, not silently
+    score only the first four groups (Bugbot, HIGH)."""
+    q, kp, vp, tab, lens = _build(1, 16, 4, 256, [32], k_groups=8)
+    with pytest.raises(AssertionError, match="unrolls k_groups"):
+        fp8_paged_decode_attention(
+            q.cuda(), kp.cuda(), vp.cuda(), tab.cuda(), lens.cuda(),
+            n_kv_heads=4, head_dim=256, k_groups=8, compute="fp8")
+    with pytest.raises(AssertionError, match="unrolls k_groups"):
+        fp8_paged_decode_attention(
+            q.cuda(), kp.cuda(), vp.cuda(), tab.cuda(), lens.cuda(),
+            n_kv_heads=4, head_dim=256, k_groups=8, compute="fp8",
+            pack_heads=True)
