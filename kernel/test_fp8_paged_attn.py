@@ -233,3 +233,43 @@ def test_f8dot_refuses_unrolled_group_counts():
             q.cuda(), kp.cuda(), vp.cuda(), tab.cuda(), lens.cuda(),
             n_kv_heads=4, head_dim=256, k_groups=8, compute="fp8",
             pack_heads=True)
+
+
+@needs_gpu
+@pytest.mark.skipif(not FP8_DOT_OK, reason="needs fp8 MMA (sm_89+)")
+def test_fuse_counters_are_per_stream():
+    """Concurrent streams of the same shape must not share arrival slots
+    (a shared slot could combine early or never — review); one stream's
+    repeated launches must reuse one buffer (that is the whole point)."""
+    from fp8_paged_attn import _fuse_counters, reset_fuse_counters
+    reset_fuse_counters()
+    dev = torch.device("cuda", torch.cuda.current_device())
+    a = _fuse_counters(8, dev)
+    assert _fuse_counters(8, dev) is a
+    s2 = torch.cuda.Stream(dev)
+    with torch.cuda.stream(s2):
+        b = _fuse_counters(8, dev)
+    assert b is not a
+    reset_fuse_counters()
+
+
+@needs_gpu
+@pytest.mark.skipif(not FP8_DOT_OK, reason="needs fp8 MMA (sm_89+)")
+def test_f8dot_two_streams_concurrent_correct():
+    """Two f8dot launches racing on different streams, each checked
+    against the oracle — the failure mode of shared counters is a wrong
+    or unwritten output tensor."""
+    builds = [_build(2, 16, 4, 64, [64, 48], k_groups=2)
+              for _ in range(2)]
+    outs = []
+    streams = [torch.cuda.Stream() for _ in range(2)]
+    for (q, kp, vp, tab, lens), s in zip(builds, streams):
+        with torch.cuda.stream(s):
+            outs.append(fp8_paged_decode_attention(
+                q.cuda(), kp.cuda(), vp.cuda(), tab.cuda(), lens.cuda(),
+                n_kv_heads=4, head_dim=64, k_groups=2, compute="fp8"))
+    torch.cuda.synchronize()
+    for (q, kp, vp, tab, lens), got in zip(builds, outs):
+        want = paged_attn_ref(q, kp, vp, tab, lens, n_kv_heads=4,
+                              head_dim=64, k_groups=2)
+        _close(got.cpu().float(), want.float(), "f8dot")

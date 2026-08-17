@@ -723,13 +723,30 @@ _FUSE_COUNTERS: dict = {}
 
 def _fuse_counters(n: int, device) -> torch.Tensor:
     """Zeroed-once arrival counters for the fused combine; slots are
-    reset by the combining CTA itself, so reuse needs no memset."""
-    key = (device, n)
+    reset by the combining CTA itself, so reuse needs no memset (a
+    per-call torch.zeros measured ~4% of the whole kernel).
+
+    Keyed by (device, STREAM, n): launches on one stream are ordered, so
+    sharing a buffer along a stream is race-free, while two concurrent
+    streams of the same shape get distinct buffers — a shared slot across
+    streams could combine early or not at all (review). The remaining
+    theoretical staleness — a launch that increments but never resets
+    because it ABORTED mid-flight — is unreachable in practice: a CUDA
+    fault poisons the context and no later launch runs normally; for
+    belt-and-braces (fresh process reusing a serialized context, exotic
+    capture replays) `reset_fuse_counters()` clears the cache.
+    """
+    key = (device, torch.cuda.current_stream(device).cuda_stream, n)
     buf = _FUSE_COUNTERS.get(key)
     if buf is None:
         buf = torch.zeros(n, dtype=torch.int32, device=device)
         _FUSE_COUNTERS[key] = buf
     return buf
+
+
+def reset_fuse_counters() -> None:
+    """Drop all cached arrival counters (they re-create zeroed)."""
+    _FUSE_COUNTERS.clear()
 
 
 def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
