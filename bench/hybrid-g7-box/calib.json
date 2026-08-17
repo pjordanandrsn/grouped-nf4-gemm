@@ -1,0 +1,72 @@
+{
+  "schema": "gnf4-hybrid-calib/1",
+  "created_utc": "2026-08-17T16:44:26Z",
+  "quick_mode": false,
+  "host": {
+    "hostname": "g7box",
+    "kernel": "7.0.0-28-generic",
+    "machine": "x86_64",
+    "cpu_model": "AMD Ryzen 7 9800X3D 8-Core Processor",
+    "cpu_flags_watched": [
+      "avx2",
+      "avx512_vnni",
+      "avx512bw",
+      "avx512f",
+      "avx512vbmi",
+      "avx512vl"
+    ],
+    "online_cpus": 16,
+    "cgroup_cpu_quota": 15.36,
+    "numa_nodes": 1,
+    "mem_total_gib": 30.4,
+    "thp": "always [madvise] never",
+    "hugetlb_2m_total": "0",
+    "governor": "powersave",
+    "loadavg_at_start": "1.15 1.08 1.03 1/753 434"
+  },
+  "gpus": [
+    {
+      "index": "0",
+      "name": "NVIDIA GeForce RTX 5090",
+      "vram": "32607 MiB",
+      "power_limit": "600.00 W",
+      "pcie_gen_max": "5",
+      "pcie_width_max": "16",
+      "pcie_gen_idle": "1",
+      "pcie_width_idle": "16"
+    }
+  ],
+  "notes": [],
+  "cpu_bench": {
+    "skipped": true
+  },
+  "gpu_bench": {
+    "devices": [
+      {
+        "device": "cuda:0",
+        "name": "NVIDIA GeForce RTX 5090",
+        "b_vram_triad_gbs": 1573.4,
+        "b_link": {
+          "h2d_8kb": {
+            "gbs": 3.9,
+            "usec": 2.1
+          },
+          "d2h_8kb": {
+            "gbs": 4.17,
+            "usec": 2.0
+          },
+          "h2d_64mb": {
+            "gbs": 37.22,
+            "usec": 1802.9
+          },
+          "d2h_64mb": {
+            "gbs": 53.58,
+            "usec": 1252.6
+          }
+        }
+      }
+    ]
+  },
+  "gate_g0": null,
+  "wall_seconds": 1.0
+}
