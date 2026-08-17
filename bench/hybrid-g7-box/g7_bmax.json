@@ -1,0 +1,13 @@
+{
+  "layers": 94,
+  "B": 25,
+  "T": 4096,
+  "kv_bytes_total": 10626662400,
+  "kv_gib": 9.8968505859375,
+  "vram_used_gib": 9.8828125,
+  "vram_free_after_gib": 19.727783203125,
+  "attn_step_all_layers_ms": 13.48680054070428,
+  "attn_per_layer_us": 143.47660149685404,
+  "aggregate_gbps": 787.9305672185077,
+  "gate_bmax_capacity": true
+}

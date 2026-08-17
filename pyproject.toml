@@ -74,7 +74,7 @@ py-modules = [
     # fuse_gate_up_segments, Mxfp4NvmeResidency -- shipped in the CHANGELOG and
     # NOT in the wheel. tests/test_packaging_covers_kernel.py now fails if any
     # non-test kernel/*.py is missing here.
-    "mxfp4_residency", "nvme_residency", "row_pool",
+    "mxfp4_residency", "nvme_residency", "row_pool", "fp8_kv", "fp8_paged_attn",
     "nf4_qlora",
     # The GGUF k-quant lane (Glimmer-era): reader + reference decoders.
     "gguf_reader", "kquant_ref",
