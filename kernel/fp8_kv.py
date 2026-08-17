@@ -146,9 +146,19 @@ def unpack_kv_block(row: torch.Tensor, block_tokens: int, n_kv_heads: int,
 
     Views, not copies — the caller may hand these straight to a kernel.
     """
+    return unpack_kv_block_grouped(row, block_tokens, n_kv_heads, head_dim,
+                                   1)
+
+
+def unpack_kv_block_grouped(row: torch.Tensor, block_tokens: int,
+                            n_kv_heads: int, head_dim: int, groups: int):
+    """Grouped-scale variant: the scale tail holds ``groups`` fp32 values
+    per (token, head); ``groups == 1`` is the per-row layout and returns
+    the scale squeezed to ``[T, H]`` so both callers see the shape the
+    reference dequant expects for their layout."""
     n = block_tokens * n_kv_heads * head_dim
     q = row.narrow(0, 0, n).view(FP8_DTYPE).view(
         block_tokens, n_kv_heads, head_dim)
-    s = row.narrow(0, n, block_tokens * n_kv_heads * 4).view(
-        torch.float32).view(block_tokens, n_kv_heads)
-    return q, s
+    s = row.narrow(0, n, block_tokens * n_kv_heads * groups * 4).view(
+        torch.float32).view(block_tokens, n_kv_heads, groups)
+    return q, (s.squeeze(-1) if groups == 1 else s)
