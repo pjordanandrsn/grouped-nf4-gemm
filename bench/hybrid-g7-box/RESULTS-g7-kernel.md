@@ -104,6 +104,87 @@ decode cannot be measured yet. The clause's arithmetic closes: at
 9.9 GiB KV + 19.7 GiB free, batch is not the binding constraint at 25
 sequences; the expert path is, which is Phase 8's gate.
 
+## Round 2 — the redesign pass ("hold and go")
+
+The 52.9% surface carried its own diagnosis: stages flat (not
+latency-bound), 2 warps beating 4, ktile 32 beating 64 by 65% — per-SM
+**issue throughput**, i.e. the ~40 integer ops per payload element of
+E4M3 bit-assembly decode + scale expansion. `compute="fp8"` deletes that
+work instead of scheduling around it: payload bytes BITCAST into fp8
+tensor-core dots, scales folded onto post-dot `[G, KTILE]` score tiles
+(grouped keys = one sub-dot per group, exact because a group's scale is
+constant across the reduction axis; V scales fold into P under a
+per-tile range factor riding the online-softmax rescale; q scaled once
+into e4m3's range, divided out of `sm_scale`).
+
+Second box, same card class, own calibration blob (`round2/calib.json`,
+B_vram **1574.3** — matching round 1's 1573.4; warm-state triad
+re-verified identical, so no thermal correction applies).
+
+| number (B=32/T=4K unless noted) | GB/s | frac B_vram |
+|---|---|---|
+| f32-decode path (round 1 best) | 832 | 52.9% |
+| **fp8-compute, best-tuned sustained** | **1087–1095** | **69.1–69.6%** |
+| fp8-compute, best-tuned, B=25 | ~1000 | 63.6% |
+| fp8-compute, shipped defaults | 1004.7 | 63.8% |
+| single-shot transient (sweep 4, unreproduced) | 1141.5 | (72.6%) |
+
+**Gate verdict unchanged in letter: MISS — sustained best 69.4% vs the
+70% bar, from 52.9%.** The 1141.5 (72.6%) single measurement did NOT
+reproduce across eight re-runs on both kernel versions with the triad
+stable; it is recorded as a transient and not quoted as the gate number.
+The bar is missed by ~0.6 points on a reproducible protocol (median of
+repeated 30–50-iter runs, fresh allocations, triad re-verified).
+
+What DID change decisively is the serving consequence:
+
+- **wall vs bf16 SDPA at serving shapes: ×0.77–0.83** — the FP8 kernel
+  is now 17–23% FASTER than bf16 SDPA while reading half the bytes
+  (round 1: ×0.99–1.05). Byte halving is now realized as capacity AND
+  speed, which is what the 70% clause was a proxy for.
+- **B_max full-model step (94 layers, B=25, 4K, shipped defaults):
+  10.59 ms** (round 1: 13.49), aggregate **1003 GB/s** over the whole
+  9.90 GiB working set with every layer L2-cold.
+- fp8-compute numerics vs the f32 oracle (K/V bytes identical; q and p
+  each pay one e4m3 rounding): probed EXACT at T=1, worst-element 0.087
+  at T=2 (one dominant token), serving-shape distribution mean 0.005 /
+  p99 0.020 / max 0.152. Documented serving tolerance (invariant 4′);
+  model-level quality of fp8 COMPUTE is explicitly owed if it becomes
+  the default — the G7 oracle certified storage, and `compute="f32"`
+  (52.9%-class, decode-exact) remains the default pending that run.
+
+Also measured and closed this round:
+
+- **Packed + fp8** (`_fp8_paged_decode_packed_f8`, whole-line loads
+  without the f32-decode register pressure): 23/23 correct, LOSES 609
+  vs 1090 at B=32 — with the decode gone the one-block tile is
+  iteration-bound on a small grid, and line utilization never pays past
+  what the 96 MB L2 already provides. Kept default-off, loss recorded
+  (`round2/g7_sweep6_pf8.json`).
+- **Fused last-CTA combine** (stream-k arrival counter, self-cleaning
+  slots): worth ~1% at the winning split counts (sp=2–4 leaves little
+  to fuse) — but building it exposed that per-call `torch.zeros` for
+  the counters cost ~4% (a memset launch per call); counters are now
+  cached per (device, size) and reset by the combining CTA itself.
+- Cache-policy hints: ptxas rejects `.cg`+`evict_first`; `evict_first`
+  alone measured ~nothing. The kernel is at the memory system's
+  effective ceiling for this access pattern on this card.
+
+Remaining headroom analysis: at 1090 counted GB/s the kernel moves
+~103.5% of counted bytes (split partials + q reloads + tables), i.e.
+~1128 GB/s of actual traffic = 71.7% of triad, against SDPA's 92% on
+contiguous bf16 with zero indirection. The residual is the paged
+gather's DRAM-page behavior itself; the two structural alternatives
+that could in principle beat it (head packing, block-tile fusion) were
+both built and both measured slower. This design is done on this card.
+
+Round-2 receipts in `round2/`: own calib blob, f8dot sweep
+(`g7_sweep4_f8dot.json` — contains the unreproduced 1141 row), fused
+sweep (`g7_sweep5_fused.json` — polluted by the per-call counter
+memset, superseded), pf8 sweep, shipped-defaults formal table
+(`g7_kernel_final2.json`, both compute modes), fp8-defaults B_max
+(`g7_bmax.json`).
+
 ## Raw receipts
 
 - `calib.json` — calibration blob (GPU lanes; `--skip-cpu`)

@@ -787,7 +787,7 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
         sms = torch.cuda.get_device_properties(q.device).multi_processor_count
         ctas_per = B if pack_heads else B * n_kv_heads
         span = block_tokens if pack_heads else ktile
-        per_sm = 2 if compute == "fp8" else 8
+        per_sm = 3 if compute == "fp8" else 8
         want = max(1, (per_sm * sms) // max(1, ctas_per))
         max_useful = max(1, (int(seq_lens.max()) + span - 1) // span)
         n_split = int(min(32, want, max_useful))
