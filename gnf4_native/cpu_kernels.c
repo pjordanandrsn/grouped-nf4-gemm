@@ -576,6 +576,9 @@ typedef struct {
 } GemvCtx;
 
 #define GEMV_TILE 32
+/* accumulator rows per cell: 8 rows x 4 lane groups = 32 zmm registers,
+ * i.e. the entire AVX-512 register file. Raising it spills. */
+#define NF4_CELL_ROWS 8
 
 static void nf4_range(int64_t lo, int64_t hi, void *argp) {
     GemvCtx *c = (GemvCtx *)argp;
@@ -603,9 +606,29 @@ static void nf4_range(int64_t lo, int64_t hi, void *argp) {
             continue;
         }
 #endif
-        for (int64_t n = tn; n < tn_end; n++)
-            nf4_cell(a_g, c->sizes[g], c->K, w_e + n * (c->K / 2),
-                     am_e + n * (c->K / 64), out_g + n, c->N, c->use512);
+        /* Rows chunk INSIDE the work item (Phase 8). The register
+         * blocking caps a cell at NF4_CELL_ROWS (8 accumulator rows x 4
+         * lane groups = 32 zmm, the whole register file), but a group at
+         * batch may hold more rows than that. Chunking here instead of
+         * splitting the group in the caller is what makes the batch pay
+         * off: the weight row is ~K/2 bytes, so after chunk 0 it is L1-hot
+         * and chunks 1..n cost no DRAM traffic. Splitting into separate
+         * GROUPS (the pre-Phase-8 behaviour) sent the chunks to different
+         * work items — possibly different threads — and re-read the
+         * weights from DRAM every time, which is exactly the amortization
+         * G8 measures. */
+        for (int64_t n = tn; n < tn_end; n++) {
+            int32_t rem = c->sizes[g];
+            int64_t r0 = 0;
+            while (rem > 0) {
+                int T = rem > NF4_CELL_ROWS ? NF4_CELL_ROWS : rem;
+                nf4_cell(a_g + r0 * c->K, T, c->K, w_e + n * (c->K / 2),
+                         am_e + n * (c->K / 64), out_g + r0 * c->N + n,
+                         c->N, c->use512);
+                r0 += T;
+                rem -= T;
+            }
+        }
     }
 }
 
@@ -613,7 +636,9 @@ static int gemv_common(GemvCtx *c, int G, int threads, pool_fn range,
                        int64_t *row_off_buf) {
     int64_t r0 = 0;
     for (int g = 0; g < G; g++) {
-        if (c->sizes[g] <= 0 || c->sizes[g] > 8) return -1;
+        /* group size is no longer capped at the cell's row blocking —
+         * nf4_range/mx_range chunk internally (Phase 8) */
+        if (c->sizes[g] <= 0) return -1;
         row_off_buf[g] = r0;
         r0 += c->sizes[g];
     }
@@ -742,9 +767,18 @@ static void mx_range(int64_t lo, int64_t hi, void *argp) {
             continue;
         }
 #endif
-        for (int64_t n = tn; n < tn_end; n++)
-            mx_cell(a_g, c->sizes[g], c->K, w_e + n * (c->K / 2),
-                    sc_e + n * (c->K / 32), out_g + n, c->N, c->use512);
+        for (int64_t n = tn; n < tn_end; n++) {   /* row chunking: see nf4_range */
+            int32_t rem = c->sizes[g];
+            int64_t r0 = 0;
+            while (rem > 0) {
+                int T = rem > NF4_CELL_ROWS ? NF4_CELL_ROWS : rem;
+                mx_cell(a_g + r0 * c->K, T, c->K, w_e + n * (c->K / 2),
+                        sc_e + n * (c->K / 32), out_g + r0 * c->N + n,
+                        c->N, c->use512);
+                r0 += T;
+                rem -= T;
+            }
+        }
     }
 }
 
