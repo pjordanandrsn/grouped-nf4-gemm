@@ -295,6 +295,210 @@ if _TRITON:
                  acc)
 
     @triton.jit
+    def _q_sub(q_ptrs, offs_dg, off, g_mask, q_s):
+        qf = tl.load(q_ptrs + (off + offs_dg)[None, :],
+                     mask=g_mask[:, None], other=0.0).to(tl.float32)
+        return (qf * q_s).to(tl.float8e4nv)
+
+    @triton.jit
+    def _k_scored(q8, kpool_u8, kpool_f32, k_base, ks_base, pay_row,
+                  offs_dg, off, j, t_mask):
+        """One scale group's contribution to the score tile: fp8 dot of
+        the group's raw payload columns, scaled per token AFTER the dot
+        (the group scale is constant across the dot's reduction axis)."""
+        ku = tl.load(kpool_u8 + k_base[:, None] + pay_row
+                     + (off + offs_dg)[None, :],
+                     mask=t_mask[:, None], other=0)
+        k8 = ku.to(tl.float8e4nv, bitcast=True)
+        ks = tl.load(kpool_f32 + ks_base + j, mask=t_mask, other=1.0)
+        return tl.dot(q8, tl.trans(k8)) * ks[None, :]
+
+    @triton.jit
+    def _fp8_paged_decode_split_f8dot(
+        q_ptr, kpool_u8, vpool_u8, kpool_f32, vpool_f32,
+        table_ptr, seqlen_ptr,
+        m_ptr, l_ptr, acc_ptr,
+        o_ptr, counter_ptr,
+        stride_qb, stride_qh, stride_tb,
+        stride_ob, stride_oh,
+        k_row_bytes, v_row_bytes,
+        sm_scale, n_split,
+        H_KV: tl.constexpr, G: tl.constexpr, D: tl.constexpr,
+        BT: tl.constexpr, KTILE: tl.constexpr,
+        NG_K: tl.constexpr,
+        BLOCK_G: tl.constexpr,
+        FUSE_COMBINE: tl.constexpr,
+    ):
+        # FP8-tensor-core variant: the E4M3 payload is BITCAST and fed to
+        # fp8 MMA units — no decode at all. The sweep surface demanded
+        # this: stages flat (not latency-bound), w=2 > w=4, kt=32 > kt=64
+        # by 65% — the wall was the ~40 integer ops per PAYLOAD ELEMENT of
+        # bit-assembly decode + scale expansion, i.e. per-SM issue
+        # throughput, and the fix is to stop touching payload elements
+        # with ALU entirely. Scales fold AFTER the dots, onto [G, KTILE]
+        # score tiles (D-fold fewer elements):
+        #
+        # * K, grouped scales: one sub-dot per scale group j over its
+        #   D/NG_K columns, then s += dot_j * ks_j[None, :] — algebraically
+        #   exact because a group's scale is constant across the dot's
+        #   reduction axis.
+        # * q: scaled to fill e4m3's range once per program, the factor
+        #   divided back out of sm_scale (fa3's q-scaling trick).
+        # * V, per-row scales: fold into P — p8 = p * (vs * C), with the
+        #   tile-dependent range factor C = 448/max(vs) keeping products
+        #   out of e4m3's subnormal floor (raw p*vs ~ 1e-3 would round to
+        #   1-3 mantissa bits). C changes per tile; the correction rides
+        #   the online-softmax rescale that already multiplies acc by
+        #   alpha each iteration, and divides out once at the end — zero
+        #   extra D-wide work.
+        # * l stays the f32 sum of UNQUANTIZED p, m unchanged: only the
+        #   numerator pays fp8 rounding, and it averages over the tile.
+        #
+        # Numerics: q and p each carry e4m3's ~6% per-element rounding
+        # into the dots (the STORED bytes are identical to the decode
+        # path's). This is the documented serving-tolerance side of
+        # invariant 4' — measured in test_fp8_paged_attn against the f32
+        # oracle — and quality certification of fp8 COMPUTE (as opposed
+        # to fp8 STORAGE, which the G7 oracle measured) is explicitly
+        # still owed if this mode becomes the default.
+        P448: tl.constexpr = 448.0
+        DG: tl.constexpr = D // NG_K
+        pid = tl.program_id(0)
+        s_id = pid % n_split
+        bh = pid // n_split
+        b = bh // H_KV
+        h = bh % H_KV
+
+        t_len = tl.load(seqlen_ptr + b)
+        n_tiles = (t_len + KTILE - 1) // KTILE
+        tiles_per = (n_tiles + n_split - 1) // n_split
+        t_lo = s_id * tiles_per * KTILE
+        t_hi = tl.minimum(t_len, (s_id + 1) * tiles_per * KTILE)
+
+        offs_g = tl.arange(0, BLOCK_G)
+        offs_d = tl.arange(0, D)
+        offs_dg = tl.max_contiguous(
+            tl.multiple_of(tl.arange(0, DG), DG), DG)
+        g_mask = offs_g < G
+
+        q_ptrs = (q_ptr + b * stride_qb + (h * G + offs_g)[:, None]
+                  * stride_qh)
+        qf = tl.load(q_ptrs + offs_d[None, :], mask=g_mask[:, None],
+                     other=0.0).to(tl.float32)
+        q_amax = tl.max(tl.abs(qf))
+        q_s = tl.where(q_amax > 0, P448 / q_amax, 1.0)
+        # static q sub-tiles, one per scale group, hoisted out of the
+        # token loop (Triton's tracer has no lists — NG_K in {1, 2, 4}
+        # is unrolled by constexpr guards, wrapper-asserted)
+        q8_0 = _q_sub(q_ptrs, offs_dg, 0 * DG, g_mask, q_s)
+        q8_1 = q8_0
+        q8_2 = q8_0
+        q8_3 = q8_0
+        if NG_K >= 2:
+            q8_1 = _q_sub(q_ptrs, offs_dg, 1 * DG, g_mask, q_s)
+        if NG_K >= 4:
+            q8_2 = _q_sub(q_ptrs, offs_dg, 2 * DG, g_mask, q_s)
+            q8_3 = _q_sub(q_ptrs, offs_dg, 3 * DG, g_mask, q_s)
+        scale_fold = sm_scale / q_s
+
+        m_i = tl.full([BLOCK_G], float("-inf"), tl.float32)
+        l_i = tl.zeros([BLOCK_G], tl.float32)
+        acc = tl.zeros([BLOCK_G, D], tl.float32)
+        c_prev = 1.0
+
+        offs_t = tl.arange(0, KTILE)
+        pay_row = (offs_t % BT)[:, None] * (H_KV * D) + h * D
+        pay_v = pay_row + tl.max_contiguous(
+            tl.multiple_of(offs_d, D), D)[None, :]
+
+        for start in range(t_lo, t_hi, KTILE):
+            tok = start + offs_t
+            t_mask = tok < t_hi
+            blk = tl.load(table_ptr + b * stride_tb + tok // BT,
+                          mask=t_mask, other=0)
+
+            k_base = blk * k_row_bytes
+            ks_base = (k_base // 4 + BT * H_KV * D // 4
+                       + ((offs_t % BT) * H_KV + h) * NG_K)
+            s = _k_scored(q8_0, kpool_u8, kpool_f32, k_base, ks_base,
+                          pay_row, offs_dg, 0 * DG, 0, t_mask)
+            if NG_K >= 2:
+                s += _k_scored(q8_1, kpool_u8, kpool_f32, k_base, ks_base,
+                               pay_row, offs_dg, 1 * DG, 1, t_mask)
+            if NG_K >= 4:
+                s += _k_scored(q8_2, kpool_u8, kpool_f32, k_base, ks_base,
+                               pay_row, offs_dg, 2 * DG, 2, t_mask)
+                s += _k_scored(q8_3, kpool_u8, kpool_f32, k_base, ks_base,
+                               pay_row, offs_dg, 3 * DG, 3, t_mask)
+            s = s * scale_fold
+            s = tl.where(t_mask[None, :], s, float("-inf"))
+
+            m_new = tl.maximum(m_i, tl.max(s, axis=1))
+            alpha = tl.exp2((m_i - m_new) * 1.4426950408889634)
+            p = tl.exp2((s - m_new[:, None]) * 1.4426950408889634)
+            l_i = l_i * alpha + tl.sum(p, axis=1)
+
+            v_base = blk * v_row_bytes
+            vu = tl.load(vpool_u8 + v_base[:, None] + pay_v,
+                         mask=t_mask[:, None], other=0)
+            v8 = vu.to(tl.float8e4nv, bitcast=True)
+            vs = tl.load(vpool_f32 + v_base // 4 + BT * H_KV * D // 4
+                         + (offs_t % BT) * H_KV + h,
+                         mask=t_mask, other=1.0)
+            # masked-out lanes carry p == 0, so their vs value is inert;
+            # exclude them from the range factor anyway (other=1.0 above
+            # would otherwise drag C toward 448)
+            c_new = P448 / tl.max(tl.where(t_mask, vs, 0.0))
+            p8 = (p * (vs * c_new)[None, :]).to(tl.float8e4nv)
+            acc = acc * (alpha * (c_new / c_prev))[:, None] \
+                + tl.dot(p8, v8)
+            c_prev = c_new
+            m_i = m_new
+
+        acc = acc / c_prev
+        part = (bh * n_split + s_id) * BLOCK_G
+        tl.store(m_ptr + part + offs_g, m_i)
+        tl.store(l_ptr + part + offs_g, l_i)
+        tl.store(acc_ptr + part * D + offs_g[:, None] * D + offs_d[None, :],
+                 acc)
+
+        if FUSE_COMBINE:
+            # stream-k-style fixup: the LAST split CTA to arrive for this
+            # (b, h) combines all partials in place. The acq_rel atomic
+            # orders each CTA's partial stores before its arrival and the
+            # last arriver's loads after — partials are seconds-old and
+            # combine reads come from L2, so the separate combine kernel's
+            # launch + DRAM round-trip disappears. Reduction order is the
+            # same fixed 0..n_split loop as the standalone kernel: which
+            # CTA runs it changes, what it computes does not (the
+            # serving-determinism contract is per config+split count).
+            arrived = tl.atomic_add(counter_ptr + bh, 1, sem="acq_rel")
+            if arrived == n_split - 1:
+                m_glob = tl.full([BLOCK_G], float("-inf"), tl.float32)
+                for s_i in range(0, n_split):
+                    m_s = tl.load(m_ptr + (bh * n_split + s_i) * BLOCK_G
+                                  + offs_g)
+                    m_glob = tl.maximum(m_glob, m_s)
+                m_glob = tl.where(m_glob == float("-inf"), 0.0, m_glob)
+                l_tot = tl.zeros([BLOCK_G], tl.float32)
+                out = tl.zeros([BLOCK_G, D], tl.float32)
+                for s_i in range(0, n_split):
+                    base = (bh * n_split + s_i) * BLOCK_G
+                    m_s = tl.load(m_ptr + base + offs_g)
+                    l_s = tl.load(l_ptr + base + offs_g)
+                    a_s = tl.load(acc_ptr + base * D + offs_g[:, None] * D
+                                  + offs_d[None, :])
+                    w = tl.exp2((m_s - m_glob) * 1.4426950408889634)
+                    l_tot += l_s * w
+                    out += a_s * w[:, None]
+                out = out / l_tot[:, None]
+                o_ptrs = (o_ptr + b * stride_ob
+                          + (h * G + offs_g)[:, None] * stride_oh
+                          + offs_d[None, :])
+                tl.store(o_ptrs, out.to(o_ptr.dtype.element_ty),
+                         mask=g_mask[:, None])
+
+    @triton.jit
     def _fp8_combine(
         m_ptr, l_ptr, acc_ptr, o_ptr,
         stride_ob, stride_oh,
@@ -342,7 +546,9 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
                                ktile: int = 32, n_split: int | None = None,
                                sm_scale: float | None = None,
                                num_warps: int = 2, num_stages: int = 3,
-                               pack_heads: bool = False):
+                               pack_heads: bool = False,
+                               compute: str = "f32",
+                               fuse_combine: bool = True):
     """Decode attention over packed FP8 KV pool rows.
 
     q            [B, H_q, D] bf16/fp16 — ONE decode token per sequence.
@@ -358,6 +564,14 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
     pack_heads   one CTA per (sequence, split) consuming ALL kv heads —
                  whole-line reads, tensor-core block-diagonal scores; the
                  tile is one BT-token block and ``ktile`` is ignored.
+    compute      "f32" (default): E4M3 decoded in registers, tf32 dots —
+                 the bit-exact-est serving path. "fp8": payload bytes are
+                 BITCAST into fp8 tensor-core dots, scales folded onto the
+                 post-dot score tiles; requires sm_89+, ``v_groups == 1``,
+                 ``head_dim // k_groups >= 32`` and ``ktile >= 32``.
+                 Documented-tolerance path (q and p each pay one e4m3
+                 rounding); fp8 COMPUTE quality is owed separately if it
+                 becomes the default — the G7 oracle certified storage.
 
     Returns [B, H_q, D] in q's dtype.
     """
@@ -371,13 +585,17 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
     if sm_scale is None:
         sm_scale = D ** -0.5
     if n_split is None:
-        # ~8 CTAs per SM: the class-card sweep's plateau. Fewer starves the
-        # serial tile loop (the B=1..8 latency pedestal); past ~2x this the
-        # per-split q reload + combine overhead wins (sp=32/64 declined).
+        # f32 decode: ~8 CTAs/SM (the sweep plateau — fewer starves the
+        # serial tile loop, the B=1..8 latency pedestal; 2x more pays
+        # q reload + combine for nothing). f8dot: ~2 CTAs/SM — with the
+        # per-element decode deleted the kernel streams, longer spans
+        # pipeline fine, and extra splits only buy partial overhead
+        # (sweep winners sat at 2-4 splits at serving batches).
         sms = torch.cuda.get_device_properties(q.device).multi_processor_count
         ctas_per = B if pack_heads else B * n_kv_heads
         span = block_tokens if pack_heads else ktile
-        want = max(1, (8 * sms) // max(1, ctas_per))
+        per_sm = 2 if compute == "fp8" else 8
+        want = max(1, (per_sm * sms) // max(1, ctas_per))
         max_useful = max(1, (int(seq_lens.max()) + span - 1) // span)
         n_split = int(min(32, want, max_useful))
 
@@ -423,17 +641,44 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
     l_buf = torch.empty(part, dtype=torch.float32, device=q.device)
     acc_buf = torch.empty(part * D, dtype=torch.float32, device=q.device)
 
-    _fp8_paged_decode_split[(B * n_kv_heads * n_split,)](
-        q, k_pool, v_pool,
-        k_pool.view(torch.float32), v_pool.view(torch.float32),
-        block_table, seq_lens.to(torch.int32),
-        m_buf, l_buf, acc_buf,
-        q.stride(0), q.stride(1), block_table.stride(0),
-        k_row, v_row, sm_scale, n_split,
-        H_KV=n_kv_heads, G=G, D=D, BT=block_tokens, KTILE=ktile,
-        NG_K=k_groups, NG_V=v_groups, BLOCK_G=block_g,
-        num_warps=num_warps, num_stages=num_stages,
-    )
+    if compute == "fp8":
+        assert v_groups == 1, "fp8 compute folds V scales into P: per-row only"
+        assert D // k_groups >= 32, "fp8 dot needs >=32-wide key scale groups"
+        assert ktile >= 32, "fp8 P.V dot reduces over ktile: needs >= 32"
+        assert q.dtype in (torch.bfloat16, torch.float16)
+        assert torch.cuda.get_device_capability(q.device) >= (8, 9), \
+            "fp8 tensor-core dots need sm_89+"
+        counters = torch.zeros(B * n_kv_heads, dtype=torch.int32,
+                               device=q.device)
+        _fp8_paged_decode_split_f8dot[(B * n_kv_heads * n_split,)](
+            q, k_pool, v_pool,
+            k_pool.view(torch.float32), v_pool.view(torch.float32),
+            block_table, seq_lens.to(torch.int32),
+            m_buf, l_buf, acc_buf,
+            o, counters,
+            q.stride(0), q.stride(1), block_table.stride(0),
+            o.stride(0), o.stride(1),
+            k_row, v_row, sm_scale, n_split,
+            H_KV=n_kv_heads, G=G, D=D, BT=block_tokens, KTILE=ktile,
+            NG_K=k_groups, BLOCK_G=block_g,
+            FUSE_COMBINE=fuse_combine,
+            num_warps=num_warps, num_stages=num_stages,
+        )
+        if fuse_combine:
+            return o
+    else:
+        assert compute == "f32", f"unknown compute mode {compute!r}"
+        _fp8_paged_decode_split[(B * n_kv_heads * n_split,)](
+            q, k_pool, v_pool,
+            k_pool.view(torch.float32), v_pool.view(torch.float32),
+            block_table, seq_lens.to(torch.int32),
+            m_buf, l_buf, acc_buf,
+            q.stride(0), q.stride(1), block_table.stride(0),
+            k_row, v_row, sm_scale, n_split,
+            H_KV=n_kv_heads, G=G, D=D, BT=block_tokens, KTILE=ktile,
+            NG_K=k_groups, NG_V=v_groups, BLOCK_G=block_g,
+            num_warps=num_warps, num_stages=num_stages,
+        )
     _fp8_combine[(B * n_kv_heads,)](
         m_buf, l_buf, acc_buf, o,
         o.stride(0), o.stride(1), n_split,
