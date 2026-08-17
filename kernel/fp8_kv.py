@@ -41,34 +41,59 @@ E4M3_MAX = 448.0
 FP8_DTYPE = torch.float8_e4m3fn
 
 
-def quantize_kv_fp8(x: torch.Tensor):
+def quantize_kv_fp8(x: torch.Tensor, group: int | None = None):
     """``[..., T, H, D]`` (any float dtype) -> ``(q, scale)``.
 
-    ``q`` is e4m3 with x's shape; ``scale`` is fp32 with x's shape minus the
-    last dim, i.e. one scale per (token, head). Runs on whatever device x is
-    on; needs no FP8 tensor cores (this is storage, not arithmetic).
+    ``q`` is e4m3 with x's shape. ``scale`` is fp32 with one entry per
+    quantization group: with the default ``group=None`` that is one per
+    (token, head), i.e. ``x.shape[:-1]``; with ``group=g`` dividing ``D``
+    it is ``x.shape[:-1] + (D // g,)``, one scale per ``g`` consecutive
+    values of a row.
+
+    Sub-row groups exist because the sensitivity is not symmetric between
+    keys and values, measured rather than assumed (Phase 7): full-row
+    scaling costs one model +0.574% perplexity through its KEYS while
+    costing another +0.080%, and the byte price of a finer key grid is 4
+    bytes per group against ``g`` bytes of payload — 1.88x compression at
+    g=64 and 1.78x at g=32, against 1.94x for the full row at D=128.
+
+    Runs on whatever device x is on; needs no FP8 tensor cores (this is
+    storage, not arithmetic).
     """
-    if x.shape[-1] < 1:
+    d = x.shape[-1]
+    if d < 1:
         raise ValueError("head_dim must be >= 1")
+    if group is None:
+        group = d
+    if group < 1 or d % group:
+        raise ValueError(f"group {group} must divide head_dim {d}")
     xf = x.float()
-    amax = xf.abs().amax(dim=-1)
-    # amax == 0 -> scale 1.0: the row is all zeros and round-trips exactly,
-    # where amax/E4M3_MAX would make the dequant 0 * 0 and the quant 0/0.
-    scale = torch.where(amax > 0, amax / E4M3_MAX,
-                        torch.ones_like(amax))
-    q = (xf / scale.unsqueeze(-1)).to(FP8_DTYPE)
-    return q, scale
+    xg = xf.reshape(*xf.shape[:-1], d // group, group)
+    amax = xg.abs().amax(dim=-1)
+    # amax == 0 -> scale 1.0: the group is all zeros and round-trips
+    # exactly, where amax/E4M3_MAX would make dequant 0*0 and quant 0/0.
+    scale = torch.where(amax > 0, amax / E4M3_MAX, torch.ones_like(amax))
+    q = (xg / scale.unsqueeze(-1)).reshape(xf.shape).to(FP8_DTYPE)
+    return q, (scale.squeeze(-1) if group == d else scale)
 
 
 def dequant_kv_fp8_ref(q: torch.Tensor, scale: torch.Tensor,
                        dtype=torch.bfloat16) -> torch.Tensor:
     """Reference dequant: ``[..., T, H, D]`` back to ``dtype``.
 
+    Accepts either scale layout — one per row (``scale.ndim == q.ndim-1``)
+    or one per sub-row group (``scale.ndim == q.ndim``).
+
     MATERIALIZES the result — this is the oracle a fused kernel is checked
     against and the path the quality harness measures, never the serving
     read path.
     """
-    return (q.to(torch.float32) * scale.unsqueeze(-1)).to(dtype)
+    qf = q.to(torch.float32)
+    if scale.ndim == qf.ndim - 1:
+        return (qf * scale.unsqueeze(-1)).to(dtype)
+    d, n_groups = qf.shape[-1], scale.shape[-1]
+    qg = qf.reshape(*qf.shape[:-1], n_groups, d // n_groups)
+    return (qg * scale.unsqueeze(-1)).reshape(qf.shape).to(dtype)
 
 
 def kv_roundtrip_error(x: torch.Tensor):
