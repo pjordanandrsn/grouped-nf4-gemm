@@ -124,21 +124,38 @@ def kv_block_bytes(block_tokens: int, n_kv_heads: int, head_dim: int) -> int:
 
 
 def pack_kv_block(q: torch.Tensor, scale: torch.Tensor,
-                  out: torch.Tensor) -> torch.Tensor:
+                  out: torch.Tensor, *, layout: str = "tokens"
+                  ) -> torch.Tensor:
     """Write ``q``/``scale`` for one block into a flat uint8 row.
 
-    Layout: fp8 payload TOKENS-MAJOR (``[T, H, D]``, the caller's natural
-    order), then fp32 scales. Measured, not assumed — a heads-major
-    variant (one contiguous 2 KB run per head per block) was built and
-    swept, and LOST: 74.2 vs 86.3 GB/s at the same best config, because
-    tokens-major lets the H_kv programs of one sequence walk the same
-    cache lines together (each 512 B line serves four CTAs) and that L2
-    cooperation is worth more than per-CTA contiguity.
+    Two layouts, both measured — under DIFFERENT kernels, which is the
+    point of keeping both:
+
+    * ``"tokens"``: payload ``[T, H, D]`` (caller order), scales
+      ``[T, H(, NG)]``. Won the bake-off under the DECODE-path kernel
+      (86.3 vs 74.2 GB/s on the dev card): the H_kv programs of one
+      sequence walk the same 512 B lines together and L2 serves the
+      sibling quarters.
+    * ``"heads"``: payload ``[H, T, D]``, scales ``[H, T(, NG)]`` — one
+      private contiguous ``T*D``-byte run per (block, head). Rebuilt for
+      the fp8-tensor-core kernel, whose bottleneck is the memory system
+      rather than decode ALU; there per-CTA contiguity competes again
+      (the tokens-major verdict was measured under a bottleneck that no
+      longer exists on that path).
+
+    Row SIZE is identical either way (``kv_block_bytes``); readers must
+    agree on the layout — the paged-attention wrapper takes the same
+    flag.
     """
     n = q.numel()
     if out.numel() < n + scale.numel() * 4:
         raise ValueError(f"row of {out.numel()} bytes too small for "
                          f"{n} payload + {scale.numel() * 4} scale bytes")
+    if layout == "heads":
+        q = q.permute(1, 0, 2)
+        scale = scale.permute(1, 0, 2) if scale.ndim == 3             else scale.permute(1, 0)
+    else:
+        assert layout == "tokens", f"unknown layout {layout!r}"
     out.narrow(0, 0, n).copy_(q.reshape(-1).contiguous().view(torch.uint8))
     out.narrow(0, n, scale.numel() * 4).copy_(
         scale.reshape(-1).contiguous().float().view(torch.uint8))
@@ -156,14 +173,25 @@ def unpack_kv_block(row: torch.Tensor, block_tokens: int, n_kv_heads: int,
 
 
 def unpack_kv_block_grouped(row: torch.Tensor, block_tokens: int,
-                            n_kv_heads: int, head_dim: int, groups: int):
+                            n_kv_heads: int, head_dim: int, groups: int,
+                            *, layout: str = "tokens"):
     """Grouped-scale variant: the scale tail holds ``groups`` fp32 values
     per (token, head); ``groups == 1`` is the per-row layout and returns
     the scale squeezed to ``[T, H]`` so both callers see the shape the
-    reference dequant expects for their layout."""
+    reference dequant expects for their layout. Always returns
+    ``[T, H, ...]`` regardless of the on-disk ``layout`` (heads-major
+    rows come back permuted — a COPY for heads, views for tokens)."""
     n = block_tokens * n_kv_heads * head_dim
-    q = row.narrow(0, 0, n).view(FP8_DTYPE).view(
-        block_tokens, n_kv_heads, head_dim)
-    s = row.narrow(0, n, block_tokens * n_kv_heads * groups * 4).view(
-        torch.float32).view(block_tokens, n_kv_heads, groups)
+    if layout == "heads":
+        q = row.narrow(0, 0, n).view(FP8_DTYPE).view(
+            n_kv_heads, block_tokens, head_dim).permute(1, 0, 2)
+        s = row.narrow(0, n, block_tokens * n_kv_heads * groups * 4).view(
+            torch.float32).view(n_kv_heads, block_tokens, groups
+                                ).permute(1, 0, 2)
+    else:
+        assert layout == "tokens", f"unknown layout {layout!r}"
+        q = row.narrow(0, 0, n).view(FP8_DTYPE).view(
+            block_tokens, n_kv_heads, head_dim)
+        s = row.narrow(0, n, block_tokens * n_kv_heads * groups * 4).view(
+            torch.float32).view(block_tokens, n_kv_heads, groups)
     return q, (s.squeeze(-1) if groups == 1 else s)
