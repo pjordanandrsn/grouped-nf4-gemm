@@ -70,12 +70,12 @@ def _build(B, hq, hkv, d, seq_lens, k_groups=1, v_groups=1, seed=0,
     return q, k_pool, v_pool, table, lens
 
 
-def _run_both(B, hq, hkv, d, seq_lens, **kw):
+def _run_both(B, hq, hkv, d, seq_lens, pack=False, **kw):
     q, kp, vp, tab, lens = _build(B, hq, hkv, d, seq_lens, **kw)
     dev = lambda t: t.cuda()  # noqa: E731
     got = fp8_paged_decode_attention(
         dev(q), dev(kp), dev(vp), dev(tab), dev(lens),
-        n_kv_heads=hkv, head_dim=d,
+        n_kv_heads=hkv, head_dim=d, pack_heads=pack,
         k_groups=kw.get("k_groups", 1), v_groups=kw.get("v_groups", 1))
     want = paged_attn_ref(q, kp, vp, tab, lens, n_kv_heads=hkv, head_dim=d,
                           k_groups=kw.get("k_groups", 1),
@@ -90,39 +90,44 @@ def _close(got, want):
 
 
 @needs_gpu
-def test_permuted_paged_tables_match_reference():
-    got, want = _run_both(3, 16, 4, 64, [64, 128, 96])
+@pytest.mark.parametrize("pack", [False, True])
+def test_permuted_paged_tables_match_reference(pack):
+    got, want = _run_both(3, 16, 4, 64, [64, 128, 96], pack=pack)
     _close(got, want)
 
 
 @needs_gpu
-def test_partial_tail_blocks_are_masked_not_scored():
+@pytest.mark.parametrize("pack", [False, True])
+def test_partial_tail_blocks_are_masked_not_scored(pack):
     """Ragged lengths ending mid-block: the tail block's unwritten rows
     hold zeros in the pool; a kernel that scores them shifts the softmax
     and fails this."""
-    got, want = _run_both(4, 16, 4, 64, [17, 33, 1, 47])
+    got, want = _run_both(4, 16, 4, 64, [17, 33, 1, 47], pack=pack)
     _close(got, want)
 
 
 @needs_gpu
-def test_grouped_key_scales():
+@pytest.mark.parametrize("pack", [False, True])
+def test_grouped_key_scales(pack):
     """The quality-passing configuration: K scales per 32 channels, V per
     row — two different scale layouts read in one kernel launch."""
-    got, want = _run_both(2, 16, 4, 128, [96, 160], k_groups=4, v_groups=1)
+    got, want = _run_both(2, 16, 4, 128, [96, 160], k_groups=4, v_groups=1, pack=pack)
     _close(got, want)
 
 
 @needs_gpu
-def test_small_gqa_group_is_padded_not_wrong():
+@pytest.mark.parametrize("pack", [False, True])
+def test_small_gqa_group_is_padded_not_wrong(pack):
     """G below the 16-row dot minimum (Llama-class 32q/8kv -> G=4): the
     group tile is padded and masked; the pad rows must not leak."""
-    got, want = _run_both(2, 32, 8, 64, [64, 80])
+    got, want = _run_both(2, 32, 8, 64, [64, 80], pack=pack)
     _close(got, want)
 
 
 @needs_gpu
-def test_single_token_context():
-    got, want = _run_both(2, 16, 4, 64, [1, 2])
+@pytest.mark.parametrize("pack", [False, True])
+def test_single_token_context(pack):
+    got, want = _run_both(2, 16, 4, 64, [1, 2], pack=pack)
     _close(got, want)
 
 

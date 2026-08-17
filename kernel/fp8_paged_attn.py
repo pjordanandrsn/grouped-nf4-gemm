@@ -173,6 +173,120 @@ if _TRITON:
                  acc)
 
     @triton.jit
+    def _fp8_paged_decode_packed(
+        q_ptr, kpool_u8, vpool_u8, kpool_f32, vpool_f32,
+        table_ptr, seqlen_ptr,
+        m_ptr, l_ptr, acc_ptr,
+        stride_qb, stride_qh, stride_tb,
+        k_row_bytes, v_row_bytes,
+        sm_scale, n_split,
+        H_KV: tl.constexpr, G: tl.constexpr, D: tl.constexpr,
+        BT: tl.constexpr,
+        NG_K: tl.constexpr, NG_V: tl.constexpr,
+        BLOCK_Q: tl.constexpr,
+    ):
+        # Head-PACKED variant: one CTA consumes ALL kv heads of its token
+        # span, so every 512 B token line (H_KV * D payload bytes) is read
+        # whole by the program that fetched it. The tokens-major split
+        # kernel reads a 1/H_KV slice per CTA and leans on L2 to serve
+        # siblings; measured on the quiet 5090 that recovered only half of
+        # B_vram (806 GB/s / 51%) with the split axis saturated — line
+        # utilization, not occupancy, was the remaining structural loss.
+        #
+        # The tile IS one block (BT tokens): payload loads collapse to one
+        # contiguous [BT, H_KV*D] read per iteration and the scale tail to
+        # one [BT, H_KV*NG] read — no modulo arithmetic survives into the
+        # gather. Scores are ONE tensor-core dot [BLOCK_Q, D] x
+        # [D, BT*H_KV] under a block-diagonal validity mask
+        # (q-head-group == token's kv head); the wasted (H_KV-1)/H_KV of
+        # the MACs are bf16 tensor-core ops in a kernel whose budget is
+        # DRAM bytes — fp32 CUDA-core dots here would cost more than the
+        # loads they serve.
+        pid = tl.program_id(0)
+        s_id = pid % n_split
+        b = pid // n_split
+
+        t_len = tl.load(seqlen_ptr + b)
+        n_blocks = (t_len + BT - 1) // BT
+        blocks_per = (n_blocks + n_split - 1) // n_split
+        blk_lo = s_id * blocks_per
+        blk_hi = tl.minimum(n_blocks, blk_lo + blocks_per)
+
+        offs_q = tl.arange(0, BLOCK_Q)
+        offs_d = tl.arange(0, D)
+        q_mask = offs_q < G * H_KV
+        q_ptrs = (q_ptr + b * stride_qb + offs_q[:, None] * stride_qh
+                  + offs_d[None, :])
+        qt = tl.load(q_ptrs, mask=q_mask[:, None], other=0.0) \
+            .to(tl.bfloat16)
+
+        # column c of a tile = (token t, kv head h) with c = t*H_KV + h
+        offs_c = tl.arange(0, BT * H_KV)
+        c_head = offs_c % H_KV
+        c_tok = offs_c // H_KV
+        diag = (offs_q[:, None] // G) == c_head[None, :]
+
+        offs_hd = tl.max_contiguous(
+            tl.multiple_of(tl.arange(0, H_KV * D), H_KV * D), H_KV * D)
+        offs_s = tl.arange(0, H_KV * NG_K)
+        offs_sv = tl.arange(0, H_KV * NG_V)
+        offs_t = tl.arange(0, BT)
+
+        m_i = tl.full([BLOCK_Q], float("-inf"), tl.float32)
+        l_i = tl.zeros([BLOCK_Q], tl.float32)
+        acc = tl.zeros([BLOCK_Q, D], tl.float32)
+
+        for blk_i in range(blk_lo, blk_hi):
+            blk = tl.load(table_ptr + b * stride_tb + blk_i)
+            t0 = blk_i * BT
+            t_mask_c = (t0 + c_tok) < t_len
+
+            k_base = blk * k_row_bytes
+            ku = tl.load(kpool_u8 + k_base + offs_t[:, None] * (H_KV * D)
+                         + offs_hd[None, :])
+            k = _e4m3_to_f32(ku)
+            ks = tl.load(kpool_f32 + k_base // 4 + BT * H_KV * D // 4
+                         + offs_t[:, None] * (H_KV * NG_K)
+                         + offs_s[None, :])
+            k = tl.reshape(k, (BT, H_KV * NG_K, D // NG_K))
+            k = k * ks[:, :, None]
+            # [BT, H_KV*D] row-major == [(t, h), D] — the reshape is free
+            k = tl.reshape(k, (BT * H_KV, D)).to(tl.bfloat16)
+
+            s = tl.dot(qt, tl.trans(k)).to(tl.float32) * sm_scale
+            s = tl.where(diag & t_mask_c[None, :], s, float("-inf"))
+
+            m_new = tl.maximum(m_i, tl.max(s, axis=1))
+            alpha = tl.exp2((m_i - m_new) * 1.4426950408889634)
+            p = tl.exp2((s - m_new[:, None]) * 1.4426950408889634)
+            l_i = l_i * alpha + tl.sum(p, axis=1)
+            acc = acc * alpha[:, None]
+
+            v_base = blk * v_row_bytes
+            vu = tl.load(vpool_u8 + v_base + offs_t[:, None] * (H_KV * D)
+                         + offs_hd[None, :])
+            v = _e4m3_to_f32(vu)
+            vs = tl.load(vpool_f32 + v_base // 4 + BT * H_KV * D // 4
+                         + offs_t[:, None] * (H_KV * NG_V)
+                         + offs_sv[None, :])
+            v = tl.reshape(v, (BT, H_KV * NG_V, D // NG_V))
+            v = v * vs[:, :, None]
+            v = tl.reshape(v, (BT * H_KV, D)).to(tl.bfloat16)
+
+            # invalid columns carry p == 0 (exp of -inf), so the full dot
+            # credits each q row with only its own head's tokens
+            acc += tl.dot(p.to(tl.bfloat16), v).to(tl.float32)
+            m_i = m_new
+
+        # partial layout matches the combine kernel at H_KV=1, G=Hq:
+        # [B, n_split, BLOCK_Q(, D)]
+        part = (b * n_split + s_id) * BLOCK_Q
+        tl.store(m_ptr + part + offs_q, m_i)
+        tl.store(l_ptr + part + offs_q, l_i)
+        tl.store(acc_ptr + part * D + offs_q[:, None] * D + offs_d[None, :],
+                 acc)
+
+    @triton.jit
     def _fp8_combine(
         m_ptr, l_ptr, acc_ptr, o_ptr,
         stride_ob, stride_oh,
@@ -219,7 +333,8 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
                                k_groups: int = 1, v_groups: int = 1,
                                ktile: int = 64, n_split: int | None = None,
                                sm_scale: float | None = None,
-                               num_warps: int = 4, num_stages: int = 3):
+                               num_warps: int = 4, num_stages: int = 3,
+                               pack_heads: bool = False):
     """Decode attention over packed FP8 KV pool rows.
 
     q            [B, H_q, D] bf16/fp16 — ONE decode token per sequence.
@@ -232,6 +347,9 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
                  grid to ~4 CTAs per SM (the first version's B×H_kv grid
                  was 4 CTAs total at batch 1 — occupancy, not bandwidth,
                  was its 40x problem).
+    pack_heads   one CTA per (sequence, split) consuming ALL kv heads —
+                 whole-line reads, tensor-core block-diagonal scores; the
+                 tile is one BT-token block and ``ktile`` is ignored.
 
     Returns [B, H_q, D] in q's dtype.
     """
@@ -246,8 +364,10 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
         sm_scale = D ** -0.5
     if n_split is None:
         sms = torch.cuda.get_device_properties(q.device).multi_processor_count
-        want = max(1, (4 * sms) // max(1, B * n_kv_heads))
-        max_useful = max(1, (int(seq_lens.max()) + ktile - 1) // ktile)
+        ctas_per = B if pack_heads else B * n_kv_heads
+        span = block_tokens if pack_heads else ktile
+        want = max(1, (4 * sms) // max(1, ctas_per))
+        max_useful = max(1, (int(seq_lens.max()) + span - 1) // span)
         n_split = int(min(32, want, max_useful))
 
     from fp8_kv import kv_block_bytes
@@ -256,6 +376,35 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
     v_row = kv_block_bytes(block_tokens, n_kv_heads, head_dim) \
         + block_tokens * n_kv_heads * 4 * (v_groups - 1)
     assert k_pool.numel() % k_row == 0 and v_pool.numel() % v_row == 0
+
+    if pack_heads:
+        # combine expects the packed partial layout at H_KV=1, G=Hq
+        assert q.dtype == torch.bfloat16, "packed path loads q as bf16"
+        block_q = max(16, triton.next_power_of_2(Hq))
+        part = B * n_split * block_q
+        m_buf = torch.empty(part, dtype=torch.float32, device=q.device)
+        l_buf = torch.empty(part, dtype=torch.float32, device=q.device)
+        acc_buf = torch.empty(part * D, dtype=torch.float32,
+                              device=q.device)
+        o = torch.empty_like(q)
+        _fp8_paged_decode_packed[(B * n_split,)](
+            q, k_pool, v_pool,
+            k_pool.view(torch.float32), v_pool.view(torch.float32),
+            block_table, seq_lens.to(torch.int32),
+            m_buf, l_buf, acc_buf,
+            q.stride(0), q.stride(1), block_table.stride(0),
+            k_row, v_row, sm_scale, n_split,
+            H_KV=n_kv_heads, G=G, D=D, BT=block_tokens,
+            NG_K=k_groups, NG_V=v_groups, BLOCK_Q=block_q,
+            num_warps=num_warps, num_stages=num_stages,
+        )
+        _fp8_combine[(B,)](
+            m_buf, l_buf, acc_buf, o,
+            o.stride(0), o.stride(1), n_split,
+            H_KV=1, G=Hq, D=D, BLOCK_G=block_q,
+            num_warps=4,
+        )
+        return o
 
     o = torch.empty_like(q)
     part = B * n_kv_heads * n_split * block_g
