@@ -144,6 +144,54 @@ def ordered_dgrad_ref(g32, packed, scales, sizes, expert_ids, *, fmt):
     return out
 
 
+def silu_locked_ref(x32: np.ndarray) -> np.ndarray:
+    """Executable spec of the fused-FFN activation ("gnf4-silu-horner6/1").
+
+    The native kernel does NOT call libm expf (not lockable across hosts,
+    and ~10 ns/element — at decode shapes that costs more than the pool
+    wake the fusion removes). Instead silu is a FIXED f32 op sequence,
+    mirrored here operation for operation: clamp to [-87, 87],
+    t = xc * -log2(e), n = floor(t + 0.5), degree-6 Horner for 2^(t-n)
+    (mul+add, no FMA — the C build forces -ffp-contract=off), scale by
+    the exact power 2^n, sig = 1/(1+e), silu = x * sig — with piecewise
+    tails beyond the clamps (x for x > 87, exact 0 for x < -87, where
+    true silu is < 1.5e-36), which keeps the astronomic-input case
+    correct and the contract free of subnormal/FTZ corners.
+    """
+    x = np.asarray(x32, dtype=np.float32)
+    xc = np.clip(x, np.float32(-87.0), np.float32(87.0))
+    t = (xc * np.float32(-1.442695040888963e0)).astype(np.float32)
+    # piecewise tails applied at the end: x above the clamp, exact 0 below
+    # (true silu there is < 1.5e-36; the zero tail also removes the
+    # subnormal-vs-FTZ corner from the exactness contract)
+    n = np.floor(t + np.float32(0.5)).astype(np.float32)
+    f = (t - n).astype(np.float32)
+    p = np.full_like(f, np.float32(1.535336188319500e-4))
+    for c in (1.339887440266574e-3, 9.618437357674640e-3,
+              5.550332471162809e-2, 2.402264791363012e-1,
+              6.931472028550421e-1, 1.0):
+        p = (p * f + np.float32(c)).astype(np.float32)
+    e = np.ldexp(p, n.astype(np.int32)).astype(np.float32)
+    sig = (np.float32(1.0) / (np.float32(1.0) + e)).astype(np.float32)
+    r = (x * sig).astype(np.float32)
+    r = np.where(x > np.float32(87.0), x, r)
+    return np.where(x < np.float32(-87.0), np.float32(0.0), r).astype(
+        np.float32)
+
+
+def ref_ffn_grouped(a32, gu_packed, gu_absmax, dn_packed, dn_absmax,
+                    sizes, expert_ids):
+    """Spec for the fused NF4 expert FFN: gu GEMV -> silu(gate) * up ->
+    dn GEMV, gate = gu[:, :H], up = gu[:, H:]. Composition of three locked
+    pieces, so fused-vs-spec is EXACT equality. Slow — test sizes only."""
+    gu = ref_gemv_grouped(a32, gu_packed, gu_absmax, sizes, expert_ids,
+                          fmt="nf4")
+    h_dim = gu.shape[1] // 2
+    h = (silu_locked_ref(gu[:, :h_dim]) * gu[:, h_dim:]).astype(np.float32)
+    return ref_gemv_grouped(h, dn_packed, dn_absmax, sizes, expert_ids,
+                            fmt="nf4")
+
+
 # --------------------------------------------------------------------------- #
 # native wrappers
 # --------------------------------------------------------------------------- #
@@ -229,6 +277,67 @@ def gemv_mxfp4_grouped_cpu(a, packed, scales, sizes, expert_ids, *, threads=0):
         raise ValueError("K mismatch or K % 32 != 0")
     return _run("gnf4_gemv_mxfp4_grouped", a, packed, scales, sizes,
                 expert_ids, threads)
+
+
+def gemm_nf4_ffn_grouped_cpu(a, gu_packed, gu_absmax, dn_packed, dn_absmax,
+                             sizes, expert_ids, *, threads=0):
+    """Fused grouped NF4 expert FFN: one native call (and one pool wake)
+    per layer instead of two — dn(silu(gate) * up) with gate/up the two
+    halves of the gu output. Motivated by the fixbox measurement that the
+    DRAM tier's decode cost is per-call-floor-bound, not bandwidth-bound.
+
+    a [R, K] fp32 rows sorted by group · gu_packed [E, 2H, K//2] u8 ·
+    gu_absmax [E, 2H, K//64] f32 · dn_packed [E, N_dn, H//2] u8 ·
+    dn_absmax [E, N_dn, H//64] f32 · H must be a multiple of 64.
+    Returns [R, N_dn] fp32. Spec: `ref_ffn_grouped` (exact equality).
+    """
+    import ctypes
+
+    import torch
+
+    import gnf4_native
+
+    _check_common(a, gu_packed, gu_absmax, sizes, expert_ids)
+    for t, name in ((dn_packed, "dn_packed"), (dn_absmax, "dn_absmax")):
+        if t.device.type != "cpu" or not t.is_contiguous():
+            raise ValueError(f"{name} must be a contiguous CPU tensor")
+    if gu_absmax.dtype != torch.float32 or dn_absmax.dtype != torch.float32:
+        raise TypeError("absmax must be fp32")
+    n_gu = gu_packed.shape[1]
+    if n_gu % 2:
+        raise ValueError(f"gu output width {n_gu} must be even "
+                         f"(gate/up halves)")
+    h_dim = n_gu // 2
+    if a.shape[1] % 64 or gu_packed.shape[2] * 2 != a.shape[1]:
+        raise ValueError("K mismatch or K % 64 != 0")
+    if h_dim % 64 or dn_packed.shape[2] * 2 != h_dim:
+        raise ValueError(f"dn expects K={h_dim} (=H) with H % 64 == 0, "
+                         f"got packed K={dn_packed.shape[2] * 2}")
+    if dn_packed.shape[0] != gu_packed.shape[0]:
+        raise ValueError("gu/dn expert counts differ")
+
+    lib = gnf4_native.load()
+    e_ids = torch.as_tensor(expert_ids, dtype=torch.int64).contiguous()
+    if int(e_ids.max()) >= gu_packed.shape[0] or int(e_ids.min()) < 0:
+        raise ValueError("expert id out of range")
+    sz = torch.as_tensor(sizes, dtype=torch.int32).contiguous()
+    n_dn = dn_packed.shape[1]
+    out = torch.empty(a.shape[0], n_dn, dtype=torch.float32)
+    rc = lib.gnf4_gemv_nf4_ffn_grouped(
+        ctypes.c_void_p(a.data_ptr()),
+        ctypes.c_void_p(gu_packed.data_ptr()),
+        ctypes.c_void_p(gu_absmax.data_ptr()),
+        ctypes.c_void_p(dn_packed.data_ptr()),
+        ctypes.c_void_p(dn_absmax.data_ptr()),
+        ctypes.c_void_p(e_ids.data_ptr()), ctypes.c_void_p(sz.data_ptr()),
+        len(sizes), n_gu, a.shape[1], n_dn,
+        ctypes.c_void_p(out.data_ptr()), threads,
+    )
+    if rc != 0:
+        raise ValueError(f"gnf4_gemv_nf4_ffn_grouped rejected the call "
+                         f"(rc={rc}) — shape/group contract violated, or "
+                         f"scratch allocation failed (rc=-2)")
+    return out
 
 
 def _check_dgrad(g, packed, scales, sizes, expert_ids):

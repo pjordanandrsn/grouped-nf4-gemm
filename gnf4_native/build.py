@@ -118,6 +118,15 @@ def _typed(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.gnf4_dgrad_nf4_grouped.argtypes = lib.gnf4_gemv_nf4_grouped.argtypes
     lib.gnf4_dgrad_mxfp4_grouped.restype = c.c_int
     lib.gnf4_dgrad_mxfp4_grouped.argtypes = lib.gnf4_gemv_nf4_grouped.argtypes
+    # fused FFN: 13 args, so the int64 trio lands in STACK slots — exactly
+    # where the bare-int default's garbage upper half segfaults (measured:
+    # immediate SIGSEGV on the first call without this registration)
+    lib.gnf4_gemv_nf4_ffn_grouped.restype = c.c_int
+    lib.gnf4_gemv_nf4_ffn_grouped.argtypes = [
+        c.c_void_p, c.c_void_p, c.c_void_p, c.c_void_p, c.c_void_p,
+        c.c_void_p, c.c_void_p, c.c_int, c.c_int64, c.c_int64, c.c_int64,
+        c.c_void_p, c.c_int,
+    ]
     lib.gnf4_route_epilogue_bf16.restype = None
     lib.gnf4_route_epilogue_bf16.argtypes = [
         c.c_void_p, c.c_int64, c.c_int64, c.c_int64, c.c_int, c.c_int,

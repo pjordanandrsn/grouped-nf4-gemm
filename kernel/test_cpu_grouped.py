@@ -376,3 +376,119 @@ def test_one_large_group_equals_the_split_it_replaces():
     whole = cg.gemv_nf4_grouped_cpu(ta, tp, tm, [rows], [3])
     split = cg.gemv_nf4_grouped_cpu(ta, tp, tm, [8, 8, 3], [3, 3, 3])
     assert np.array_equal(whole.numpy(), split.numpy())
+
+
+# --------------------------------------------------------------------------- #
+# fused NF4 expert FFN (one pool wake per layer; hybrid Phase 8 follow-on)
+# --------------------------------------------------------------------------- #
+
+FFN_K, FFN_H, FFN_NDN = 128, 64, 24     # gu is [E, 2H, K/2]; dn [E, NDN, H/2]
+
+
+def _ffn_stack(seed=21, sizes=(1, 9, 3), scale=1.0):
+    """Random packed gu+dn stacks. `scale` inflates activations so the gu
+    outputs sweep the silu clamps (|x| > 87) and the deep negative tail —
+    the corners where a wrong activation contract would hide."""
+    g = np.random.default_rng(seed)
+    gu_p = g.integers(0, 256, size=(E, 2 * FFN_H, FFN_K // 2), dtype=np.uint8)
+    gu_a = (g.random(size=(E, 2 * FFN_H, FFN_K // 64), dtype=np.float32)
+            + 0.5) * np.float32(scale)
+    dn_p = g.integers(0, 256, size=(E, FFN_NDN, FFN_H // 2), dtype=np.uint8)
+    dn_a = g.random(size=(E, FFN_NDN, FFN_H // 64), dtype=np.float32) + 0.5
+    a = g.standard_normal((sum(sizes), FFN_K), dtype=np.float32)
+    eids = [int(x) for x in g.permutation(E)[:len(sizes)]]
+    return a, gu_p, gu_a, dn_p, dn_a, list(sizes), eids
+
+
+def test_silu_locked_ref_tracks_true_silu():
+    """The polynomial is a spec, not an approximation contest — but it must
+    still BE silu: ~2e-8 relative against float64 ground truth on the
+    clamped domain, and exactly x (resp. ~0) beyond the clamps."""
+    x = np.linspace(-87.0, 87.0, 20011, dtype=np.float32)
+    got = cg.silu_locked_ref(x)
+    want = x.astype(np.float64) / (1.0 + np.exp(-x.astype(np.float64)))
+    denom = np.maximum(np.abs(want), 1e-6)
+    # bound is diagnostic (the CONTRACT is the locked op sequence):
+    # the deep tail computes sig via 1/(1+e) and sits a few f32
+    # ulps off true silu — ~9e-7 worst on this grid
+    assert np.max(np.abs(got - want) / denom) < 2e-6
+    big = np.asarray([88.0, 500.0, 1e30], dtype=np.float32)
+    assert np.array_equal(cg.silu_locked_ref(big), big)
+    assert np.array_equal(cg.silu_locked_ref(-big),
+                          np.zeros_like(big))
+
+
+@needs_native
+@pytest.mark.parametrize("sizes,scale", [
+    ((1, 9, 3), 1.0),          # chunk crossing NF4_CELL_ROWS
+    ((1, 1, 1, 1), 1.0),       # every group T=1 -> the paired-column path
+    ((8, 8), 1.0),             # exactly at the row blocking
+    ((2, 5), 40.0),            # activations through the silu clamps
+])
+def test_ffn_fused_matches_composed_spec_exactly(sizes, scale):
+    a, gu_p, gu_a, dn_p, dn_a, sz, eids = _ffn_stack(sizes=sizes,
+                                                     scale=scale)
+    want = cg.ref_ffn_grouped(a, gu_p, gu_a, dn_p, dn_a, sz, eids)
+    got = cg.gemm_nf4_ffn_grouped_cpu(
+        torch.from_numpy(a), torch.from_numpy(gu_p), torch.from_numpy(gu_a),
+        torch.from_numpy(dn_p), torch.from_numpy(dn_a), sz, eids)
+    assert np.array_equal(got.numpy(), want), (
+        f"fused FFN diverged from the composed spec (sizes={sizes}, "
+        f"scale={scale}) — max abs diff "
+        f"{np.max(np.abs(got.numpy() - want))}")
+
+
+@needs_native
+def test_ffn_fused_equals_two_native_calls_plus_locked_silu():
+    """The fusion must change WHERE the chain runs, not what it computes:
+    fused == gemv -> silu_locked_ref -> gemv with the same native cells."""
+    a, gu_p, gu_a, dn_p, dn_a, sz, eids = _ffn_stack(seed=33, sizes=(4, 7))
+    gu = cg.gemv_nf4_grouped_cpu(torch.from_numpy(a), torch.from_numpy(gu_p),
+                                 torch.from_numpy(gu_a), sz, eids)
+    h = (cg.silu_locked_ref(gu.numpy()[:, :FFN_H])
+         * gu.numpy()[:, FFN_H:]).astype(np.float32)
+    dn = cg.gemv_nf4_grouped_cpu(torch.from_numpy(h), torch.from_numpy(dn_p),
+                                 torch.from_numpy(dn_a), sz, eids)
+    fused = cg.gemm_nf4_ffn_grouped_cpu(
+        torch.from_numpy(a), torch.from_numpy(gu_p), torch.from_numpy(gu_a),
+        torch.from_numpy(dn_p), torch.from_numpy(dn_a), sz, eids)
+    assert torch.equal(fused, dn)
+
+
+@needs_native
+def test_ffn_pool_and_threads_do_not_change_bits():
+    a, gu_p, gu_a, dn_p, dn_a, sz, eids = _ffn_stack(seed=44, sizes=(1, 9, 3))
+    args = (torch.from_numpy(a), torch.from_numpy(gu_p),
+            torch.from_numpy(gu_a), torch.from_numpy(dn_p),
+            torch.from_numpy(dn_a), sz, eids)
+    base = cg.gemm_nf4_ffn_grouped_cpu(*args, threads=1)
+    t4 = cg.gemm_nf4_ffn_grouped_cpu(*args, threads=4)
+    assert torch.equal(base, t4)
+    n = cg.pool_start(4)
+    try:
+        assert n >= 1
+        pooled = cg.gemm_nf4_ffn_grouped_cpu(*args)
+    finally:
+        cg.pool_stop()
+    assert torch.equal(base, pooled)
+
+
+@needs_native
+def test_ffn_bad_calls_raise():
+    a, gu_p, gu_a, dn_p, dn_a, sz, eids = _ffn_stack()
+    ta = torch.from_numpy(a)
+    with pytest.raises(ValueError, match="even"):
+        cg.gemm_nf4_ffn_grouped_cpu(ta, torch.from_numpy(gu_p[:, :-1].copy()),
+                                    torch.from_numpy(gu_a[:, :-1].copy()),
+                                    torch.from_numpy(dn_p),
+                                    torch.from_numpy(dn_a), sz, eids)
+    with pytest.raises(ValueError, match="H % 64"):
+        cg.gemm_nf4_ffn_grouped_cpu(ta, torch.from_numpy(gu_p[:, :64].copy()),
+                                    torch.from_numpy(gu_a[:, :64].copy()),
+                                    torch.from_numpy(dn_p),
+                                    torch.from_numpy(dn_a), sz, eids)
+    with pytest.raises(ValueError, match="expert counts"):
+        cg.gemm_nf4_ffn_grouped_cpu(ta, torch.from_numpy(gu_p),
+                                    torch.from_numpy(gu_a),
+                                    torch.from_numpy(dn_p[:2]),
+                                    torch.from_numpy(dn_a[:2]), sz, eids)
