@@ -56,6 +56,7 @@
 #include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include <pthread.h>
@@ -698,6 +699,231 @@ EXPORT int gnf4_gemv_nf4_grouped(const float *a, const uint8_t *B,
                   .eids = eids, .sizes = sizes, .N = N, .K = K, .out = out,
                   .use512 = (gnf4_cpu_features() & 16) != 0 };
     return gemv_common(&c, G, threads, nf4_range, row_off);
+}
+
+/* ------------------------------------------------------- fused NF4 FFN -- */
+/* One pool job per MoE layer instead of two: gu GEMV -> silu(gate)*up ->
+ * dn GEMV, chained inside a work item. The serving measurement that
+ * motivates it: the pool's wake/join floor (~441 us cold at 32 workers)
+ * is paid PER CALL, and the DRAM tier's decode cost is call-count-bound,
+ * not bandwidth-bound (fixbox receipts, e4b bench/hybrid-g9/fixbox/).
+ *
+ * Partition changes from (group, column tile) to (group, row chunk):
+ * the dn stage needs a row's FULL gu output, so a column-tiled item
+ * cannot chain without cross-item waits. Each item owns <= NF4_CELL_ROWS
+ * rows of one group and runs all three stages for them; the intermediate
+ * never leaves the worker's thread-local scratch.
+ *
+ * Activation contract ("gnf4-silu-horner6/1"): silu computed as a LOCKED
+ * f32 op sequence — clamp to [-87, 87], t = xc * -log2(e), n = floor
+ * (t + 0.5), f = t - n, degree-6 Horner for 2^f, scale by the exact
+ * power 2^n via exponent bits, sig = 1/(1+e), silu = x * sig. The numpy
+ * spec mirrors the sequence op for op (same f32 rounding, no FMA — the
+ * -ffp-contract=off this file already requires), so fused-vs-spec stays
+ * EXACT equality, same bar as the GEMV tree. Scalar expf is not used:
+ * it is ~10 ns/element, which at decode shapes would cost more than the
+ * pool wake the fusion removes; and libm expf is not lockable across
+ * hosts anyway. Accuracy of the polynomial is ~2e-8 relative on the
+ * clamped domain — far below NF4 quantization noise. */
+
+#define SILU_C6 1.535336188319500e-4f
+#define SILU_C5 1.339887440266574e-3f
+#define SILU_C4 9.618437357674640e-3f
+#define SILU_C3 5.550332471162809e-2f
+#define SILU_C2 2.402264791363012e-1f
+#define SILU_C1 6.931472028550421e-1f
+#define SILU_LOG2E_NEG -1.442695040888963e0f
+
+static inline float silu_locked(float x) {
+    /* piecewise tails: beyond the clamp true silu is x (resp. < 1.5e-36),
+     * and computing x * sig(clamped) would return x * 1.7e-38 — garbage
+     * for astronomically negative x. Exact x / exact 0 instead; the zero
+     * tail also removes the subnormal-vs-FTZ corner from the contract. */
+    if (x > 87.0f) return x;
+    if (x < -87.0f) return 0.0f;
+    float xc = x;
+    float t = xc * SILU_LOG2E_NEG;
+    float n = floorf(t + 0.5f);
+    float f = t - n;
+    float p = SILU_C6;
+    p = p * f + SILU_C5;
+    p = p * f + SILU_C4;
+    p = p * f + SILU_C3;
+    p = p * f + SILU_C2;
+    p = p * f + SILU_C1;
+    p = p * f + 1.0f;
+    union { uint32_t u; float f32; } sc;
+    sc.u = (uint32_t)((int32_t)n + 127) << 23;   /* n in [-126, 126] */
+    float e = p * sc.f32;
+    return x * (1.0f / (1.0f + e));
+}
+
+#if defined(__AVX512F__)
+/* identical op sequence, 16 lanes at a time — lane l computes exactly
+ * silu_locked(x[l]) (same clamp, same Horner order, mul+add not fma) */
+static inline __m512 silu_locked_avx512(__m512 x) {
+    __m512 xc = _mm512_min_ps(_mm512_max_ps(x, _mm512_set1_ps(-87.0f)),
+                              _mm512_set1_ps(87.0f));
+    __m512 t = _mm512_mul_ps(xc, _mm512_set1_ps(SILU_LOG2E_NEG));
+    __m512 n = _mm512_roundscale_ps(
+        _mm512_add_ps(t, _mm512_set1_ps(0.5f)),
+        _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC);
+    __m512 f = _mm512_sub_ps(t, n);
+    __m512 p = _mm512_set1_ps(SILU_C6);
+    p = _mm512_add_ps(_mm512_mul_ps(p, f), _mm512_set1_ps(SILU_C5));
+    p = _mm512_add_ps(_mm512_mul_ps(p, f), _mm512_set1_ps(SILU_C4));
+    p = _mm512_add_ps(_mm512_mul_ps(p, f), _mm512_set1_ps(SILU_C3));
+    p = _mm512_add_ps(_mm512_mul_ps(p, f), _mm512_set1_ps(SILU_C2));
+    p = _mm512_add_ps(_mm512_mul_ps(p, f), _mm512_set1_ps(SILU_C1));
+    p = _mm512_add_ps(_mm512_mul_ps(p, f), _mm512_set1_ps(1.0f));
+    __m512i sc = _mm512_slli_epi32(
+        _mm512_add_epi32(_mm512_cvtps_epi32(n), _mm512_set1_epi32(127)), 23);
+    __m512 e = _mm512_mul_ps(p, _mm512_castsi512_ps(sc));
+    __m512 sig = _mm512_div_ps(
+        _mm512_set1_ps(1.0f), _mm512_add_ps(_mm512_set1_ps(1.0f), e));
+    __m512 r = _mm512_mul_ps(x, sig);
+    /* same piecewise tails as the scalar path, mask-selected */
+    r = _mm512_mask_mov_ps(r, _mm512_cmp_ps_mask(
+            x, _mm512_set1_ps(87.0f), _CMP_GT_OQ), x);
+    return _mm512_maskz_mov_ps(_mm512_cmp_ps_mask(
+            x, _mm512_set1_ps(-87.0f), _CMP_GE_OQ), r);
+}
+#endif
+
+/* per-thread scratch for the fused chain: NF4_CELL_ROWS rows of gu output
+ * plus the activated half. Grows on demand, lives for the thread — pool
+ * workers are persistent, so this is a one-time cost per worker, not a
+ * leak that accumulates (and small: rows * (N_gu + H) floats). */
+static __thread float *ffn_tls = NULL;
+static __thread int64_t ffn_tls_cap = 0;
+
+static float *ffn_scratch(int64_t floats) {
+    if (ffn_tls_cap < floats) {
+        free(ffn_tls);
+        ffn_tls = (float *)malloc((size_t)floats * sizeof(float));
+        ffn_tls_cap = ffn_tls ? floats : 0;
+    }
+    return ffn_tls;
+}
+
+typedef struct {
+    const float *a;
+    const uint8_t *B_gu; const float *am_gu;
+    const uint8_t *B_dn; const float *am_dn;
+    const int64_t *eids;
+    const int32_t *sizes;
+    const int64_t *row_off;      /* [G] first row of each group */
+    const int64_t *item_off;     /* [G+1] first item of each group */
+    int G;
+    int64_t N_gu, K_gu, N_dn;    /* H = N_gu/2 is dn's K */
+    float *out;
+    int use512;
+    volatile int err;            /* scratch OOM: refuse loudly, never
+                                  * hand back torch.empty garbage */
+} FfnCtx;
+
+static void ffn_range(int64_t lo, int64_t hi, void *argp) {
+    FfnCtx *c = (FfnCtx *)argp;
+    int64_t H = c->N_gu / 2;
+    int g = 0;
+    for (int64_t u = lo; u < hi; u++) {
+        while (c->item_off[g + 1] <= u) g++;     /* u ascends; g follows */
+        int64_t chunk = u - c->item_off[g];
+        int64_t r0 = c->row_off[g] + chunk * NF4_CELL_ROWS;
+        int32_t left = c->sizes[g] - (int32_t)(chunk * NF4_CELL_ROWS);
+        int T = left > NF4_CELL_ROWS ? NF4_CELL_ROWS : left;
+        int64_t e = c->eids[g];
+        const uint8_t *wgu = c->B_gu + e * c->N_gu * (c->K_gu / 2);
+        const float *agu = c->am_gu + e * c->N_gu * (c->K_gu / 64);
+        const uint8_t *wdn = c->B_dn + e * c->N_dn * (H / 2);
+        const float *adn = c->am_dn + e * c->N_dn * (H / 64);
+        const float *a_r = c->a + r0 * c->K_gu;
+        float *gu = ffn_scratch(NF4_CELL_ROWS * (c->N_gu + H));
+        if (!gu) { c->err = 1; return; }
+        float *h = gu + NF4_CELL_ROWS * c->N_gu;
+        int64_t n = 0;
+#if defined(__AVX512F__)
+        if (c->use512 && T == 1) {
+            for (; n + 1 < c->N_gu; n += 2)
+                nf4_cell_t1_pair_avx512(
+                    a_r, c->K_gu,
+                    wgu + n * (c->K_gu / 2), agu + n * (c->K_gu / 64),
+                    wgu + (n + 1) * (c->K_gu / 2),
+                    agu + (n + 1) * (c->K_gu / 64), &gu[n], &gu[n + 1]);
+        }
+#endif
+        for (; n < c->N_gu; n++)
+            nf4_cell(a_r, T, c->K_gu, wgu + n * (c->K_gu / 2),
+                     agu + n * (c->K_gu / 64), gu + n, c->N_gu, c->use512);
+        for (int r = 0; r < T; r++) {
+            const float *row = gu + (int64_t)r * c->N_gu;
+            float *hr = h + (int64_t)r * H;
+            int64_t j = 0;
+#if defined(__AVX512F__)
+            if (c->use512)
+                for (; j + 16 <= H; j += 16)
+                    _mm512_storeu_ps(hr + j, _mm512_mul_ps(
+                        silu_locked_avx512(_mm512_loadu_ps(row + j)),
+                        _mm512_loadu_ps(row + H + j)));
+#endif
+            for (; j < H; j++)
+                hr[j] = silu_locked(row[j]) * row[H + j];
+        }
+        n = 0;
+#if defined(__AVX512F__)
+        if (c->use512 && T == 1) {
+            for (; n + 1 < c->N_dn; n += 2)
+                nf4_cell_t1_pair_avx512(
+                    h, H, wdn + n * (H / 2), adn + n * (H / 64),
+                    wdn + (n + 1) * (H / 2), adn + (n + 1) * (H / 64),
+                    &c->out[r0 * c->N_dn + n], &c->out[r0 * c->N_dn + n + 1]);
+        }
+#endif
+        for (; n < c->N_dn; n++)
+            nf4_cell(h, T, H, wdn + n * (H / 2), adn + n * (H / 64),
+                     c->out + r0 * c->N_dn + n, c->N_dn, c->use512);
+    }
+}
+
+/* a       [R_total, K_gu] fp32, rows sorted by group
+ * B_gu    [E, N_gu, K_gu/2] u8, am_gu [E, N_gu, K_gu/64] f32
+ * B_dn    [E, N_dn, H/2] u8,   am_dn [E, N_dn, H/64] f32, H = N_gu/2
+ * out     [R_total, N_dn] fp32; gate = gu[:, :H], up = gu[:, H:]
+ * returns 0, or -1 on bad shape */
+EXPORT int gnf4_gemv_nf4_ffn_grouped(
+        const float *a, const uint8_t *B_gu, const float *am_gu,
+        const uint8_t *B_dn, const float *am_dn, const int64_t *eids,
+        const int32_t *sizes, int G, int64_t N_gu, int64_t K_gu,
+        int64_t N_dn, float *out, int threads) {
+    if (K_gu % 64 || N_gu <= 0 || N_gu % 2 || (N_gu / 2) % 64 || N_dn <= 0)
+        return -1;
+    if (G <= 0 || G > 512) return -1;
+    int64_t row_off[512], item_off[513];
+    int64_t r0 = 0, items = 0;
+    for (int g = 0; g < G; g++) {
+        if (sizes[g] <= 0) return -1;
+        row_off[g] = r0;
+        item_off[g] = items;
+        r0 += sizes[g];
+        items += (sizes[g] + NF4_CELL_ROWS - 1) / NF4_CELL_ROWS;
+    }
+    item_off[G] = items;
+    FfnCtx c = { .a = a, .B_gu = B_gu, .am_gu = am_gu, .B_dn = B_dn,
+                 .am_dn = am_dn, .eids = eids, .sizes = sizes,
+                 .row_off = row_off, .item_off = item_off, .G = G,
+                 .N_gu = N_gu, .K_gu = K_gu, .N_dn = N_dn, .out = out,
+                 .use512 = (gnf4_cpu_features() & 16) != 0, .err = 0 };
+    if (P.n) {
+        pool_run(ffn_range, &c, items);
+        return c.err ? -2 : 0;
+    }
+#ifdef _OPENMP
+    omp_set_num_threads(threads > 0 ? threads : omp_get_max_threads());
+#endif
+#pragma omp parallel for schedule(static)
+    for (int64_t u = 0; u < items; u++)
+        ffn_range(u, u + 1, &c);
+    return c.err ? -2 : 0;
 }
 
 /* ----------------------------------------------------------- MXFP4 GEMV -- */
