@@ -305,6 +305,12 @@ static inline void lane_step(const uint8_t *codes, const float *lut,
     }
 }
 
+/* NOTE: a portable (scalar-loop) pre-dequant variant was tried and
+ * REVERTED — on the AVX2 fallback the fused lane_step vectorizes better
+ * than a wbuf store/reload split (T=32 regressed 175 -> 238 ms on the
+ * dev Xeon). The hoist lives only in the AVX-512 paths, where the
+ * dequantized vectors stay in zmm registers across the row loop. */
+
 static inline float combine_acc(const float acc[4][16]) {
     float comb[16];
     for (int i = 0; i < 16; i++)
@@ -348,6 +354,19 @@ static inline __m512 lane_step_avx512(__m512i codes32, __m512 lutv,
                                       __m512 scale, const float *a,
                                       __m512 acc) {
     __m512 w = _mm512_mul_ps(_mm512_permutexvar_ps(codes32, lutv), scale);
+    __m512 prod = _mm512_mul_ps(w, _mm512_loadu_ps(a));
+    return _mm512_add_ps(acc, prod);       /* mul+add, NOT fma — locked */
+}
+
+/* Row-batched step over a PRE-DEQUANTIZED weight vector. The dequant
+ * (permute + scale multiply) is invariant across the T rows of a group,
+ * so hoisting it halves the per-row vector work — the 632 us/row term
+ * the rows-curve fit exposed (Phase 8 diag). w is the SAME value the
+ * per-row path computed, so every lane's mul+add sees identical
+ * operands in identical order: bit-exactness is preserved by
+ * construction, and the ordered-ref tests hold it. */
+static inline __m512 lane_step_w_avx512(__m512 w, const float *a,
+                                        __m512 acc) {
     __m512 prod = _mm512_mul_ps(w, _mm512_loadu_ps(a));
     return _mm512_add_ps(acc, prod);       /* mul+add, NOT fma — locked */
 }
@@ -521,13 +540,18 @@ static void nf4_cell(const float *a, int T, int64_t K, const uint8_t *w_row,
             __m512i c0, c1, c2, c3;
             unpack32_avx512(p, 1, &c0, &c1);
             unpack32_avx512(p + 16, 1, &c2, &c3);
+            /* dequant ONCE per block, reuse across the T rows */
+            __m512 w0 = _mm512_mul_ps(_mm512_permutexvar_ps(c0, lutv), sc);
+            __m512 w1 = _mm512_mul_ps(_mm512_permutexvar_ps(c1, lutv), sc);
+            __m512 w2 = _mm512_mul_ps(_mm512_permutexvar_ps(c2, lutv), sc);
+            __m512 w3 = _mm512_mul_ps(_mm512_permutexvar_ps(c3, lutv), sc);
             int64_t base = b * 64;
             for (int r = 0; r < T; r++) {
                 const float *ar = a + (int64_t)r * K + base;
-                accv[r][0] = lane_step_avx512(c0, lutv, sc, ar, accv[r][0]);
-                accv[r][1] = lane_step_avx512(c1, lutv, sc, ar + 16, accv[r][1]);
-                accv[r][2] = lane_step_avx512(c2, lutv, sc, ar + 32, accv[r][2]);
-                accv[r][3] = lane_step_avx512(c3, lutv, sc, ar + 48, accv[r][3]);
+                accv[r][0] = lane_step_w_avx512(w0, ar, accv[r][0]);
+                accv[r][1] = lane_step_w_avx512(w1, ar + 16, accv[r][1]);
+                accv[r][2] = lane_step_w_avx512(w2, ar + 32, accv[r][2]);
+                accv[r][3] = lane_step_w_avx512(w3, ar + 48, accv[r][3]);
             }
         }
         for (int r = 0; r < T; r++) {
@@ -576,6 +600,9 @@ typedef struct {
 } GemvCtx;
 
 #define GEMV_TILE 32
+/* accumulator rows per cell: 8 rows x 4 lane groups = 32 zmm registers,
+ * i.e. the entire AVX-512 register file. Raising it spills. */
+#define NF4_CELL_ROWS 8
 
 static void nf4_range(int64_t lo, int64_t hi, void *argp) {
     GemvCtx *c = (GemvCtx *)argp;
@@ -603,9 +630,29 @@ static void nf4_range(int64_t lo, int64_t hi, void *argp) {
             continue;
         }
 #endif
-        for (int64_t n = tn; n < tn_end; n++)
-            nf4_cell(a_g, c->sizes[g], c->K, w_e + n * (c->K / 2),
-                     am_e + n * (c->K / 64), out_g + n, c->N, c->use512);
+        /* Rows chunk INSIDE the work item (Phase 8). The register
+         * blocking caps a cell at NF4_CELL_ROWS (8 accumulator rows x 4
+         * lane groups = 32 zmm, the whole register file), but a group at
+         * batch may hold more rows than that. Chunking here instead of
+         * splitting the group in the caller is what makes the batch pay
+         * off: the weight row is ~K/2 bytes, so after chunk 0 it is L1-hot
+         * and chunks 1..n cost no DRAM traffic. Splitting into separate
+         * GROUPS (the pre-Phase-8 behaviour) sent the chunks to different
+         * work items — possibly different threads — and re-read the
+         * weights from DRAM every time, which is exactly the amortization
+         * G8 measures. */
+        for (int64_t n = tn; n < tn_end; n++) {
+            int32_t rem = c->sizes[g];
+            int64_t r0 = 0;
+            while (rem > 0) {
+                int T = rem > NF4_CELL_ROWS ? NF4_CELL_ROWS : rem;
+                nf4_cell(a_g + r0 * c->K, T, c->K, w_e + n * (c->K / 2),
+                         am_e + n * (c->K / 64), out_g + r0 * c->N + n,
+                         c->N, c->use512);
+                r0 += T;
+                rem -= T;
+            }
+        }
     }
 }
 
@@ -613,7 +660,9 @@ static int gemv_common(GemvCtx *c, int G, int threads, pool_fn range,
                        int64_t *row_off_buf) {
     int64_t r0 = 0;
     for (int g = 0; g < G; g++) {
-        if (c->sizes[g] <= 0 || c->sizes[g] > 8) return -1;
+        /* group size is no longer capped at the cell's row blocking —
+         * nf4_range/mx_range chunk internally (Phase 8) */
+        if (c->sizes[g] <= 0) return -1;
         row_off_buf[g] = r0;
         r0 += c->sizes[g];
     }
@@ -669,14 +718,17 @@ static void mx_cell(const float *a, int T, int64_t K, const uint8_t *w_row,
             __m512 sc = _mm512_set1_ps(e8m0_scale(e));
             __m512i c0, c1;
             unpack32_avx512(w_row + b * 16, 0, &c0, &c1);
+            /* dequant once per block, reuse across rows (see nf4_cell) */
+            __m512 w0 = _mm512_mul_ps(_mm512_permutexvar_ps(c0, lutv), sc);
+            __m512 w1 = _mm512_mul_ps(_mm512_permutexvar_ps(c1, lutv), sc);
             int64_t base = b * 32;
             /* two lane-groups per block; group parity alternates 0,1,2,3
              * across consecutive blocks: lane-group index = 2b, 2b+1 */
             for (int r = 0; r < T; r++) {
                 const float *ar = a + (int64_t)r * K + base;
                 int g0 = (int)((2 * b) & 3), g1 = (int)((2 * b + 1) & 3);
-                accv[r][g0] = lane_step_avx512(c0, lutv, sc, ar, accv[r][g0]);
-                accv[r][g1] = lane_step_avx512(c1, lutv, sc, ar + 16, accv[r][g1]);
+                accv[r][g0] = lane_step_w_avx512(w0, ar, accv[r][g0]);
+                accv[r][g1] = lane_step_w_avx512(w1, ar + 16, accv[r][g1]);
             }
         }
         for (int r = 0; r < T; r++) {
@@ -742,9 +794,18 @@ static void mx_range(int64_t lo, int64_t hi, void *argp) {
             continue;
         }
 #endif
-        for (int64_t n = tn; n < tn_end; n++)
-            mx_cell(a_g, c->sizes[g], c->K, w_e + n * (c->K / 2),
-                    sc_e + n * (c->K / 32), out_g + n, c->N, c->use512);
+        for (int64_t n = tn; n < tn_end; n++) {   /* row chunking: see nf4_range */
+            int32_t rem = c->sizes[g];
+            int64_t r0 = 0;
+            while (rem > 0) {
+                int T = rem > NF4_CELL_ROWS ? NF4_CELL_ROWS : rem;
+                mx_cell(a_g + r0 * c->K, T, c->K, w_e + n * (c->K / 2),
+                        sc_e + n * (c->K / 32), out_g + r0 * c->N + n,
+                        c->N, c->use512);
+                r0 += T;
+                rem -= T;
+            }
+        }
     }
 }
 

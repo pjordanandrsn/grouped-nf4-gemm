@@ -7,7 +7,9 @@ The native kernels (gnf4_native/cpu_kernels.c, compiled at first use with
 ``-march=native``) consume the SAME packed bytes as the GPU kernels:
 NF4 ``B [E, N, K//2] u8`` + ``absmax [E, N, K//64] f32`` (high nibble =
 even element), MXFP4 ``blocks`` + e8m0 ``scales`` (low nibble = even
-element). fp32 activations in, fp32 out, batch 1–8 rows per routed group.
+element). fp32 activations in, fp32 out, any positive rows per routed group (the
+kernel chunks a group across its 8-row register blocking internally, so
+the weight row stays L1-hot instead of being re-read per chunk — Phase 8).
 
 Bit-exactness contract: the kernel's summation tree is fixed (16-lane
 groups ascending, four round-robin accumulators, mul+add — deliberately no
@@ -169,8 +171,8 @@ def _check_common(a, packed, scales, sizes, expert_ids):
     if sum(sizes) != a.shape[0]:
         raise ValueError(f"sum(sizes)={sum(sizes)} != rows={a.shape[0]}")
     for s in sizes:
-        if not (1 <= s <= 8):
-            raise ValueError(f"group size {s} outside the decode contract 1..8")
+        if s < 1:
+            raise ValueError(f"group size {s} < 1")
 
 
 def _run(fn_name, a, packed, scales, sizes, expert_ids, threads):
@@ -203,7 +205,7 @@ def gemv_nf4_grouped_cpu(a, packed, absmax, sizes, expert_ids, *, threads=0):
     """Grouped NF4 GEMV/small-GEMM on packed bytes, fp32 out.
 
     a [R, K] fp32 rows sorted by group · packed [E, N, K//2] u8 ·
-    absmax [E, N, K//64] f32 · sizes per-group row counts (1..8) ·
+    absmax [E, N, K//64] f32 · sizes per-group row counts (>= 1) ·
     expert_ids [G]. Raises when the native library is unavailable — the
     exact-but-slow path is `ref_gemv_grouped`, deliberately explicit.
     """

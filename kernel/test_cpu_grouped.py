@@ -32,16 +32,16 @@ def test_native_required_when_promised():
             "the exact-parity gate would silently skip")
 
 
-def _nf4_stack(seed=0):
+def _nf4_stack(seed=0, rows=None):
     g = np.random.default_rng(seed)
     packed = g.integers(0, 256, size=(E, N, K // 2), dtype=np.uint8)
     absmax = g.random(size=(E, N, K // 64), dtype=np.float32) + 0.5
-    rows = sum(SIZES)
+    rows = sum(SIZES) if rows is None else rows
     a = g.standard_normal((rows, K), dtype=np.float32)
     return a, packed, absmax
 
 
-def _mx_stack(seed=1, weird_scales=False):
+def _mx_stack(seed=1, weird_scales=False, rows=None):
     g = np.random.default_rng(seed)
     packed = g.integers(0, 256, size=(E, N, K // 2), dtype=np.uint8)
     scales = g.integers(100, 140, size=(E, N, K // 32), dtype=np.uint8)
@@ -49,7 +49,7 @@ def _mx_stack(seed=1, weird_scales=False):
         scales[0, 0, 0] = 0xFF        # oracle ldexp semantics: 2^128
         scales[0, 0, 1] = 0           # subnormal 2^-127
         scales[1, 3, 2] = 0xFF
-    rows = sum(SIZES)
+    rows = sum(SIZES) if rows is None else rows
     a = g.standard_normal((rows, K), dtype=np.float32)
     return a, packed, scales
 
@@ -198,7 +198,7 @@ def test_bad_calls_raise():
     with pytest.raises(TypeError):
         cg.gemv_nf4_grouped_cpu(ta.to(torch.bfloat16), tp, tm, SIZES, EIDS)
     with pytest.raises(ValueError):
-        cg.gemv_nf4_grouped_cpu(ta, tp, tm, [1, 2, 9], EIDS)   # size > 8
+        cg.gemv_nf4_grouped_cpu(ta, tp, tm, [1, 2, 0], EIDS)   # empty group
     with pytest.raises(ValueError):
         cg.gemv_nf4_grouped_cpu(ta, tp, tm, [1, 1, 1], EIDS)   # rows mismatch
     with pytest.raises(ValueError):
@@ -330,3 +330,49 @@ def test_dgrad_rejects_contract_violations():
         cg.dgrad_nf4_grouped_cpu(tg, tp, ta, SIZES, [2, 0, 99])
     with pytest.raises(ValueError, match="< 1"):
         cg.dgrad_nf4_grouped_cpu(tg[:2], tp, ta, [1, 0, 1], EIDS)
+
+
+# --------------------------------------------------------------------------- #
+# Phase 8: groups larger than the cell's 8-row register blocking
+# --------------------------------------------------------------------------- #
+
+@needs_native
+@pytest.mark.parametrize("fmt", ["nf4", "mxfp4"])
+@pytest.mark.parametrize("sizes", [[9], [16], [8, 17, 1], [33, 2]])
+def test_large_groups_match_the_ordered_reference(fmt, sizes):
+    """A group may now hold any number of rows: the kernel chunks across
+    its 8-row register blocking internally so the weight row stays L1-hot
+    (Phase 8's amortization) instead of being re-read per chunk. Outputs
+    are per-row, so chunking cannot change a single bit — and the ordered
+    reference is what proves it."""
+    rows = sum(sizes)
+    eids = [i % E for i in range(len(sizes))]
+    if fmt == "nf4":
+        a, packed, scales = _nf4_stack(rows=rows)
+        fn = cg.gemv_nf4_grouped_cpu
+    else:
+        a, packed, scales = _mx_stack(rows=rows)
+        fn = cg.gemv_mxfp4_grouped_cpu
+    ref = cg.ref_gemv_grouped(a, packed, scales, sizes, eids, fmt=fmt)
+    out = fn(torch.from_numpy(a), torch.from_numpy(packed),
+             torch.from_numpy(scales), sizes, eids)
+    got, want = out.numpy(), ref
+    if fmt == "mxfp4":
+        got = np.nan_to_num(got, nan=1e30, posinf=2e30, neginf=-2e30)
+        want = np.nan_to_num(want, nan=1e30, posinf=2e30, neginf=-2e30)
+    assert np.array_equal(got, want), f"large-group mismatch ({fmt}, {sizes})"
+
+
+@needs_native
+def test_one_large_group_equals_the_split_it_replaces():
+    """The pre-Phase-8 caller split an oversize group into 8-row chunks as
+    SEPARATE groups (re-reading weights per chunk). One large group must
+    produce bit-identical output to that split — same rows, same expert,
+    same order — or the change is a numerics change wearing a perf hat."""
+    rows = 19
+    a, packed, absmax = _nf4_stack(rows=rows)
+    ta, tp, tm = (torch.from_numpy(a), torch.from_numpy(packed),
+                  torch.from_numpy(absmax))
+    whole = cg.gemv_nf4_grouped_cpu(ta, tp, tm, [rows], [3])
+    split = cg.gemv_nf4_grouped_cpu(ta, tp, tm, [8, 8, 3], [3, 3, 3])
+    assert np.array_equal(whole.numpy(), split.numpy())
