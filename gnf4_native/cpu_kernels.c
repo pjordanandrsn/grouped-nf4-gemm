@@ -148,13 +148,16 @@ static struct {
     pool_fn fn;
     void *arg;
     int64_t total;
-    int active;      /* workers ENGAGED for this job (subset engagement):
-                      * partition and join cover exactly [0, active);
-                      * workers with wid >= active wake, see they are not
-                      * engaged, and go straight back to sleep — off the
-                      * join's critical path. The join tail scales with
-                      * the ENGAGED count, which is what the pool-floor
-                      * U-curves actually measured. */
+    /* Subset engagement: the engaged count rides IN the generation word
+     * (gen = counter<<8 | active), so a worker's (job, active) view is
+     * one atomic load — a separate field raced: an unengaged worker
+     * stalled between loading gen and reading active could adopt the
+     * NEXT job's count and run or bump `done` under a stale generation
+     * (bugbot, PR #109). Engaged workers cannot race at all: the join
+     * waits for every one of them before pool_run returns, so no writer
+     * exists while they work. Every sleeper is woken by every job's
+     * broadcast and re-arms `seen`, so the 24-bit counter cannot alias
+     * across a sleep. */
 } P;
 
 static void futex_wait_u32(_Atomic uint32_t *addr, uint32_t val) {
@@ -236,10 +239,12 @@ static void *pool_worker(void *idp) {
             if (atomic_load(&P.stop)) break;
         }
         seen = g;
-        int act = P.active;
+        int act = (int)(g & 0xFF);         /* engaged count, same atomic
+                                            * load as the generation */
         if (wid >= act) continue;          /* not engaged: back to sleep;
-                                            * MUST NOT touch done — the
-                                            * join counts only [0, act) */
+                                            * MUST NOT touch done or the
+                                            * job fields — the join counts
+                                            * only [0, act) */
         int64_t per = (P.total + act - 1) / act;
         int64_t lo = (int64_t)wid * per;
         int64_t hi = lo + per > P.total ? P.total : lo + per;
@@ -277,7 +282,11 @@ EXPORT int gnf4_pool_start(int nthreads) {
 EXPORT void gnf4_pool_stop(void) {
     if (!P.n) return;
     atomic_store(&P.stop, 1);
-    atomic_fetch_add(&P.gen, 1);
+    {
+        uint32_t cur = atomic_load_explicit(&P.gen, memory_order_relaxed);
+        atomic_store_explicit(&P.gen, (((cur >> 8) + 1) << 8),
+                              memory_order_release);
+    }
     futex_wake_all_u32(&P.gen);
     for (int w = 0; w < P.n; w++) pthread_join(P.th[w], NULL);
     P.n = 0;
@@ -289,16 +298,18 @@ EXPORT int gnf4_pool_size(void) { return P.n; }
 static int pool_run(pool_fn fn, void *arg, int64_t total, int want) {
     if (!P.n) return -1;
     if (want <= 0 || want > P.n) want = P.n;
-    P.fn = fn; P.arg = arg; P.total = total; P.active = want;
+    P.fn = fn; P.arg = arg; P.total = total;
     atomic_store_explicit(&P.done, 0, memory_order_release);
-    atomic_fetch_add_explicit(&P.gen, 1, memory_order_release);
+    uint32_t cur = atomic_load_explicit(&P.gen, memory_order_relaxed);
+    atomic_store_explicit(&P.gen, (((cur >> 8) + 1) << 8) | (uint32_t)want,
+                          memory_order_release);
     futex_wake_all_u32(&P.gen);
     /* The caller must not displace a worker: at nthreads == ncores a
      * hard-spinning caller costs one whole core and the job time goes
      * ~10x (measured 190 -> 17 GB/s at 48/48 on metal). Yield
      * periodically so the scheduler can run the worker underneath. */
     int s = 0;
-    while (atomic_load_explicit(&P.done, memory_order_acquire) != P.active) {
+    while (atomic_load_explicit(&P.done, memory_order_acquire) != want) {
         if (++s > 2000) { sched_yield(); s = 0; }
         cpu_relax();
     }
