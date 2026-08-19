@@ -63,16 +63,54 @@ class ColdTier:
             CPU budget via :func:`nvme_reader.default_qd`. The old fixed 4 was
             measured on a loaded 12-core box; on an idle 32-vCPU host qd=8 and
             qd=16 read 12% and 15% faster at the same pattern.
+        protected_rows: capacity-ownership budget, ``<= hot_rows``. Rows
+            beyond it are RECLAIMABLE: still mapped, still readable, first in
+            line to be overwritten. ``None`` (default) = ``hot_rows``, which
+            leaves the reclaimable set permanently empty and every code path
+            below identical to the pre-Stage-3 tier. See "Reclaimable
+            residency" in the class docstring.
+
+    **Reclaimable residency** (Stage 3). Three states, not two:
+
+    - ACTIVE — inside the protected budget.
+    - RECLAIMABLE — logical eviction has revoked capacity ownership, but the
+      packed bytes are untouched and a request before physical overwrite is a
+      **resurrection**: a hit costing no disk read.
+    - absent — the slot was claimed and refilled; the bytes are gone.
+
+    The distinction this adds is bookkeeping over a property the tier already
+    had (eviction here never zeroed a row, so an unprotected mapped row was
+    always a free hit). What did not exist was a *nameable* logical-eviction
+    event, and therefore no way to measure the load-bearing probability
+    ``P(reuse before overwrite | logical eviction)`` — reported by
+    :meth:`stats` as ``reuse_before_overwrite``, over resolved evictions only
+    (rows still sitting reclaimable are unresolved and count on neither side).
+
+    Slot generations make a held reference checkable: ``_gen[slot]`` bumps on
+    every claim, so a caller that snapshotted ``(slot, generation)`` can ask
+    :meth:`validate` whether those bytes are still the expert it meant. An
+    expert id alone never proves a slot's contents — the address-vs-contents
+    lesson, made explicit rather than left to a caller's discipline.
     """
 
     def __init__(self, arena_path: str, *, hot_rows: int, pinned: bool = True,
-                 qd: int | None = None, index=None, reader: ArenaReader | None = None):
+                 qd: int | None = None, index=None, reader: ArenaReader | None = None,
+                 protected_rows: int | None = None):
         if hot_rows < 1:
             raise ValueError("hot_rows must be >= 1")
         self.reader = reader or ArenaReader(arena_path, index, qd=qd)
         self.row_stride = self.reader.row_stride
         self.row_bytes = self.reader.row_bytes
         self.hot_rows = hot_rows
+        if protected_rows is None:
+            protected_rows = hot_rows
+        protected_rows = int(protected_rows)
+        if not 1 <= protected_rows <= hot_rows:
+            raise ValueError(
+                f"protected_rows={protected_rows} must be in [1, "
+                f"hot_rows={hot_rows}] — it is a budget WITHIN the pool, not "
+                f"a second pool")
+        self.protected_rows = protected_rows
         self.buffer, self._keepalive = alloc_landing(
             hot_rows * self.row_stride, pinned=pinned)
         self.pinned = pinned
@@ -88,6 +126,11 @@ class ColdTier:
         self._reserved: set[int] = set()   # slots whose fill is in flight
         self._pending: dict[tuple[int, int], threading.Event] = {}
         self._demand_protected: set[int] = set()
+        # Reclaimable residency: key -> the clock tick at its logical
+        # eviction. Membership IS the RECLAIMABLE state; the row stays in
+        # _slot_of throughout (it is still readable — that is the point).
+        self._reclaimable: dict[tuple[int, int], int] = {}
+        self._gen: list[int] = [0] * hot_rows
 
         self.hits = 0
         self.misses = 0
@@ -104,6 +147,15 @@ class ColdTier:
         self.demand_fill_ns = 0
         self.demand_wait_ns = 0
         self.spec_fill_ns = 0
+        # Reclaimable-residency accounting. Every logical eviction resolves
+        # exactly once, as a resurrection or as an overwrite; the two are the
+        # numerator and the complement of `reuse_before_overwrite`.
+        self.logical_evictions = 0
+        self.resurrections = 0
+        self.spec_resurrections = 0
+        self.reclaimable_overwritten = 0
+        self._reclaim_ticks = 0        # sum of eviction->overwrite lifetimes
+        self._resurrect_ticks = 0      # sum of eviction->resurrection ones
 
     # ---------------------------------------------------------------- slots --
     def _slot_view(self, slot: int) -> memoryview:
@@ -112,12 +164,21 @@ class ColdTier:
 
     def _victim(self, excluded: set) -> int:
         """LFU, LRU tie-break, never a slot in ``excluded`` (this request's own
-        claims, in-flight reservations, and the current demand window)."""
+        claims, in-flight reservations, and the current demand window).
+
+        RECLAIMABLE rows lose every allocation contest by construction — the
+        leading rank term. That is what makes them free capacity rather than a
+        second pool: they are handed over the moment anything needs a slot,
+        and only until then do they preserve information. With no protected
+        budget set the reclaimable set is empty and the ranking is exactly the
+        pre-Stage-3 (freq, last_use) pair.
+        """
         best, best_key = None, None
         for slot, key in enumerate(self._key_of):
             if slot in excluded or slot in self._reserved or key is None:
                 continue
-            k = (self._freq[key], self._last_use.get(key, 0))
+            k = (0 if key in self._reclaimable else 1,
+                 self._freq[key], self._last_use.get(key, 0))
             if best_key is None or k < best_key:
                 best, best_key = slot, k
         if best is None:
@@ -204,6 +265,7 @@ class ColdTier:
                     self.hits += 1
                     if speculative:
                         self.spec_hits += 1
+                    self._resurrect_locked(key, speculative)
                     resolved[key] = slot
                     own.add(slot)
                     if not speculative:
@@ -228,6 +290,7 @@ class ColdTier:
                     self.hits += 1
                     if speculative:
                         self.spec_hits += 1
+                    self._resurrect_locked(key, speculative)
                     resolved[key] = cur
                     own.add(cur)
                     if not speculative:
@@ -324,11 +387,19 @@ class ColdTier:
                 slot = self._slot_of.get(key)
                 if slot is not None:
                     self.hits += 1
+                    self._resurrect_locked(key, False)
                     resolved[key] = slot
                     self._demand_protected.add(slot)
                     continue
             resolved[key] = self._ensure(layer, [key], [key], False,
                                          fresh_window=False)[0]
+        if fresh_window:
+            # One logical-eviction pass per demand ensure, after this
+            # request's window is protected — never inside the recursive
+            # refetch above, which would demote rows the outer call is
+            # still resolving.
+            with self._lock:
+                self._demote_locked()
         return [resolved[k] for k in keys]
 
     def _claim_slot(self, own: set, speculative: bool):
@@ -360,7 +431,58 @@ class ColdTier:
                 del self._slot_of[old]
                 self._key_of[slot] = None         # unpublish before refilling
                 self.evictions += 1
+                born = self._reclaimable.pop(old, None)
+                if born is not None:
+                    # a logical eviction resolving the losing way: the bytes
+                    # were never re-requested and the slot is now spent
+                    self.reclaimable_overwritten += 1
+                    self._reclaim_ticks += self._clock - born
+            # The slot's contents change from here — bump BEFORE the fill, so
+            # a generation snapshot can never straddle a refill. Bumped on the
+            # free-list path too: "generation moved" must mean "may not be the
+            # bytes you saw", never "was definitely evicted".
+            self._gen[slot] += 1
             return slot
+
+    def _resurrect_locked(self, key, speculative: bool) -> None:
+        """Promote a RECLAIMABLE row back to ACTIVE. Metadata only — the bytes
+        never moved, which is the whole claim. No-op for an ACTIVE row."""
+        born = self._reclaimable.pop(key, None)
+        if born is None:
+            return
+        self._resurrect_ticks += self._clock - born
+        if speculative:
+            self.spec_resurrections += 1
+        else:
+            self.resurrections += 1
+
+    def _demote_locked(self) -> None:
+        """Revoke capacity ownership from the worst-ranked ACTIVE rows until
+        the active set fits ``protected_rows``.
+
+        This is the *logical eviction* the directive names, and the event
+        whose interval-until-overwrite is the thing under test. It touches no
+        bytes and issues no I/O: a demoted row stays in ``_slot_of``, stays
+        readable through :meth:`row`, and a request for it before some later
+        claim overwrites its slot is a resurrection.
+
+        Rows in the current demand window are never demoted — the caller is
+        between its ``ensure`` and its reads, and revoking there would count
+        a resurrection for a row that was never at risk.
+        """
+        if self.protected_rows >= self.hot_rows:
+            return                    # nothing can be reclaimable: today's tier
+        over = (len(self._slot_of) - len(self._reclaimable)) - self.protected_rows
+        if over <= 0:
+            return
+        cands = [k for k, s in self._slot_of.items()
+                 if k not in self._reclaimable
+                 and s not in self._demand_protected
+                 and s not in self._reserved]
+        cands.sort(key=lambda k: (self._freq[k], self._last_use.get(k, 0)))
+        for k in cands[:over]:
+            self._reclaimable[k] = self._clock
+            self.logical_evictions += 1
 
     def row(self, layer: int, expert: int) -> memoryview:
         """A resident row's bytes (``row_bytes``, excluding alignment padding).
@@ -378,6 +500,34 @@ class ColdTier:
     def resident(self, layer: int, expert: int) -> bool:
         with self._lock:
             return (layer, int(expert)) in self._slot_of
+
+    def reclaimable(self, layer: int, expert: int) -> bool:
+        """True iff this row is mapped but has lost capacity ownership — a
+        request for it now is a resurrection, not a read."""
+        with self._lock:
+            return (layer, int(expert)) in self._reclaimable
+
+    def generations(self, slots) -> list[int]:
+        """Generation stamps for ``slots``, to snapshot alongside an
+        :meth:`ensure` result. Pair them and hand both to :meth:`validate`
+        before trusting a slot reference that outlived its ensure."""
+        with self._lock:
+            return [self._gen[int(s)] for s in slots]
+
+    def validate(self, layer: int, expert: int, slot: int, generation: int) -> bool:
+        """Are (slot, generation)'s bytes still this expert's?
+
+        False means the slot was claimed since the snapshot — the bytes may be
+        another expert's, or half of one. A caller that skips this check and
+        reads anyway gets a plausible tensor, which is the failure mode this
+        method exists to make impossible to reach by accident.
+        """
+        slot = int(slot)
+        with self._lock:
+            if not 0 <= slot < self.hot_rows:
+                return False
+            return (self._gen[slot] == int(generation)
+                    and self._key_of[slot] == (layer, int(expert)))
 
     def pinned_tensor(self):
         """The pinned buffer as a ``[hot_rows, row_stride]`` uint8 tensor — what
@@ -433,6 +583,35 @@ class ColdTier:
             "evictions": self.evictions,
             "resident_rows": len(self._slot_of),
             "hot_rows": self.hot_rows,
+            # --- reclaimable residency ---------------------------------- #
+            # `evictions` above counts PHYSICAL overwrites; `logical_evictions`
+            # counts revoked ownership. R8 predicts these diverge, and that the
+            # physical one is the operational metric.
+            "protected_rows": self.protected_rows,
+            "reclaimable_rows": len(self._reclaimable),
+            "logical_evictions": self.logical_evictions,
+            "resurrections": self.resurrections,
+            "spec_resurrections": self.spec_resurrections,
+            "reclaimable_overwritten": self.reclaimable_overwritten,
+            # bytes NOT read from NVMe because a demand request found bytes a
+            # logical eviction had left in place
+            "resurrection_bytes_saved": self.resurrections * self.row_bytes,
+            # P(reuse before overwrite | logical eviction), over RESOLVED
+            # evictions only — rows still sitting reclaimable have not
+            # resolved either way and belong in neither term. None until one
+            # resolves, deliberately: a 0.0 from an empty denominator would
+            # read as a measured refutation of R1.
+            "reuse_before_overwrite": (
+                (self.resurrections + self.spec_resurrections) / resolved
+                if (resolved := (self.resurrections + self.spec_resurrections
+                                 + self.reclaimable_overwritten)) else None),
+            "mean_ticks_to_overwrite": (
+                self._reclaim_ticks / self.reclaimable_overwritten
+                if self.reclaimable_overwritten else None),
+            "mean_ticks_to_resurrection": (
+                self._resurrect_ticks / res
+                if (res := self.resurrections + self.spec_resurrections)
+                else None),
             "disk_reads": t["reads"],
             "disk_bytes": t["bytes_read"],
             "io_mode": t["mode"],
