@@ -436,6 +436,15 @@ def pool_start(nthreads: int = 0) -> int:
     return gnf4_native.load().gnf4_pool_start(nthreads)
 
 
+def pool_spin_us(us: int) -> None:
+    """Idle-spin budget (microseconds) before pool workers futex-sleep.
+    us <= 0 restores the ~100 us default. Serving raises it (~2000-3000)
+    so workers stay warm across a forward's inter-call gaps — the
+    first call after an idle window pays ~2.5x (intracall receipts)."""
+    import gnf4_native
+    gnf4_native.load().gnf4_pool_spin_us(int(us))
+
+
 def pool_stop() -> None:
     import gnf4_native
     gnf4_native.load().gnf4_pool_stop()

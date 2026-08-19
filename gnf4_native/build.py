@@ -142,6 +142,8 @@ def _typed(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.gnf4_pool_stop.argtypes = []
     lib.gnf4_pool_size.restype = c.c_int
     lib.gnf4_pool_size.argtypes = []
+    lib.gnf4_pool_spin_us.restype = None
+    lib.gnf4_pool_spin_us.argtypes = [c.c_int]
     return lib
 
 
