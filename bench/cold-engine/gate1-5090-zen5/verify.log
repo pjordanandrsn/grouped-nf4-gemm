@@ -1,0 +1,11 @@
+### ARM A: e4b WITH the Stage-3 PR (main)
+2ba26ff Gate 1 instrument: cold mass you can dial, not cold mass you wait for (#169)
+[WITH_PR] control-vs-coldGPU tokens_match=False first_divergence=59
+[WITH_PR] ref[55:65] =[2570, 1963, 13, 285, 10950, 403, 1335, 4715, 849, 352]
+[WITH_PR] cold[55:65]=[2570, 1963, 13, 285, 253, 1039, 352, 2987, 310, 1335]
+### ARM B: e4b BEFORE the Stage-3 PR (f62c119)
+f62c119 B=16 receipts + campaign handoff: row-scaling is call-level real on both ISAs; B=8 closed on a third host class; B=16 open at 0.698 (#167)
+[PRE_PR] control-vs-coldGPU tokens_match=False first_divergence=59
+[PRE_PR] ref[55:65] =[2570, 1963, 13, 285, 10950, 403, 1335, 4715, 849, 352]
+[PRE_PR] cold[55:65]=[2570, 1963, 13, 285, 253, 1039, 352, 2987, 310, 1335]
+### restored: 2ba26ff Gate 1 instrument: cold mass you can dial, not cold mass you wait for (#169)
