@@ -148,6 +148,14 @@ static struct {
     pool_fn fn;
     void *arg;
     int64_t total;
+    _Atomic int64_t next;    /* work-stealing cursor: engaged workers grab
+                              * item chunks via fetch_add instead of a
+                              * static split — the static partition made
+                              * every call wait on its slowest worker's
+                              * FIXED chunk (the same tail that sank the
+                              * fused kernel's coarse items). Outputs are
+                              * per-item independent, so bit-exactness is
+                              * partition-invariant. */
     /* Subset engagement: the engaged count rides IN the generation word
      * (gen = counter<<8 | active), so a worker's (job, active) view is
      * one atomic load — a separate field raced: an unengaged worker
@@ -245,10 +253,17 @@ static void *pool_worker(void *idp) {
                                             * MUST NOT touch done or the
                                             * job fields — the join counts
                                             * only [0, act) */
-        int64_t per = (P.total + act - 1) / act;
-        int64_t lo = (int64_t)wid * per;
-        int64_t hi = lo + per > P.total ? P.total : lo + per;
-        if (lo < hi) P.fn(lo, hi, P.arg);
+        /* grain: ~8 grabs per engaged worker keeps fetch_add
+         * contention negligible while the tail shrinks to one chunk */
+        int64_t chunk = P.total / ((int64_t)act * 8);
+        if (chunk < 1) chunk = 1;
+        for (;;) {
+            int64_t lo = atomic_fetch_add_explicit(&P.next, chunk,
+                                                   memory_order_relaxed);
+            if (lo >= P.total) break;
+            int64_t hi = lo + chunk > P.total ? P.total : lo + chunk;
+            P.fn(lo, hi, P.arg);
+        }
         atomic_fetch_add_explicit(&P.done, 1, memory_order_release);
     }
     return NULL;
@@ -299,6 +314,7 @@ static int pool_run(pool_fn fn, void *arg, int64_t total, int want) {
     if (!P.n) return -1;
     if (want <= 0 || want > P.n) want = P.n;
     P.fn = fn; P.arg = arg; P.total = total;
+    atomic_store_explicit(&P.next, 0, memory_order_relaxed);
     atomic_store_explicit(&P.done, 0, memory_order_release);
     uint32_t cur = atomic_load_explicit(&P.gen, memory_order_relaxed);
     atomic_store_explicit(&P.gen, (((cur >> 8) + 1) << 8) | (uint32_t)want,
