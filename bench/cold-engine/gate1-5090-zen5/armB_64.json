@@ -1,0 +1,37 @@
+{
+  "schema": "e4b-tribrid-reclaimable/1",
+  "hot_rows": 128,
+  "dest": "cpu",
+  "manifest": "/root/man_cold20.json",
+  "arms": [
+    {
+      "protected_rows": 64,
+      "median_ns": 76908693.5,
+      "reads_in_window": 2618,
+      "logical_evictions": 5729,
+      "resurrections": 1234,
+      "reuse_before_overwrite": 0.217828773168579,
+      "resurrection_bytes_saved": 4367056896,
+      "physical_evictions": 4431,
+      "tokens": [
+        33267,
+        285,
+        10950,
+        323,
+        14020,
+        15,
+        2091,
+        359,
+        6983,
+        271,
+        2362,
+        13,
+        359,
+        513,
+        417,
+        44864
+      ]
+    }
+  ],
+  "all_tokens_identical": true
+}
