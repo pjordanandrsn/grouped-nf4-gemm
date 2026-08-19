@@ -148,6 +148,13 @@ static struct {
     pool_fn fn;
     void *arg;
     int64_t total;
+    int active;      /* workers ENGAGED for this job (subset engagement):
+                      * partition and join cover exactly [0, active);
+                      * workers with wid >= active wake, see they are not
+                      * engaged, and go straight back to sleep — off the
+                      * join's critical path. The join tail scales with
+                      * the ENGAGED count, which is what the pool-floor
+                      * U-curves actually measured. */
 } P;
 
 static void futex_wait_u32(_Atomic uint32_t *addr, uint32_t val) {
@@ -229,7 +236,11 @@ static void *pool_worker(void *idp) {
             if (atomic_load(&P.stop)) break;
         }
         seen = g;
-        int64_t per = (P.total + P.n - 1) / P.n;
+        int act = P.active;
+        if (wid >= act) continue;          /* not engaged: back to sleep;
+                                            * MUST NOT touch done — the
+                                            * join counts only [0, act) */
+        int64_t per = (P.total + act - 1) / act;
         int64_t lo = (int64_t)wid * per;
         int64_t hi = lo + per > P.total ? P.total : lo + per;
         if (lo < hi) P.fn(lo, hi, P.arg);
@@ -275,9 +286,10 @@ EXPORT void gnf4_pool_stop(void) {
 
 EXPORT int gnf4_pool_size(void) { return P.n; }
 
-static int pool_run(pool_fn fn, void *arg, int64_t total) {
+static int pool_run(pool_fn fn, void *arg, int64_t total, int want) {
     if (!P.n) return -1;
-    P.fn = fn; P.arg = arg; P.total = total;
+    if (want <= 0 || want > P.n) want = P.n;
+    P.fn = fn; P.arg = arg; P.total = total; P.active = want;
     atomic_store_explicit(&P.done, 0, memory_order_release);
     atomic_fetch_add_explicit(&P.gen, 1, memory_order_release);
     futex_wake_all_u32(&P.gen);
@@ -286,7 +298,7 @@ static int pool_run(pool_fn fn, void *arg, int64_t total) {
      * ~10x (measured 190 -> 17 GB/s at 48/48 on metal). Yield
      * periodically so the scheduler can run the worker underneath. */
     int s = 0;
-    while (atomic_load_explicit(&P.done, memory_order_acquire) != P.n) {
+    while (atomic_load_explicit(&P.done, memory_order_acquire) != P.active) {
         if (++s > 2000) { sched_yield(); s = 0; }
         cpu_relax();
     }
@@ -671,7 +683,7 @@ static int gemv_common(GemvCtx *c, int G, int threads, pool_fn range,
     c->tiles_n = (c->N + GEMV_TILE - 1) / GEMV_TILE;
     int64_t total = (int64_t)G * c->tiles_n;
     if (P.n) {                             /* executor pool, when started */
-        pool_run(range, c, total);
+        pool_run(range, c, total, threads);
         return 0;
     }
 #ifdef _OPENMP
@@ -914,7 +926,7 @@ EXPORT int gnf4_gemv_nf4_ffn_grouped(
                  .N_gu = N_gu, .K_gu = K_gu, .N_dn = N_dn, .out = out,
                  .use512 = (gnf4_cpu_features() & 16) != 0, .err = 0 };
     if (P.n) {
-        pool_run(ffn_range, &c, items);
+        pool_run(ffn_range, &c, items, threads);
         return c.err ? -2 : 0;
     }
 #ifdef _OPENMP
@@ -1296,7 +1308,7 @@ static int dgrad_common(DgradCtx *c, int G, int threads, pool_fn range,
     c->tiles_k = (c->K + DG_KTILE - 1) / DG_KTILE;
     int64_t total = (int64_t)G * c->tiles_k;
     if (P.n) {
-        pool_run(range, c, total);
+        pool_run(range, c, total, threads);
         return 0;
     }
 #ifdef _OPENMP

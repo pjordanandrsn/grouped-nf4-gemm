@@ -256,6 +256,12 @@ def gemv_nf4_grouped_cpu(a, packed, absmax, sizes, expert_ids, *, threads=0):
     absmax [E, N, K//64] f32 · sizes per-group row counts (>= 1) ·
     expert_ids [G]. Raises when the native library is unavailable — the
     exact-but-slow path is `ref_gemv_grouped`, deliberately explicit.
+
+    ``threads`` under an ACTIVE pool engages that many workers for THIS
+    call (0 = all; oversized clamps) — the join waits only on the
+    engaged subset, so small calls can stop paying the full pool's join
+    tail. Without the pool it is the OpenMP thread count, as before.
+    Bit-identical output for every value (test-pinned).
     """
     import torch
     _check_common(a, packed, absmax, sizes, expert_ids)
