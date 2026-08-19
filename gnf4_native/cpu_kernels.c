@@ -148,7 +148,16 @@ static struct {
     pool_fn fn;
     void *arg;
     int64_t total;
-    _Atomic int64_t next;    /* work-stealing cursor: engaged workers grab
+    _Atomic int64_t next;
+    _Atomic int spin_threshold;  /* worker idle-spin budget before futex
+                                  * sleep, in relax-iterations (~200/us).
+                                  * Default ~100us. Serving raises it to
+                                  * span a forward's inter-call gaps: the
+                                  * measured first-call-after-idle cost is
+                                  * ~2.5x, paid ~32x per step otherwise
+                                  * (intracall receipts). Spinning uses
+                                  * cpu_relax(), so SMT siblings keep the
+                                  * core's resources. */    /* work-stealing cursor: engaged workers grab
                               * item chunks via fetch_add instead of a
                               * static split — the static partition made
                               * every call wait on its slowest worker's
@@ -236,9 +245,12 @@ static void *pool_worker(void *idp) {
         if (atomic_load(&P.stop)) break;
         if (g == seen) {
             int spins = 0;
+            int lim = atomic_load_explicit(&P.spin_threshold,
+                                           memory_order_relaxed);
+            if (lim <= 0) lim = 20000;          /* ~100 µs default */
             while ((g = atomic_load_explicit(&P.gen, memory_order_acquire)) == seen
                    && !atomic_load(&P.stop)) {
-                if (++spins > 20000) {          /* ~100 µs, then sleep */
+                if (++spins > lim) {
                     futex_wait_u32(&P.gen, seen);
                     spins = 0;
                 }
@@ -309,6 +321,14 @@ EXPORT void gnf4_pool_stop(void) {
 }
 
 EXPORT int gnf4_pool_size(void) { return P.n; }
+
+/* idle-spin budget in MICROSECONDS before a worker futex-sleeps.
+ * us <= 0 restores the ~100 us default. Threshold conversion is the
+ * same ~200 relax-iterations/us the default constant encodes. */
+EXPORT void gnf4_pool_spin_us(int us) {
+    atomic_store_explicit(&P.spin_threshold,
+                          us > 0 ? us * 200 : 0, memory_order_relaxed);
+}
 
 static int pool_run(pool_fn fn, void *arg, int64_t total, int want) {
     if (!P.n) return -1;

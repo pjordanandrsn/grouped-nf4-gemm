@@ -536,3 +536,23 @@ def test_pool_subset_rapid_alternation_stays_exact():
             assert torch.equal(base, o), f"iteration {i}"
     finally:
         cg.pool_stop()
+
+
+@needs_native
+def test_pool_spin_budget_does_not_change_bits():
+    """The spin knob is a scheduling hint: any budget must produce the
+    same bits, and the default restores cleanly."""
+    a, packed, absmax = _nf4_stack(seed=19)
+    ta, tp, tm = (torch.from_numpy(a), torch.from_numpy(packed),
+                  torch.from_numpy(absmax))
+    base = cg.gemv_nf4_grouped_cpu(ta, tp, tm, SIZES, EIDS)
+    n = cg.pool_start(4)
+    try:
+        assert n >= 2
+        for us in (3000, 1, 0):
+            cg.pool_spin_us(us)
+            out = cg.gemv_nf4_grouped_cpu(ta, tp, tm, SIZES, EIDS)
+            assert torch.equal(base, out), f"spin_us={us}"
+    finally:
+        cg.pool_spin_us(0)
+        cg.pool_stop()
