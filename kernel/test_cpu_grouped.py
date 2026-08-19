@@ -492,3 +492,47 @@ def test_ffn_bad_calls_raise():
                                     torch.from_numpy(gu_a),
                                     torch.from_numpy(dn_p[:2]),
                                     torch.from_numpy(dn_a[:2]), sz, eids)
+
+
+@needs_native
+def test_pool_subset_engagement_bits_identical():
+    """Per-call `threads` under an ACTIVE pool now engages a worker
+    subset (join covers exactly the engaged set). Any subset must
+    produce the same bits as the full pool and the OMP path — and an
+    oversized request clamps instead of hanging the join."""
+    a, packed, absmax = _nf4_stack(seed=13)
+    ta, tp, tm = (torch.from_numpy(a), torch.from_numpy(packed),
+                  torch.from_numpy(absmax))
+    base = cg.gemv_nf4_grouped_cpu(ta, tp, tm, SIZES, EIDS)
+    n = cg.pool_start(4)
+    try:
+        assert n >= 2
+        outs = [cg.gemv_nf4_grouped_cpu(ta, tp, tm, SIZES, EIDS,
+                                        threads=t)
+                for t in (0, 1, 2, 99)]
+    finally:
+        cg.pool_stop()
+    for o in outs:
+        assert torch.equal(base, o)
+
+
+@needs_native
+def test_pool_subset_rapid_alternation_stays_exact():
+    """Hammer the (gen | active) protocol: rapid alternation of engaged
+    counts across back-to-back jobs is exactly the window where a stale
+    worker could adopt the wrong job's engagement (bugbot, PR #109).
+    A race surfaces as wrong bits or a hung join, probabilistically —
+    400 alternations makes it loud."""
+    a, packed, absmax = _nf4_stack(seed=17)
+    ta, tp, tm = (torch.from_numpy(a), torch.from_numpy(packed),
+                  torch.from_numpy(absmax))
+    base = cg.gemv_nf4_grouped_cpu(ta, tp, tm, SIZES, EIDS)
+    n = cg.pool_start(4)
+    try:
+        assert n >= 3
+        for i in range(400):
+            o = cg.gemv_nf4_grouped_cpu(ta, tp, tm, SIZES, EIDS,
+                                        threads=1 + (i % 3))
+            assert torch.equal(base, o), f"iteration {i}"
+    finally:
+        cg.pool_stop()
