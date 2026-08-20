@@ -36,7 +36,46 @@ No torch at module top (house rule: importable everywhere).
 """
 from __future__ import annotations
 
+from nvme_reader import alloc_landing, check_aligned
 from nvme_residency import segment_geometry, segment_into
+
+
+def scatter_layout(index: dict, segments):
+    """``[(suffix|None, length)]`` covering one whole row in FILE order, or
+    ``None`` when a scattering read would not be legal for this arena.
+
+    ``None`` entries are inter-segment gaps and trailing padding that scratch
+    must absorb, because ``preadv`` fills its iovec list sequentially and
+    cannot skip. Mirrors ``arena_experts._scatter_layout`` deliberately —
+    same refusal rules, same reason.
+
+    Refused when any segment length, gap, or the row padding is not
+    ``align``-aligned: O_DIRECT would EINVAL, or every following destination
+    would be pushed off alignment. Returning ``None`` rather than guessing is
+    the point; the caller falls back to the copy path and says so.
+    """
+    align = index["align"]
+    segs = sorted(index["segments"], key=lambda g: g["seg_off"])
+    row_stride = index["row_stride"]
+    plan, cur, ok = [], 0, True
+    for g in segs:
+        gap = g["seg_off"] - cur
+        if gap:
+            plan.append((None, gap))
+            ok &= gap % align == 0
+        plan.append((g["suffix"], g["length"]))
+        ok &= g["length"] % align == 0
+        cur = g["seg_off"] + g["length"]
+    pad = row_stride - cur
+    if pad:
+        plan.append((None, pad))
+        ok &= pad % align == 0
+    # A view that materializes only SOME segments still has to absorb the
+    # others: the read covers a whole row either way, so an unwanted segment
+    # becomes scratch rather than a hole.
+    want = set(segments)
+    plan = [(sfx if sfx in want else None, ln) for sfx, ln in plan]
+    return plan if ok else None
 
 
 class ColdCpuView:
@@ -56,7 +95,8 @@ class ColdCpuView:
             check lives there rather than being re-implemented here.
     """
 
-    def __init__(self, tier, index: dict, segments, *, casts=None):
+    def __init__(self, tier, index: dict, segments, *, casts=None,
+                 direct=False):
         import torch
 
         self.tier = tier
@@ -70,12 +110,42 @@ class ColdCpuView:
             raise ValueError(f"casts name segments this view does not hold: "
                              f"{sorted(unknown)}")
 
+        self.direct = bool(direct)
+        # Cast first: it is a contradiction in the CALLER's request, so it
+        # should be reported whatever the arena's geometry happens to be.
+        if direct and casts:
+            raise ValueError(
+                "direct=True cannot cast: the kernel DMAs the segment's own "
+                "bytes into the stack, so a widening conversion has nowhere "
+                "to happen. Drop the cast or drop direct=.")
+        self._layout = scatter_layout(index, self.segments) if direct else None
+        if direct and self._layout is None:
+            raise ValueError(
+                "direct=True but this arena's geometry cannot scatter: some "
+                "segment length, inter-segment gap, or row padding is not a "
+                "multiple of align. Construct without direct= to use the copy "
+                "path (correct, one host memcpy per segment per fill).")
+
         self.stacks: dict = {}
+        self._keep = []
         for suffix in self.segments:
-            dt, shape, _off, _ln = segment_geometry(index, suffix)
+            dt, shape, _off, ln = segment_geometry(index, suffix)
             dt = casts.get(suffix, dt)
-            self.stacks[suffix] = torch.empty(
-                (tier.hot_rows, *shape), dtype=dt).contiguous()
+            if not direct:
+                self.stacks[suffix] = torch.empty(
+                    (tier.hot_rows, *shape), dtype=dt).contiguous()
+                continue
+            # Page-aligned, because every row of this stack becomes an
+            # O_DIRECT iovec base. torch's allocator gives 64 B; alloc_landing
+            # gives `align`, and a misaligned base is an EINVAL far from its
+            # cause (the lesson alloc_landing's own docstring records).
+            mv, keep = alloc_landing(tier.hot_rows * ln)
+            self._keep.append(keep)
+            self._mv = getattr(self, "_mv", {})
+            self._mv[suffix] = mv
+            t = torch.frombuffer(mv, dtype=torch.uint8)
+            self.stacks[suffix] = t.view(dt).view(tier.hot_rows, *shape)
+            check_aligned(mv, index["align"])
 
         # What each slot currently holds, as the tier's own identity pair. A
         # slot's ADDRESS never identifies its contents (the invalidation
@@ -86,6 +156,43 @@ class ColdCpuView:
         self.materializations = 0
         self.view_hits = 0
         self.rows_requested = 0
+
+    # ------------------------------------------------------------- landing --
+    def landing(self, layer: int, expert: int, slot: int):
+        """Views for one row's scattering read, in FILE order.
+
+        Hand this to ``ColdTier(landing=...)`` and the kernel DMAs each
+        segment straight into the stack row the CPU kernels will index — no
+        arena-row stop, no ``segment_into`` memcpy. The tier still owns
+        residency; only the destination moves.
+
+        Scratch absorbs gaps, padding, and any segment this view does not
+        materialize, because ``preadv`` fills sequentially and cannot skip.
+        """
+        if not self.direct:
+            raise RuntimeError("landing() requires direct=True")
+        views = []
+        for suffix, ln in self._layout:
+            if suffix is None:
+                views.append(memoryview(self._scratch(ln)))
+            else:
+                mv = self._mv[suffix]
+                views.append(mv[slot * ln:(slot + 1) * ln])
+        return views
+
+    def _scratch(self, ln: int):
+        """One aligned throwaway buffer per distinct gap/padding size, reused
+        across rows. These bytes are read and discarded; nothing may depend on
+        them, and two concurrent fills writing the same scratch is harmless
+        for exactly that reason."""
+        cache = getattr(self, "_scratch_cache", None)
+        if cache is None:
+            cache = self._scratch_cache = {}
+        if ln not in cache:
+            mv, keep = alloc_landing(ln)
+            self._keep.append(keep)
+            cache[ln] = mv
+        return cache[ln]
 
     # ------------------------------------------------------------------ API --
     def stack(self, suffix: str):
@@ -122,9 +229,14 @@ class ColdCpuView:
             if self._held[slot] == (key, gen):
                 self.view_hits += 1
                 continue
-            for suffix in self.segments:
-                segment_into(self.tier, self.index, layer, [e], suffix,
-                             self.stacks[suffix], rows=[slot])
+            if not self.direct:
+                for suffix in self.segments:
+                    segment_into(self.tier, self.index, layer, [e], suffix,
+                                 self.stacks[suffix], rows=[slot])
+            # direct: tier.ensure() above already scattered this row into
+            # these stacks through landing(), so there is nothing to copy.
+            # The stamp below still runs — it is what makes a later hit
+            # skippable.
             # Stamp only after every segment landed: a partially materialized
             # slot must never look current, exactly as the tier publishes a
             # row only once its whole read lands.
