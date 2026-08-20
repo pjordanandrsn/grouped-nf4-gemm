@@ -1,0 +1,83 @@
+{
+  "meta": {
+    "model": "/root/models/olmoe",
+    "steps": 512,
+    "layers": 16,
+    "top_k": 8,
+    "n_experts": 64,
+    "prompt_tokens": 64,
+    "decode": true
+  },
+  "arena_row_bytes": 3342336,
+  "routed_slots": 65536,
+  "pinned": true,
+  "repeats": 3,
+  "points": [
+    {
+      "rows": 128,
+      "protected": 120,
+      "hard_wall_ns": [
+        31418386315,
+        30433489847,
+        30548874699
+      ],
+      "soft_wall_ns": [
+        30671842140,
+        30526574020,
+        30192543367
+      ],
+      "hard_wall_median_ns": 30548874699,
+      "soft_wall_median_ns": 30526574020,
+      "delta_wall_pct": -0.07300000153763438,
+      "hard_reads": 44298,
+      "soft_reads": 44965,
+      "delta_reads_pct": 1.505711318795431,
+      "soft_resurrections": 186,
+      "resurrection_frac_of_routed": 0.002838134765625
+    },
+    {
+      "rows": 256,
+      "protected": 248,
+      "hard_wall_ns": [
+        21852445540,
+        22967378315,
+        21972082910
+      ],
+      "soft_wall_ns": [
+        24015902327,
+        23553395168,
+        24412415352
+      ],
+      "hard_wall_median_ns": 21972082910,
+      "soft_wall_median_ns": 24015902327,
+      "delta_wall_pct": 9.301891975247422,
+      "hard_reads": 32169,
+      "soft_reads": 32604,
+      "delta_reads_pct": 1.3522335167397184,
+      "soft_resurrections": 257,
+      "resurrection_frac_of_routed": 0.0039215087890625
+    },
+    {
+      "rows": 384,
+      "protected": 376,
+      "hard_wall_ns": [
+        15727887509,
+        14729782881,
+        14742069614
+      ],
+      "soft_wall_ns": [
+        15947726999,
+        15656950100,
+        15268199298
+      ],
+      "hard_wall_median_ns": 14742069614,
+      "soft_wall_median_ns": 15656950100,
+      "delta_wall_pct": 6.205916197351095,
+      "hard_reads": 21890,
+      "soft_reads": 22151,
+      "delta_reads_pct": 1.1923252626770213,
+      "soft_resurrections": 313,
+      "resurrection_frac_of_routed": 0.0047760009765625
+    }
+  ]
+}
