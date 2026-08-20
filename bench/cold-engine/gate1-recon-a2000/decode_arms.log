@@ -1,0 +1,100 @@
+# decode_arms.py — RTX A2000 12GB, torch 2.8.0+cu128, triton 3.4.0
+# gnf4 native AVX2 + OpenMP. Three runs, in the order they were made.
+
+########################################################################
+# RUN 1 — DISCARDED. The control carried its own NVMe population, so
+# cold_dest also changed the destination of experts nobody moved. Kept
+# because the confound is the point: same error class as #171, one
+# level up, and the 0.1068/0.1129 below are the probe's, not the tier's.
+########################################################################
+layers=8 experts=32 k=4 steps=128  movers=4/layer (32 of 256 cells)
+
+offload_thin_uniq=None
+ force_cold_mass(source='dram')          max|dlogit|   tokensfirstdiv
+  cold_dest='gpu'  (cold rows 202095/0)      3.4570    False     15
+  cold_dest='cpu'  (cold rows 0/202162)      0.1068     True   None
+  control self-pair                       0.0000     True   None
+
+ force_cold_mass(source='vram')          max|dlogit|   tokensfirstdiv
+  cold_dest='gpu'  (cold rows 205779/0)      0.0000     True   None
+  cold_dest='cpu'  (cold rows 0/205438)      0.1129     True   None
+  control self-pair                       0.0000     True   None
+
+offload_thin_uniq=4
+ force_cold_mass(source='dram')          max|dlogit|   tokensfirstdiv
+  cold_dest='gpu'  (cold rows 202006/0)      0.1121     True   None
+  cold_dest='cpu'  (cold rows 0/202162)      0.1067     True   None
+  control self-pair                       0.0000     True   None
+
+ force_cold_mass(source='vram')          max|dlogit|   tokensfirstdiv
+  cold_dest='gpu'  (cold rows 205779/0)      0.0000     True   None
+  cold_dest='cpu'  (cold rows 0/205438)      0.1129     True   None
+  control self-pair                       0.0000     True   None
+
+
+[exited with code 0]
+
+########################################################################
+# RUN 2 — control with an EMPTY NVMe tier (the gate-1 control shape),
+# wide DRAM population (24 -> 20 after the move). offload_thin_uniq
+# cannot engage in either arm, so this isolates cold_dest alone.
+########################################################################
+layers=8 experts=32 k=4 steps=96  movers=4/layer (32 of 256 cells)
+
+offload_thin_uniq=None
+ control self-pair                        0.0000     True
+
+ force_cold_mass(source='dram')          max|dlogit|   tokensfirstdiv
+  cold_dest='gpu'  (cold rows 21408/0)      0.0683     True   None
+  cold_dest='cpu'  (cold rows 0/21504)      0.0000     True   None
+
+ force_cold_mass(source='vram')          max|dlogit|   tokensfirstdiv
+  cold_dest='gpu'  (cold rows 23257/0)      0.0000     True   None
+  cold_dest='cpu'  (cold rows 0/23338)      0.0676     True   None
+
+offload_thin_uniq=4
+ control self-pair                        0.0000     True
+
+ force_cold_mass(source='dram')          max|dlogit|   tokensfirstdiv
+  cold_dest='gpu'  (cold rows 21408/0)      0.0683     True   None
+  cold_dest='cpu'  (cold rows 0/21504)      0.0000     True   None
+
+ force_cold_mass(source='vram')          max|dlogit|   tokensfirstdiv
+  cold_dest='gpu'  (cold rows 23257/0)      0.0000     True   None
+  cold_dest='cpu'  (cold rows 0/23338)      0.0676     True   None
+
+
+[exited with code 0]
+
+########################################################################
+# RUN 3 — same control, DRAM population STRADDLING the threshold
+# (8 -> 4 after the move, thin=4). This is the one that exercises the
+# flip; source='vram' leaves the DRAM population alone and is the
+# internal control for it.
+########################################################################
+layers=8 experts=32 k=4 steps=96  movers=4/layer (32 of 256 cells)  vram=24 dram=8 -> 4 after the move
+
+offload_thin_uniq=None
+ control self-pair                        0.0000     True
+
+ force_cold_mass(source='dram')          max|dlogit|   tokensfirstdiv
+  cold_dest='gpu'  (cold rows 22984/0)      0.0508     True   None
+  cold_dest='cpu'  (cold rows 0/22915)      0.0000     True   None
+
+ force_cold_mass(source='vram')          max|dlogit|   tokensfirstdiv
+  cold_dest='gpu'  (cold rows 23434/0)      0.0000     True   None
+  cold_dest='cpu'  (cold rows 0/23284)      0.0557     True   None
+
+offload_thin_uniq=4
+ control self-pair                        0.0000     True
+
+ force_cold_mass(source='dram')          max|dlogit|   tokensfirstdiv
+  cold_dest='gpu'  (cold rows 23132/0)      0.0691     True   None
+  cold_dest='cpu'  (cold rows 0/23132)      0.0709     True   None
+
+ force_cold_mass(source='vram')          max|dlogit|   tokensfirstdiv
+  cold_dest='gpu'  (cold rows 23434/0)      0.0000     True   None
+  cold_dest='cpu'  (cold rows 0/23284)      0.0557     True   None
+
+
+[exited with code 0]

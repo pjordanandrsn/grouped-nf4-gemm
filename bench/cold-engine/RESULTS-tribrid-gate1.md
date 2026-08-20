@@ -278,6 +278,66 @@ was specific to the original box instance is **not determined here**, and
 this run cannot distinguish them — the original box is destroyed. Recorded
 as unexplained rather than resolved.
 
+## Addendum: the thin flip, exercised — and a control-design trap
+
+Checks (a) and (b) settled the destination question on this box with the real
+model, and nothing below revisits them. What they did **not** exercise is the
+`offload_thin_uniq` flip: that run had the knob at `None`, so `dram_thin` was
+False on all 16 modules in both arms, and the section above correctly says the
+flip "would bite a run that sets that knob". This turns *would* into
+*does, measured* — and bounds it.
+
+`decode_arms.py` (receipts in `decode_arms.log`) is a portable version of the
+gate-1 equivalence arms: a synthetic 8-layer MoE stack, greedy decode, arms
+compared by generated tokens and max abs logit delta against a control whose
+NVMe tier is empty. Synthetic weights on purpose — the mechanism is a property
+of the engine, not of a checkpoint, and this re-fires in ~10 minutes on any
+CUDA box instead of needing a rented one. It gives no OLMoE divergence indices
+and is not offered as a substitute for the real run.
+
+RTX A2000 12GB, torch 2.8.0+cu128, triton 3.4.0, gnf4 native AVX2 + OpenMP.
+8 layers x 32 experts, top-4, 96 greedy steps, 4 movers per layer, ~23k cold
+rows executed per arm. Max abs logit delta against the control:
+
+| DRAM population | `offload_thin_uniq` | `source` | `cold_dest` | delta | tokens |
+|---|---|---|---|---|---|
+| 24 → 20 (never thin) | `None` | `dram` | `cpu` | **0.0000** | ✓ |
+| 24 → 20 (never thin) | `4` | `dram` | `cpu` | **0.0000** | ✓ |
+| **8 → 4 (straddles)** | `None` | `dram` | `cpu` | **0.0000** | ✓ |
+| **8 → 4 (straddles)** | **`4`** | `dram` | `cpu` | **0.0709** | ✓ |
+| 8 → 4 (straddles) | `None` | `vram` | `gpu` | **0.0000** | ✓ |
+| 8 → 4 (straddles) | `4` | `vram` | `gpu` | **0.0000** | ✓ |
+
+Read the fourth row against the third: **same arm, same movers, same
+destination — only the knob differs, and a bitwise arm stops being bitwise.**
+The experts that moved never changed engine; the four that STAYED did, because
+the population fell to the threshold in the cold arm and not in the control.
+
+The last two rows are the internal control. Under `source="vram"` the DRAM
+population is untouched, so no layer crosses the threshold and the knob changes
+nothing — the effect appears exactly where the population moves and nowhere
+else. Rows 1–2 are the other bound: a population that never comes near the
+threshold is equally immune. **The flip needs the population to straddle**,
+which is why check (b) was right not to see it and why this is not a retraction
+of that result.
+
+It also bounds the size. 0.0709 here against the original run's 0.0703 is the
+same order and the same shape — a constant, bf16-scale residual on an arm that
+should have been exact. That is **suggestive and no more**: different model,
+different geometry, different box, and the original run's knob setting remains
+unrecoverable (which is what e4b#175 fixes going forward). It is recorded as
+the first mechanism measured to produce a residual of that kind on a
+destination-matched CPU arm, not as the cause of that one.
+
+**A control-design trap, recorded because it cost a run.** The first version of
+this probe left an NVMe population in the control. `cold_dest` applies to
+*every* cold expert, so the cold-CPU arm switched those experts' destination
+too, and the arm was unmatched for a reason unrelated to its movers — reading
+0.1068 where the corrected control reads 0.0000. That is the same error class
+as #171, one level up: an equivalence control has to hold the destination fixed
+for **all** experts, not only the ones the arm moves. Run 1 is kept in
+`decode_arms.log` rather than deleted.
+
 ## Addendum: the hide-ratio clause is aimed at 5–11% of the cost
 
 Derived from the committed receipts (`gate1_v2.json` + the calibration
@@ -363,10 +423,19 @@ fraction of routed work. Its numbers (cold arms reading 6,472–12,940 times
 against the control's 1,024) measured tier thrash, not cold-path
 scheduling, and are not reported as a result.
 
-**The registered equivalence metric was the wrong one.** The PREREG fixed a
-5e-2 max-abs-logit tolerance. Over 16 layers, cross-placement rounding
-accumulates past that even on the *correct* CPU path (0.0703). The
-tolerance was **not widened after seeing the data**; instead generated-token
-agreement is reported alongside it, and the clause is scored as registered.
+**The registered equivalence metric was applied to the wrong reference.**
+The PREREG fixed a 5e-2 max-abs-logit tolerance, and every arm exceeded it.
+The tolerance was **not widened after seeing the data**; generated-token
+agreement was reported alongside it and the clause scored as registered.
 Amending the metric requires its own justification and a new stamp — it is
 not a post-hoc edit.
+
+What this paragraph originally concluded from that — *"cross-placement
+rounding accumulates past that even on the **correct** CPU path (0.0703)"* —
+is **struck**. It is contradicted twice above and was left standing here only
+because it sits in a different section: the *Reconciliation* shows
+`control_dram` vs `cold_cpu` bitwise at the layer level, and check (b) shows
+it bitwise end to end on this box. A matched CPU arm does not accumulate past
+the tolerance; it does not accumulate at all. The 0.0703 belongs to the
+original run and is recorded as unexplained, not as a property of the
+metric.
