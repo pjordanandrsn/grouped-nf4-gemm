@@ -159,3 +159,45 @@ def test_absent_slots_are_used_before_active_ones_are_disturbed():
     v.want([2])
     assert v.slot_of(1) is not None and v.slot_of(2) is not None
     assert sum(1 for s in range(4) if v.state(s) == ABSENT) == 2
+
+
+def test_settle_never_releases_a_slot_resurrected_since_its_tag():
+    """gnf4#128. A RETIRING self-hit makes the slot ACTIVE again, but the
+    pending entry recorded before it could outlive the resurrection. settle()
+    then wrote RECLAIMABLE over a LIVE assignment -- making it _claim's first
+    pick, so another expert would be handed bytes the holder still owns."""
+    v = VramSlots(4, protected=2)
+    v.want([0, 1])
+    v.want([2, 3], event_tag="ev1")          # 0,1 -> RETIRING under ev1
+    assert v.state(v.slot_of(0)) == "retiring"
+
+    a, _ = v.want([0, 2], event_tag="ev2")   # self-hit resurrects 0
+    s0 = a[0]
+    assert v.state(s0) == "active"
+
+    v.settle(lambda t: t == "ev1")           # ev1's readers finish
+    assert v.state(s0) == "active", "a live assignment was released"
+
+    a2, _ = v.want([0, 2, 7], event_tag="ev3")
+    assert a2[0] == s0 and a2[7] != s0, "expert 7 was handed live bytes"
+
+
+def test_claim_refuses_a_live_active_slot_while_pipelining():
+    """gnf4#128. With event tags in play the natural victims are RETIRING and
+    get skipped, so the ACTIVE fallback took the recent working set -- whose
+    readers may still be running and which carries no tag to prove otherwise.
+    Refusing the allocation is correct; corrupting the reader is not."""
+    v = VramSlots(2, protected=2)
+    v.want([0, 1])                           # both ACTIVE, neither tagged
+    with pytest.raises(RuntimeError, match="cannot prove are done"):
+        v.want([5], event_tag="ev1")
+
+
+def test_claim_still_takes_active_when_the_caller_asserts_quiescence():
+    """The untagged path is the caller stating there are no readers in
+    flight -- the same assertion that sends _demote's victims straight to
+    RECLAIMABLE. It keeps the fallback."""
+    v = VramSlots(2, protected=2)
+    v.want([0, 1])
+    a, need = v.want([5])                    # no tag -> ACTIVE is fair game
+    assert need == [5] and a[5] in (0, 1)

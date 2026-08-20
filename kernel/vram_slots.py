@@ -101,10 +101,19 @@ class VramSlots:
         """
         n = 0
         for slot, tag in list(self._pending.items()):
-            if completed(tag):
-                del self._pending[slot]
-                self._state[slot] = RECLAIMABLE
-                n += 1
+            if not completed(tag):
+                continue
+            del self._pending[slot]
+            # Only a slot that is STILL retiring may be released. A slot
+            # resurrected by want() since the tag was recorded is live, and
+            # writing RECLAIMABLE over it would make it _claim's FIRST pick
+            # -- handing an in-use assignment's bytes to another expert
+            # (Bugbot, gnf4#128). want() drops the pending entry on
+            # resurrection; this is the second lock on the same door.
+            if self._state[slot] != RETIRING:
+                continue
+            self._state[slot] = RECLAIMABLE
+            n += 1
         return n
 
     # -------------------------------------------------------------- want --
@@ -133,9 +142,13 @@ class VramSlots:
             if s is None:
                 continue
             if self._state[s] == RETIRING:
-                # its readers may still be running; treat as a hit but do not
-                # hand the slot to anyone else until settle() clears it
+                # A self-hit on a retiring slot: the SAME expert wants bytes
+                # that are still its own, so the in-flight readers are no
+                # threat and this is a legitimate resurrection. It stops
+                # being retired, though -- leaving the pending entry behind
+                # let settle() later mark a live assignment RECLAIMABLE.
                 self.blocked_by_retiring += 1
+                self._pending.pop(s, None)
             elif self._state[s] == RECLAIMABLE:
                 self.resurrections += 1
             else:
@@ -146,7 +159,7 @@ class VramSlots:
         for e in experts:
             if e in assign:
                 continue
-            s = self._claim(set(assign.values()))
+            s = self._claim(set(assign.values()), event_tag)
             self._holds[s] = e
             self._state[s] = ACTIVE
             self._gen[s] += 1
@@ -158,12 +171,27 @@ class VramSlots:
         return assign, need
 
     # ------------------------------------------------------------ claim --
-    def _claim(self, protected_now: set) -> int:
+    def _claim(self, protected_now: set, event_tag=None) -> int:
         """A slot for a new expert. RECLAIMABLE first — they lose every
         allocation contest, which is what makes them free capacity rather
         than a second arena — then ABSENT, then ACTIVE. Never RETIRING: its
-        bytes may still be under a running kernel."""
-        for want in (RECLAIMABLE, ABSENT, ACTIVE):
+        bytes may still be under a running kernel.
+
+        The same argument bars ACTIVE **while the caller is pipelining.** An
+        ACTIVE slot outside this request is one that survived the last
+        _demote as within-budget, so it is the recent working set and its
+        readers may well still be running — and it carries no event tag, so
+        nothing here can prove otherwise. Under tags the natural victims are
+        all RETIRING and get skipped, which made a live slot the common
+        pick rather than a rare one (Bugbot, gnf4#128).
+
+        Omitting ``event_tag`` is the caller asserting quiescence — the same
+        assertion that sends _demote's victims straight to RECLAIMABLE — so
+        the ACTIVE fallback is honored there and refused here.
+        """
+        order = ((RECLAIMABLE, ABSENT) if event_tag is not None
+                 else (RECLAIMABLE, ABSENT, ACTIVE))
+        for want in order:
             for s in range(self.n_slots):
                 if s in protected_now or self._state[s] == RETIRING:
                     continue
@@ -172,9 +200,13 @@ class VramSlots:
                         self.overwritten += 1
                     return s
         raise RuntimeError(
-            "no slot available: every slot is either wanted by this request "
-            "or RETIRING with readers still in flight. Size the arena to the "
-            "routed set, or settle() before asking again.")
+            "no slot available: every slot is either wanted by this request, "
+            "RETIRING with readers still in flight, or ACTIVE with readers "
+            "this call cannot prove are done (you supplied an event tag, so "
+            "they may not be). settle() first, or size the arena to the "
+            "routed set. Overwriting a live slot is not offered as a "
+            "fallback: it corrupts the reader instead of failing the "
+            "allocation.")
 
     def _demote(self, keep: set, event_tag) -> None:
         """Revoke ownership from ACTIVE slots beyond the protected budget.
