@@ -49,12 +49,12 @@
         "protected": 248,
         "decline": true,
         "routed": 65536,
-        "transfers": 37016,
-        "declined": 87,
-        "resurrections": 120,
-        "est_ms": 20207.034399999997
+        "transfers": 37130,
+        "declined": 188,
+        "resurrections": 0,
+        "est_ms": 20269.267
       },
-      "delta": 148
+      "delta": 262
     },
     {
       "keep": {
@@ -72,12 +72,12 @@
         "protected": 192,
         "decline": true,
         "routed": 65536,
-        "transfers": 42456,
-        "declined": 138,
-        "resurrections": 275,
-        "est_ms": 23176.730399999997
+        "transfers": 42724,
+        "declined": 385,
+        "resurrections": 0,
+        "est_ms": 23323.0316
       },
-      "delta": 189
+      "delta": 457
     },
     {
       "keep": {
@@ -95,12 +95,12 @@
         "protected": 376,
         "decline": true,
         "routed": 65536,
-        "transfers": 26742,
-        "declined": 174,
-        "resurrections": 272,
-        "est_ms": 14598.457799999998
+        "transfers": 27022,
+        "declined": 432,
+        "resurrections": 0,
+        "est_ms": 14751.309799999999
       },
-      "delta": 274
+      "delta": 554
     },
     {
       "keep": {
@@ -118,12 +118,12 @@
         "protected": 256,
         "decline": true,
         "routed": 65536,
-        "transfers": 36579,
-        "declined": 136,
-        "resurrections": 284,
-        "est_ms": 19968.476099999996
+        "transfers": 36870,
+        "declined": 388,
+        "resurrections": 0,
+        "est_ms": 20127.333
       },
-      "delta": 286
+      "delta": 577
     },
     {
       "keep": {
@@ -141,12 +141,12 @@
         "protected": 504,
         "decline": true,
         "routed": 65536,
-        "transfers": 17850,
-        "declined": 205,
-        "resurrections": 323,
-        "est_ms": 9744.315
+        "transfers": 18175,
+        "declined": 479,
+        "resurrections": 0,
+        "est_ms": 9921.7325
       },
-      "delta": 412
+      "delta": 737
     },
     {
       "keep": {
@@ -164,12 +164,12 @@
         "protected": 512,
         "decline": true,
         "routed": 65536,
-        "transfers": 17145,
-        "declined": 198,
-        "resurrections": 257,
-        "est_ms": 9359.4555
+        "transfers": 17418,
+        "declined": 435,
+        "resurrections": 0,
+        "est_ms": 9508.4862
       },
-      "delta": 502
+      "delta": 775
     },
     {
       "keep": {

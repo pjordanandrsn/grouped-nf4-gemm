@@ -56,11 +56,21 @@ def replay(recs, rows, protected, decline):
             li = int(L)
             routed += len(experts)
             if decline:
-                # Take the DRAM copy for anything sitting reclaimable: unpublish
-                # it so `want` must claim and fill instead of resurrecting.
+                # Take the DRAM copy for every VRAM copy this request could
+                # otherwise reuse for free: unpublish it so `want` must claim
+                # and fill instead.
+                #
+                # BOTH non-active states count, and getting that wrong made
+                # this policy far weaker than advertised (Bugbot, gnf4#156).
+                # State is inspected BEFORE `want`, and `want` runs its own
+                # settle pass, so a row demoted on the previous step is still
+                # RETIRING here -- it flips to RECLAIMABLE inside `want` and
+                # resurrects for free. Filtering on "reclaimable" alone
+                # therefore skipped exactly the copies _want_locked reuses via
+                # its RETIRING self-hit path.
                 give_up = [e for e in experts
                            if (s := c.slots.slot_of((li, int(e)))) is not None
-                           and c.slots.state(s) == "reclaimable"]
+                           and c.slots.state(s) in ("reclaimable", "retiring")]
                 if give_up:
                     declined += c.discard(li, give_up)
             tag = StepTag("cpu")

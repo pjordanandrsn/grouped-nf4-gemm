@@ -41,34 +41,41 @@ Taking the higher tier costs no capacity the alternative would have saved.
 | rows | prot | keep (transfers) | decline | Δ | declined | est. cost (ms) |
 |---|---|---|---|---|---|---|
 | 256 | 128 | 43338 | 43338 | **+0** | 0 | +0.0 |
-| 256 | 248 | 36868 | 37016 | **+148** | 87 | +80.8 |
-| 384 | 192 | 42267 | 42456 | **+189** | 138 | +103.2 |
-| 384 | 376 | 26468 | 26742 | **+274** | 174 | +149.6 |
-| 512 | 256 | 36293 | 36579 | **+286** | 136 | +156.1 |
-| 512 | 504 | 17438 | 17850 | **+412** | 205 | +224.9 |
-| 1024 | 512 | 16643 | 17145 | **+502** | 198 | +274.0 |
+| 256 | 248 | 36868 | 37130 | **+262** | 188 | +143.0 |
+| 384 | 192 | 42267 | 42724 | **+457** | 385 | +249.5 |
+| 384 | 376 | 26468 | 27022 | **+554** | 432 | +302.4 |
+| 512 | 256 | 36293 | 36870 | **+577** | 388 | +315.0 |
+| 512 | 504 | 17438 | 18175 | **+737** | 479 | +402.3 |
+| 1024 | 512 | 16643 | 17418 | **+775** | 435 | +423.1 |
 | 1024 | 1016 | 989 | 989 | **+0** | 0 | +0.0 |
-
 The two ties are structural rather than close calls: `declined = 0` at both,
 so no reclaimable copy was ever available to refuse and the policies are
 identical by construction. Everywhere a choice existed, taking it cost
-between **148** and
-**502** extra row transfers —
-**81
-to 274 ms** over
-the trace at the measured per-row cost.
+between **262** and **775** extra row transfers — **143 to 423 ms** over the trace at the measured per-row cost.
 
-## Why this covers every slack policy, not just this one
+## Why this covers every slack policy
 
-The policy measured here declines **every** reclaimable copy — the extreme
-end of R9's spectrum. A real slack policy would decline some subset.
+The policy measured declines **every copy the cache holds in a non-owned
+state** — both `RECLAIMABLE` and `RETIRING`. That pairing matters and an
+earlier version of this scorer got it wrong: it filtered on `RECLAIMABLE`
+alone, and since state is inspected before `want` runs its own settle pass, a
+row demoted on the previous step is still `RETIRING` at that moment. Those
+flip to reclaimable inside `want` and resurrect for free, so the scorer was
+skipping exactly the copies `_want_locked` reuses through its RETIRING
+self-hit path. Correcting it roughly doubled both the declines (87–205 →
+188–479) and the penalty. Caught by Bugbot on gnf4#156.
 
-That is covered, because declining is dominated **per request**: each
-individual decline adds a transfer and saves no capacity. Any policy that
-declines a subset therefore sits between "never decline" (highest-tier-always,
-the best case) and "always decline" (the worst case measured above), and
-cannot beat the former. There is no subset whose members are individually
-free.
+`ACTIVE` rows are deliberately not declined: those are the current request's
+own working set, not a spare copy lying around. Declining one is more
+dominated still — it pays a transfer *and* evicts a row being used — so
+excluding them cannot hide a policy that would have won.
+
+Everything else is covered because declining is dominated **per request**:
+each individual decline adds a transfer and saves no capacity. Any policy
+declining a subset therefore sits between "never decline" (highest-tier-always,
+the best case) and "decline every non-owned copy" (the worst case measured
+above), and cannot beat the former. There is no subset whose members are
+individually free.
 
 Refuting R9 does not require finding the best slack signal, because no slack
 signal can pay for a strictly dominated action.
