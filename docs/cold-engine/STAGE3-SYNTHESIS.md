@@ -176,6 +176,34 @@ is the same defect shape as R3's unpinned budget and R2's two denominators.
 Full working: `bench/cold-engine/reconciliation/RESULTS-r5-reconciled.md`.
 R6 is untouched, and the uncontended half of R5 stands.
 
+## Four prompts: which conclusions were about routing
+
+Every offline result here replayed one captured trace. Three more now exist —
+code, mathematics, dialogue, same model and decode shape. Re-run against all
+four:
+
+| conclusion | verdict |
+|---|---|
+| **R4 refuted** (frequency > short-window recurrence) | **holds** — 20 of 22 signal cells, all four prompts |
+| **Device row cache beats the positional cache** | **holds, and prose was the WORST case** — 8.9% of positional on math at 384 rows |
+| **Gate 3** — adaptive beats static | **direction holds, magnitude does not** — the published 6–41% is prose's; on code it is **0.5–2.6%** |
+| **EWMA is the better policy** | **does not hold** — plain adaptive beats it on code at every capacity |
+| **Placement beats demand-paging when the tier is scarce** | **does not hold** — on math, demand does 54 reads against static's 2,335 |
+
+The variable is the **working set**, not the capacity: math's scored window
+touches 377 of 1024 pairs against prose's 899, so capacity covers it and
+recency wins outright. And decay helps only when the routing distribution
+drifts — prose drifts, code does not, which is why EWMA reverses.
+
+Two lessons for what gets registered next. **"Placement beats demand-paging
+below N rows" is the wrong shape of claim** — the threshold is
+working-set-relative, and a rule stated in rows cannot be scored across
+workloads. And a policy tuned on one generation should be assumed
+prompt-specific until it has been re-run, which is cheap: the capture is
+`bench/cold-engine/routing-trace/capture_routing.py` and costs about $0.02.
+
+Full working: `bench/cold-engine/routing-trace/RESULTS-generalization.md`.
+
 ## A metric this campaign leaned on does not carry weight
 
 R1–R3 all use **resurrection rate** as though higher were better. Measured
