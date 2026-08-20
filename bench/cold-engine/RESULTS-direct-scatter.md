@@ -70,12 +70,52 @@ self-pair is loose (21.1%) because it is dominated by one-shot cold-start
 fills, so it is reported as the *clean-attribution* arm rather than the
 headline.
 
+## End to end: it pays where fills dominate, and nowhere else
+
+The isolated number above is the fill path. This is the served step, with a
+model, a router, attention and a GPU competing for the same wall. Only
+`cold_direct` varies; each arm asserts the landing it actually took, so a
+silent fallback cannot make both arms the same measurement.
+
+Box: RTX 5090 + EPYC 9655 (Zen 5), gnf4 `9a85ab1` / e4b `3e1728e`,
+OLMoE-1B-7B NF4 arena, 64-token prose prefill then 128 greedy decode steps,
+A/B/A with a self-pair. Receipts `ab_direct.json`, `ab_direct_20.json`.
+
+| cold mass | tier | reads in window | copy | direct | self-pair | Δ |
+|---|---|---|---|---|---|---|
+| 5% | hot_rows=384 | **37** | 55.43 / 56.15 ms | 55.69 ms | 1.31% | **+0.48% — null** |
+| 20% | hot_rows=128 | **2963** | 80.49 / 81.12 ms | **70.40 ms** | 0.79% | **−12.53%** |
+
+Tokens identical across every arm at both points.
+
+**At 5% cold mass the fill path barely runs** — 37 reads across 128 steps,
+about 0.3 fills per step — so a 43% faster fill is 43% of nearly nothing.
+That is exactly what the gate-1 cost attribution predicted: at 1–10% cold
+mass, storage (and therefore filling) is ~5–11% of what cold work costs, so
+an optimization aimed at fills cannot move the wall there.
+
+**At 20%, where the tier is under real pressure and fills dominate, it is
+worth −12.5%** at sixteen times the instrument's own spread.
+
+Worth noting the direct arm issued **more** reads than copy (3761 vs 2963)
+and was still 12.5% faster — it is not winning by doing less I/O. The extra
+reads come from the self-heal path (gnf4#121) dropping rows it had not
+landed, plus the generation bumps that perturb LFU.
+
+### One receipt was lost and the point re-run
+
+The first 20% measurement (−15.90% on a different EPYC 9655 instance,
+`B_dram` 453.4 GB/s against this one's 370.8) was destroyed by operator
+error: the scp and the instance teardown were issued in one command, the
+scp failed on a local path that did not exist, and the destroy ran anyway.
+Rather than cite console scrollback, the point was re-run on a fresh box of
+the same class — hence −12.53% here. Both runs agree in direction and
+magnitude; only the second has a receipt, and only the second is cited.
+
 ## What this does not establish
 
-- **Not an end-to-end serving number.** This is the fill path in isolation —
-  no model, no GPU, no router. The gate-1 cost attribution says software is
-  ~90% of cold-path cost at 1–10% cold mass, but how much of a *served*
-  step this recovers needs the full engine.
+- ~~Not an end-to-end serving number.~~ **Measured** — see the section
+  above. It is worth nothing at 5% cold mass and −12.5% at 20%.
 - **One host, and an old one.** A Xeon E5 v4's memcpy throughput is well
   below a Zen 5's, so this likely **overstates** the benefit relative to the
   gate-1 box. Instrument law 7 applies: state the host class with every
