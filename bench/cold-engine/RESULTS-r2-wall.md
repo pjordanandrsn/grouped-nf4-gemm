@@ -96,6 +96,17 @@ went 16.80% → 15.72%, the slope 533 → 545.9 µs, the residual
 correlation −0.144 → -0.1778. The lowest rate is unchanged at
 5.37%, so every nonzero point still sits above R2's band.
 
+A third, low-severity one followed the fix itself: the windowed `diff`
+blacklisted non-counters by NAME, and `bytes` is a GAUGE (`rows *
+row_stride`), so it differenced to a constant 0 and the committed receipt
+stores 0 where the cache footprint is 317 MB at 24 rows. **No published
+number uses that field**, and it is derivable as `rows x row_stride`, so the
+receipt is left as taken rather than re-run for a column nothing cites. The
+harness now WHITELISTS the monotone counters instead: a gauge wrongly
+differenced reads 0 and looks like a measurement, while a counter wrongly
+carried through reads as a lifetime total and is obvious beside a windowed
+neighbour. Whitelisting fails in the visible direction.
+
 A second defect surfaced with it: the transfer column had been reading
 `overwritten`, an eviction counter, rather than `host_to_cache_rows`. The
 two are near-collinear here, which is why it went unnoticed until the

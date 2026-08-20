@@ -121,24 +121,32 @@ def run_arm(path, index, layer, k, hot_rows, rows, protected, seq, x, warmup):
                 torch.cuda.synchronize()
                 per.append(time.perf_counter_ns() - t0)
         post_t, post_dc = snap()
-        # Difference only counters that are numeric on BOTH sides. Some keys
-        # are not counters at all (rows, protected, row_stride) and some are
-        # derived and NULL until they have a value -- reuse_before_overwrite
-        # is None until an eviction resolves, so post-minus-pre is float minus
-        # None the first time it populates. Post-value is carried through for
-        # those rather than differenced.
-        STATIC = {"rows", "protected", "n_slots", "row_stride",
-                  "reclaimable_now", "retiring_now", "reuse_before_overwrite"}
+        # WHITELIST the monotone counters instead of blacklisting the rest.
+        # Two passes of blacklist-by-name already failed here: first
+        # reuse_before_overwrite (None until an eviction resolves, float
+        # after, so post-minus-pre threw), then `bytes` -- a GAUGE holding
+        # rows*row_stride, which differences to a constant 0 and replaced the
+        # cache footprint with zero in the receipt (Bugbot, gnf4#152).
+        #
+        # The asymmetry is why: a gauge that is wrongly differenced reads 0
+        # and looks like a measurement. A counter that is wrongly carried
+        # through reads as a lifetime total and is obvious next to a windowed
+        # neighbour. Whitelisting fails in the visible direction.
+        COUNTERS = {"active_hits", "gathers", "host_to_cache_rows",
+                    "logical_evictions", "overwritten", "resurrections",
+                    "spec_resurrections", "stalls", "abandoned_steps",
+                    "blocked_by_retiring", "hot_d2d_bytes", "cold_pcie_bytes",
+                    "host_to_device_bytes"}
 
         def diff(post, pre):
             out = {}
             for kk, pv in post.items():
                 qv = pre.get(kk)
-                if kk not in STATIC and isinstance(pv, (int, float)) \
+                if kk in COUNTERS and isinstance(pv, (int, float)) \
                         and isinstance(qv, (int, float)):
                     out[kk] = pv - qv
                 else:
-                    out[kk] = pv
+                    out[kk] = pv          # gauge, static or derived: as-is
             return out
 
         dc = diff(post_dc, pre_dc)
