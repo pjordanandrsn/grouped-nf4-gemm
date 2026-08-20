@@ -1,0 +1,296 @@
+{
+  "meta": {
+    "model": "/root/models/olmoe",
+    "steps": 512,
+    "layers": 16,
+    "top_k": 8,
+    "n_experts": 64,
+    "prompt_tokens": 64,
+    "decode": true
+  },
+  "warm": 256,
+  "period": 32,
+  "decay": 0.5,
+  "pinned_frac": 0.75,
+  "points": [
+    {
+      "rows": 128,
+      "static": 22596,
+      "static_migrations": 0,
+      "adaptive": 21167,
+      "adaptive_migrations": 41,
+      "ewma": 20569,
+      "ewma_migrations": 117,
+      "hybrid": 22921,
+      "hybrid_migrations": 25,
+      "demand": 25105,
+      "demand_migrations": 0,
+      "oracle": 19818,
+      "oracle_migrations": 0,
+      "best": "ewma",
+      "best_vs_oracle_pct": 3.7894843071954787,
+      "adaptive_vs_oracle_pct": 6.8069431829649805
+    },
+    {
+      "rows": 256,
+      "static": 16880,
+      "static_migrations": 0,
+      "adaptive": 15331,
+      "adaptive_migrations": 80,
+      "ewma": 14509,
+      "ewma_migrations": 199,
+      "hybrid": 17343,
+      "hybrid_migrations": 45,
+      "demand": 18874,
+      "demand_migrations": 0,
+      "oracle": 13389,
+      "oracle_migrations": 0,
+      "best": "ewma",
+      "best_vs_oracle_pct": 8.365075808499514,
+      "adaptive_vs_oracle_pct": 14.504443946523265
+    },
+    {
+      "rows": 384,
+      "static": 11708,
+      "static_migrations": 0,
+      "adaptive": 10380,
+      "adaptive_migrations": 78,
+      "ewma": 9684,
+      "ewma_migrations": 217,
+      "hybrid": 10524,
+      "hybrid_migrations": 39,
+      "demand": 13458,
+      "demand_migrations": 0,
+      "oracle": 8498,
+      "oracle_migrations": 0,
+      "best": "ewma",
+      "best_vs_oracle_pct": 13.956224994116262,
+      "adaptive_vs_oracle_pct": 22.146387385267122
+    },
+    {
+      "rows": 512,
+      "static": 7531,
+      "static_migrations": 0,
+      "adaptive": 6226,
+      "adaptive_migrations": 66,
+      "ewma": 5742,
+      "ewma_migrations": 202,
+      "hybrid": 6543,
+      "hybrid_migrations": 35,
+      "demand": 9308,
+      "demand_migrations": 0,
+      "oracle": 4773,
+      "oracle_migrations": 0,
+      "best": "ewma",
+      "best_vs_oracle_pct": 20.301697045883095,
+      "adaptive_vs_oracle_pct": 30.4420699769537
+    },
+    {
+      "rows": 768,
+      "static": 2101,
+      "static_migrations": 0,
+      "adaptive": 1243,
+      "adaptive_migrations": 49,
+      "ewma": 1013,
+      "ewma_migrations": 131,
+      "hybrid": 1133,
+      "hybrid_migrations": 1,
+      "demand": 1330,
+      "demand_migrations": 0,
+      "oracle": 496,
+      "oracle_migrations": 0,
+      "best": "ewma",
+      "best_vs_oracle_pct": 104.23387096774192,
+      "adaptive_vs_oracle_pct": 150.60483870967744
+    }
+  ],
+  "decay_sweep": [
+    {
+      "rows": 128,
+      "decays": [
+        1.0,
+        0.9,
+        0.75,
+        0.5,
+        0.25,
+        0.1
+      ],
+      "reads": [
+        21167,
+        21061,
+        20809,
+        20569,
+        20680,
+        20685
+      ],
+      "oracle": 19818
+    },
+    {
+      "rows": 256,
+      "decays": [
+        1.0,
+        0.9,
+        0.75,
+        0.5,
+        0.25,
+        0.1
+      ],
+      "reads": [
+        15331,
+        15062,
+        14747,
+        14509,
+        14567,
+        14727
+      ],
+      "oracle": 13389
+    },
+    {
+      "rows": 384,
+      "decays": [
+        1.0,
+        0.9,
+        0.75,
+        0.5,
+        0.25,
+        0.1
+      ],
+      "reads": [
+        10380,
+        10148,
+        9906,
+        9684,
+        9716,
+        9833
+      ],
+      "oracle": 8498
+    },
+    {
+      "rows": 512,
+      "decays": [
+        1.0,
+        0.9,
+        0.75,
+        0.5,
+        0.25,
+        0.1
+      ],
+      "reads": [
+        6226,
+        6083,
+        5915,
+        5742,
+        5969,
+        5995
+      ],
+      "oracle": 4773
+    },
+    {
+      "rows": 768,
+      "decays": [
+        1.0,
+        0.9,
+        0.75,
+        0.5,
+        0.25,
+        0.1
+      ],
+      "reads": [
+        1243,
+        1199,
+        1126,
+        1013,
+        1071,
+        1134
+      ],
+      "oracle": 496
+    }
+  ],
+  "pin_sweep": [
+    {
+      "rows": 128,
+      "fracs": [
+        0.25,
+        0.5,
+        0.75,
+        0.9,
+        1.0
+      ],
+      "reads": [
+        27796,
+        25011,
+        22921,
+        21865,
+        21167
+      ]
+    },
+    {
+      "rows": 256,
+      "fracs": [
+        0.25,
+        0.5,
+        0.75,
+        0.9,
+        1.0
+      ],
+      "reads": [
+        17362,
+        16396,
+        17343,
+        16370,
+        15331
+      ]
+    },
+    {
+      "rows": 384,
+      "fracs": [
+        0.25,
+        0.5,
+        0.75,
+        0.9,
+        1.0
+      ],
+      "reads": [
+        12578,
+        11221,
+        10524,
+        11412,
+        10380
+      ]
+    },
+    {
+      "rows": 512,
+      "fracs": [
+        0.25,
+        0.5,
+        0.75,
+        0.9,
+        1.0
+      ],
+      "reads": [
+        9068,
+        7914,
+        6543,
+        6244,
+        6226
+      ]
+    },
+    {
+      "rows": 768,
+      "fracs": [
+        0.25,
+        0.5,
+        0.75,
+        0.9,
+        1.0
+      ],
+      "reads": [
+        1347,
+        1298,
+        1133,
+        1003,
+        1243
+      ]
+    }
+  ]
+}
