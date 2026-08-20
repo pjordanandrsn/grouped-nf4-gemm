@@ -556,12 +556,26 @@ class Mxfp4NvmeResidency(Mxfp4PipelinedGptOss):
             # (under reclaimable residency) even re-mapped.
             from dev_row_cache import StepTag
             tag = StepTag(self.device)
-            assign, need = self._dcache.want(self.layer, cold, tag, self._tag)
+            assign, need = self._dcache.want(self.layer, cold, tag)
             if need:
-                tslots = self.tier.ensure(self.layer, need)
-                pin, dc = self.tier.pinned_tensor(), self._dcache.rowview()
-                for e, ts in zip(need, tslots):
-                    dc[assign[e]].copy_(pin[ts])
+                try:
+                    tslots = self.tier.ensure(self.layer, need)
+                    pin, dc = self.tier.pinned_tensor(), self._dcache.rowview()
+                    for e, ts in zip(need, tslots):
+                        dc[assign[e]].copy_(pin[ts])
+                except BaseException:
+                    # want() published these rows as this expert's BEFORE the
+                    # bytes arrived. A raise here leaves them mapped and empty
+                    # (or half-written), and the next request would find them
+                    # by slot_of and call it a hit -- serving garbage as an
+                    # expert, silently, with no wrong-shape or wrong-dtype to
+                    # trip on. Unpublish before anything can read them, and
+                    # record the tag so rows demoted under it can settle
+                    # instead of retiring against an event that never fires
+                    # (Bugbot, gnf4#131).
+                    self._dcache.discard(self.layer, need)
+                    tag.record()
+                    raise
                 self._dcache.note_filled(len(need))
             self._tag = tag
             for i, e in enumerate(ids):

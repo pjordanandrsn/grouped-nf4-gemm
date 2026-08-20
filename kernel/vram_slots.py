@@ -199,6 +199,29 @@ class VramSlots:
         self._demote(set(assign.values()), event_tag)
         return assign, need
 
+    def discard(self, experts) -> int:
+        """Unpublish rows whose contents can no longer be trusted.
+
+        A fill that raised partway leaves its slot mapped to an expert whose
+        bytes are missing or half-written. Left alone, the next request finds
+        it by :meth:`slot_of` and reports a HIT -- serving garbage as an
+        expert, silently. These rows go to ABSENT rather than RECLAIMABLE:
+        reclaimable means "still valid, just unowned", and that is exactly
+        what these are not. The generation is bumped so any held
+        ``(slot, generation)`` reference stops validating.
+        """
+        n = 0
+        for e in experts:
+            s = self.slot_of(e)
+            if s is None:
+                continue
+            self._holds[s] = None
+            self._state[s] = ABSENT
+            self._gen[s] += 1
+            self._pending.pop(s, None)
+            n += 1
+        return n
+
     # ------------------------------------------------------------ claim --
     def _claim(self, protected_now: set, event_tag=None) -> int:
         """A slot for a new expert. RECLAIMABLE first — they lose every
