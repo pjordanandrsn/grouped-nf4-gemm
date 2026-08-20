@@ -80,8 +80,9 @@ py-modules = [
     "gguf_reader", "kquant_ref",
     # Hybrid tier Phase 2: torch-facing wrappers for the native CPU kernels.
     "cpu_grouped",
-    # Stage 3 (tribrid): the CPU destination for cold experts.
-    "cold_cpu_view",
+    # Stage 3 (tribrid): the CPU destination for cold experts, and the
+    # time-to-contribution cost model the destination rule consumes.
+    "cold_cpu_view", "cold_deadline",
 ]
 
 [tool.setuptools.package-data]
