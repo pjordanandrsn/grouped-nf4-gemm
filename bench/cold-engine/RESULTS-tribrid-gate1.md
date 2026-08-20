@@ -3,7 +3,8 @@
 
 Registered in [`PREREG-tribrid-stage3.md`](PREREG-tribrid-stage3.md),
 stamped `7bf5b2be87aef56dc514f67cf90ea219ba1289004aaf0901e5c3230503a52ef5`
-before any measurement existed. Receipts in `gate1-5090-zen5/`.
+before any measurement existed. Receipts in `gate1-5090-zen5/`; the
+post-hoc reconciliation of the equivalence clause in `gate1-recon-a2000/`.
 
 ## Verdict: **MISS**
 
@@ -12,7 +13,7 @@ attributable to a measured mechanism rather than an inference.
 
 | gate-1 clause | result |
 |---|---|
-| numerically equivalent to the resident reference | **NOT MEASURED** — the comparison was mis-specified (see *Correction*). The clause needs a matched reference and a re-run |
+| numerically equivalent to the resident reference | **NOT MEASURED** — the comparison was mis-specified (see *Correction* and *Reconciliation*). The mechanism is now measured; the clause still needs a matched reference and a re-run |
 | hide ratio ≥ 70% | **MISS** — cold work is essentially unhidden; 5% cold mass costs 26–33% wall |
 | beats both fixed arms | **MISS** — dynamic tracks the better fixed arm, never beats it |
 | ≥1 destination flip | **PASS** — 225/1874 at 1%, 4005/5061 at 5%, 17973/9844 at 20% |
@@ -126,26 +127,111 @@ for exactly the experts under test:
 Cold-CPU matching was structurally guaranteed, not evidence. What was
 measured is the **cross-placement rounding law this engine documents in its
 own first docstring**, reached through a destination switch instead of a
-tier move (3.8e-3 relative RMS / 4.7e-3 relative max on the expert output,
-which greedy decode over 128 steps does not absorb).
+tier move.
 
 Every supporting observation is equally consistent with rounding —
 determinism, independence from `hot_rows` (384/1024/2048), byte-identical
 reproduction pre-PR, and growth with cold mass. Eviction was ruled out and
 the Stage-3 PRs were ruled out; the documented rounding path never was.
 
-**The matched-reference rule** (from e4b `6dccfc1`): compare `"gpu"`
-against the same experts **in VRAM**, and `"cpu"` against them **in DRAM**.
-This harness violated it. A threshold arm is reproducible only against
-itself on the same routing trace, since its destination is per-step.
-
-**The falsifiable check, not yet run** (box destroyed): re-run this sweep
-with `force_cold_mass(source="vram")`. If the mechanism is the rounding
-path, **the arms swap** and cold-GPU becomes the one that matches.
+**The matched-reference rule**: compare `"gpu"` against the same experts
+**in VRAM**, and `"cpu"` against them **in DRAM**. This harness violated
+it. A threshold arm is reproducible only against itself on the same routing
+trace, since its destination is per-step.
 
 Consequently the equivalence clause above is scored **NOT MEASURED** rather
 than MISS. The timing results are unaffected — they never depended on the
 reference — but no equivalence conclusion should be drawn from this run.
+
+### Reconciliation with the e4b account (receipts in `gate1-recon-a2000/`)
+
+The correction above was written from a pure-torch emulation of the two
+destinations. It has since been **measured with the real engine and the real
+kernels** — e4b
+[#173](https://github.com/pjordanandrsn/experts4bit-qlora/pull/173),
+`bench/hybrid-g9/issue171/` — and this section reconciles the two accounts.
+Where they disagree, the measurement wins and the earlier figure is struck
+rather than silently replaced.
+
+Box: RTX A2000 12GB (sm_86), torch 2.8.0+cu128, triton 3.4.0, gnf4 native
+AVX2 + OpenMP. One MoE layer at OLMoE-1B-7B geometry, four placements of the
+SAME experts through the SAME engine, relative RMS on the layer output:
+
+| pair | T=1 | T=8 | T=64 | bitwise |
+|---|---|---|---|---|
+| `control_dram` vs `cold_cpu` | 0.000e+00 | 0.000e+00 | 0.000e+00 | **yes** |
+| `control_vram` vs `cold_gpu` | 0.000e+00 | 0.000e+00 | 0.000e+00 | **yes** |
+| `control_dram` vs `cold_gpu` | 4.590e-03 | 4.622e-03 | 4.627e-03 | no |
+| **`control_dram` vs `control_vram`** | **4.590e-03** | **4.622e-03** | **4.627e-03** | no |
+
+**Three things change in the account above.**
+
+1. *The figure.* `3.8e-3 relative RMS / 4.7e-3 relative max on the expert
+   output` was the emulation. Measured, it is **4.59–4.63e-3 relative RMS on
+   the layer output**, stable from decode (T=1, decode GEMV) to prefill
+   (T=64, M-tile path) — so it is the epilogue and output rounding, not a
+   launch-config artifact.
+
+2. *The prediction is confirmed, at the layer level.* The last row is the
+   whole finding: **DRAM against VRAM, with no cold path anywhere in it,
+   reproduces the cold arm's divergence to the digit**, and both cold
+   destinations are exact against their matched control. That is the
+   `source="vram"` swap, measured directly rather than by re-running the
+   sweep. What remains unrun is the **end-to-end token-sequence** swap on a
+   5090-class box; nothing here bounds how a 16-layer greedy decode
+   amplifies a 4.6e-3 layer perturbation.
+
+3. *One attribution above is now wrong.* "cross-placement rounding
+   accumulates past that even on the **correct CPU path** (0.0703)" does not
+   survive: `control_dram` vs `cold_cpu` is **bitwise**, so the cold-CPU
+   arm's 0.0703 is not cross-placement rounding on the moved experts. It is
+   unexplained, and the next section names a candidate.
+
+**A second way these arms are unmatched, and it is not the destination
+switch.** `_HybridTier.dram_thin` is decided at enable time from the layer's
+TOTAL DRAM population (`0 < n_dram <= offload_thin_uniq`), and
+`force_cold_mass` shrinks that population. So a layer above the threshold in
+the control can fall to or below it in a cold arm, and the DRAM experts that
+**stayed** flip from the CPU tier to the GPU — a destination change on
+experts the arm never touched. Measured (`thin_flip.py`, same box, one
+layer, 3 of 7 DRAM experts moved, `cold_dest="cpu"` so every mover stays on
+the CPU):
+
+| `offload_thin_uniq` | control `n_dram`/thin | cold `n_dram`/thin | rel RMS | bitwise |
+|---|---|---|---|---|
+| `None` | 7 / False | 4 / False | 0.000e+00 | **yes** |
+| `4` | 7 / False | 4 / **True** | 3.654e-03 | no |
+| `8` | 7 / **True** | 4 / **True** | 3.362e-03 | no |
+
+With the knob off the arms are bitwise; with it on they are not, and nothing
+that moved changed engine. `offload_rows` reads per-step DRAM routing
+statistics that `force_cold_mass` also perturbs, so it is the same class.
+
+This is a **candidate** for the 0.0703 residual, not a proven cause, and one
+observation cuts against it: the residual is *exactly* 0.0703125 at all four
+cold masses, where a thin-flip should move as different layers cross the
+threshold. It is recorded as the thing a re-run has to control for.
+
+**Not recoverable from this run.** The receipt records the harness's own
+arguments but **not the engine's `enable_hybrid_tier` kwargs**, and the
+runner was a disposable box script. So whether `offload_thin_uniq` /
+`offload_rows` were set here cannot be established after the fact. A
+placement-arm receipt has to carry the engine configuration, not only the
+sweep configuration — otherwise an arm can differ in a way no reader can
+see.
+
+**What the receipts already show and neither account stated.** At 1% cold
+mass `cold-gpu` has `tokens_match: True` (0.9023 max abs logit); token
+divergence starts at 5% (`first_divergence: 59`). The `dynamic` arm diverges
+at 1% (20.5002, `first_divergence: 59`) — the same step index, a different
+arm. Any restatement of "the cold path generates different text" has to name
+the arm and the cold-mass point.
+
+**The falsifiable checks still open**, in order: (a) re-run this sweep with
+`force_cold_mass(source="vram")` and confirm the arms swap end to end;
+(b) re-run cold-CPU against the control with `offload_thin_uniq=None` and
+see whether 0.0703 goes to 0.0000; (c) record the engine kwargs in the
+receipt so (b) is answerable from the artifact next time.
 
 ## What this run does NOT establish
 
