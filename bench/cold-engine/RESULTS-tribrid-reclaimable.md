@@ -130,3 +130,165 @@ corrects it.
   that R4 points at was not swept.
 - The P(reuse) numbers are specific to this trace's locality. Instrument
   law 7 applies to the wall numbers as always.
+
+---
+
+# Re-measurement (2026-08-20) — R1 measured, and the withdrawal's reasoning corrected
+
+The section above said re-measuring R1 "needs a box and is not done here."
+This is that run.
+
+**Box:** RTX 5090 + AMD EPYC 9755 (Zen5). Measured ceilings: B_vram
+1572.7 GB/s, B_dram 470.99 GB/s, B_nvme 5.96 GB/s **sequential**, G0
+proceed. gnf4 `48c78a1` (fixed) and `0a10eab` (pre-#130, for the control
+arm); e4b `36c0aee` plus the `cold_stats` forwarding fix this run required.
+Same model, same arena geometry, and the **committed routing trace**
+(`olmoe_profile.jsonl`, 1010 rows) — so the placement solve reproduces the
+original cold sets exactly: **265 experts at 5%** (achieved 0.0503) and
+**505 at 20%** (achieved 0.2003). Receipts: `r1-2026-08-20/`.
+
+Instrument notes. (1) This box is proxy-ssh — `ports: None`, instrument
+law 4 — acceptable here because the only bulk transfer is box→HuggingFace.
+(2) Instrument law 7: different host class from the withdrawn runs, so
+**wall** numbers are scored only against same-session matched pairs and
+never against the old document. Read counts are trace-and-policy
+determined and are the load-bearing measurement here.
+
+## R1, measured
+
+**Contended — 505 cold rows, 128-slot pool** (the informative regime):
+
+| protected | reads | logical evict | resurrections | overwritten | **P(reuse)** |
+|---|---|---|---|---|---|
+| 128 (control) | 3293 | 0 | 0 | 0 | — |
+| 96 | 3434 | 3564 | 236 | 3296 | **0.067** |
+| 64 | 3430 | 4039 | 673 | 3302 | **0.169** |
+| 32 | 3430 | 4462 | 1064 | 3302 | **0.244** |
+
+Registered R1 is **5–20%**. Two of three points land inside it, one above:
+**R1 is CONFIRMED, modestly.** The withdrawn "11–60%, exceeded" is gone and
+nothing here restores it.
+
+**Uncontended — 265 cold rows, 384-slot pool: cannot test R1 at all.**
+
+| protected | reads | logical evict | resurrections | overwritten | P(reuse) |
+|---|---|---|---|---|---|
+| 384 / 256 | 218 | 0 | 0 | 0 | — |
+| 192 | 218 | 388 | 362 | 0 | 1.000 |
+| 128 | 218 | 785 | 695 | 0 | 1.000 |
+| 96 | 218 | 1049 | 927 | 0 | 1.000 |
+
+`reclaimable_overwritten` is **zero at every point** — the working set fits
+the pool, so no reclaimable row is ever contended for and P collapses to
+1.000 by construction. That is not a 100% reuse rate; it is the absence of
+the event whose probability R1 asks about. A configuration without capacity
+pressure cannot score this clause in either direction, and the withdrawn
+document's uncontended P values were reporting overwrites that only the bug
+created.
+
+The **ghost working set survives and is sharper**: reads are flat at **218**
+while ownership is cut 4× (384→96). Zero additional disk reads for a 75%
+smaller protected budget.
+
+## The bug's actual effect, isolated
+
+The withdrawal attributed the published numbers to gnf4#112. That is
+testable: run the pre-fix tree (`0a10eab`) against the fixed tree on the
+**same box, same trace, same harness**, with the direct landing off so the
+buggy path is reachable at all.
+
+| protected | P buggy | P fixed | reads buggy | reads fixed |
+|---|---|---|---|---|
+| 96 | 0.082 | **0.067** | 3495 | 3434 |
+| 64 | 0.159 | **0.169** | 3492 | 3430 |
+| 32 | 0.248 | **0.244** | 3488 | 3430 |
+
+**The contamination is real but small.** It inflates P by ~22% at the
+tightest ownership budget, and at the looser two the difference is within
+what the instrument moves anyway. Reads are inflated ~1.8% throughout. The
+withdrawal was the right call — the number was not clean — but its stated
+reasoning ("not a small correction … scales with segments-per-expert")
+**overstated the magnitude**. The bug is not what produced 11–60%.
+
+**Under the current default the bug is unreachable.** `cold_direct` defaults
+to `True`, and `build_cold_view(direct=True)` attaches an external landing
+that bypasses `segment_into` entirely — so buggy and fixed trees return
+identical counters at the default, and the first pass of this
+re-measurement accidentally demonstrated that by finding no difference at
+all. The contamination applies only to the non-direct path, which is no
+longer how this code runs.
+
+### What is still unexplained
+
+Neither tree reproduces the withdrawn absolutes. Published Arm B reads were
+**2618**; every configuration measured here reads **3430–3495**, and the
+buggy tree does not close the gap. So the published figures differ from
+anything reproducible today for reasons **beyond** #112 — most plausibly
+e4b-side changes to how rows are requested between then and now. Recorded
+as an open discrepancy, not resolved. It is why this is presented as a
+fresh measurement of current code rather than a restoration of the old
+number, and why no counter here should be compared across the two
+documents.
+
+## Arm A vs Arm B — the "surviving" read claim does not survive
+
+Arm A is hard eviction (`hot_rows == protected_rows`); Arm B keeps a
+128-slot pool so `128 − protected` rows are reclaimable. Both at 20% cold,
+`cold_direct=True`.
+
+| protected | A reads | B reads | **Δ reads** | A wall | B wall | Δ wall |
+|---|---|---|---|---|---|---|
+| 96 | 3670 | 3434 | **−6.4%** | 76.52 ms | 75.85 ms | −0.9% |
+| 64 | 4103 | 3430 | **−16.4%** | 80.08 ms | 77.38 ms | −3.4% |
+| 32 | **infeasible** | 3430 | — | — | 74.37 ms | — |
+
+Against the registered clauses:
+
+* **≥10% fewer physical NVMe reads: MISSES at protected=96 (−6.4%), PASSES
+  at protected=64 (−16.4%).** The withdrawn document scored this "CONFIRMED
+  at both feasible points" on −14.9% / −29.6%. It does not hold at both.
+  #130 listed this among the claims that survive because they "rest on read
+  counts rather than eviction bookkeeping" — **that reasoning was wrong**:
+  the code change moved the read counts too, in both arms.
+* **5–15% lower exposed cold-path wall: MISS at both points** (−0.9%,
+  −3.4%), consistent with the withdrawn document's own verdict of MISS
+  though not with its magnitudes. Treat the wall clause as **unresolved
+  rather than scored**: deltas this small sit near run-to-run variation,
+  and a first pass on a different host class produced a visibly different
+  wall picture from the same read counts. Only the receipted box is
+  reported here.
+* **Feasibility survives verbatim.** Arm A at protected=32 still fails with
+  the identical named refusal — `request of 36 unique rows exceeds
+  hot_rows=32` — while Arm B at the same ownership budget runs normally.
+  Capacity ownership and information retention come apart exactly as
+  before.
+* **Token-identical in every arm of every run** (`all_tokens_identical:
+  true`, 19 arms across 6 receipts). Reclaimable residency remains pure
+  bookkeeping.
+
+## Corrected scoreboard
+
+| prediction | withdrawn claim | measured now |
+|---|---|---|
+| **R1** — 5–20% reuse before overwrite | 11–60%, "exceeded" | **CONFIRMED** — 6.7 / 16.9 / 24.4% |
+| **R5** — soft eviction ≤ hard | confirmed | **CONFIRMED** — B ≤ A on reads and wall at both feasible points |
+| **R6** — best gains at moderate pressure | shape confirmed | **CONFIRMED** — P rises monotonically as ownership tightens |
+| ≥10% fewer physical NVMe reads | confirmed at both | **PARTIAL** — miss at 96 (−6.4%), pass at 64 (−16.4%) |
+| 5–15% lower exposed cold wall | MISS (3.4–4.4%) | **UNRESOLVED** — −0.9% / −3.4% here, not stable across hosts |
+| ghost working set | ~4× | **CONFIRMED** — 4× cut in ownership, 0 extra reads |
+| feasibility extension | observed | **CONFIRMED** — identical named refusal |
+| no numerical difference | confirmed | **CONFIRMED** — 19/19 arms token-identical |
+
+## What this still does not establish
+
+Everything in "What this does not establish" above stands unchanged: no
+cold→GPU arm, no VRAM-side reclaimable arm (R2, R3, R4, R7–R10 remain
+untested), `order="tail"` only, one trace's locality. Added by this run:
+
+- **The uncontended regime cannot score R1** and must not be quoted for it.
+  Only configurations where the routed set exceeds the pool produce the
+  overwrite event the prediction is about.
+- **The gap to the withdrawn absolutes is open.** Until it is explained, no
+  counter in this document may be compared against the pre-correction one.
+- **The wall clause needs an instrument that resolves single-digit
+  percentages** before it can be scored either way.
