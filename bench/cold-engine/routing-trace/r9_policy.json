@@ -1,0 +1,203 @@
+{
+  "meta": {
+    "model": "/root/models/olmoe",
+    "steps": 512,
+    "layers": 16,
+    "top_k": 8,
+    "n_experts": 64,
+    "prompt_tokens": 64,
+    "decode": true
+  },
+  "us_per_row": 545.9,
+  "points": [
+    {
+      "keep": {
+        "rows": 256,
+        "protected": 128,
+        "decline": false,
+        "routed": 65536,
+        "transfers": 43338,
+        "declined": 0,
+        "resurrections": 0,
+        "est_ms": 23658.2142
+      },
+      "decline": {
+        "rows": 256,
+        "protected": 128,
+        "decline": true,
+        "routed": 65536,
+        "transfers": 43338,
+        "declined": 0,
+        "resurrections": 0,
+        "est_ms": 23658.2142
+      },
+      "delta": 0
+    },
+    {
+      "keep": {
+        "rows": 256,
+        "protected": 248,
+        "decline": false,
+        "routed": 65536,
+        "transfers": 36868,
+        "declined": 0,
+        "resurrections": 266,
+        "est_ms": 20126.2412
+      },
+      "decline": {
+        "rows": 256,
+        "protected": 248,
+        "decline": true,
+        "routed": 65536,
+        "transfers": 37130,
+        "declined": 188,
+        "resurrections": 0,
+        "est_ms": 20269.267
+      },
+      "delta": 262
+    },
+    {
+      "keep": {
+        "rows": 384,
+        "protected": 192,
+        "decline": false,
+        "routed": 65536,
+        "transfers": 42267,
+        "declined": 0,
+        "resurrections": 458,
+        "est_ms": 23073.5553
+      },
+      "decline": {
+        "rows": 384,
+        "protected": 192,
+        "decline": true,
+        "routed": 65536,
+        "transfers": 42724,
+        "declined": 385,
+        "resurrections": 0,
+        "est_ms": 23323.0316
+      },
+      "delta": 457
+    },
+    {
+      "keep": {
+        "rows": 384,
+        "protected": 376,
+        "decline": false,
+        "routed": 65536,
+        "transfers": 26468,
+        "declined": 0,
+        "resurrections": 552,
+        "est_ms": 14448.8812
+      },
+      "decline": {
+        "rows": 384,
+        "protected": 376,
+        "decline": true,
+        "routed": 65536,
+        "transfers": 27022,
+        "declined": 432,
+        "resurrections": 0,
+        "est_ms": 14751.309799999999
+      },
+      "delta": 554
+    },
+    {
+      "keep": {
+        "rows": 512,
+        "protected": 256,
+        "decline": false,
+        "routed": 65536,
+        "transfers": 36293,
+        "declined": 0,
+        "resurrections": 577,
+        "est_ms": 19812.3487
+      },
+      "decline": {
+        "rows": 512,
+        "protected": 256,
+        "decline": true,
+        "routed": 65536,
+        "transfers": 36870,
+        "declined": 388,
+        "resurrections": 0,
+        "est_ms": 20127.333
+      },
+      "delta": 577
+    },
+    {
+      "keep": {
+        "rows": 512,
+        "protected": 504,
+        "decline": false,
+        "routed": 65536,
+        "transfers": 17438,
+        "declined": 0,
+        "resurrections": 740,
+        "est_ms": 9519.404199999999
+      },
+      "decline": {
+        "rows": 512,
+        "protected": 504,
+        "decline": true,
+        "routed": 65536,
+        "transfers": 18175,
+        "declined": 479,
+        "resurrections": 0,
+        "est_ms": 9921.7325
+      },
+      "delta": 737
+    },
+    {
+      "keep": {
+        "rows": 1024,
+        "protected": 512,
+        "decline": false,
+        "routed": 65536,
+        "transfers": 16643,
+        "declined": 0,
+        "resurrections": 782,
+        "est_ms": 9085.4137
+      },
+      "decline": {
+        "rows": 1024,
+        "protected": 512,
+        "decline": true,
+        "routed": 65536,
+        "transfers": 17418,
+        "declined": 435,
+        "resurrections": 0,
+        "est_ms": 9508.4862
+      },
+      "delta": 775
+    },
+    {
+      "keep": {
+        "rows": 1024,
+        "protected": 1016,
+        "decline": false,
+        "routed": 65536,
+        "transfers": 989,
+        "declined": 0,
+        "resurrections": 0,
+        "est_ms": 539.8951
+      },
+      "decline": {
+        "rows": 1024,
+        "protected": 1016,
+        "decline": true,
+        "routed": 65536,
+        "transfers": 989,
+        "declined": 0,
+        "resurrections": 0,
+        "est_ms": 539.8951
+      },
+      "delta": 0
+    }
+  ],
+  "summary": {
+    "worse": 6,
+    "ties": 2,
+    "better": 0
+  }
+}
