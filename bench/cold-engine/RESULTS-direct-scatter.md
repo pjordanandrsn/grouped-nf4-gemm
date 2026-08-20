@@ -112,6 +112,48 @@ Rather than cite console scrollback, the point was re-run on a fresh box of
 the same class — hence −12.53% here. Both runs agree in direction and
 magnitude; only the second has a receipt, and only the second is cited.
 
+## Is `cold_direct=True` the right default? Yes — and my earlier doubt was wrong
+
+I flagged that the default might be "neutral rather than free" at low cold
+mass, on the grounds that the direct arm issues extra reads. The receipts do
+not support that, and the flag is withdrawn:
+
+| cold mass | copy reads | direct reads |
+|---|---|---|
+| 5% | 37 | **37** |
+| 20% | 2963 | 3761 |
+
+At 5% the arms issue **identical** I/O — the extra reads appear only at 20%,
+where they come with a −12.5% win. There is no regime in these receipts
+where direct costs I/O without paying for it.
+
+It also uses **less** host RAM, which I had missed. An external-landing tier
+never fills its own buffer, so it allocates **one row instead of
+`hot_rows`** — at `hot_rows=384` and 3.54 MB rows that is ~1.36 GB saved,
+against a view whose stacks are the same size either way.
+
+So: neutral at low cold mass, faster at high, strictly smaller. The default
+stands.
+
+## The 0.0703: narrowed, not solved
+
+The original gate-1 run measured a 0.0703 max-abs-logit difference between
+cold-CPU and its matched DRAM control; the controlled repeat
+(`check_b.json`, engine state recorded) measured **0.000000, bitwise**. Two
+explanations were on the table and **both are now eliminated**:
+
+* **e4b #173** — its own commit states no engine behaviour change; it is
+  documentation plus matched-reference tests.
+* **e4b #172** — adds a `protected_rows` pass-through whose default
+  (`None` → `hot_rows`) reproduces the prior behaviour exactly.
+
+Neither merge could have removed it. What remains is the gate-1 harness
+itself or the destroyed instance, and neither is recoverable: that box is
+gone, so the original conditions cannot be reconstructed. Recorded as
+**unexplained and unreproduced**, with the two obvious candidates ruled out
+rather than left as plausible. It is not carried as a known defect, because
+nothing currently reproduces it.
+
 ## What this does not establish
 
 - ~~Not an end-to-end serving number.~~ **Measured** — see the section
