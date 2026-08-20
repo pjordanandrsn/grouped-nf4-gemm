@@ -1,0 +1,147 @@
+{
+  "meta": {
+    "model": "/root/models/olmoe",
+    "steps": 512,
+    "layers": 16,
+    "top_k": 8,
+    "n_experts": 64,
+    "prompt_tokens": 64,
+    "decode": true
+  },
+  "routed": 65536,
+  "points": [
+    {
+      "rows": 128,
+      "protected": 64,
+      "hard_reads": 44298,
+      "soft_reads": 44939,
+      "delta_reads_pct": 1.447017924059777,
+      "hard_evictions": 44170,
+      "soft_evictions": 44811,
+      "delta_churn_pct": 1.4512112293411819,
+      "hard_hit_rate": 0.324066162109375,
+      "soft_hit_rate": 0.3142852783203125,
+      "verdict": "REFUTED"
+    },
+    {
+      "rows": 128,
+      "protected": 120,
+      "hard_reads": 44298,
+      "soft_reads": 44965,
+      "delta_reads_pct": 1.505711318795431,
+      "hard_evictions": 44170,
+      "soft_evictions": 44837,
+      "delta_churn_pct": 1.5100747113425401,
+      "hard_hit_rate": 0.324066162109375,
+      "soft_hit_rate": 0.3138885498046875,
+      "verdict": "REFUTED"
+    },
+    {
+      "rows": 192,
+      "protected": 96,
+      "hard_reads": 38086,
+      "soft_reads": 38607,
+      "delta_reads_pct": 1.3679567295069055,
+      "hard_evictions": 37894,
+      "soft_evictions": 38415,
+      "delta_churn_pct": 1.3748878450414315,
+      "hard_hit_rate": 0.418853759765625,
+      "soft_hit_rate": 0.4109039306640625,
+      "verdict": "REFUTED"
+    },
+    {
+      "rows": 192,
+      "protected": 184,
+      "hard_reads": 38086,
+      "soft_reads": 38620,
+      "delta_reads_pct": 1.4020900068266555,
+      "hard_evictions": 37894,
+      "soft_evictions": 38428,
+      "delta_churn_pct": 1.4091940676624268,
+      "hard_hit_rate": 0.418853759765625,
+      "soft_hit_rate": 0.41070556640625,
+      "verdict": "REFUTED"
+    },
+    {
+      "rows": 256,
+      "protected": 128,
+      "hard_reads": 32169,
+      "soft_reads": 32569,
+      "delta_reads_pct": 1.2434331188411203,
+      "hard_evictions": 31913,
+      "soft_evictions": 32313,
+      "delta_churn_pct": 1.25340770219033,
+      "hard_hit_rate": 0.5091400146484375,
+      "soft_hit_rate": 0.5030364990234375,
+      "verdict": "REFUTED"
+    },
+    {
+      "rows": 256,
+      "protected": 248,
+      "hard_reads": 32169,
+      "soft_reads": 32605,
+      "delta_reads_pct": 1.355342099536821,
+      "hard_evictions": 31913,
+      "soft_evictions": 32349,
+      "delta_churn_pct": 1.3662143953874597,
+      "hard_hit_rate": 0.5091400146484375,
+      "soft_hit_rate": 0.5024871826171875,
+      "verdict": "REFUTED"
+    },
+    {
+      "rows": 384,
+      "protected": 192,
+      "hard_reads": 21890,
+      "soft_reads": 22129,
+      "delta_reads_pct": 1.0918227501142075,
+      "hard_evictions": 21506,
+      "soft_evictions": 21745,
+      "delta_churn_pct": 1.111317771784618,
+      "hard_hit_rate": 0.665985107421875,
+      "soft_hit_rate": 0.6623382568359375,
+      "verdict": "REFUTED"
+    },
+    {
+      "rows": 384,
+      "protected": 376,
+      "hard_reads": 21890,
+      "soft_reads": 22149,
+      "delta_reads_pct": 1.1831886706258565,
+      "hard_evictions": 21506,
+      "soft_evictions": 21765,
+      "delta_churn_pct": 1.204315074862829,
+      "hard_hit_rate": 0.665985107421875,
+      "soft_hit_rate": 0.6620330810546875,
+      "verdict": "REFUTED"
+    },
+    {
+      "rows": 512,
+      "protected": 256,
+      "hard_reads": 13616,
+      "soft_reads": 13706,
+      "delta_reads_pct": 0.6609870740305523,
+      "hard_evictions": 13104,
+      "soft_evictions": 13194,
+      "delta_churn_pct": 0.6868131868131868,
+      "hard_hit_rate": 0.792236328125,
+      "soft_hit_rate": 0.790863037109375,
+      "verdict": "REFUTED"
+    },
+    {
+      "rows": 512,
+      "protected": 504,
+      "hard_reads": 13616,
+      "soft_reads": 13720,
+      "delta_reads_pct": 0.763807285546416,
+      "hard_evictions": 13104,
+      "soft_evictions": 13208,
+      "delta_churn_pct": 0.7936507936507936,
+      "hard_hit_rate": 0.792236328125,
+      "soft_hit_rate": 0.7906494140625,
+      "verdict": "REFUTED"
+    }
+  ],
+  "tally": {
+    "REFUTED": 10
+  }
+}
