@@ -114,9 +114,22 @@ def hybrid_p(warm, ev, cap, period=32, pinned_frac=0.75, **_):
     for i, r in enumerate(ev):
         if i and i % period == 0:
             new = _top(c, npin)
-            migr += len(new - pin)
-            for k in new:                 # a pinned row leaves the LRU half
+            # A newly pinned key already sitting in the LRU half is ALREADY
+            # RESIDENT -- it changes status, it does not need a read. And a
+            # demoted pin does not vanish: its row is still there, it just
+            # stops being protected and joins the demand-paged half. Getting
+            # either wrong holds residency below `cap` and charges reads the
+            # policy would not pay (Bugbot, gnf4#157).
+            migr += len(new - pin - set(lru))
+            demoted = pin - new
+            for k in new:
                 lru.pop(k, None)
+            for k in demoted:
+                lru[k] = 1
+            while ncache and len(lru) > ncache:
+                lru.popitem(last=False)
+            if not ncache:
+                lru.clear()
             pin = new
         for k in _keys(r):
             c[k] += 1

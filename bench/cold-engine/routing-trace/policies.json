@@ -21,8 +21,8 @@
       "adaptive_migrations": 41,
       "ewma": 20569,
       "ewma_migrations": 117,
-      "hybrid": 22929,
-      "hybrid_migrations": 29,
+      "hybrid": 22921,
+      "hybrid_migrations": 25,
       "demand": 25105,
       "demand_migrations": 0,
       "oracle": 19818,
@@ -40,7 +40,7 @@
       "ewma": 14509,
       "ewma_migrations": 199,
       "hybrid": 17343,
-      "hybrid_migrations": 72,
+      "hybrid_migrations": 45,
       "demand": 18874,
       "demand_migrations": 0,
       "oracle": 13389,
@@ -57,8 +57,8 @@
       "adaptive_migrations": 78,
       "ewma": 9684,
       "ewma_migrations": 217,
-      "hybrid": 10547,
-      "hybrid_migrations": 73,
+      "hybrid": 10524,
+      "hybrid_migrations": 39,
       "demand": 13458,
       "demand_migrations": 0,
       "oracle": 8498,
@@ -75,8 +75,8 @@
       "adaptive_migrations": 66,
       "ewma": 5742,
       "ewma_migrations": 202,
-      "hybrid": 6586,
-      "hybrid_migrations": 78,
+      "hybrid": 6543,
+      "hybrid_migrations": 35,
       "demand": 9308,
       "demand_migrations": 0,
       "oracle": 4773,
@@ -93,8 +93,8 @@
       "adaptive_migrations": 49,
       "ewma": 1013,
       "ewma_migrations": 131,
-      "hybrid": 1229,
-      "hybrid_migrations": 64,
+      "hybrid": 1133,
+      "hybrid_migrations": 1,
       "demand": 1330,
       "demand_migrations": 0,
       "oracle": 496,
@@ -217,10 +217,10 @@
         1.0
       ],
       "reads": [
-        27811,
-        25022,
-        22929,
-        21866,
+        27796,
+        25011,
+        22921,
+        21865,
         21167
       ]
     },
@@ -234,10 +234,10 @@
         1.0
       ],
       "reads": [
-        17384,
-        16419,
+        17362,
+        16396,
         17343,
-        16381,
+        16370,
         15331
       ]
     },
@@ -251,10 +251,10 @@
         1.0
       ],
       "reads": [
-        12616,
-        11303,
-        10547,
-        11427,
+        12578,
+        11221,
+        10524,
+        11412,
         10380
       ]
     },
@@ -268,10 +268,10 @@
         1.0
       ],
       "reads": [
-        9134,
-        8010,
-        6586,
-        6282,
+        9068,
+        7914,
+        6543,
+        6244,
         6226
       ]
     },
@@ -285,10 +285,10 @@
         1.0
       ],
       "reads": [
-        1452,
-        1423,
-        1229,
-        1057,
+        1347,
+        1298,
+        1133,
+        1003,
         1243
       ]
     }

@@ -22,15 +22,15 @@ which [R4](RESULTS-r4.md) showed loses.
 and LRU winning at 768, so neither is right everywhere. Pin the top of the
 ranking and demand-page the remainder.
 
-## EWMA wins; hybrid does not
+## EWMA wins at four of five capacities
 
 | rows | static | adaptive | **ewma** | hybrid | demand | oracle |
 |---|---|---|---|---|---|---|
-| 128 | 22,596 | 21,167 | **20,569** | 22,929 | 25,105 | 19,818 |
+| 128 | 22,596 | 21,167 | **20,569** | 22,921 | 25,105 | 19,818 |
 | 256 | 16,880 | 15,331 | **14,509** | 17,343 | 18,874 | 13,389 |
-| 384 | 11,708 | 10,380 | **9,684** | 10,547 | 13,458 | 8,498 |
-| 512 | 7,531 | 6,226 | **5,742** | 6,586 | 9,308 | 4,773 |
-| 768 | 2,101 | 1,243 | **1,013** | 1,229 | 1,330 | 496 |
+| 384 | 11,708 | 10,380 | **9,684** | 10,524 | 13,458 | 8,498 |
+| 512 | 7,531 | 6,226 | **5,742** | 6,543 | 9,308 | 4,773 |
+| 768 | 2,101 | 1,243 | **1,013** | 1,133 | 1,330 | 496 |
 
 **EWMA is best at every capacity**, and it closes **31–44% of the gap between
 adaptive and the ceiling**:
@@ -43,22 +43,36 @@ adaptive and the ceiling**:
 | 512 | +30.4% | **+20.3%** | 33% |
 | 768 | +150.6% | **+104.2%** | 31% |
 
-## The hypothesis that failed
+## The hypothesis that mostly failed
 
-**Hybrid loses, and the sweep says why.** Its reads fall monotonically as the
-pinned fraction rises — it is best when it stops being a hybrid:
+**Hybrid loses at four of five capacities, and the sweep says why.** Its reads
+fall monotonically as the pinned fraction rises — it is best when it stops
+being a hybrid:
 
 | rows | pin 25% | 50% | 75% | 90% | **100% (= adaptive)** |
 |---|---|---|---|---|---|
-| 128 | 27,811 | 25,022 | 22,929 | 21,866 | **21,167** |
-| 384 | 12,616 | 11,303 | 10,547 | 11,427 | **10,380** |
-| 768 | 1,452 | 1,423 | 1,229 | **1,057** | 1,243 |
+| 128 | 27,796 | 25,011 | 22,921 | 21,865 | **21,167** |
+| 384 | 12,578 | 11,221 | 10,524 | 11,412 | **10,380** |
+| 512 | 9,068 | 7,914 | 6,543 | 6,244 | **6,226** |
+| 768 | 1,347 | 1,298 | 1,133 | **1,003** | 1,243 |
 
-Only at 768 rows — where `demand` already beats `static` outright — does a
-demand-paged slice help, and even there `ewma` at 1,013 beats the best hybrid
-at 1,057. The reasoning behind hybrid was that two policies win in different
-regimes so a blend should win in both. On this trace the blend mostly inherits
-the weaknesses of the worse half.
+**The exception is 768 rows**, where the best hybrid (pin 90%, **1,003**)
+edges `ewma` (**1,013**) by 1%. That is the one capacity where `demand`
+already beats `static` outright — capacity nearly covers the working set and
+recency wins — so a demand-paged slice has something to contribute. Everywhere
+below, the blend inherits the weaknesses of the worse half.
+
+The reasoning behind hybrid was that two policies win in different regimes so
+a blend should win in both. It wins only in the regime where the *other* half
+was already winning alone, which is not the claim.
+
+> **Corrected after review.** The first version of `hybrid_p` dropped demoted
+> pins instead of handing them to the demand-paged half, and charged a
+> migration for keys already resident in it — holding residency below `cap`
+> and inflating hybrid's reads (Bugbot, gnf4#157). The numbers above are the
+> fixed implementation. The correction narrowed hybrid's loss and gave it the
+> 768-row win; the conclusion that it is not the answer survives, on an arm
+> that is no longer handicapped.
 
 ## The decay is tuned, and has an interior optimum
 
