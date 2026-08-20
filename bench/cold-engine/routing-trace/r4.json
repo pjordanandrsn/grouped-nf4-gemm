@@ -1,0 +1,358 @@
+{
+  "meta": {
+    "model": "/root/models/olmoe",
+    "steps": 512,
+    "layers": 16,
+    "top_k": 8,
+    "n_experts": 64,
+    "prompt_tokens": 64,
+    "decode": true
+  },
+  "window": 64,
+  "points": [
+    {
+      "rows": 128,
+      "resurrections": 22198,
+      "recency": 0.84724523547669,
+      "frequency": 0.8219096565359133,
+      "n_keys": 989,
+      "verdict": "R4 holds"
+    },
+    {
+      "rows": 192,
+      "resurrections": 265,
+      "recency": 0.38408691880831713,
+      "frequency": 0.3534504230240315,
+      "n_keys": 989,
+      "verdict": "R4 holds"
+    },
+    {
+      "rows": 256,
+      "resurrections": 266,
+      "recency": 0.3649349482681343,
+      "frequency": 0.3753853701377716,
+      "n_keys": 989,
+      "verdict": "REFUTED (freq wins)"
+    },
+    {
+      "rows": 384,
+      "resurrections": 552,
+      "recency": 0.4386570473397141,
+      "frequency": 0.4758432115013522,
+      "n_keys": 989,
+      "verdict": "REFUTED (freq wins)"
+    },
+    {
+      "rows": 512,
+      "resurrections": 740,
+      "recency": 0.30666425546115433,
+      "frequency": 0.44548243255215725,
+      "n_keys": 989,
+      "verdict": "REFUTED (freq wins)"
+    },
+    {
+      "rows": 768,
+      "resurrections": 128,
+      "recency": -0.004328768650897193,
+      "frequency": -0.038350653349844596,
+      "n_keys": 989,
+      "verdict": "R4 holds"
+    }
+  ],
+  "window_sweep": [
+    {
+      "rows": 128,
+      "window": 4,
+      "resurrections": 22198,
+      "recency": 0.7713205865974128,
+      "frequency": 0.8219096565359133,
+      "winner": "frequency"
+    },
+    {
+      "rows": 128,
+      "window": 8,
+      "resurrections": 22198,
+      "recency": 0.8113826953863658,
+      "frequency": 0.8219096565359133,
+      "winner": "frequency"
+    },
+    {
+      "rows": 128,
+      "window": 16,
+      "resurrections": 22198,
+      "recency": 0.824890857212425,
+      "frequency": 0.8219096565359133,
+      "winner": "recency"
+    },
+    {
+      "rows": 128,
+      "window": 32,
+      "resurrections": 22198,
+      "recency": 0.8340362699105696,
+      "frequency": 0.8219096565359133,
+      "winner": "recency"
+    },
+    {
+      "rows": 128,
+      "window": 64,
+      "resurrections": 22198,
+      "recency": 0.84724523547669,
+      "frequency": 0.8219096565359133,
+      "winner": "recency"
+    },
+    {
+      "rows": 128,
+      "window": 128,
+      "resurrections": 22198,
+      "recency": 0.8479717026143807,
+      "frequency": 0.8219096565359133,
+      "winner": "recency"
+    },
+    {
+      "rows": 192,
+      "window": 4,
+      "resurrections": 265,
+      "recency": 0.25316479787714946,
+      "frequency": 0.3534504230240315,
+      "winner": "frequency"
+    },
+    {
+      "rows": 192,
+      "window": 8,
+      "resurrections": 265,
+      "recency": 0.3229117112266804,
+      "frequency": 0.3534504230240315,
+      "winner": "frequency"
+    },
+    {
+      "rows": 192,
+      "window": 16,
+      "resurrections": 265,
+      "recency": 0.36193728227026073,
+      "frequency": 0.3534504230240315,
+      "winner": "recency"
+    },
+    {
+      "rows": 192,
+      "window": 32,
+      "resurrections": 265,
+      "recency": 0.37558765257397564,
+      "frequency": 0.3534504230240315,
+      "winner": "recency"
+    },
+    {
+      "rows": 192,
+      "window": 64,
+      "resurrections": 265,
+      "recency": 0.38408691880831713,
+      "frequency": 0.3534504230240315,
+      "winner": "recency"
+    },
+    {
+      "rows": 192,
+      "window": 128,
+      "resurrections": 265,
+      "recency": 0.38094546604897866,
+      "frequency": 0.3534504230240315,
+      "winner": "recency"
+    },
+    {
+      "rows": 256,
+      "window": 4,
+      "resurrections": 266,
+      "recency": 0.21171392798803218,
+      "frequency": 0.3753853701377716,
+      "winner": "frequency"
+    },
+    {
+      "rows": 256,
+      "window": 8,
+      "resurrections": 266,
+      "recency": 0.29040158561786594,
+      "frequency": 0.3753853701377716,
+      "winner": "frequency"
+    },
+    {
+      "rows": 256,
+      "window": 16,
+      "resurrections": 266,
+      "recency": 0.32575606186338135,
+      "frequency": 0.3753853701377716,
+      "winner": "frequency"
+    },
+    {
+      "rows": 256,
+      "window": 32,
+      "resurrections": 266,
+      "recency": 0.3580642395213863,
+      "frequency": 0.3753853701377716,
+      "winner": "frequency"
+    },
+    {
+      "rows": 256,
+      "window": 64,
+      "resurrections": 266,
+      "recency": 0.3649349482681343,
+      "frequency": 0.3753853701377716,
+      "winner": "frequency"
+    },
+    {
+      "rows": 256,
+      "window": 128,
+      "resurrections": 266,
+      "recency": 0.3709737560748011,
+      "frequency": 0.3753853701377716,
+      "winner": "frequency"
+    },
+    {
+      "rows": 384,
+      "window": 4,
+      "resurrections": 552,
+      "recency": 0.23212493911567444,
+      "frequency": 0.4758432115013522,
+      "winner": "frequency"
+    },
+    {
+      "rows": 384,
+      "window": 8,
+      "resurrections": 552,
+      "recency": 0.3203471984430995,
+      "frequency": 0.4758432115013522,
+      "winner": "frequency"
+    },
+    {
+      "rows": 384,
+      "window": 16,
+      "resurrections": 552,
+      "recency": 0.37515719506780704,
+      "frequency": 0.4758432115013522,
+      "winner": "frequency"
+    },
+    {
+      "rows": 384,
+      "window": 32,
+      "resurrections": 552,
+      "recency": 0.4198790245964025,
+      "frequency": 0.4758432115013522,
+      "winner": "frequency"
+    },
+    {
+      "rows": 384,
+      "window": 64,
+      "resurrections": 552,
+      "recency": 0.4386570473397141,
+      "frequency": 0.4758432115013522,
+      "winner": "frequency"
+    },
+    {
+      "rows": 384,
+      "window": 128,
+      "resurrections": 552,
+      "recency": 0.46575809290955916,
+      "frequency": 0.4758432115013522,
+      "winner": "frequency"
+    },
+    {
+      "rows": 512,
+      "window": 4,
+      "resurrections": 740,
+      "recency": 0.0878111275333001,
+      "frequency": 0.44548243255215725,
+      "winner": "frequency"
+    },
+    {
+      "rows": 512,
+      "window": 8,
+      "resurrections": 740,
+      "recency": 0.14888874763566518,
+      "frequency": 0.44548243255215725,
+      "winner": "frequency"
+    },
+    {
+      "rows": 512,
+      "window": 16,
+      "resurrections": 740,
+      "recency": 0.22209416909292065,
+      "frequency": 0.44548243255215725,
+      "winner": "frequency"
+    },
+    {
+      "rows": 512,
+      "window": 32,
+      "resurrections": 740,
+      "recency": 0.2731714284411428,
+      "frequency": 0.44548243255215725,
+      "winner": "frequency"
+    },
+    {
+      "rows": 512,
+      "window": 64,
+      "resurrections": 740,
+      "recency": 0.30666425546115433,
+      "frequency": 0.44548243255215725,
+      "winner": "frequency"
+    },
+    {
+      "rows": 512,
+      "window": 128,
+      "resurrections": 740,
+      "recency": 0.3650028643112347,
+      "frequency": 0.44548243255215725,
+      "winner": "frequency"
+    },
+    {
+      "rows": 768,
+      "window": 4,
+      "resurrections": 128,
+      "recency": 0.01249169158553685,
+      "frequency": -0.038350653349844596,
+      "winner": "recency"
+    },
+    {
+      "rows": 768,
+      "window": 8,
+      "resurrections": 128,
+      "recency": -0.018119205587265475,
+      "frequency": -0.038350653349844596,
+      "winner": "recency"
+    },
+    {
+      "rows": 768,
+      "window": 16,
+      "resurrections": 128,
+      "recency": -0.012411930608549821,
+      "frequency": -0.038350653349844596,
+      "winner": "recency"
+    },
+    {
+      "rows": 768,
+      "window": 32,
+      "resurrections": 128,
+      "recency": 0.007025211168428301,
+      "frequency": -0.038350653349844596,
+      "winner": "recency"
+    },
+    {
+      "rows": 768,
+      "window": 64,
+      "resurrections": 128,
+      "recency": -0.004328768650897193,
+      "frequency": -0.038350653349844596,
+      "winner": "recency"
+    },
+    {
+      "rows": 768,
+      "window": 128,
+      "resurrections": 128,
+      "recency": -0.010745846880960133,
+      "frequency": -0.038350653349844596,
+      "winner": "recency"
+    }
+  ],
+  "tally": {
+    "recency": 14,
+    "frequency": 22,
+    "tie": 0,
+    "undefined": 0
+  }
+}
