@@ -218,6 +218,13 @@ def main():
                 del model
                 torch.cuda.empty_cache()
                 continue
+            # Snapshot at LOAD as well as at the measurement boundary. The
+            # load snapshot is the quantity the pre-#132 harness was
+            # unknowingly differencing against, so recording both lets one
+            # run show that the PUBLISHED counts are reproduced by
+            # reads_since_load -- which turns "those numbers were
+            # warmup-inclusive" from a diagnosis into a measurement.
+            at_load = hy.cold_stats(model)
             pre = {}
             steps, logits, toks = run_steps(
                 model, tok_ids, a.steps, a.warmup,
@@ -240,6 +247,10 @@ def main():
             # prefetch coverage rather than on those counts.
             cs["reads_in_window"] = (cs.get("disk_reads", 0)
                                      - pre.get("disk_reads", 0))
+            cs["reads_since_load"] = (cs.get("disk_reads", 0)
+                                      - at_load.get("disk_reads", 0))
+            cs["warmup_reads"] = (cs["reads_since_load"]
+                                  - cs.get("reads_in_window", 0))
             cs["cold_rows_in_window"] = (
                 (cs.get("cold_rows", 0)) - (pre.get("cold_rows", 0)))
             point["arms"][arm] = {
