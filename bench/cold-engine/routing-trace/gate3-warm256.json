@@ -1,0 +1,93 @@
+{
+  "meta": {
+    "model": "/root/models/olmoe",
+    "steps": 512,
+    "layers": 16,
+    "top_k": 8,
+    "n_experts": 64,
+    "prompt_tokens": 64,
+    "decode": true
+  },
+  "warm": 256,
+  "period": 32,
+  "eval_routed": 32768,
+  "points": [
+    {
+      "rows": 64,
+      "static": 26178,
+      "adaptive": 25022,
+      "adaptive_migrations": 20,
+      "demand": 32768,
+      "oracle": 24047,
+      "adaptive_vs_static_pct": -4.415921766368706,
+      "demand_vs_static_pct": 25.173810069524027,
+      "adaptive_vs_oracle_pct": 4.054559820351811
+    },
+    {
+      "rows": 128,
+      "static": 22596,
+      "adaptive": 21167,
+      "adaptive_migrations": 41,
+      "demand": 25105,
+      "oracle": 19818,
+      "adaptive_vs_static_pct": -6.324128164276862,
+      "demand_vs_static_pct": 11.103735174367145,
+      "adaptive_vs_oracle_pct": 6.8069431829649805
+    },
+    {
+      "rows": 192,
+      "static": 20038,
+      "adaptive": 18125,
+      "adaptive_migrations": 72,
+      "demand": 21792,
+      "oracle": 16389,
+      "adaptive_vs_static_pct": -9.54686096416808,
+      "demand_vs_static_pct": 8.753368599660645,
+      "adaptive_vs_oracle_pct": 10.59247055952163
+    },
+    {
+      "rows": 256,
+      "static": 16880,
+      "adaptive": 15331,
+      "adaptive_migrations": 80,
+      "demand": 18874,
+      "oracle": 13389,
+      "adaptive_vs_static_pct": -9.17654028436019,
+      "demand_vs_static_pct": 11.812796208530806,
+      "adaptive_vs_oracle_pct": 14.504443946523265
+    },
+    {
+      "rows": 384,
+      "static": 11708,
+      "adaptive": 10380,
+      "adaptive_migrations": 78,
+      "demand": 13458,
+      "oracle": 8498,
+      "adaptive_vs_static_pct": -11.34267167748548,
+      "demand_vs_static_pct": 14.947044755722583,
+      "adaptive_vs_oracle_pct": 22.146387385267122
+    },
+    {
+      "rows": 512,
+      "static": 7531,
+      "adaptive": 6226,
+      "adaptive_migrations": 66,
+      "demand": 9308,
+      "oracle": 4773,
+      "adaptive_vs_static_pct": -17.328376045677864,
+      "demand_vs_static_pct": 23.59580401009162,
+      "adaptive_vs_oracle_pct": 30.4420699769537
+    },
+    {
+      "rows": 768,
+      "static": 2101,
+      "adaptive": 1243,
+      "adaptive_migrations": 49,
+      "demand": 1330,
+      "oracle": 496,
+      "adaptive_vs_static_pct": -40.83769633507853,
+      "demand_vs_static_pct": -36.696811042360785,
+      "adaptive_vs_oracle_pct": 150.60483870967744
+    }
+  ]
+}

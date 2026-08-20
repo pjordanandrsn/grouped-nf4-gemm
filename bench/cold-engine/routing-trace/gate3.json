@@ -1,0 +1,79 @@
+{
+  "meta": {
+    "model": "/root/models/olmoe",
+    "steps": 512,
+    "layers": 16,
+    "top_k": 8,
+    "n_experts": 64,
+    "prompt_tokens": 64,
+    "decode": true
+  },
+  "warm": 128,
+  "period": 32,
+  "eval_routed": 49152,
+  "points": [
+    {
+      "rows": 64,
+      "static": 38892,
+      "adaptive": 37722,
+      "adaptive_migrations": 38,
+      "demand": 49152,
+      "adaptive_vs_static_pct": -3.00833076211046,
+      "demand_vs_static_pct": 26.380746683122492
+    },
+    {
+      "rows": 128,
+      "static": 34140,
+      "adaptive": 32161,
+      "adaptive_migrations": 86,
+      "demand": 37260,
+      "adaptive_vs_static_pct": -5.796719390743995,
+      "demand_vs_static_pct": 9.13884007029877
+    },
+    {
+      "rows": 192,
+      "static": 30115,
+      "adaptive": 27601,
+      "adaptive_migrations": 141,
+      "demand": 32147,
+      "adaptive_vs_static_pct": -8.34799933587913,
+      "demand_vs_static_pct": 6.747468039183131
+    },
+    {
+      "rows": 256,
+      "static": 26247,
+      "adaptive": 23359,
+      "adaptive_migrations": 156,
+      "demand": 27889,
+      "adaptive_vs_static_pct": -11.003162266163752,
+      "demand_vs_static_pct": 6.255953061302244
+    },
+    {
+      "rows": 384,
+      "static": 19035,
+      "adaptive": 15854,
+      "adaptive_migrations": 169,
+      "demand": 20010,
+      "adaptive_vs_static_pct": -16.711321250328343,
+      "demand_vs_static_pct": 5.12214342001576
+    },
+    {
+      "rows": 512,
+      "static": 12425,
+      "adaptive": 9632,
+      "adaptive_migrations": 146,
+      "demand": 13363,
+      "adaptive_vs_static_pct": -22.47887323943662,
+      "demand_vs_static_pct": 7.549295774647888
+    },
+    {
+      "rows": 768,
+      "static": 3473,
+      "adaptive": 2073,
+      "adaptive_migrations": 108,
+      "demand": 1887,
+      "adaptive_vs_static_pct": -40.31097034264325,
+      "demand_vs_static_pct": -45.666570688165855
+    }
+  ]
+}
