@@ -13,7 +13,7 @@ attributable to a measured mechanism rather than an inference.
 
 | gate-1 clause | result |
 |---|---|
-| numerically equivalent to the resident reference | **NOT MEASURED** — the comparison was mis-specified (see *Correction* and *Reconciliation*). The mechanism is now measured; the clause still needs a matched reference and a re-run |
+| numerically equivalent to the resident reference | **PASS on a matched reference** — cold-GPU vs a VRAM-sourced control is **bit-identical** (dmax 0.0000, identical tokens) at 1/5/10% cold. The original MISS came from a mis-specified comparison (see *Correction*); check (a) has now been run |
 | hide ratio ≥ 70% | **MISS** — cold work is essentially unhidden; 5% cold mass costs 26–33% wall |
 | beats both fixed arms | **MISS** — dynamic tracks the better fixed arm, never beats it |
 | ≥1 destination flip | **PASS** — 225/1874 at 1%, 4005/5061 at 5%, 17973/9844 at 20% |
@@ -227,11 +227,34 @@ at 1% (20.5002, `first_divergence: 59`) — the same step index, a different
 arm. Any restatement of "the cold path generates different text" has to name
 the arm and the cold-mass point.
 
-**The falsifiable checks still open**, in order: (a) re-run this sweep with
-`force_cold_mass(source="vram")` and confirm the arms swap end to end;
-(b) re-run cold-CPU against the control with `offload_thin_uniq=None` and
-see whether 0.0703 goes to 0.0000; (c) record the engine kwargs in the
-receipt so (b) is answerable from the artifact next time.
+**Check (a): RUN, and the arms swap end to end.** Re-ran this sweep with
+`force_cold_mass(source="vram")` on the same host class (RTX 5090 + EPYC
+9655; this box `B_dram` 417.4 GB/s, G0 122.5% PROCEED), same model, arena,
+routing prompt and workload; gnf4 `5b4463e` / e4b `2e88bd1`.
+
+| control's experts sourced from | control executes on | cold-GPU | cold-CPU |
+|---|---|---|---|
+| `dram` (original run) | **CPU** | dmax 0.90–15.9, tokens ✗ | dmax 0.0703, tokens ✓ |
+| `vram` (this run) | **GPU** | **dmax 0.0000, tokens ✓** | dmax 14.3–18.9, tokens ✗ |
+
+Divergence tracks **which engine the control runs on**, not the cold path.
+
+Stronger than a match: cold-GPU against a VRAM-sourced control is
+**bit-identical** — `dmax = 0.0000` at 1%, 5% and 10% cold mass, with
+identical greedy token sequences. A cold expert read from NVMe, gathered
+through `_TieredStack` and executed on the fused GPU kernel produces
+*exactly* the bytes that expert produces resident in VRAM. The cold path is
+exonerated: no gather defect, no invalidation defect, no mis-indexed
+weighting. e4b#171 was correctly closed.
+
+Receipts: `gate1_vram.json`, `receipts-hybrid-calib-vram-arm.json`.
+
+**Checks still open**: (b) re-run cold-CPU against the control with
+`offload_thin_uniq=None` and see whether 0.0703 goes to 0.0000 — note this
+arm now has a sharper framing, since cold-GPU *does* reproduce its matched
+reference bitwise while cold-CPU does not reproduce its own to better than
+0.0703; (c) record the engine kwargs in the receipt so (b) is answerable
+from the artifact next time.
 
 ## What this run does NOT establish
 
