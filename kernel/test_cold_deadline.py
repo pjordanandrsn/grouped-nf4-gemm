@@ -152,3 +152,33 @@ def test_a_missing_ceiling_raises_rather_than_defaulting():
 
 def test_decision_is_a_plain_value():
     assert isinstance(choose(4, 2, C), Decision)
+
+
+def test_first_to_finish_is_the_same_rule_as_minimising_the_layer_join():
+    """`choose` picks the engine that delivers this group soonest. The
+    directive's objective is different on its face — minimise
+    max(T_cpu_side, T_gpu_side) for the whole layer — so the two could
+    disagree, and if they did the model would be optimising the wrong
+    thing.
+
+    They do not: over the whole parameter space the rules coincide. (The
+    proof is short — if adding the group to the CPU makes the CPU the max,
+    it is because Cc+cc exceeds Gc, and choosing CPU means Cc+cc < Gc+gc,
+    so the GPU assignment is at least as large; the symmetric argument runs
+    the other way.) Pinned by search rather than left as an assertion.
+    """
+    import random
+    rng = random.Random(20260820)
+
+    def first(cc_b, cc, gc_b, gc):
+        return "cpu" if cc_b + cc < gc_b + gc else "gpu"
+
+    def join(cc_b, cc, gc_b, gc):
+        return "cpu" if max(cc_b + cc, gc_b) < max(cc_b, gc_b + gc) else "gpu"
+
+    for _ in range(20000):
+        a = [rng.uniform(0, 1000) for _ in range(4)]
+        assert first(*a) == join(*a), a
+    # and the degenerate corners search rarely hits
+    for a in ((0, 0, 0, 0), (0, 1, 1, 0), (1, 0, 0, 1), (5, 5, 5, 5)):
+        assert first(*a) == join(*a), a

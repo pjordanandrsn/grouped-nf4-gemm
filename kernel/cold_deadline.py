@@ -126,6 +126,18 @@ def choose(rows: int, uniq: int, c: Costs, *, cpu_backlog_us: float = 0.0,
 
     Ties go to the GPU, deliberately: it is the pre-Stage-3 destination, so
     an exactly-balanced prediction changes nothing.
+
+    **This is also the layer-join rule**, which is not obvious. The
+    directive's objective is ``min max(T_cpu_side, T_gpu_side)`` over the
+    whole layer, not "which engine finishes this group first" — but the two
+    coincide everywhere (pinned by
+    ``test_first_to_finish_is_the_same_rule_as_minimising_the_layer_join``).
+    If adding the group to the CPU makes the CPU the max, that is because
+    ``cpu_backlog + cpu_solo`` exceeds ``gpu_backlog``; and choosing CPU
+    means it is below ``gpu_backlog + gpu_solo``, so the GPU assignment is
+    at least as large. The symmetric argument runs the other way. So the
+    cheaper local rule optimizes the global objective, and no separate
+    join-aware variant is needed.
     """
     if cpu_backlog_us < 0 or gpu_backlog_us < 0:
         raise ValueError("backlog must be >= 0")
