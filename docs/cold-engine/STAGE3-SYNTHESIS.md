@@ -26,6 +26,7 @@ scheduling gates missed, and the clear win came from a memory mechanism.
 | **Gate 2** — does choosing a destination by deadline beat a threshold? | **MISS** | Backlog changed 0 of 1975 decisions in the regime built to provoke it; the rule's own syncs cost 11.7–15.6% for routing identical to fixed-CPU |
 | **Reclaimable residency (R1, R5)** | **CONFIRMED** (withdrawn, then re-measured) | P(reuse before overwrite) is **13.5 / 24.5 / 34.2%** at protected 96/64/32 on a decode-only window — one point inside the registered 5–20% band and two above it. Reads **−13.5% / −24.5%** at the two feasible budgets, wall −2.5% / −7.9%. The earlier 11–60% was withdrawn for a nested-ensure defect that does inflate P, but only by 7–15% relative; the real distortion was a measurement window that counted warmup prefills against decode-only wall. See `RESULTS-tribrid-reclaimable.md`. **No read count here is comparable to one published before that window fix** |
 | **VRAM reclaimable residency** | **Validated, and it needed fixing** | Bitwise-equal to the uncached engine on GPU, and now measured on a real 512-step OLMoE decode routing sequence rather than a fixture that held every expert. **As shipped it LOST to the positional cache the engine already had** (108.3% of its transfers at 12.5% capacity). Two policy defects: `protected` defaulted to half the arena, and `VramSlots` incremented a `_clock` it never read, so eviction was by slot index. Fixed, it tracks ideal LRU everywhere and removes 23% of the positional cache's transfers at 12.5% capacity. Untimed. `bench/cold-engine/routing-trace/` |
+| **R4** — short-window recurrence beats long-run frequency | **REFUTED** | Scored on the captured OLMoE decode sequence across six capacities × six windows. Frequency takes 21 of 24 cells that carry any signal, and all 18 in the capacities with the most resurrections. Recency's only sweep is where max\|ρ\| = 0.036 — noise, not a win. Its ρ rises monotonically with window width, converging to frequency from below and never reaching it: short-window recurrence improves only as it stops being short. Gate 3's loop should be frequency-driven, which is also simpler. Headroom is limited either way — frequency's best ρ is 0.374. `bench/cold-engine/routing-trace/RESULTS-r4.md` |
 | **Direct scatter** (implementation, not a registered gate) | **Real, regime-bound** | −43% on the fill path in isolation; −12.5% end-to-end at 20% cold mass; **null** at 5% |
 
 ## The one prediction that mattered most was the directive's own
@@ -89,13 +90,14 @@ The receipts favour **residency over scheduling**, in three ways:
 
 Gate 3 (adaptive residency — promotion and demotion driven by observed
 reuse) is therefore the live thread, and R2, R3, R4 and R7–R10 remain
-untested. The VRAM side of reclaimable residency now has that real routing trace
+untested — **R4 is now scored and REFUTED**, see the verdict table. The VRAM
+side of reclaimable residency now has that real routing trace
 (`bench/cold-engine/routing-trace/olmoe_routing_seq.jsonl`, 512 autoregressive
 decode steps of OLMoE), and it was worth taking: sized far below the expert
 count, the cache as shipped was *worse than the positional one already in the
 engine*. Two policy defects explain it and both are fixed. The trace is also
-the first real captured routing **sequence** in this repo, which is what R4
-has been registered against and waiting for.
+the first real captured routing **sequence** in this repo, which is what R4 was
+registered against; R4 is scored above.
 
 **One correction still outstanding.** The measurement-window defect that
 distorted R1 is also present in `run_gate1.py`, and is fixed there — but
