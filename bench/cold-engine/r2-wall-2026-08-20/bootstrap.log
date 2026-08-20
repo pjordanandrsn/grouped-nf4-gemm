@@ -1,0 +1,46 @@
+=== Thu Aug 20 17:48:31 UTC 2026 mxfp4 bootstrap ===
+--- deps ok ---
+[32m✓ Downloaded[0m
+  path: /root/models/gptoss
+--- model: 39G ---
+expert block tensors: 48
+   model.layers.0.mlp.experts.down_proj_blocks
+   model.layers.0.mlp.experts.gate_up_proj_blocks
+   model.layers.1.mlp.experts.down_proj_blocks
+  num_hidden_layers: 24
+  num_local_experts: 32
+  num_experts_per_tok: 4
+  hidden_size: 2880
+  intermediate_size: 2880
+  baked layer 0 (1/24, 0.42 GB, 0s)
+  baked layer 1 (2/24, 0.85 GB, 1s)
+  baked layer 2 (3/24, 1.27 GB, 1s)
+  baked layer 3 (4/24, 1.69 GB, 1s)
+  baked layer 4 (5/24, 2.12 GB, 2s)
+  baked layer 5 (6/24, 2.54 GB, 2s)
+  baked layer 6 (7/24, 2.96 GB, 2s)
+  baked layer 7 (8/24, 3.38 GB, 3s)
+  baked layer 8 (9/24, 3.81 GB, 3s)
+  baked layer 9 (10/24, 4.23 GB, 3s)
+  baked layer 10 (11/24, 4.65 GB, 4s)
+  baked layer 11 (12/24, 5.08 GB, 4s)
+  baked layer 12 (13/24, 5.50 GB, 4s)
+  baked layer 13 (14/24, 5.92 GB, 5s)
+  baked layer 14 (15/24, 6.35 GB, 5s)
+  baked layer 15 (16/24, 6.77 GB, 5s)
+  baked layer 16 (17/24, 7.19 GB, 6s)
+  baked layer 17 (18/24, 7.62 GB, 6s)
+  baked layer 18 (19/24, 8.04 GB, 6s)
+  baked layer 19 (20/24, 8.46 GB, 7s)
+  baked layer 20 (21/24, 8.89 GB, 7s)
+  baked layer 21 (22/24, 9.31 GB, 7s)
+  baked layer 22 (23/24, 9.73 GB, 8s)
+  baked layer 23 (24/24, 10.15 GB, 8s)
+bake complete: 768 rows x 13221888 B (10.15 GB) in 20s
+--- arena: 9.5G ---
+arena: 24 layers x 32 experts, row 13219200 B
+    mlp.experts.gate_up_proj_blocks [5760, 90, 16] U8
+    mlp.experts.gate_up_proj_scales [5760, 90] U8
+    mlp.experts.down_proj_blocks [2880, 90, 16] U8
+    mlp.experts.down_proj_scales [2880, 90] U8
+=== Thu Aug 20 18:04:56 UTC 2026 MX BOOTSTRAP DONE ===
