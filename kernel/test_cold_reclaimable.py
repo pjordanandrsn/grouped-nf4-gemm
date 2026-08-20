@@ -347,3 +347,43 @@ def test_a_late_attached_landing_frees_the_buffer_it_will_never_fill(arena):
         assert len(t.buffer) == t.row_stride < big
     finally:
         t.close()
+
+
+def test_a_submit_failure_after_earlier_keys_launched_strands_nothing(arena):
+    """gnf4#130, on the gnf4#118 fix. The #118 test fails the FIRST key, so
+    nothing is ever in flight and the re-raise path looks clean. Fail a LATER
+    key and the earlier ones are already running: re-raising past the drain
+    leaves their slots reserved and their events unset -- the identical leak,
+    one key over. The drain must run before the error escapes."""
+    import threading
+
+    path, index = arena
+    t = ColdTier(path, hot_rows=4, pinned=False, index=index)
+    try:
+        real, calls = t._submit_fill, []
+
+        def flaky(layer, key, slot):
+            calls.append(key)
+            if len(calls) > 1:
+                raise RuntimeError("submit exploded on a later key")
+            return real(layer, key, slot)
+
+        t._submit_fill = flaky
+        with pytest.raises(RuntimeError, match="exploded"):
+            t.ensure(0, [0, 1])
+
+        assert t._reserved == set(), "in-flight reservations leaked"
+        assert t._pending == {}, "in-flight pending events leaked"
+
+        # the key that DID land keeps its slot -- the read was paid for and
+        # the bytes are valid; only the unlaunched one goes back
+        assert len(t._free) == t.hot_rows - len(t._slot_of)
+
+        # the real proof: asking again must not wait on an event nobody sets
+        t._submit_fill = real
+        done = threading.Event()
+        threading.Thread(target=lambda: (t.ensure(0, [0, 1]), done.set()),
+                         daemon=True).start()
+        assert done.wait(20), "ensure blocked on a stranded pending event"
+    finally:
+        t.close()

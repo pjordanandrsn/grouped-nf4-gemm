@@ -367,15 +367,24 @@ class ColdTier:
             # unsignalled, and the next ensure of that key would wait on an
             # event nothing will ever set (Bugbot, gnf4#118). Reclaim
             # exactly what was reserved and re-raise.
+            #
+            # Do NOT re-raise here. Keys submitted BEFORE the failure are
+            # already in flight; raising past the drain below leaves THEIR
+            # slots reserved with their events unset -- the same leak, moved
+            # one key over (Bugbot, gnf4#130, on the gnf4#118 fix). Reclaim
+            # only what never got submitted, narrow `reserved` to what did,
+            # and let the error out through `first_err` so the existing
+            # drain-publish-reclaim path runs first and raises after it.
             fut_of = {}
             try:
                 for k, s in reserved:
                     fut_of[self._submit_fill(layer, k, s)] = (k, s)
-            except BaseException:
+            except BaseException as exc:      # noqa: BLE001 - raised below
+                submitted = set(fut_of.values())
                 with self._lock:
                     for k, s in reserved:
-                        if (k, s) in {v for v in fut_of.values()}:
-                            continue          # already in flight; drained below
+                        if (k, s) in submitted:
+                            continue          # in flight; drained below
                         self._key_of[s] = None
                         self._reserved.discard(s)
                         self._demand_protected.discard(s)
@@ -384,7 +393,8 @@ class ColdTier:
                         ev = self._pending.pop(k, None)
                         if ev is not None:
                             ev.set()          # wake waiters; they refetch
-                raise
+                reserved = [ks for ks in reserved if ks in submitted]
+                first_err = exc
             for fut in as_completed(fut_of):
                 key, slot = fut_of[fut]
                 try:
