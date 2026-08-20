@@ -57,6 +57,13 @@ class StepTag:
         self.recorded = False
 
     def record(self) -> None:
+        """Idempotent. A tag names ONE point -- the gather that read the rows
+        it was issued for -- so recording it twice is never right. A second
+        record() moves the event forward on the stream, and rows retiring
+        under it then wait on a position that keeps receding; every repeat
+        pushes it again (Bugbot, gnf4#131)."""
+        if self.recorded:
+            return
         if self.ev is not None:
             self.ev.record()
         self.recorded = True
@@ -159,6 +166,11 @@ class DevRowCache:
         except RuntimeError:
             if prev is None:
                 raise
+            # Every DISTINCT pending tag, not just the most recent one: the
+            # rows blocking this request may be retiring under an older step,
+            # and syncing only `_last` leaves them stuck.
+            for t in {id(t): t for t in self.slots.pending_tags()}.values():
+                t.sync()
             prev.sync()
             self.stalls += 1
             self.slots.settle(lambda t: t.done())

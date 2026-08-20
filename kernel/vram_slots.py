@@ -90,6 +90,12 @@ class VramSlots:
     def generation(self, slot: int) -> int:
         return self._gen[slot]
 
+    def pending_tags(self):
+        """The tags RETIRING rows are waiting on, for a caller that needs to
+        wait on them. Returned rather than exposing ``_pending`` so the
+        mapping stays this class's business."""
+        return list(self._pending.values())
+
     # ------------------------------------------------------------ events --
     def settle(self, completed) -> int:
         """Flip RETIRING slots whose in-flight readers have finished.

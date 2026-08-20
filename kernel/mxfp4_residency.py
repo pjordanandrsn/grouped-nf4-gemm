@@ -591,6 +591,9 @@ class Mxfp4NvmeResidency(Mxfp4PipelinedGptOss):
                 addr[i] = (self._hot_base + self._hot_row_host[e] * self.row_bytes
                            if self._hot_host[e] else self._dcache.addr(assign[e]))
         else:
+            # This step resolved no cold rows, so it owns no tag. Leaving the
+            # previous one in place made _commit record it a SECOND time.
+            self._tag = None
             slots = iter(self.tier.ensure(self.layer, cold)) if cold else iter(())
             for i, e in enumerate(ids):
                 if self._hot_host[e]:

@@ -244,3 +244,54 @@ def test_a_correctly_sized_arena_is_accepted():
 def test_the_engine_refuses_a_stride_that_is_not_the_tier_s():
     with pytest.raises(ValueError, match="row_stride"):
         _guard(_cache(rows=8, protected=4, stride=512))
+
+
+def test_record_is_idempotent():
+    """gnf4#131. A tag names ONE point in time. An all-hot step left the
+    previous cold tag in place and _commit recorded it again, moving it
+    forward on the stream; rows retiring under it then waited on a position
+    that receded with every repeat."""
+    class _Counting(StepTag):
+        def __init__(self):
+            super().__init__("cpu")
+            self.records = 0
+
+        def record(self):
+            before = self.recorded
+            super().record()
+            if not before:
+                self.records += 1
+
+    t = _Counting()
+    t.record()
+    t.record()
+    t.record()
+    assert t.records == 1 and t.done()
+
+
+def test_the_stall_path_waits_on_every_pending_tag():
+    """Rows blocking a request may be retiring under an OLDER step than the
+    most recent one, and syncing only the last tag leaves them stuck."""
+    class _Stub:
+        recorded = True
+
+        def __init__(self):
+            self.synced = False
+
+        def done(self):
+            return self.synced
+
+        def sync(self):
+            self.synced = True
+
+    c = _cache(rows=2, protected=1)
+    old, last = _Stub(), _Stub()
+    t1 = StepTag("cpu")
+    c.want(0, [0], t1)
+    c.slots.want([(0, 9)], event_tag=old)      # retired under the OLDER tag
+    c.slots._demote({(0, 9)}, old)
+    c._last = last                              # a different, newer tag
+
+    t2 = StepTag("cpu")
+    c.want(0, [7], t2)
+    assert old.synced, "the older tag's rows would have stayed stuck"
