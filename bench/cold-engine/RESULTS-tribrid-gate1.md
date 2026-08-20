@@ -12,7 +12,7 @@ attributable to a measured mechanism rather than an inference.
 
 | gate-1 clause | result |
 |---|---|
-| numerically equivalent to the resident reference | **MISS** — the dynamic arm inherits a **pre-existing** cold→GPU divergence ([e4b#171](https://github.com/pjordanandrsn/experts4bit-qlora/issues/171)). Cold→CPU alone **passes** at every point |
+| numerically equivalent to the resident reference | **NOT MEASURED** — the comparison was mis-specified (see *Correction*). The clause needs a matched reference and a re-run |
 | hide ratio ≥ 70% | **MISS** — cold work is essentially unhidden; 5% cold mass costs 26–33% wall |
 | beats both fixed arms | **MISS** — dynamic tracks the better fixed arm, never beats it |
 | ≥1 destination flip | **PASS** — 225/1874 at 1%, 4005/5061 at 5%, 17973/9844 at 20% |
@@ -104,22 +104,48 @@ hide-ratio clause cannot be met by construction, and P2 (>70% hide at 1–5%
 cold mass) is **not yet falsified** — it has not been given a working
 hiding mechanism to be tested against. Stated plainly rather than scored.
 
-## The correctness finding
+## Correction: the equivalence clause was measured against the wrong reference
 
-Cold experts routed to the **GPU** generate a different token sequence than
-the resident reference — deterministically, from decode step 59. Cold→CPU
-matches exactly at every sweep point (max abs logit diff flat at 0.0703 vs
-0.90→15.9 growing with cold traffic on the GPU path).
-
-Reproduces **byte-identically on `f62c119`** (before the Stage-3 PRs) and
-`2ba26ff` (after), and at `hot_rows` 384 / 1024 / **2048** — with 2048 slots
-for 265 cold rows there is no eviction pressure, ruling out the
-address-vs-contents class. Filed as
+This document originally reported a cold→GPU **correctness bug**, filed as
 [e4b#171](https://github.com/pjordanandrsn/experts4bit-qlora/issues/171).
+That was wrong, and the issue is closed as not-a-defect. The finding is
+retained here rather than deleted, because the mistake is instructive.
 
-The gate caught it because the equivalence clause was registered *before*
-the run, comparing generated tokens rather than a tolerance chosen after
-seeing data.
+`force_cold_mass` defaults to `source="dram"`, so the experts moved to
+`nvme` came **out of the DRAM tier — and a DRAM expert executes on the
+CPU** (`_dram_contrib` → `cpu_grouped.gemv_nf4_grouped_cpu`, the native
+fp32 locked tree). The control was therefore a *CPU-arithmetic* reference
+for exactly the experts under test:
+
+- control — moved experts in `dram` → CPU kernels
+- `cold_dest="cpu"` — same experts in `nvme`, still CPU kernels → **matches
+  by construction**
+- `cold_dest="gpu"` — same experts on the fused GPU kernel → compute-dtype
+  rounding
+
+Cold-CPU matching was structurally guaranteed, not evidence. What was
+measured is the **cross-placement rounding law this engine documents in its
+own first docstring**, reached through a destination switch instead of a
+tier move (3.8e-3 relative RMS / 4.7e-3 relative max on the expert output,
+which greedy decode over 128 steps does not absorb).
+
+Every supporting observation is equally consistent with rounding —
+determinism, independence from `hot_rows` (384/1024/2048), byte-identical
+reproduction pre-PR, and growth with cold mass. Eviction was ruled out and
+the Stage-3 PRs were ruled out; the documented rounding path never was.
+
+**The matched-reference rule** (from e4b `6dccfc1`): compare `"gpu"`
+against the same experts **in VRAM**, and `"cpu"` against them **in DRAM**.
+This harness violated it. A threshold arm is reproducible only against
+itself on the same routing trace, since its destination is per-step.
+
+**The falsifiable check, not yet run** (box destroyed): re-run this sweep
+with `force_cold_mass(source="vram")`. If the mechanism is the rounding
+path, **the arms swap** and cold-GPU becomes the one that matches.
+
+Consequently the equivalence clause above is scored **NOT MEASURED** rather
+than MISS. The timing results are unaffected — they never depended on the
+reference — but no equivalence conclusion should be drawn from this run.
 
 ## What this run does NOT establish
 
