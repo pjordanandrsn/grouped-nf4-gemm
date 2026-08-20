@@ -160,6 +160,45 @@ def _chunk_table(pieces, block_words: int):
     return src, dst, ln
 
 
+def _as_nk(g: dict):
+    """A segment's ``shape_per_expert`` as ``[n, k]``, flattening trailing dims.
+
+    gpt-oss stores expert blocks as ``[n, nblocks, 16]`` and ``nvme_arena.bake``
+    records the checkpoint's own shape — which is the point: it is what makes
+    ``sha256(arena) == sha256(source)`` meaningful and lets ``verify
+    --against-source`` compare byte ranges against the release. Rewriting the
+    shape at bake time would buy this function a simpler input at the cost of
+    the arena's fidelity to its source, and would put newly-baked arenas'
+    metadata at odds with every arena already on disk.
+
+    So the flattening belongs here, where the seam map always described it
+    (`docs/mxfp4/PHASE0-seam-map.md`: "Flatten [E, N, 90, 16] -> [E, N, 1440]").
+    It is also *required* here rather than cosmetic: the blocks-vs-scales
+    discriminator below keys on the invariant that a projection's blocks width
+    is exactly 16x its scales width, and on the unflattened shape both read
+    ``nblocks`` and the signal disappears.
+
+    The flatten is byte-faithful by construction and checked, not assumed:
+    every dtype reaching this point is a packed BYTE dtype, so ``n * k`` must
+    equal the segment's own per-expert length. A shape that fails that is not a
+    reshape of these bytes and is refused.
+    """
+    shp = list(g["shape_per_expert"])
+    if len(shp) < 2:
+        raise ValueError(f"segment {g['suffix']!r} shape {shp} is not [n, k]")
+    flat = 1
+    for d in shp[1:]:
+        flat *= int(d)
+    n = int(shp[0])
+    if n * flat != g["length"]:
+        raise ValueError(
+            f"segment {g['suffix']!r} shape {shp} flattens to [{n}, {flat}] = "
+            f"{n * flat} bytes but the segment is {g['length']} bytes per "
+            f"expert. These bytes are not that shape, so flattening it would "
+            f"reinterpret them.")
+    return [n, flat]
+
+
 def engine_segment_map(index: dict):
     """Map an arena's segments onto the engine's four, in engine order.
 
@@ -180,7 +219,10 @@ def engine_segment_map(index: dict):
       source order are (gate, up, down) and likewise the scales. w1=gate is
       confirmed against the release by shape (``moonshot_gather.K3_SCHEME``).
     """
-    segs = index["segments"]
+    # Segments are normalised onto [n, k] on a LOCAL COPY; `index` is left
+    # exactly as the bake wrote it. See _as_nk for why the flattening is the
+    # consumer's job and not the bake's.
+    segs = [dict(g) for g in index["segments"]]
     for g in segs:
         if g["dtype"] not in _PACKED_BYTE_DTYPES:
             raise ValueError(
@@ -189,9 +231,7 @@ def engine_segment_map(index: dict):
                 "nibbles + e8m0 scale bytes, one byte per element either way. An "
                 "F32 segment means this is an NF4 arena (fp32 absmax); serve it "
                 "with experts4bit_qlora.nvme_experts instead.")
-        if len(g["shape_per_expert"]) != 2:
-            raise ValueError(f"segment {g['suffix']!r} shape "
-                             f"{g['shape_per_expert']} is not [n, k]")
+        g["shape_per_expert"] = _as_nk(g)
     if len(segs) not in (4, 6):
         raise ValueError(
             f"expected 4 segments (fused gate_up) or 6 (split w1/w3), got "

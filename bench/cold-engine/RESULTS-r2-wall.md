@@ -125,9 +125,15 @@ shape both read 90 so the discriminator collapses. Flattened to
 `[5760, 1440]` it is 1440 against 90 and works. The bytes are identical;
 only the metadata differs.
 
-The harness flattens a **copy** of the index. Whether that belongs in the
-bake or in the engine is a real decision with provenance consequences on
-both sides, and a measurement harness is the wrong place to settle it.
+**Settled in gnf4#153: the engine.** The arena keeps recording what the
+checkpoint says — that fidelity is the whole point of `sha256(arena) ==
+sha256(source)` and of `verify --against-source` — and
+`engine_segment_map` normalises onto `[n, k]` on a local copy, which is
+where the seam map always described the flattening. Rewriting shapes at bake
+time would have bought a simpler validator at the cost of the arena's
+fidelity to its source, and put newly-baked arenas at odds with every arena
+already on disk. The harness workaround here predates that fix and is left
+as taken.
 
 ## What this does not establish
 
