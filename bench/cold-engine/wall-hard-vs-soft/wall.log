@@ -1,0 +1,21 @@
++ V=/root/venv/bin
++ export PYTHONPATH=/root/g/kernel
++ PYTHONPATH=/root/g/kernel
++ df -h /root
++ tail -1
+overlay          80G  5.5G   75G   7% /
++ /root/venv/bin/python /root/g/bench/cold-engine/routing-trace/wall_hard_vs_soft.py --trace /root/g/bench/cold-engine/routing-trace/olmoe_routing_seq.jsonl --build /root/snap --arena /root/big.arena --rows 128,256,384 --repeats 3 --pinned --out /root/wall.json
+building 16L x 64E snapshot, 3.34 MB/row (3.4 GB arena)...
+  snapshot in 21s; baking...
+  baked in 14s
+arena: 16L x 64E, row 3342336 B, pinned=True
+trace: 512 steps, 16 layers, top-8 of 64
+
+  rows   prot |     hard ms     soft ms   d wall | hard reads soft reads  d reads | resurrections
+   128    120 |    117711.7    121237.2    +3.0% |      44298      44964    +1.5% | 187
+   256    248 |     91551.6     96818.4    +5.8% |      32169      32605    +1.4% | 256
+   384    376 |     66985.1     73611.9    +9.9% |      21890      22150    +1.2% | 314
+
+receipt -> /root/wall.json
++ echo WALL_DONE
+WALL_DONE
