@@ -561,6 +561,44 @@ class ColdTier:
                 f"first ensure().")
         self._landing = callback
 
+    def slot_of(self, layer: int, expert: int):
+        """The slot holding this row, or None. Lets a consumer ask what the
+        tier thinks BEFORE calling ensure — which is the only moment at
+        which a row can be invalidated, since ensure protects what it
+        resolves."""
+        with self._lock:
+            return self._slot_of.get((layer, int(expert)))
+
+    def invalidate(self, layer: int, expert: int) -> bool:
+        """Drop a row's residency so the next :meth:`ensure` refills it.
+
+        Returns True if a mapping was dropped. Refuses a slot with a fill in
+        flight (its bytes are still landing) and one inside the current
+        demand window (a caller is between its ensure and its reads) — in
+        both cases dropping the mapping would strand a reader.
+
+        Exists for a consumer that can tell a row is not usable to IT even
+        though the tier considers it resident: an external-landing view
+        whose stacks were never written for that slot, because the row was
+        filled before the landing was attached. Without this the view would
+        either serve bytes it never landed or have to give up on any tier
+        with prior residency.
+        """
+        key = (layer, int(expert))
+        with self._lock:
+            slot = self._slot_of.get(key)
+            if slot is None:
+                return False
+            if slot in self._reserved or slot in self._demand_protected:
+                return False
+            del self._slot_of[key]
+            self._key_of[slot] = None
+            self._reclaimable.pop(key, None)
+            self._gen[slot] += 1
+            if slot not in self._free:
+                self._free.append(slot)
+            return True
+
     def reclaimable(self, layer: int, expert: int) -> bool:
         """True iff this row is mapped but has lost capacity ownership — a
         request for it now is a resurrection, not a read."""

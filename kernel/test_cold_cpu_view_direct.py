@@ -257,3 +257,80 @@ def test_attach_landing_after_a_fill_is_refused(arena):
             t.attach_landing(v.landing)
     finally:
         t.close()
+
+
+def test_prior_tier_residency_is_refilled_not_stamped(arena):
+    """The bug this guards: a row resident BEFORE the landing was attached
+    was never scattered into the view's stacks, so a tier hit must force a
+    refill. Stamping it would mark uninitialized bytes valid.
+
+    The rows are taken out of the demand window first, because `invalidate`
+    refuses a protected row — see the KNOWN LIMITATION test below, which is
+    the reason this landing cannot simply be bolted onto an engine's
+    already-used serving tier.
+    """
+    path, index = arena
+    if not _scatterable(index):
+        pytest.skip("geometry not scatterable")
+    sufs = _sufs(index)
+    t = ColdTier(path, hot_rows=AL * AE, pinned=False, index=index)
+    t.ensure(0, range(AE))                    # residency with NO landing
+    t.ensure(1, range(AE))                    # rotate the demand window off it
+    v = ColdCpuView(t, index, sufs, direct=True)
+    t._landing = v.landing
+    try:
+        slots = v.ensure(0, range(AE))
+        assert v.stats()["unlanded_refills"] == AE, (
+            "every pre-existing row must be dropped and re-landed")
+        tc, vc = _copy_view(path, index, sufs)
+        try:
+            sc = vc.ensure(0, range(AE))
+            for s in sufs:
+                assert torch.equal(v.stack(s)[list(slots)],
+                                   vc.stack(s)[list(sc)]), (
+                    "self-healed rows must equal the copy path's bytes")
+        finally:
+            tc.close()
+    finally:
+        t.close()
+
+
+def test_KNOWN_LIMITATION_protected_rows_cannot_self_heal(arena):
+    """A row in the CURRENT demand window cannot be invalidated, so if the
+    tier's last demand ensure covered exactly the rows the view now wants,
+    the self-heal cannot run and those stacks would be stamped unlanded.
+
+    This is why an external landing must be attached to a tier BEFORE it
+    serves anyone — `attach_landing` refuses a used tier for exactly this
+    reason. Recorded as a test so the boundary is visible rather than
+    folklore.
+    """
+    path, index = arena
+    if not _scatterable(index):
+        pytest.skip("geometry not scatterable")
+    t = ColdTier(path, hot_rows=AL * AE, pinned=False, index=index)
+    t.ensure(0, range(AE))                    # window still holds these
+    v = ColdCpuView(t, index, _sufs(index), direct=True)
+    t._landing = v.landing
+    try:
+        v.ensure(0, range(AE))
+        assert v.stats()["unlanded_refills"] == 0, (
+            "protected rows are refused by invalidate — that is the guard "
+            "working, and the reason this configuration is unsupported")
+    finally:
+        t.close()
+
+
+def test_invalidate_refuses_a_row_in_the_demand_window(arena):
+    """A caller between its ensure and its reads must not have the row
+    dropped underneath it."""
+    path, index = arena
+    t = ColdTier(path, hot_rows=4, pinned=False, index=index)
+    try:
+        t.ensure(0, [0])
+        assert t.invalidate(0, 0) is False     # 0 is the demand window
+        t.ensure(0, [1])                       # window rotates
+        assert t.invalidate(0, 0) is True
+        assert not t.resident(0, 0)
+    finally:
+        t.close()
