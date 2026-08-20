@@ -1,0 +1,3 @@
+    raise ValueError(
+ValueError: request of 36 unique rows exceeds hot_rows=32
+ARMA_DONE
