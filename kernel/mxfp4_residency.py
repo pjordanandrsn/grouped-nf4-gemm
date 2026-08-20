@@ -364,7 +364,7 @@ class Mxfp4NvmeResidency(Mxfp4PipelinedGptOss):
                  hot_rows=None, gate_up_bias=None, down_bias=None,
                  device="cuda", alpha=1.702, limit=7.0,
                  compute_dtype=torch.bfloat16, tier=None, index=None, qd=4,
-                 store=None):
+                 store=None, dev_cache=None):
         from nvme_arena import load_index
         index = index if index is not None else load_index(arena_path)
         groups, geo = engine_segment_map(index)
@@ -398,6 +398,7 @@ class Mxfp4NvmeResidency(Mxfp4PipelinedGptOss):
         self._init_permutation()
         self._build_source_from_arena(hot_ids)
         self._init_slots(store)
+        self._init_dev_cache(dev_cache)
         self._init_bias(gate_up_bias, down_bias)
         self._init_tier_state()
         self._prime()
@@ -488,6 +489,28 @@ class Mxfp4NvmeResidency(Mxfp4PipelinedGptOss):
         self._hot_base = self.hot_stack.data_ptr()
         self._cold_base = self.tier.buffer_ptr
 
+    def _init_dev_cache(self, cache):
+        """Attach a shared :class:`DevRowCache`, or run without one.
+
+        ``None`` is not a degraded mode — it is exactly the engine that
+        shipped before this, address for address, so the cache can be turned
+        off in an A/B without a second code path to trust.
+        """
+        self._dcache = cache
+        self._tag = None
+        if cache is None:
+            return
+        if cache.row_stride != self.row_stride:
+            raise ValueError(
+                f"dev_cache row_stride {cache.row_stride} != engine "
+                f"{self.row_stride}: the cache strides the tier's PADDED row, "
+                f"and a mismatch reads mid-row from slot 1 onward")
+        if cache.rows <= self.k:
+            raise ValueError(
+                f"dev_cache rows={cache.rows} must EXCEED k={self.k}. At k "
+                f"the routed set fills the arena, so a miss can only be served "
+                f"by a slot this step is about to read.")
+
     def _init_tier_state(self):
         k = self.k
         self._want_eid = [-1] * k
@@ -518,13 +541,32 @@ class Mxfp4NvmeResidency(Mxfp4PipelinedGptOss):
                 "Mxfp4PipelinedGptOss instead, or run this engine eagerly.")
         ids = self.want_buf.tolist()
         cold = [e for e in ids if not self._hot_host[e]]
-        slots = iter(self.tier.ensure(self.layer, cold)) if cold else iter(())
         addr = self._src_host
-        for i, e in enumerate(ids):
-            if self._hot_host[e]:
-                addr[i] = self._hot_base + self._hot_row_host[e] * self.row_bytes
-            else:
-                addr[i] = self._cold_base + next(slots) * self.row_stride
+        if self._dcache is not None and cold:
+            # Cold rows resolve to a DEVICE slot. The tier is still the only
+            # thing that reads NVMe -- the cache sits in front of it, so a row
+            # already on the device is not read, not copied over PCIe, and not
+            # (under reclaimable residency) even re-mapped.
+            from dev_row_cache import StepTag
+            tag = StepTag(self.device)
+            assign, need = self._dcache.want(self.layer, cold, tag, self._tag)
+            if need:
+                tslots = self.tier.ensure(self.layer, need)
+                pin, dc = self.tier.pinned_tensor(), self._dcache.rowview()
+                for e, ts in zip(need, tslots):
+                    dc[assign[e]].copy_(pin[ts])
+                self._dcache.note_filled(len(need))
+            self._tag = tag
+            for i, e in enumerate(ids):
+                addr[i] = (self._hot_base + self._hot_row_host[e] * self.row_bytes
+                           if self._hot_host[e] else self._dcache.addr(assign[e]))
+        else:
+            slots = iter(self.tier.ensure(self.layer, cold)) if cold else iter(())
+            for i, e in enumerate(ids):
+                if self._hot_host[e]:
+                    addr[i] = self._hot_base + self._hot_row_host[e] * self.row_bytes
+                else:
+                    addr[i] = self._cold_base + next(slots) * self.row_stride
         self._want_eid = ids
         self._src_dev.copy_(torch.tensor(addr, dtype=torch.long))
         return self._src_dev
@@ -548,6 +590,11 @@ class Mxfp4NvmeResidency(Mxfp4PipelinedGptOss):
         super()._commit(src)
         self._have_eid = list(self._want_eid)
         self._have_addr = list(self._src_host)
+        if self._tag is not None:
+            # Recorded HERE, after _gather has been issued: the readers of a
+            # cache row are that gather, not the epilogue, so a row is free
+            # the moment its bytes have been copied into the engine's slots.
+            self._tag.record()
 
     def _forget(self):
         """Drop this engine's residency mirror when another layer takes the slots.
@@ -568,6 +615,13 @@ class Mxfp4NvmeResidency(Mxfp4PipelinedGptOss):
         t["tier"] = self.tier.stats()
         t["slots"] = {"bytes": self.store.bytes, "users": self.store.users,
                       "claims": self.store.claims}
+        if self._dcache is not None:
+            t["dev_cache"] = self._dcache.stats()
+            # cold_pcie_bytes counts the GATHER's cold reads, which the cache
+            # makes device-side. Reporting it as PCIe under the cache would
+            # credit the cache with traffic it moved rather than removed, so
+            # the real host->device figure is named separately.
+            t["host_to_device_bytes"] = self._dcache.filled * self.row_bytes
         return t
 
 
