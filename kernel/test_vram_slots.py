@@ -234,3 +234,31 @@ def test_a_failed_want_does_not_double_count_on_retry():
     assert v.stats()["resurrections"] == before, \
         "a failed want left its resurrection on the books"
     assert v.state(v.slot_of(0)) == "reclaimable", "the hit was not rolled back"
+
+
+def test_victims_are_the_least_recently_used_not_the_lowest_numbered():
+    """The clock was incremented and never read: both victim selection and
+    allocation walked slot order, so the cache overwrote the row it was about
+    to need. On a captured OLMoE decode trace that cost up to 1.33x more
+    fills than an ideal LRU of the same capacity."""
+    v = VramSlots(3, protected=1)
+    v.want([10])            # slot 0
+    v.want([11])            # slot 1
+    v.want([12])            # slot 2 -- 10 is now the oldest
+    a, need = v.want([99])
+    assert v.slot_of(10) is None, "the oldest row survived"
+    assert v.slot_of(12) is not None, "the newest row was evicted"
+
+
+def test_a_re_touched_row_stops_being_the_oldest():
+    """A hit has to refresh recency, or the row a caller just used stays
+    first in line to be overwritten. Two slots so the arena is genuinely
+    full -- with a spare slot the claim takes the free one and evicts
+    nothing, which proves nothing."""
+    v = VramSlots(2, protected=1)
+    v.want([10])
+    v.want([11])            # 10 demoted to reclaimable
+    v.want([10])            # resurrected; 11 is now the older row
+    v.want([99])
+    assert v.slot_of(11) is None, "recency was not updated on a hit"
+    assert v.slot_of(10) is not None, "the just-used row was overwritten"
