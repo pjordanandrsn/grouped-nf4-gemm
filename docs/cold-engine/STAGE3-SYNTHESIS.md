@@ -22,7 +22,7 @@ scheduling gates missed, and the clear win came from a memory mechanism.
 
 | | verdict | why |
 |---|---|---|
-| **Gate 1** — can cold mass be admitted without proportional wall growth? | **MISS** | The hide-ratio clause is unreachable *by construction*: storage is a minority of cold-path cost at 1–10% cold mass, so a perfect prefetcher could remove only that fraction of the exposure. The published 5–11% is **6–12%** once charged at the box's real sequential ceiling, and lower still once the read counts are re-taken on the fixed window — see the correction in `RESULTS-tribrid-gate1.md`. The verdict rests on prefetch coverage (<1% of demand misses), a ratio inside the window and unaffected by either error |
+| **Gate 1** — can cold mass be admitted without proportional wall growth? | **MISS** | The hide-ratio clause is unreachable *by construction*: storage is 0.8–3.0% of cold-path cost at 1–10% cold mass, so a perfect prefetcher could remove only that fraction of the exposure. The published 5–11% was warmup-inclusive: the counts reproduce exactly as `reads_since_load` on a re-run, and the decode-window figures are 4.3–12.9× smaller, putting storage at **0.8–3.0%** (`gate1-rerun/RESULTS-gate1-window-rerun.md`). The verdict rests on prefetch coverage (<1% of demand misses), a ratio inside the window and unaffected by either error |
 | **Gate 2** — does choosing a destination by deadline beat a threshold? | **MISS** | Backlog changed 0 of 1975 decisions in the regime built to provoke it; the rule's own syncs cost 11.7–15.6% for routing identical to fixed-CPU |
 | **Reclaimable residency (R1, R5)** | **CONFIRMED** (withdrawn, then re-measured) | P(reuse before overwrite) is **13.5 / 24.5 / 34.2%** at protected 96/64/32 on a decode-only window — one point inside the registered 5–20% band and two above it. Reads **−13.5% / −24.5%** at the two feasible budgets, wall −2.5% / −7.9%. The earlier 11–60% was withdrawn for a nested-ensure defect that does inflate P, but only by 7–15% relative; the real distortion was a measurement window that counted warmup prefills against decode-only wall. See `RESULTS-tribrid-reclaimable.md`. **No read count here is comparable to one published before that window fix** |
 | **VRAM reclaimable residency** | **Mechanism validated, not scored** | The device-side row cache is bitwise-equal to the uncached engine over 24 steps with 45 logical evictions in flight, and fills 19 rows for 96 routed cold expert-slots. But its fixture holds *every* expert in the layer, so the 21.6% byte figure is a best case and not a claim about real routing. Untimed. `bench/cold-engine/dev-row-cache/` |
@@ -94,23 +94,25 @@ mechanism but no scored measurement: what it lacks is a real routing trace
 against a cache sized far below the expert count, which is the regime where
 its hit rate stops being a foregone conclusion.
 
-**One correction still outstanding.** The measurement-window defect that
-distorted R1 is also present in `run_gate1.py`, and is fixed there — but
-**gate 1's published read counts were taken with it and are uncorrected.**
-They are warmup-inclusive where they claim decode-only, by roughly the
-factor R1 measured (six sevenths of the traffic was warmup). A second,
-smaller error was found in the same addendum and *is* corrected: disk time
-was charged at 6.26 GB/s, described as the box's sequential ceiling, which
-is in fact its **random** qd16 rate — the sequential ceiling is 5.51.
-`run_gate1.py` had been reading a `seq_best_gbs` key that no calibration in
-this repo produces, so every gate-1 receipt carries `b_nvme_gbs: null` and
-the constant was chosen by hand. It now derives the ceiling from the
-sequential points and raises when there are none.
+**That correction is now closed.** The window defect that distorted R1 was
+also in `run_gate1.py`. It is fixed and the re-run is done: the published
+gate-1 read counts **reproduce as `reads_since_load`** on different silicon
+(seven of eight within 7%), which makes "they were warmup-inclusive" a
+measurement rather than an inference. Decode-window counts are 4.3–12.9×
+smaller, and the corrected storage share is **0.8–3.0%** at 1–10% cold —
+against a published 5–11% — and **5–9%** at 20%, where the addendum claimed
+30–61%. A second, smaller error in the same addendum is also corrected: disk
+was charged at 6.26 GB/s, described as the box's sequential ceiling, which is
+its **random** qd16 rate (sequential is 5.51). `run_gate1.py` had been reading
+a `seq_best_gbs` key no calibration here produces, so every earlier receipt
+carries `b_nvme_gbs: null`; it now derives the ceiling and raises when there
+is none.
 
-Gate 1's MISS does not rest on those absolutes — it rests on prefetch
-coverage, a ratio taken inside the window — so the verdict stands, and
-correcting the reads makes the reframing stronger rather than weaker. **No
-read count in that document should be quoted until it is re-run.**
+Gate 1's MISS stands and its reframing strengthens — the software cost the
+addendum put at ~90% of cold work is ~97–99%. Quote read counts from
+`gate1-rerun/RESULTS-gate1-window-rerun.md`, not the original addendum. The
+re-run did **not** re-score gate 1's clauses (different host class), and did
+not exercise the device row cache, which lives on a different engine.
 
 ## Cost of the campaign
 

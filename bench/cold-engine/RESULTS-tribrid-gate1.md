@@ -496,7 +496,16 @@ therefore resolved to `None`, every gate-1 receipt recorded
 be chosen by hand from the blob. It is now computed from the sequential
 points and **raises** when there are none.
 
-### 2. The read counts are warmup-inclusive — NOT corrected
+### 2. The read counts are warmup-inclusive — NOW MEASURED AND CORRECTED
+
+> **Resolved.** `gate1-rerun/RESULTS-gate1-window-rerun.md` measures this. The
+> published counts **reproduce as `reads_since_load`** on a re-run (105→112,
+> 238→241, 340→335, 3400→3437 — seven of eight within 7%), and the
+> decode-window counts are **25–38** at 1–10% cold, a 4.3–12.9×
+> overstatement. Corrected disk share is **0.8–3.0%** at 1–10% cold, and
+> **5–9%** at 20% where this addendum claimed 30–61%. The paragraphs below
+> stated the problem before it was measured; they are kept for the argument,
+> and the numbers live in the re-run.
 
 `pre = cold_stats(...)` was snapshotted before `run_steps`, which performs
 warmup prefills, warmup decodes and the KV-building prefill *inside itself*.
@@ -512,7 +521,7 @@ tables, is inflated by an unknown factor of that order.** The direction is
 certain and it is much larger than the ceiling correction, so the true
 storage share at 1–10% cold is *well below* the 6–12% shown — plausibly
 1–2%, but this document does not claim a number it has not measured. The
-fix is in `run_gate1.py` (gnf4#132); the re-run is not done.
+fix is in `run_gate1.py` (gnf4#132); and the re-run **is now done** — see the banner above.
 
 ### What this does and does not change
 
@@ -524,6 +533,7 @@ starts. The reframing says a perfect prefetcher could remove only the
 storage fraction of cold cost; correcting the reads makes that fraction
 smaller, not larger.
 
-**No absolute read count in this document should be quoted** until gate 1 is
-re-run on the fixed window. That includes the "3400 reads against 340 at
-10%" thrashing observation, which is warmup-inclusive on both sides.
+**No absolute read count in this document should be quoted.** Use the
+corrected table in `gate1-rerun/RESULTS-gate1-window-rerun.md`. That includes
+the "3400 reads against 340 at 10%" thrashing observation, which is
+warmup-inclusive on both sides — corrected, it is 255 against 26.

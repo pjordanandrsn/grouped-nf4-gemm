@@ -218,6 +218,12 @@ def main():
                 del model
                 torch.cuda.empty_cache()
                 continue
+            # Snapshot at LOAD as well as at the measurement boundary, so a
+            # single run reports both windows and the size of the difference
+            # is measured on one trace rather than inferred across runs. The
+            # load snapshot is what the pre-#132 harness was unknowingly
+            # differencing against.
+            at_load = hy.cold_stats(model)
             pre = {}
             steps, logits, toks = run_steps(
                 model, tok_ids, a.steps, a.warmup,
@@ -242,6 +248,14 @@ def main():
                                      - pre.get("disk_reads", 0))
             cs["cold_rows_in_window"] = (
                 (cs.get("cold_rows", 0)) - (pre.get("cold_rows", 0)))
+            # The warmup-inclusive figure, named for what it is. Reported so
+            # the published numbers can be located against this run instead
+            # of merely declared wrong: reads_since_load is the quantity the
+            # old code called "in window".
+            cs["reads_since_load"] = (cs.get("disk_reads", 0)
+                                      - at_load.get("disk_reads", 0))
+            cs["warmup_reads"] = (cs["reads_since_load"]
+                                  - cs["reads_in_window"])
             point["arms"][arm] = {
                 "engaged": n, "median_ns": statistics.median(steps),
                 "steps": steps, "cold_stats": cs,
