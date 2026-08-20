@@ -1,0 +1,16 @@
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+70 passed, 10 warnings in 4.32s
+  import pynvml  # type: ignore[import]
+box: {'gpu': 'NVIDIA GeForce RTX 5090', 'b_dram_gbs': 442.18, 'g0_verdict': 'proceed'}
+=== cold 5%, dest=4.0 ===
+  copy#1    median=   57.95 ms cpu/gpu=  3101/4963   mat=237    path=copy           toks_ok=True
+  copy#2    median=   59.89 ms cpu/gpu=  3101/4963   mat=237    path=copy           toks_ok=True
+  direct#1  median=   58.91 ms cpu/gpu=  3101/4963   mat=237    path=direct-scatter toks_ok=True
+  direct#2  median=   58.25 ms cpu/gpu=  3101/4963   mat=237    path=direct-scatter toks_ok=True
+=== cold 20%, dest=4.0 ===
+  copy#1    median=   65.04 ms cpu/gpu= 13972/9631   mat=1277   path=copy           toks_ok=True
+  copy#2    median=   67.03 ms cpu/gpu= 13972/9631   mat=1277   path=copy           toks_ok=True
+  direct#1  median=   64.53 ms cpu/gpu= 13972/9631   mat=1277   path=direct-scatter toks_ok=True
+  direct#2  median=   64.57 ms cpu/gpu= 13972/9631   mat=1277   path=direct-scatter toks_ok=True
+MIXED_DONE

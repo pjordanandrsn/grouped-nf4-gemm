@@ -43,6 +43,10 @@ def main():
     ap.add_argument("--vram-frac", type=float, default=0.25)
     ap.add_argument("--seq", type=int, default=64)
     ap.add_argument("--repeats", type=int, default=2)
+    ap.add_argument("--direct", default="both", choices=("both","true","false"),
+                    help="cold_direct for the GPU destination. 'both' A/Bs "
+                         "the preadv landing, which was illegal here until "
+                         "the stack learned to read the view.")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
 
@@ -85,15 +89,18 @@ def main():
         print("\n=== cold %.0f%% (%d experts) ===" % (
             frac * 100, pt["experts_moved"]))
         ref_toks = None
-        for via in (False, True):
+        arms = ([(True, True), (True, False)] if a.direct == "both"
+                else [(True, a.direct == "true")])
+        for via, direct in arms:
             for rep in range(a.repeats):
-                name = f"{'view' if via else 'rebuild'}#{rep + 1}"
+                name = f"{'direct' if direct else 'copy'}#{rep + 1}"
                 model, _ = load_moe_4bit_streaming(
                     a.model, device="cuda", dtype=torch.bfloat16, r=8,
                     alpha=16, quant_type="nf4", arena=a.arena)
                 n = hy.enable_hybrid_tier(
                     model, a.arena, man, hot_rows=a.hot_rows, cold_dest="gpu",
-                    gpu_stacks_via_view=via, verbose=False)
+                    gpu_stacks_via_view=via, cold_direct=direct,
+                    verbose=False)
                 assert n > 0
                 pre = {}
                 steps, _, toks = run_steps(
@@ -111,7 +118,8 @@ def main():
                        "materializations": vs.get("materializations"),
                        "rows_requested": vs.get("rows_requested"),
                        "cold_rows_gpu": cs.get("cold_rows_gpu"),
-                       "serve_gpu_stacks": via}
+                       "serve_gpu_stacks": via, "cold_direct": direct,
+                       "e4b_path": getattr(v, "e4b_path", None)}
                 if ref_toks is None:
                     ref_toks = toks
                 arm["tokens_match"] = (toks == ref_toks)
@@ -120,7 +128,7 @@ def main():
                       "materializations=%-8s toks_ok=%s" % (
                           name, arm["median_ns"] / 1e6, arm["reads_in_window"],
                           arm["view_hits"], arm["materializations"],
-                          arm["tokens_match"]))
+                          arm["tokens_match"]), "path=", arm["e4b_path"])
                 hy.disable_hybrid_tier(model)
                 del model
                 torch.cuda.empty_cache()
