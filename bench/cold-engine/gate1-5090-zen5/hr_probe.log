@@ -1,0 +1,12 @@
+--- hot_rows=384 (265 cold rows at 5%) ---
+[HR384] control-vs-coldGPU tokens_match=False first_divergence=59
+[HR384] ref[55:65] =[2570, 1963, 13, 285, 10950, 403, 1335, 4715, 849, 352]
+[HR384] cold[55:65]=[2570, 1963, 13, 285, 253, 1039, 352, 2987, 310, 1335]
+--- hot_rows=1024 (265 cold rows at 5%) ---
+[HR1024] control-vs-coldGPU tokens_match=False first_divergence=59
+[HR1024] ref[55:65] =[2570, 1963, 13, 285, 10950, 403, 1335, 4715, 849, 352]
+[HR1024] cold[55:65]=[2570, 1963, 13, 285, 253, 1039, 352, 2987, 310, 1335]
+--- hot_rows=2048 (265 cold rows at 5%) ---
+[HR2048] control-vs-coldGPU tokens_match=False first_divergence=59
+[HR2048] ref[55:65] =[2570, 1963, 13, 285, 10950, 403, 1335, 4715, 849, 352]
+[HR2048] cold[55:65]=[2570, 1963, 13, 285, 253, 1039, 352, 2987, 310, 1335]

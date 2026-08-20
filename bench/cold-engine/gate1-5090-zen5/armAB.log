@@ -1,0 +1,11 @@
+### protected=32  ARM A (hard eviction: hot_rows==protected, nothing reclaimable)
+### protected=32  ARM B (reclaimable: 128-slot pool, 96 reclaimable slots)
+protected=  32 | median=  75.37 ms | win_reads= 2618 | logical_evict=   6618 | resurrections=   2091 | P(reuse)=0.3206 | bytes_saved=7399931904
+### protected=64  ARM A (hard eviction: hot_rows==protected, nothing reclaimable)
+protected=  64 | median=  80.46 ms | win_reads= 3720 | logical_evict=      0 | resurrections=      0 | P(reuse)=n/a | bytes_saved=0
+### protected=64  ARM B (reclaimable: 128-slot pool, 64 reclaimable slots)
+protected=  64 | median=  76.91 ms | win_reads= 2618 | logical_evict=   5729 | resurrections=   1234 | P(reuse)=0.2178 | bytes_saved=4367056896
+### protected=96  ARM A (hard eviction: hot_rows==protected, nothing reclaimable)
+protected=  96 | median=  79.02 ms | win_reads= 3077 | logical_evict=      0 | resurrections=      0 | P(reuse)=n/a | bytes_saved=0
+### protected=96  ARM B (reclaimable: 128-slot pool, 32 reclaimable slots)
+protected=  96 | median=  76.31 ms | win_reads= 2618 | logical_evict=   4993 | resurrections=    543 | P(reuse)=0.1095 | bytes_saved=1921646592
