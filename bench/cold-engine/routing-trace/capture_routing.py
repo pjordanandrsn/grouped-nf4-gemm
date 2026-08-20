@@ -92,24 +92,48 @@ def main():
     step_rec = {}
 
     def _indices(out):
-        """The router hands back (scores[T,E], weights[T,k], indices[T,k]).
+        """The routed expert ids, however this transformers version spells them.
 
-        Pick the tensor by SHAPE AND DTYPE rather than by position: an
-        integer tensor whose last dim is k is the index tensor and nothing
-        else is. Reading position 2 would break silently the first time a
-        transformers version reorders the tuple, and the failure would be a
+        Two shapes exist in the wild and both have to work, because the
+        module named `mlp.gate` is not the same object across versions:
+
+        * a **router module** (OLMoE's `OlmoeTopKRouter` in current
+          transformers) returns `(scores[T,E], weights[T,k], indices[T,k])`
+          and hands the ids over directly;
+        * a bare **`nn.Linear`** (older transformers) returns float logits
+          `[T, E]`, and the ids have to be recomputed with top-k.
+
+        Indices are preferred when present and picked by SHAPE AND DTYPE, not
+        by position -- an integer tensor whose last dim is k is the index
+        tensor and nothing else is. Reading position 2 would break silently
+        the first time the tuple is reordered, and a silent break here is a
         plausible-looking routing trace rather than an exception.
         """
-        cands = [t for t in (out if isinstance(out, (tuple, list)) else [out])
-                 if isinstance(t, torch.Tensor)
-                 and t.dtype in (torch.int32, torch.int64)
-                 and t.shape[-1] == k]
-        if len(cands) != 1:
+        ts = [t for t in (out if isinstance(out, (tuple, list)) else [out])
+              if isinstance(t, torch.Tensor)]
+        idx = [t for t in ts if t.dtype in (torch.int32, torch.int64)
+               and t.shape[-1] == k]
+        if len(idx) == 1:
+            return idx[0]
+        if len(idx) > 1:
             raise RuntimeError(
-                f"expected exactly one integer [*, k={k}] tensor in the "
-                f"router output, found {len(cands)}: "
-                f"{[(tuple(t.shape), str(t.dtype)) for t in (out if isinstance(out,(tuple,list)) else [out]) if isinstance(t, torch.Tensor)]}")
-        return cands[0]
+                f"ambiguous router output: {len(idx)} integer [*, k={k}] "
+                f"tensors, cannot tell which holds the routed ids "
+                f"({[tuple(t.shape) for t in idx]})")
+        # No index tensor: this is the raw-logits form. Take the widest
+        # float tensor -- scores over all E experts -- and redo the top-k.
+        lg = [t for t in ts if t.is_floating_point()]
+        if not lg:
+            raise RuntimeError(
+                "router output has neither an integer [*, k] index tensor "
+                f"nor a float logit tensor: "
+                f"{[(tuple(t.shape), str(t.dtype)) for t in ts]}")
+        wide = max(lg, key=lambda t: t.shape[-1])
+        if wide.shape[-1] < k:
+            raise RuntimeError(
+                f"router logits have {wide.shape[-1]} columns, fewer than "
+                f"top_k={k}; this is not a router output")
+        return torch.topk(wide.reshape(-1, wide.shape[-1]), k=k, dim=-1).indices
 
     def mk(i):
         def hook(_m, _inp, out):
