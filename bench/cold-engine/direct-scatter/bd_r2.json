@@ -1,0 +1,43 @@
+{
+  "config": {
+    "root": "/root/bench_arena",
+    "layers": 8,
+    "experts": 64,
+    "hot_rows": 96,
+    "steps": 60,
+    "topk": 8,
+    "out": "/root/bd_r2.json"
+  },
+  "arms": {
+    "copy-A": {
+      "median_ns": 4841001.5,
+      "total_ns": 2256249259,
+      "calls": 480,
+      "disk_reads": 1333,
+      "misses": 1333,
+      "hits": 4284,
+      "materializations": 1333
+    },
+    "direct": {
+      "median_ns": 2725153.0,
+      "total_ns": 1244818176,
+      "calls": 480,
+      "disk_reads": 1301,
+      "misses": 1301,
+      "hits": 1650,
+      "materializations": 1301
+    },
+    "copy-B": {
+      "median_ns": 4393478.0,
+      "total_ns": 2202864925,
+      "calls": 480,
+      "disk_reads": 1333,
+      "misses": 1333,
+      "hits": 4284,
+      "materializations": 1333
+    }
+  },
+  "self_pair_spread": 0.024234047850210334,
+  "direct_vs_copy": -0.43490943912505214,
+  "reads_match": false
+}
