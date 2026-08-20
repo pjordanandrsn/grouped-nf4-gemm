@@ -134,6 +134,35 @@ class VramSlots:
         if len(experts) > self.n_slots:
             raise ValueError(
                 f"{len(experts)} experts requested into {self.n_slots} slots")
+        # ALL OR NOTHING. _claim can raise partway through the claim loop,
+        # and the experts already claimed are ACTIVE and mapped but have no
+        # bytes -- nothing fills a row until want() has RETURNED. A caller
+        # that retries (DevRowCache stalls and retries) then finds them via
+        # slot_of, counts them as hits, leaves them out of `need`, and the
+        # gather reads whatever was in those rows as that expert. Restoring
+        # the snapshot also keeps the counters honest: without it a retried
+        # request double-counts its hits and resurrections, and
+        # resurrections is R2/R3's numerator (Bugbot, gnf4#131).
+        snap = self._snapshot()
+        try:
+            return self._want_locked(experts, event_tag)
+        except BaseException:
+            self._restore(snap)
+            raise
+
+    def _snapshot(self):
+        return (list(self._holds), list(self._state), list(self._gen),
+                dict(self._pending), self._clock, self.gathers,
+                self.active_hits, self.resurrections, self.logical_evictions,
+                self.overwritten, self.blocked_by_retiring)
+
+    def _restore(self, snap) -> None:
+        (self._holds, self._state, self._gen, self._pending, self._clock,
+         self.gathers, self.active_hits, self.resurrections,
+         self.logical_evictions, self.overwritten,
+         self.blocked_by_retiring) = snap
+
+    def _want_locked(self, experts, event_tag):
         self._clock += 1
         assign, need = {}, []
 

@@ -201,3 +201,36 @@ def test_claim_still_takes_active_when_the_caller_asserts_quiescence():
     v.want([0, 1])
     a, need = v.want([5])                    # no tag -> ACTIVE is fair game
     assert need == [5] and a[5] in (0, 1)
+
+
+def test_want_is_all_or_nothing_when_a_claim_raises():
+    """gnf4#131. Nothing fills a row until want() has RETURNED, so an expert
+    claimed before a mid-loop failure is ACTIVE, mapped, and empty. A caller
+    that retries finds it via slot_of, calls it a hit, leaves it out of
+    `need`, and the gather reads leftover bytes as that expert."""
+    v = VramSlots(3, protected=1)
+    v.want([9])                                  # one slot ACTIVE, untagged
+    before = v.stats()["gathers"]
+    # 3 experts into 3 slots passes the size guard, but only 2 slots are
+    # claimable under a tag -- the third claim raises mid-loop
+    with pytest.raises(RuntimeError, match="no slot available"):
+        v.want([0, 1, 2], event_tag="ev")
+    assert v.slot_of(0) is None and v.slot_of(1) is None, \
+        "a partially claimed expert stayed mapped with no bytes behind it"
+    assert v.slot_of(9) is not None, "the rollback took out an untouched row"
+    assert v.stats()["gathers"] == before, "a failed request counted gathers"
+
+
+def test_a_failed_want_does_not_double_count_on_retry():
+    """resurrections is R2/R3's numerator; a request that fails after
+    resurrecting a row must not leave the count behind for the retry."""
+    v = VramSlots(4, protected=1)
+    v.want([0, 1])
+    v.want([2, 3], event_tag="ev1")              # 0,1 -> retiring
+    v.settle(lambda t: True)                     # -> reclaimable
+    before = v.stats()["resurrections"]
+    with pytest.raises(RuntimeError, match="no slot available"):
+        v.want([0, 5, 6], event_tag="ev2")       # 0 resurrects, then 6 fails
+    assert v.stats()["resurrections"] == before, \
+        "a failed want left its resurrection on the books"
+    assert v.state(v.slot_of(0)) == "reclaimable", "the hit was not rolled back"
