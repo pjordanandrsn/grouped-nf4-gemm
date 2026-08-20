@@ -1,0 +1,58 @@
+=== Thu Aug 20 08:19:29 UTC 2026 bootstrap start ===
+--- deps ok ---
+/opt/conda/lib/python3.11/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+e4b ok
+--- installs ok ---
+[32m✓ Downloaded[0m
+  path: /root/models/olmoe
+--- model ok: 13G ---
+Traceback (most recent call last):
+  File "/root/src/gnf4/kernel/nvme_arena.py", line 527, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/root/src/gnf4/kernel/nvme_arena.py", line 510, in main
+    bake(args.snapshot, args.out, layers=layers, prefix=args.prefix,
+  File "/root/src/gnf4/kernel/nvme_arena.py", line 143, in bake
+    raise ValueError(f"no MoE layers found under prefix {prefix!r}")
+ValueError: no MoE layers found under prefix 'model.layers'
+=== Thu Aug 20 08:22:37 UTC 2026 bootstrap start ===
+--- deps ok ---
+/opt/conda/lib/python3.11/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+e4b ok
+--- installs ok ---
+--- model ok: 13G ---
+/opt/conda/lib/python3.11/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+nf4 bake: L=16 E=64 (baking 64/layer) I=1024 H=2048 row=3538944 stride=3538944 total=3.6 GB
+  baked layer 3 (4/16, 0.9 GB, 4s)
+  baked layer 7 (8/16, 1.8 GB, 6s)
+  baked layer 11 (12/16, 2.7 GB, 9s)
+  baked layer 15 (16/16, 3.6 GB, 12s)
+nf4 bake complete: 1024 rows (3.6 GB) in 15s
+--- arena ok: 3.4G ---
+/opt/conda/lib/python3.11/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[08:23:04]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[08:23:04]   quantized experts on 16/16 MoE layers (64 experts each)
+[08:23:04]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[08:23:04]   experts deferred to the arena: 16 module(s), 80 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+hooked 16 routers
+wrote 181 (layer,expert) rows, total mass 12288 -> /root/olmoe_profile.jsonl
+--- profile ok: 181 rows ---
+[calibrate] running CPU microbench (/usr/bin/cc -O3 -march=native)...
+[calibrate] running GPU benches...
+/opt/conda/lib/python3.11/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+
+calibration blob: /root/calib.json
+host: AMD EPYC 9655 96-Core Processor | 48 cpus | quota 46.08 | flags ['avx2', 'avx512_vnni', 'avx512bw', 'avx512f', 'avx512vbmi', 'avx512vl']
+B_dram triad best :    459.9 GB/s  (48t compact nt=1)
+grouped scatter   :    515.5 GB/s  (48t, 16 MiB blocks, E=512)
+GATE G0           : 112.1% of triad -> PROCEED
+cuda:0 NVIDIA GeForce RTX 5090: triad 1571.5 GB/s | link h2d 28.47 / d2h 28.24 GB/s
+B_nvme seq best   : 5.54 GB/s (o_direct=True)
+--- calib ok ---
+B_vram=1571.5 B_dram=459.9 B_nvme=None G0=proceed
+=== Thu Aug 20 08:24:10 UTC 2026 BOOTSTRAP DONE ===

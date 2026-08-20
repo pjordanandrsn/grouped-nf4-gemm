@@ -1,0 +1,11 @@
+=== TREE=gnf4_buggy direct=false CONTENDED (BUGGY) ===
+  prot= 128 median=   71.69 ms reads= 3335 logEv=    0 resurr=    0 overwr=    0 P=- toks_ok=True
+  prot=  96 median=   76.41 ms reads= 3470 logEv= 3672 resurr=  311 overwr= 3329 P=0.085 toks_ok=True
+  prot=  64 median=   75.25 ms reads= 3465 logEv= 4054 resurr=  653 overwr= 3337 P=0.164 toks_ok=True
+  prot=  32 median=   76.47 ms reads= 3461 logEv= 4531 resurr= 1102 overwr= 3333 P=0.248 toks_ok=True
+=== TREE=gnf4 direct=false CONTENDED (FIXED) ===
+  prot= 128 median=   68.54 ms reads= 3262 logEv=    0 resurr=    0 overwr=    0 P=- toks_ok=True
+  prot=  96 median=   75.11 ms reads= 3409 logEv= 3522 resurr=  219 overwr= 3271 P=0.063 toks_ok=True
+  prot=  64 median=   74.38 ms reads= 3405 logEv= 4017 resurr=  676 overwr= 3277 P=0.171 toks_ok=True
+  prot=  32 median=   79.47 ms reads= 3405 logEv= 4430 resurr= 1057 overwr= 3277 P=0.244 toks_ok=True
+TWOBYTWO_DONE

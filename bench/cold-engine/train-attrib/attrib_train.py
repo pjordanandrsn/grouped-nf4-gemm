@@ -62,6 +62,39 @@ def routed_per_layer(model, ids, E):
             "max_routed": max(len(v) for v in seen.values()), "n_experts": E}
 
 
+def _sum_tier_stats(tiers):
+    """Aggregate stats over DISTINCT tiers.
+
+    Walking the modules and keeping the last one seen reported a single
+    attachment's hits, misses and evictions as if they were the whole patched
+    set's, while `engaged` was 16 (Bugbot, gnf4#128). When the engines share
+    one tier -- the usual arrangement -- the distinct set has one member and
+    this is exactly what it was before.
+
+    Counters add. ``reuse_before_overwrite`` is a RATIO and is recomputed from
+    the summed numerator and denominator; averaging per-tier ratios would
+    weight a tier that resolved three evictions the same as one that resolved
+    three thousand. The key names are ColdTier's: the numerator is
+    ``resurrections + spec_resurrections`` and the denominator adds
+    ``reclaimable_overwritten``. It stays None on an empty denominator, so
+    nothing reads as a measured zero.
+    """
+    tiers = list(tiers)
+    if not tiers:
+        return {}
+    out, res, over = {}, 0, 0
+    for t in tiers:
+        s = t.stats()
+        for k, v in s.items():
+            if k == "reuse_before_overwrite" or not isinstance(v, (int, float)):
+                continue
+            out[k] = out.get(k, 0) + v
+        res += (s.get("resurrections", 0) or 0) + (s.get("spec_resurrections", 0) or 0)
+        over += s.get("reclaimable_overwritten", 0) or 0
+    out["reuse_before_overwrite"] = (res / (res + over)) if (res + over) else None
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="/root/models/olmoe")
@@ -79,11 +112,6 @@ def main():
     a = ap.parse_args()
 
     calib = json.load(open(a.calib))
-    # The prereg and gate 1's method both specify the measured SEQUENTIAL
-    # ceiling. Taking the max over every NVMe point pulls in random QD16,
-    # which is faster here (8.08 vs 6.07 GB/s) and would UNDERSTATE the disk
-    # share -- the opposite of the conservative direction. Caught by Bugbot
-    # on #129.
     # The prereg and gate 1's method both specify the measured SEQUENTIAL
     # ceiling. The blob records {"points": [{"mode": "seq"|"rand", "qd", "gbs"}]},
     # so filter on mode rather than on a key name -- taking the max over every
@@ -177,11 +205,15 @@ def main():
             if i == a.warmup:
                 torch.cuda.synchronize()
                 pre = hy.cold_stats(model)
-                pre_t = {}
+                # Same distinct-tier sum as the post-window read below. A
+                # baseline over one attachment and a delta over all of them
+                # would not be a delta at all.
+                pre_tiers = {}
                 for _, mm in model.named_modules():
                     t = getattr(mm, "_e4b_cold_tier", None)
                     if t is not None:
-                        pre_t = t.stats()
+                        pre_tiers[id(t)] = t
+                pre_t = _sum_tier_stats(pre_tiers.values())
             t0 = time.perf_counter_ns()
             o = model(ids, labels=ids)
             o.loss.backward()
@@ -200,13 +232,14 @@ def main():
         # Read the tier DIRECTLY: cold_stats does not surface hits/misses,
         # and inferring "no reads" from a missing key would be exactly the
         # instrument failure this measurement exists to avoid.
-        tier = None
+        tiers = {}
         for _, mm in model.named_modules():
             t = getattr(mm, "_e4b_cold_tier", None)
             if t is not None:
-                tier = t
-        ts = tier.stats() if tier is not None else {}
-        rec["tier_seen"] = tier is not None
+                tiers[id(t)] = t
+        ts = _sum_tier_stats(tiers.values())
+        rec["tier_seen"] = bool(tiers)
+        rec["tiers_distinct"] = len(tiers)
         for k in ("hits", "misses", "demand_misses", "evictions",
                   "resurrections", "logical_evictions",
                   "reuse_before_overwrite", "disk_reads", "hot_rows"):

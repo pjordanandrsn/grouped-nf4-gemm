@@ -1,0 +1,70 @@
+/opt/conda/lib/python3.11/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+calibration: {'gpu': 'NVIDIA GeForce RTX 5090', 'b_vram_gbs': 1571.5, 'b_dram_gbs': 459.94, 'b_nvme_seq_gbs': 5.54, 'g0_verdict': 'proceed'}
+cold 5% -> achieved 0.0503, 265 experts moved
+[08:29:19]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[08:29:19]   quantized experts on 16/16 MoE layers (64 experts each)
+[08:29:19]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[08:29:19]   experts deferred to the arena: 16 module(s), 80 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[08:29:21]   hybrid tier active on 16 module(s): vram/dram/nvme masses 0.48/0.47/0.05
+  prot= 384 median=   49.12 ms reads=  216 logEv=    0 resurr=    0 overwr=    0 P=- toks_ok=True
+[08:29:26]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[08:29:26]   quantized experts on 16/16 MoE layers (64 experts each)
+[08:29:26]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[08:29:26]   experts deferred to the arena: 16 module(s), 80 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[08:29:28]   hybrid tier active on 16 module(s): vram/dram/nvme masses 0.48/0.47/0.05
+  prot= 256 median=   47.79 ms reads=  216 logEv=    0 resurr=    0 overwr=    0 P=- toks_ok=True
+[08:29:32]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[08:29:32]   quantized experts on 16/16 MoE layers (64 experts each)
+[08:29:32]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[08:29:32]   experts deferred to the arena: 16 module(s), 80 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[08:29:33]   hybrid tier active on 16 module(s): vram/dram/nvme masses 0.48/0.47/0.05
+  prot= 192 median=   48.97 ms reads=  216 logEv=  381 resurr=  357 overwr=    0 P=1.000 toks_ok=True
+[08:29:37]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[08:29:37]   quantized experts on 16/16 MoE layers (64 experts each)
+[08:29:37]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[08:29:37]   experts deferred to the arena: 16 module(s), 80 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[08:29:39]   hybrid tier active on 16 module(s): vram/dram/nvme masses 0.48/0.47/0.05
+  prot= 128 median=   47.67 ms reads=  216 logEv=  765 resurr=  677 overwr=    0 P=1.000 toks_ok=True
+[08:29:43]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[08:29:43]   quantized experts on 16/16 MoE layers (64 experts each)
+[08:29:43]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[08:29:43]   experts deferred to the arena: 16 module(s), 80 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[08:29:45]   hybrid tier active on 16 module(s): vram/dram/nvme masses 0.48/0.47/0.05
+  prot=  96 median=   47.42 ms reads=  216 logEv= 1045 resurr=  925 overwr=    0 P=1.000 toks_ok=True
+
+all_tokens_identical = True
+receipt -> /root/reclaim_fixed.json
+=== CONTENDED ===
+/opt/conda/lib/python3.11/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+calibration: {'gpu': 'NVIDIA GeForce RTX 5090', 'b_vram_gbs': 1571.5, 'b_dram_gbs': 459.94, 'b_nvme_seq_gbs': 5.54, 'g0_verdict': 'proceed'}
+cold 20% -> achieved 0.2003, 505 experts moved
+[08:29:53]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[08:29:53]   quantized experts on 16/16 MoE layers (64 experts each)
+[08:29:53]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[08:29:53]   experts deferred to the arena: 16 module(s), 80 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[08:29:54]   hybrid tier active on 16 module(s): vram/dram/nvme masses 0.48/0.32/0.20
+  prot= 128 median=   70.26 ms reads= 3262 logEv=    0 resurr=    0 overwr=    0 P=- toks_ok=True
+[08:30:02]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[08:30:02]   quantized experts on 16/16 MoE layers (64 experts each)
+[08:30:02]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[08:30:02]   experts deferred to the arena: 16 module(s), 80 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[08:30:03]   hybrid tier active on 16 module(s): vram/dram/nvme masses 0.48/0.32/0.20
+  prot=  96 median=   70.00 ms reads= 3409 logEv= 3522 resurr=  219 overwr= 3271 P=0.063 toks_ok=True
+[08:30:11]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[08:30:11]   quantized experts on 16/16 MoE layers (64 experts each)
+[08:30:11]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[08:30:11]   experts deferred to the arena: 16 module(s), 80 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[08:30:12]   hybrid tier active on 16 module(s): vram/dram/nvme masses 0.48/0.32/0.20
+  prot=  64 median=   68.09 ms reads= 3405 logEv= 4017 resurr=  676 overwr= 3277 P=0.171 toks_ok=True
+[08:30:20]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[08:30:20]   quantized experts on 16/16 MoE layers (64 experts each)
+[08:30:20]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[08:30:20]   experts deferred to the arena: 16 module(s), 80 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[08:30:21]   hybrid tier active on 16 module(s): vram/dram/nvme masses 0.48/0.32/0.20
+  prot=  32 median=   69.03 ms reads= 3405 logEv= 4430 resurr= 1057 overwr= 3277 P=0.244 toks_ok=True
+
+all_tokens_identical = True
+receipt -> /root/reclaim_contended_fixed.json
+ALLDONE

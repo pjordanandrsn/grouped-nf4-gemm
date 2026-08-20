@@ -91,3 +91,33 @@ against the hybrid control, not against ordinary QLoRA training. LoRA
 adapters were the only trainable parameters. Instrument law 7 applies. The
 backward's CPU kernel (`dgrad_nf4_grouped_cpu`) is a different kernel from
 the forward GEMV, and nothing here fits constants for either.
+
+## Post-hoc: tier stats were read from one attachment, not all of them
+
+Bugbot found that both the warmup baseline and the post-window read walked
+every module carrying a `_e4b_cold_tier` and kept the **last one**, so
+hits/misses/evictions described a single attachment while `engaged` was 16.
+Now summed over the DISTINCT tiers, with `reuse_before_overwrite` recomputed
+from the summed numerator and denominator rather than averaged.
+
+(A second finding on the same file — that the disk-time charge took the max
+over every NVMe point and so used a random-QD ceiling, 8.08 GB/s against a
+sequential best of 6.07 — was fixed when this work merged as #129 and is
+already reflected above.)
+
+**Neither moves a number in this document, and the reason is checkable.**
+
+T1 reads **0%** because `reads_in_window` is **0**. The bandwidth constant
+multiplies a zero numerator, so 0/6.07 and 0/8.08 are the same figure; the
+ceiling defect would have mattered on an arm that actually read the disk and
+these arms did not.
+
+T3 reads **100%** (0 misses). A tier miss is by construction a row that is
+not resident, which forces a read — and the aggregate `disk_reads`, taken
+from `hy.cold_stats(model)` which was already summing across modules
+correctly, is **0**. Zero aggregate reads means no tier anywhere took a miss,
+whatever the per-tier accounting said. A hit rate cannot fall below 100% when
+the miss denominator is provably empty.
+
+Recorded rather than fixed quietly: a reader who finds these fixes later
+should not have to work out whether the numbers above predate them.

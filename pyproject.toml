@@ -83,8 +83,9 @@ py-modules = [
     # Stage 3 (tribrid): the CPU destination for cold experts, and the
     # time-to-contribution cost model the destination rule consumes.
     "cold_cpu_view", "cold_deadline",
-    # Gate 3: observed-reuse classification for adaptive residency.
-    "reuse_profile",
+    # Gate 3: observed-reuse classification for adaptive residency, and
+    # reclaimable residency for the VRAM slot arena (R2/R3).
+    "reuse_profile", "vram_slots",
 ]
 
 [tool.setuptools.package-data]
