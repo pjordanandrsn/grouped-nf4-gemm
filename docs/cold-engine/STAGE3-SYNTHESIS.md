@@ -26,6 +26,7 @@ scheduling gates missed, and the clear win came from a memory mechanism.
 | **Gate 2** — does choosing a destination by deadline beat a threshold? | **MISS** | Backlog changed 0 of 1975 decisions in the regime built to provoke it; the rule's own syncs cost 11.7–15.6% for routing identical to fixed-CPU |
 | **Reclaimable residency (R1, R5)** | **CONFIRMED** (withdrawn, then re-measured) | P(reuse before overwrite) is **13.5 / 24.5 / 34.2%** at protected 96/64/32 on a decode-only window — one point inside the registered 5–20% band and two above it. Reads **−13.5% / −24.5%** at the two feasible budgets, wall −2.5% / −7.9%. The earlier 11–60% was withdrawn for a nested-ensure defect that does inflate P, but only by 7–15% relative; the real distortion was a measurement window that counted warmup prefills against decode-only wall. See `RESULTS-tribrid-reclaimable.md`. **No read count here is comparable to one published before that window fix** |
 | **VRAM reclaimable residency** | **Validated, and it needed fixing** | Bitwise-equal to the uncached engine on GPU, and now measured on a real 512-step OLMoE decode routing sequence rather than a fixture that held every expert. **As shipped it LOST to the positional cache the engine already had** (108.3% of its transfers at 12.5% capacity). Two policy defects: `protected` defaulted to half the arena, and `VramSlots` incremented a `_clock` it never read, so eviction was by slot index. Fixed, it tracks ideal LRU everywhere and removes 23% of the positional cache's transfers at 12.5% capacity. Untimed. `bench/cold-engine/routing-trace/` |
+| **R3** — DRAM resurrection rate exceeds VRAM | **UNDETERMINED** | Measured matched for the first time: one captured trace through both state machines at the same capacity and budget. The verdict **inverts with the protected budget**, which R3 never pins — holds 5/5 at `rows/2`, refuted 4/5 at `rows−k`. At 128 rows the VRAM rate moves 0.0%→33.9% and the DRAM rate 13.5%→0.4% on that one setting. Left undetermined rather than refuted because amending a registered prediction to match a result is what preregistration prevents. `bench/cold-engine/routing-trace/RESULTS-r3.md` |
 | **R4** — short-window recurrence beats long-run frequency | **REFUTED as stated** | Scored on the captured OLMoE decode sequence, six capacities × six windows. At genuinely short windows frequency wins **5 of 5** signal-bearing capacities (w=4 and w=8); recurrence only starts winning at w≥16 and only at the two smallest. Recency's ρ rises monotonically with window width everywhere, converging on frequency from below — it predicts better the more it behaves like frequency, which is the opposite of the claim. Gate 3's loop should be frequency-driven; a windowed predictor, if kept, wants a WIDE window. Headroom is limited either way (best ρ = 0.476 outside the smallest capacity). `bench/cold-engine/routing-trace/RESULTS-r4.md` |
 | **Direct scatter** (implementation, not a registered gate) | **Real, regime-bound** | −43% on the fill path in isolation; −12.5% end-to-end at 20% cold mass; **null** at 5% |
 
@@ -116,6 +117,25 @@ Gate 1's MISS does not rest on those absolutes — it rests on prefetch
 coverage, a ratio taken inside the window — so the verdict stands, and
 correcting the reads makes the reframing stronger rather than weaker. **No
 read count in that document should be quoted until it is re-run.**
+
+## A metric this campaign leaned on does not carry weight
+
+R1–R3 all use **resurrection rate** as though higher were better. Measured
+against physical refills on one trace, it is not reliably coupled to cost:
+
+* At 128 VRAM rows the rate rises **0.0% → 33.9%** while refills *improve*,
+  65,536 → 43,338. Rate up, cost down.
+* Between victim rules at 256 rows the rate falls **266 → 0** while refills
+  also improve, 54,819 → 43,338. Rate down, cost down.
+
+It rises with quality in one comparison and falls with it in another. A
+resurrection is a **capacity-relative bookkeeping event, not a saving** — it
+counts rows that were demoted and then needed again, which a cache that
+demoted better would never have demoted at all.
+
+**Report physical refills.** The resurrection rate cannot carry a claim by
+itself. R1 is undisturbed: its operational half was measured in reads
+(−13.5% / −24.5%), not in this rate.
 
 ## Cost of the campaign
 
