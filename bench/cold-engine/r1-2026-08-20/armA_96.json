@@ -7,9 +7,9 @@
   "cold_frac_achieved": 0.2002776731927711,
   "box": {
     "gpu": "NVIDIA GeForce RTX 5090",
-    "b_vram_gbs": 1572.7,
-    "b_dram_gbs": 470.99,
-    "b_nvme_seq_gbs": 5.96,
+    "b_vram_gbs": 1573.1,
+    "b_dram_gbs": 425.27,
+    "b_nvme_seq_gbs": 5.11,
     "g0_verdict": "proceed"
   },
   "config": {
@@ -32,17 +32,18 @@
   "arms": [
     {
       "protected_rows": 96,
-      "median_ns": 76520310.5,
-      "reads_in_window": 3670,
+      "median_ns": 72481702.5,
+      "reads_in_window": 622,
       "logical_evictions": 0,
       "resurrections": 0,
       "spec_resurrections": 0,
       "reclaimable_overwritten": 0,
       "reuse_before_overwrite": null,
+      "reuse_before_overwrite_cumulative": null,
       "resurrection_bytes_saved": 0,
-      "physical_evictions": 3574,
-      "mean_ticks_to_overwrite": null,
-      "mean_ticks_to_resurrection": null,
+      "physical_evictions": 622,
+      "mean_ticks_to_overwrite_cumulative": null,
+      "mean_ticks_to_resurrection_cumulative": null,
       "tokens_match": true
     }
   ],

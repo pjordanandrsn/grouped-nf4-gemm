@@ -36,6 +36,19 @@ sys.path.insert(0, __file__.rsplit("/", 1)[0])
 from run_gate1 import run_steps  # noqa: E402  same decode-shaped loop
 
 
+def _d(post, pre, key):
+    """Windowed value of a cumulative tier counter."""
+    return post.get(key, 0) - pre.get(key, 0)
+
+
+def _ratio(num, overwritten):
+    """P(reuse before overwrite) over RESOLVED evictions only. None on an
+    empty denominator, deliberately: a 0.0 from no resolutions would read as
+    a measured refutation of R1 rather than an absent measurement."""
+    resolved = num + overwritten
+    return (num / resolved) if resolved else None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="/root/models/olmoe")
@@ -134,22 +147,48 @@ def main():
             protected_rows=prot, cold_direct=(a.cold_direct == "true"),
             verbose=False)
         assert n > 0, "tier not engaged"
-        pre = hy.cold_stats(model)
-        steps, _, toks = run_steps(model, ids, a.steps, a.warmup)
+        # Snapshot AT the measurement boundary, not before run_steps: the
+        # warmup prefills inside it touch nearly every expert per layer, and
+        # charging them into the window scores reads and eviction
+        # bookkeeping on prefill+decode while wall is decode-only. The first
+        # version of this harness got that wrong (Bugbot, gnf4#132), which
+        # is what inflated uncontended reads from 26 to 218.
+        pre = {}
+        steps, _, toks = run_steps(model, ids, a.steps, a.warmup,
+                                   # bind by value: `model` is deleted at
+                                   # the end of each sweep iteration
+                                   on_measure_start=lambda m=model: pre.update(
+                                       hy.cold_stats(m)))
+        assert pre, "on_measure_start never fired — window is unmeasured"
         cs = hy.cold_stats(model)
         arm = {
             "protected_rows": prot,
             "median_ns": statistics.median(steps),
             "reads_in_window": cs.get("disk_reads", 0) - pre.get("disk_reads", 0),
-            "logical_evictions": cs.get("logical_evictions", 0),
-            "resurrections": cs.get("resurrections", 0),
-            "spec_resurrections": cs.get("spec_resurrections", 0),
-            "reclaimable_overwritten": cs.get("reclaimable_overwritten", 0),
-            "reuse_before_overwrite": cs.get("reuse_before_overwrite"),
-            "resurrection_bytes_saved": cs.get("resurrection_bytes_saved", 0),
-            "physical_evictions": cs.get("evictions", 0),
-            "mean_ticks_to_overwrite": cs.get("mean_ticks_to_overwrite"),
-            "mean_ticks_to_resurrection": cs.get("mean_ticks_to_resurrection"),
+            # Every counter is cumulative on the tier, so each one is a
+            # DIFFERENCE across the window. reuse_before_overwrite is
+            # recomputed from the differenced terms rather than read off the
+            # tier, which reports it over the process lifetime.
+            "logical_evictions": _d(cs, pre, "logical_evictions"),
+            "resurrections": _d(cs, pre, "resurrections"),
+            "spec_resurrections": _d(cs, pre, "spec_resurrections"),
+            "reclaimable_overwritten": _d(cs, pre, "reclaimable_overwritten"),
+            "reuse_before_overwrite": _ratio(
+                _d(cs, pre, "resurrections") + _d(cs, pre, "spec_resurrections"),
+                _d(cs, pre, "reclaimable_overwritten")),
+            "reuse_before_overwrite_cumulative": cs.get("reuse_before_overwrite"),
+            # windowed, to match the windowed resurrection count beside it;
+            # the tier's own field is cumulative over the process
+            "resurrection_bytes_saved": (
+                (_d(cs, pre, "resurrections")
+                 + _d(cs, pre, "spec_resurrections")) * row_bytes),
+            "physical_evictions": _d(cs, pre, "evictions"),
+            # CUMULATIVE (the tier keeps only running means; there is no
+            # windowed form). Named so no one differences them by mistake.
+            "mean_ticks_to_overwrite_cumulative":
+                cs.get("mean_ticks_to_overwrite"),
+            "mean_ticks_to_resurrection_cumulative":
+                cs.get("mean_ticks_to_resurrection"),
         }
         # Reclaimable residency is bookkeeping: it must not change a single
         # emitted token at ANY protected_rows. If it does, the mechanism is

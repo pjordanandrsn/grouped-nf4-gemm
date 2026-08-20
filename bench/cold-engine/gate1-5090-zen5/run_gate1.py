@@ -27,7 +27,7 @@ def arm_dest(arm, thr):
             "cold-cpu": "cpu", "dynamic": thr}[arm]
 
 
-def run_steps(model, ids, n_steps, warmup):
+def run_steps(model, ids, n_steps, warmup, on_measure_start=None):
     """DECODE-shaped measurement: prefill once, then one token per step
     against a KV cache.
 
@@ -54,6 +54,18 @@ def run_steps(model, ids, n_steps, warmup):
         past = out.past_key_values
         cur = out.logits[:, -1:].argmax(-1)
         torch.cuda.synchronize()
+
+        # THE measurement boundary. Everything above is warmup prefills,
+        # warmup decodes, and the prefill that builds the KV cache -- a
+        # prefill touches 62-64 of 64 experts per layer, which is the exact
+        # access shape this function exists to keep out of the measurement.
+        # A tier-counter snapshot taken before run_steps() therefore charges
+        # all of it into the "window", scoring reads and eviction
+        # bookkeeping on prefill+decode while wall is scored on decode
+        # alone. Callers that diff counters MUST snapshot here.
+        # (Bugbot, gnf4#132.)
+        if on_measure_start is not None:
+            on_measure_start()
 
         per_step, toks = [], []
         for _ in range(n_steps):
@@ -188,12 +200,26 @@ def main():
                 del model
                 torch.cuda.empty_cache()
                 continue
-            pre = hy.cold_stats(model)
-            steps, logits, toks = run_steps(model, tok_ids, a.steps, a.warmup)
+            pre = {}
+            steps, logits, toks = run_steps(
+                model, tok_ids, a.steps, a.warmup,
+                # bind by value: `model` is deleted at the end of each arm
+                on_measure_start=lambda m=model: pre.update(hy.cold_stats(m)))
+            assert pre, "on_measure_start never fired — window is unmeasured"
             cs = hy.cold_stats(model)
             # Reads charged to the MEASURED window, not the whole process:
             # warmup cold-start traffic is not what gate 1 asks about, and
             # counting it would make every arm look disk-bound.
+            #
+            # This comment described the INTENT and the code did not
+            # implement it: `pre` was snapshotted before run_steps(), which
+            # runs the warmup prefills INSIDE itself, so every warmup
+            # prefill's near-full-arena sweep landed in the "window"
+            # (Bugbot, gnf4#132). Now snapshotted at the measurement
+            # boundary via on_measure_start. THE PUBLISHED GATE-1 READ
+            # COUNTS IN RESULTS-tribrid-gate1.md PREDATE THIS FIX and would
+            # need a re-run to correct; gate 1's MISS verdict rests on
+            # prefetch coverage rather than on those counts.
             cs["reads_in_window"] = (cs.get("disk_reads", 0)
                                      - pre.get("disk_reads", 0))
             cs["cold_rows_in_window"] = (

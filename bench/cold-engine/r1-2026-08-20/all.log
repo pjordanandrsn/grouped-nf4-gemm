@@ -1,4 +1,4 @@
-=== Thu Aug 20 08:54:14 UTC 2026 bootstrap start ===
+=== Thu Aug 20 09:14:53 UTC 2026 bootstrap start ===
 --- deps ok ---
 /opt/conda/lib/python3.11/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
   import pynvml  # type: ignore[import]
@@ -10,11 +10,11 @@ e4b ok
 /opt/conda/lib/python3.11/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
   import pynvml  # type: ignore[import]
 nf4 bake: L=16 E=64 (baking 64/layer) I=1024 H=2048 row=3538944 stride=3538944 total=3.6 GB
-  baked layer 3 (4/16, 0.9 GB, 4s)
+  baked layer 3 (4/16, 0.9 GB, 3s)
   baked layer 7 (8/16, 1.8 GB, 6s)
   baked layer 11 (12/16, 2.7 GB, 9s)
   baked layer 15 (16/16, 3.6 GB, 12s)
-nf4 bake complete: 1024 rows (3.6 GB) in 17s
+nf4 bake complete: 1024 rows (3.6 GB) in 16s
 --- arena ok: 3.4G ---
 /root/bootstrap.sh: line 40: /root/olmoe_profile.jsonl: No such file or directory
 --- profile ok:  rows ---
@@ -24,55 +24,55 @@ nf4 bake complete: 1024 rows (3.6 GB) in 17s
   import pynvml  # type: ignore[import]
 
 calibration blob: /root/calib.json
-host: AMD EPYC 9755 128-Core Processor | 48 cpus | quota 46.08 | flags ['avx2', 'avx512_vnni', 'avx512bw', 'avx512f', 'avx512vbmi', 'avx512vl']
-B_dram triad best :    471.0 GB/s  (32t compact nt=1)
-grouped scatter   :    507.4 GB/s  (48t, 16 MiB blocks, E=512)
-GATE G0           : 107.7% of triad -> PROCEED
-cuda:0 NVIDIA GeForce RTX 5090: triad 1572.7 GB/s | link h2d 28.48 / d2h 28.25 GB/s
-B_nvme seq best   : 5.96 GB/s (o_direct=True)
+host: AMD EPYC 9655 96-Core Processor | 48 cpus | quota 46.08 | flags ['avx2', 'avx512_vnni', 'avx512bw', 'avx512f', 'avx512vbmi', 'avx512vl']
+B_dram triad best :    425.3 GB/s  (32t compact nt=1)
+grouped scatter   :    505.9 GB/s  (48t, 4 MiB blocks, E=2048)
+GATE G0           : 119.0% of triad -> PROCEED
+cuda:0 NVIDIA GeForce RTX 5090: triad 1573.1 GB/s | link h2d 28.47 / d2h 28.24 GB/s
+B_nvme seq best   : 5.11 GB/s (o_direct=True)
 --- calib ok ---
-B_vram=1572.7 B_dram=471.0 B_nvme=None G0=proceed
-=== Thu Aug 20 08:57:02 UTC 2026 BOOTSTRAP DONE ===
+B_vram=1573.1 B_dram=425.3 B_nvme=None G0=proceed
+=== Thu Aug 20 09:18:30 UTC 2026 BOOTSTRAP DONE ===
 ### uncontended  tree=gnf4 direct=true frac=0.05 hot=384 prot=384,256,192,128,96
-calibration: {'gpu': 'NVIDIA GeForce RTX 5090', 'b_vram_gbs': 1572.7, 'b_dram_gbs': 470.99, 'b_nvme_seq_gbs': 5.96, 'g0_verdict': 'proceed'}
+calibration: {'gpu': 'NVIDIA GeForce RTX 5090', 'b_vram_gbs': 1573.1, 'b_dram_gbs': 425.27, 'b_nvme_seq_gbs': 5.11, 'g0_verdict': 'proceed'}
 cold 5% -> achieved 0.0503, 265 experts moved
-  prot= 384 median=   54.91 ms reads=  218 logEv=    0 resurr=    0 overwr=    0 P=- toks_ok=True
-  prot= 256 median=   52.61 ms reads=  218 logEv=    0 resurr=    0 overwr=    0 P=- toks_ok=True
-  prot= 192 median=   53.86 ms reads=  218 logEv=  388 resurr=  362 overwr=    0 P=1.000 toks_ok=True
-  prot= 128 median=   52.48 ms reads=  218 logEv=  785 resurr=  695 overwr=    0 P=1.000 toks_ok=True
-  prot=  96 median=   53.86 ms reads=  218 logEv= 1049 resurr=  927 overwr=    0 P=1.000 toks_ok=True
+  prot= 384 median=   51.15 ms reads=    4 logEv=    0 resurr=    0 overwr=    0 P=- toks_ok=True
+  prot= 256 median=   51.79 ms reads=    4 logEv=    0 resurr=    0 overwr=    0 P=- toks_ok=True
+  prot= 192 median=   51.28 ms reads=    4 logEv=   11 resurr=    7 overwr=    0 P=1.000 toks_ok=True
+  prot= 128 median=   52.43 ms reads=    4 logEv=   60 resurr=   56 overwr=    0 P=1.000 toks_ok=True
+  prot=  96 median=   53.13 ms reads=    4 logEv=  103 resurr=   99 overwr=    0 P=1.000 toks_ok=True
 ### armB  tree=gnf4 direct=true frac=0.20 hot=128 prot=128,96,64,32
-calibration: {'gpu': 'NVIDIA GeForce RTX 5090', 'b_vram_gbs': 1572.7, 'b_dram_gbs': 470.99, 'b_nvme_seq_gbs': 5.96, 'g0_verdict': 'proceed'}
+calibration: {'gpu': 'NVIDIA GeForce RTX 5090', 'b_vram_gbs': 1573.1, 'b_dram_gbs': 425.27, 'b_nvme_seq_gbs': 5.11, 'g0_verdict': 'proceed'}
 cold 20% -> achieved 0.2003, 505 experts moved
-  prot= 128 median=   73.49 ms reads= 3293 logEv=    0 resurr=    0 overwr=    0 P=- toks_ok=True
-  prot=  96 median=   75.85 ms reads= 3434 logEv= 3564 resurr=  236 overwr= 3296 P=0.067 toks_ok=True
-  prot=  64 median=   77.38 ms reads= 3430 logEv= 4039 resurr=  673 overwr= 3302 P=0.169 toks_ok=True
-  prot=  32 median=   74.37 ms reads= 3430 logEv= 4462 resurr= 1064 overwr= 3302 P=0.244 toks_ok=True
+  prot= 128 median=   68.10 ms reads=  527 logEv=    0 resurr=    0 overwr=    0 P=- toks_ok=True
+  prot=  96 median=   70.70 ms reads=  538 logEv=  622 resurr=   84 overwr=  538 P=0.135 toks_ok=True
+  prot=  64 median=   70.89 ms reads=  538 logEv=  713 resurr=  175 overwr=  538 P=0.245 toks_ok=True
+  prot=  32 median=   70.74 ms reads=  538 logEv=  823 resurr=  280 overwr=  538 P=0.342 toks_ok=True
 ### armA_96  tree=gnf4 direct=true frac=0.20 hot=96 prot=96
-calibration: {'gpu': 'NVIDIA GeForce RTX 5090', 'b_vram_gbs': 1572.7, 'b_dram_gbs': 470.99, 'b_nvme_seq_gbs': 5.96, 'g0_verdict': 'proceed'}
+calibration: {'gpu': 'NVIDIA GeForce RTX 5090', 'b_vram_gbs': 1573.1, 'b_dram_gbs': 425.27, 'b_nvme_seq_gbs': 5.11, 'g0_verdict': 'proceed'}
 cold 20% -> achieved 0.2003, 505 experts moved
-  prot=  96 median=   76.52 ms reads= 3670 logEv=    0 resurr=    0 overwr=    0 P=- toks_ok=True
+  prot=  96 median=   72.48 ms reads=  622 logEv=    0 resurr=    0 overwr=    0 P=- toks_ok=True
 ### armA_64  tree=gnf4 direct=true frac=0.20 hot=64 prot=64
-calibration: {'gpu': 'NVIDIA GeForce RTX 5090', 'b_vram_gbs': 1572.7, 'b_dram_gbs': 470.99, 'b_nvme_seq_gbs': 5.96, 'g0_verdict': 'proceed'}
+calibration: {'gpu': 'NVIDIA GeForce RTX 5090', 'b_vram_gbs': 1573.1, 'b_dram_gbs': 425.27, 'b_nvme_seq_gbs': 5.11, 'g0_verdict': 'proceed'}
 cold 20% -> achieved 0.2003, 505 experts moved
-  prot=  64 median=   80.08 ms reads= 4103 logEv=    0 resurr=    0 overwr=    0 P=- toks_ok=True
+  prot=  64 median=   76.94 ms reads=  713 logEv=    0 resurr=    0 overwr=    0 P=- toks_ok=True
 ### armA_32_infeasible  tree=gnf4 direct=true frac=0.20 hot=32 prot=32
-calibration: {'gpu': 'NVIDIA GeForce RTX 5090', 'b_vram_gbs': 1572.7, 'b_dram_gbs': 470.99, 'b_nvme_seq_gbs': 5.96, 'g0_verdict': 'proceed'}
+calibration: {'gpu': 'NVIDIA GeForce RTX 5090', 'b_vram_gbs': 1573.1, 'b_dram_gbs': 425.27, 'b_nvme_seq_gbs': 5.11, 'g0_verdict': 'proceed'}
 cold 20% -> achieved 0.2003, 505 experts moved
     raise ValueError(
 ValueError: request of 36 unique rows exceeds hot_rows=32
 ### nodirect_BUGGY  tree=gnf4_buggy direct=false frac=0.20 hot=128 prot=128,96,64,32
-calibration: {'gpu': 'NVIDIA GeForce RTX 5090', 'b_vram_gbs': 1572.7, 'b_dram_gbs': 470.99, 'b_nvme_seq_gbs': 5.96, 'g0_verdict': 'proceed'}
+calibration: {'gpu': 'NVIDIA GeForce RTX 5090', 'b_vram_gbs': 1573.1, 'b_dram_gbs': 425.27, 'b_nvme_seq_gbs': 5.11, 'g0_verdict': 'proceed'}
 cold 20% -> achieved 0.2003, 505 experts moved
-  prot= 128 median=   84.53 ms reads= 3379 logEv=    0 resurr=    0 overwr=    0 P=- toks_ok=True
-  prot=  96 median=   88.05 ms reads= 3495 logEv= 3685 resurr=  299 overwr= 3354 P=0.082 toks_ok=True
-  prot=  64 median=   83.25 ms reads= 3492 logEv= 4064 resurr=  636 overwr= 3364 P=0.159 toks_ok=True
-  prot=  32 median=   86.22 ms reads= 3488 logEv= 4566 resurr= 1110 overwr= 3360 P=0.248 toks_ok=True
+  prot= 128 median=   76.32 ms reads=  519 logEv=    0 resurr=    0 overwr=    0 P=- toks_ok=True
+  prot=  96 median=   75.04 ms reads=  519 logEv=  614 resurr=   95 overwr=  519 P=0.155 toks_ok=True
+  prot=  64 median=   76.70 ms reads=  519 logEv=  719 resurr=  200 overwr=  519 P=0.278 toks_ok=True
+  prot=  32 median=   76.16 ms reads=  519 logEv=  820 resurr=  301 overwr=  519 P=0.367 toks_ok=True
 ### nodirect_FIXED  tree=gnf4 direct=false frac=0.20 hot=128 prot=128,96,64,32
-calibration: {'gpu': 'NVIDIA GeForce RTX 5090', 'b_vram_gbs': 1572.7, 'b_dram_gbs': 470.99, 'b_nvme_seq_gbs': 5.96, 'g0_verdict': 'proceed'}
+calibration: {'gpu': 'NVIDIA GeForce RTX 5090', 'b_vram_gbs': 1573.1, 'b_dram_gbs': 425.27, 'b_nvme_seq_gbs': 5.11, 'g0_verdict': 'proceed'}
 cold 20% -> achieved 0.2003, 505 experts moved
-  prot= 128 median=   87.71 ms reads= 3293 logEv=    0 resurr=    0 overwr=    0 P=- toks_ok=True
-  prot=  96 median=   84.26 ms reads= 3434 logEv= 3564 resurr=  236 overwr= 3296 P=0.067 toks_ok=True
-  prot=  64 median=   85.87 ms reads= 3430 logEv= 4039 resurr=  673 overwr= 3302 P=0.169 toks_ok=True
-  prot=  32 median=   83.48 ms reads= 3430 logEv= 4462 resurr= 1064 overwr= 3302 P=0.244 toks_ok=True
+  prot= 128 median=   75.25 ms reads=  527 logEv=    0 resurr=    0 overwr=    0 P=- toks_ok=True
+  prot=  96 median=   74.12 ms reads=  538 logEv=  622 resurr=   84 overwr=  538 P=0.135 toks_ok=True
+  prot=  64 median=   76.18 ms reads=  538 logEv=  713 resurr=  175 overwr=  538 P=0.245 toks_ok=True
+  prot=  32 median=   74.28 ms reads=  538 logEv=  823 resurr=  280 overwr=  538 P=0.342 toks_ok=True
 ALL_DONE
