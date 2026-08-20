@@ -1,7 +1,18 @@
 # Device row cache — first hardware validation
 
-Receipt: [`receipt-3060.json`](receipt-3060.json). Box: RTX 3060 12 GB,
-torch 2.13.0+cu130, triton 3.7.1, driver 580.159.03, destroyed after the pull.
+Receipts: [`receipt-3060.json`](receipt-3060.json) (torch 2.13.0+cu130,
+triton 3.7.1, driver 580.159.03) and
+[`receipt-3060-cu128.json`](receipt-3060-cu128.json) (torch 2.11.0+cu128,
+triton 3.6.0, driver 570.181). Both RTX 3060 12 GB, both boxes destroyed
+after their receipt was pulled and verified locally.
+
+The second run exists because Bugbot found two real defects in the cache
+*after* the first receipt was taken, which made that receipt a description of
+code that no longer existed. It was re-taken rather than reasoned about. The
+two runs agree exactly — same fills, same resurrections, same evictions,
+same overwrites, same zero stalls — on different torch, triton and driver
+versions, so the mechanism counts are a property of the code and not of a
+particular CUDA stack.
 
 **This is not a performance result and does not claim to be.** A 3060 is not
 reference silicon and no timing was taken. What is measured here is an
@@ -18,6 +29,7 @@ the code rather than of the card.
 | tier misses (reads that reached the pinned tier) | **54 → 17** |
 | resurrections (reclaimable rows re-hit before overwrite) | **30**, `reuse_before_overwrite` **0.714** |
 | stalls at `rows = 2k` | **0** |
+| abandoned steps (a step that never reached its `record()`) | **0** |
 
 The equivalence is the load-bearing one. The cache relocates *where* a row is
 read from and must never change *what* the row is; a single differing bit

@@ -1,0 +1,53 @@
+{
+  "host": {
+    "gpu": "NVIDIA GeForce RTX 3060",
+    "torch": "2.11.0+cu128",
+    "triton": "3.6.0",
+    "driver": "570.181",
+    "note": "RTX 3060 is NOT reference silicon. These are MECHANISM counts and an equivalence check, both silicon-independent. No timing is claimed."
+  },
+  "shape": {
+    "experts": 8,
+    "k_slots": 4,
+    "steps": 24,
+    "routed_cold_expert_slots": 96,
+    "row_stride": 28672
+  },
+  "equivalence": {
+    "max_abs_diff_vs_uncached": 0.0,
+    "bitwise_identical": true
+  },
+  "uncached": {
+    "cold_pcie_bytes": 2297856,
+    "tier_misses": 54,
+    "tier_hits": 43
+  },
+  "cached": {
+    "host_to_device_bytes": 496128,
+    "dev_cache": {
+      "n_slots": 8,
+      "protected": 4,
+      "gathers": 19,
+      "active_hits": 48,
+      "resurrections": 30,
+      "logical_evictions": 45,
+      "overwritten": 12,
+      "blocked_by_retiring": 0,
+      "retiring_now": 2,
+      "reclaimable_now": 1,
+      "reuse_before_overwrite": 0.7142857142857143,
+      "rows": 8,
+      "row_stride": 28672,
+      "stalls": 0,
+      "host_to_cache_rows": 19,
+      "abandoned_steps": 0,
+      "bytes": 229376
+    },
+    "tier_misses": 17,
+    "tier_hits": 2
+  },
+  "reduction": {
+    "rows_filled_vs_routed": "19/96",
+    "host_to_device_bytes_ratio": 0.2159
+  }
+}
