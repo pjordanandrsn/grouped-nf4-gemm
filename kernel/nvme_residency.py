@@ -95,7 +95,7 @@ class ColdTier:
 
     def __init__(self, arena_path: str, *, hot_rows: int, pinned: bool = True,
                  qd: int | None = None, index=None, reader: ArenaReader | None = None,
-                 protected_rows: int | None = None):
+                 protected_rows: int | None = None, landing=None):
         if hot_rows < 1:
             raise ValueError("hot_rows must be >= 1")
         self.reader = reader or ArenaReader(arena_path, index, qd=qd)
@@ -111,8 +111,20 @@ class ColdTier:
                 f"hot_rows={hot_rows}] — it is a budget WITHIN the pool, not "
                 f"a second pool")
         self.protected_rows = protected_rows
+        # EXTERNAL LANDING (Stage 3). When set, a fill scatters straight into
+        # views this callable supplies for (layer, expert, slot) instead of
+        # this tier's own row buffer — the consumer's kernel-shaped stacks,
+        # so the bytes never make the intermediate stop. Residency, eviction,
+        # reclaimable state and the concurrency contract are unchanged: the
+        # slot is still the name, only the destination moves.
+        self._landing = landing
+        # With fills going elsewhere this tier's buffer holds nothing, so the
+        # byte-serving API must REFUSE rather than hand back stale rows. Keep
+        # it one page instead of hot_rows*row_stride: allocating a landing
+        # nothing writes would be pure footprint.
         self.buffer, self._keepalive = alloc_landing(
-            hot_rows * self.row_stride, pinned=pinned)
+            (hot_rows * self.row_stride) if landing is None else self.row_stride,
+            pinned=pinned)
         self.pinned = pinned
 
         self._lock = threading.Lock()
@@ -161,6 +173,26 @@ class ColdTier:
     def _slot_view(self, slot: int) -> memoryview:
         lo = slot * self.row_stride
         return self.buffer[lo:lo + self.row_stride]
+
+    def _submit_fill(self, layer: int, key, slot: int):
+        """Start this slot's fill and return its future.
+
+        One line of policy: with an external landing the row scatters
+        straight into the consumer's buffers, otherwise it lands in this
+        tier's own slot. Everything around it — reservation, publish-after-
+        fill, the failure drain — is identical, because the slot is the
+        NAME of the residency, not the storage.
+        """
+        if self._landing is None:
+            return self.reader.read_row(layer, key[1], self._slot_view(slot))
+        views = self._landing(layer, key[1], slot)
+        if views is None:
+            raise RuntimeError(
+                f"landing callback returned no views for (layer {layer}, "
+                f"expert {key[1]}, slot {slot}) — a fill has nowhere to go. "
+                f"A consumer whose geometry cannot scatter must construct "
+                f"the tier WITHOUT landing= and copy instead.")
+        return self.reader.read_row_scatter(layer, key[1], views)
 
     def _victim(self, excluded: set) -> int:
         """LFU, LRU tie-break, never a slot in ``excluded`` (this request's own
@@ -328,8 +360,8 @@ class ColdTier:
         if reserved:
             t_fill = time.monotonic_ns()
             landed: set = set()
-            fut_of = {self.reader.read_row(layer, k[1], self._slot_view(s)):
-                      (k, s) for k, s in reserved}
+            fut_of = {self._submit_fill(layer, k, s): (k, s)
+                      for k, s in reserved}
             for fut in as_completed(fut_of):
                 key, slot = fut_of[fut]
                 try:
@@ -491,6 +523,12 @@ class ColdTier:
         taking the lock here is what guarantees a caller can never be handed a
         view of a slot whose read is still in flight.
         """
+        if self._landing is not None:
+            raise RuntimeError(
+                "this tier fills an EXTERNAL landing, so its own buffer never "
+                "receives a row — row() would hand back uninitialized bytes. "
+                "Read the consumer's stacks, or build the tier without "
+                "landing=.")
         with self._lock:
             slot = self._slot_of.get((layer, int(expert)))
             if slot is None:
@@ -529,6 +567,13 @@ class ColdTier:
             return (self._gen[slot] == int(generation)
                     and self._key_of[slot] == (layer, int(expert)))
 
+    def _refuse_if_external(self, what: str):
+        if self._landing is not None:
+            raise RuntimeError(
+                f"{what} exposes this tier's own landing buffer, which an "
+                f"external-landing tier never fills. The bytes live in the "
+                f"consumer's stacks.")
+
     def pinned_tensor(self):
         """The pinned buffer as a ``[hot_rows, row_stride]`` uint8 tensor — what
         the gather kernel indexes by slot. Requires ``pinned=True``.
@@ -541,6 +586,7 @@ class ColdTier:
         address-table engine adds slot offsets to, so a silent skew here would
         make every gather read one page early.
         """
+        self._refuse_if_external("pinned_tensor()")
         if not self.pinned:
             raise RuntimeError("pinned_tensor() requires pinned=True")
         n = self.hot_rows * self.row_stride
@@ -553,6 +599,7 @@ class ColdTier:
         ``row_bytes``: the arena pads rows out to ``align`` for O_DIRECT, so an
         engine that strides its own ``row_bytes`` through this buffer starts
         reading mid-row on slot 1 and never fails loudly."""
+        self._refuse_if_external("buffer_ptr")
         return buffer_address(self.buffer)
 
     # --------------------------------------------------------------- stats --
