@@ -275,3 +275,115 @@ def test_speculative_churn_cannot_evict_the_demand_window(arena):
         finally:
             stop.set()
             th.join(timeout=5)
+
+
+# ------------------------------------------------- Bugbot follow-ups --
+
+def test_a_nested_ensure_does_not_demote_the_outer_batchs_siblings(arena):
+    """gnf4#112. A caller materializing a batch one expert at a time must not
+    logically evict its own siblings: that inflates logical_evictions and
+    resurrections, and drops the window protection that keeps a concurrent
+    speculative ensure off rows still being copied out."""
+    from nvme_residency import segment_into
+    path, index = arena
+    suf = next(g["suffix"] for g in index["segments"])
+    with _tier(path, index, 4, protected=1) as t:
+        t.ensure(0, range(E))                       # one batch, protected
+        before = t.stats()
+        out = __import__("torch").empty(
+            (4, *next(g["shape_per_expert"] for g in index["segments"]
+                      if g["suffix"] == suf)), dtype=__import__("torch").uint8)
+        for e in range(E):
+            segment_into(t, index, 0, [e], suf, out, rows=[e], ensure=False)
+        after = t.stats()
+        assert after["logical_evictions"] == before["logical_evictions"], (
+            "materializing a batch must not evict its own members")
+        assert after["resurrections"] == before["resurrections"]
+
+
+def test_ensure_false_refuses_a_row_that_is_not_resident(arena):
+    """The contract that makes ensure=False safe: it may not silently read a
+    slot the caller never made resident."""
+    import torch
+
+    from nvme_residency import segment_into
+    path, index = arena
+    g0 = next(g for g in index["segments"])
+    with _tier(path, index, 4) as t:
+        out = torch.empty((1, *g0["shape_per_expert"]), dtype=torch.uint8)
+        with pytest.raises(KeyError, match="not resident"):
+            segment_into(t, index, 0, [3], g0["suffix"], out, rows=[0],
+                         ensure=False)
+
+
+def test_a_failing_landing_does_not_strand_reservations(arena):
+    """gnf4#118. A synchronous submit failure must reclaim its slots and wake
+    its waiters — otherwise the next ensure of that key waits on an event
+    nothing will ever set."""
+    path, index = arena
+    t = ColdTier(path, hot_rows=4, pinned=False, index=index,
+                 landing=lambda layer, e, slot: None)   # always fails
+    try:
+        with pytest.raises(RuntimeError, match="no views"):
+            t.ensure(0, [0, 1])
+        assert t._reserved == set(), "reservations leaked"
+        assert t._pending == {}, "pending events leaked"
+        # every slot is back on the free list, so the tier can still serve a
+        # caller that fixes its landing -- the failure is not terminal
+        assert len(t._free) == t.hot_rows
+        assert t._slot_of == {}
+    finally:
+        t.close()
+
+
+def test_a_late_attached_landing_frees_the_buffer_it_will_never_fill(arena):
+    """gnf4#120. Construction with landing= allocates one row; a late attach
+    must match, or it keeps a full landing nothing writes."""
+    path, index = arena
+    t = ColdTier(path, hot_rows=64, pinned=False, index=index)
+    try:
+        big = len(t.buffer)
+        t.attach_landing(lambda layer, e, slot: None)
+        assert len(t.buffer) == t.row_stride < big
+    finally:
+        t.close()
+
+
+def test_a_submit_failure_after_earlier_keys_launched_strands_nothing(arena):
+    """gnf4#130, on the gnf4#118 fix. The #118 test fails the FIRST key, so
+    nothing is ever in flight and the re-raise path looks clean. Fail a LATER
+    key and the earlier ones are already running: re-raising past the drain
+    leaves their slots reserved and their events unset -- the identical leak,
+    one key over. The drain must run before the error escapes."""
+    import threading
+
+    path, index = arena
+    t = ColdTier(path, hot_rows=4, pinned=False, index=index)
+    try:
+        real, calls = t._submit_fill, []
+
+        def flaky(layer, key, slot):
+            calls.append(key)
+            if len(calls) > 1:
+                raise RuntimeError("submit exploded on a later key")
+            return real(layer, key, slot)
+
+        t._submit_fill = flaky
+        with pytest.raises(RuntimeError, match="exploded"):
+            t.ensure(0, [0, 1])
+
+        assert t._reserved == set(), "in-flight reservations leaked"
+        assert t._pending == {}, "in-flight pending events leaked"
+
+        # the key that DID land keeps its slot -- the read was paid for and
+        # the bytes are valid; only the unlaunched one goes back
+        assert len(t._free) == t.hot_rows - len(t._slot_of)
+
+        # the real proof: asking again must not wait on an event nobody sets
+        t._submit_fill = real
+        done = threading.Event()
+        threading.Thread(target=lambda: (t.ensure(0, [0, 1]), done.set()),
+                         daemon=True).start()
+        assert done.wait(20), "ensure blocked on a stranded pending event"
+    finally:
+        t.close()

@@ -360,8 +360,41 @@ class ColdTier:
         if reserved:
             t_fill = time.monotonic_ns()
             landed: set = set()
-            fut_of = {self._submit_fill(layer, k, s): (k, s)
-                      for k, s in reserved}
+            # _submit_fill can raise SYNCHRONOUSLY -- a landing callback that
+            # errors or returns no views, or a scatter whose iovecs fail the
+            # O_DIRECT alignment check. Any key already reserved when that
+            # happens would keep its slot reserved and its pending event
+            # unsignalled, and the next ensure of that key would wait on an
+            # event nothing will ever set (Bugbot, gnf4#118). Reclaim
+            # exactly what was reserved and re-raise.
+            #
+            # Do NOT re-raise here. Keys submitted BEFORE the failure are
+            # already in flight; raising past the drain below leaves THEIR
+            # slots reserved with their events unset -- the same leak, moved
+            # one key over (Bugbot, gnf4#130, on the gnf4#118 fix). Reclaim
+            # only what never got submitted, narrow `reserved` to what did,
+            # and let the error out through `first_err` so the existing
+            # drain-publish-reclaim path runs first and raises after it.
+            fut_of = {}
+            try:
+                for k, s in reserved:
+                    fut_of[self._submit_fill(layer, k, s)] = (k, s)
+            except BaseException as exc:      # noqa: BLE001 - raised below
+                submitted = set(fut_of.values())
+                with self._lock:
+                    for k, s in reserved:
+                        if (k, s) in submitted:
+                            continue          # in flight; drained below
+                        self._key_of[s] = None
+                        self._reserved.discard(s)
+                        self._demand_protected.discard(s)
+                        if s not in self._free:
+                            self._free.append(s)
+                        ev = self._pending.pop(k, None)
+                        if ev is not None:
+                            ev.set()          # wake waiters; they refetch
+                reserved = [ks for ks in reserved if ks in submitted]
+                first_err = exc
             for fut in as_completed(fut_of):
                 key, slot = fut_of[fut]
                 try:
@@ -560,6 +593,12 @@ class ColdTier:
                 f"unreachable when the landing redirects. Attach before the "
                 f"first ensure().")
         self._landing = callback
+        # Construction with landing= allocates ONE row instead of
+        # hot_rows*row_stride; a late attach must do the same or it keeps a
+        # full landing nothing will ever write, doubling the DRAM the
+        # scatter path exists to free (Bugbot, gnf4#120).
+        self.buffer, self._keepalive = alloc_landing(
+            self.row_stride, pinned=self.pinned)
 
     def slot_of(self, layer: int, expert: int):
         """The slot holding this row, or None. Lets a consumer ask what the
@@ -807,7 +846,8 @@ def widening_casts():
 
 
 def segment_into(tier: "ColdTier", index: dict, layer: int, experts,
-                 suffix: str, out, *, rows=None, non_blocking: bool = False):
+                 suffix: str, out, *, rows=None, non_blocking: bool = False,
+                 ensure: bool = True):
     """Fill ``out`` with one segment's bytes for ``experts``, into storage the
     CALLER owns. Returns ``out``.
 
@@ -853,7 +893,21 @@ def segment_into(tier: "ColdTier", index: dict, layer: int, experts,
     if not out.is_contiguous():
         raise ValueError("out must be contiguous — rows are filled as flat byte runs")
 
-    slots = tier.ensure(layer, experts)
+    # ``ensure=False`` for a caller that ALREADY made these rows resident.
+    # A nested demand ensure is not free: it replaces the demand window and
+    # runs the demotion pass, so a caller materializing a batch one expert
+    # at a time logically evicts its own siblings mid-materialization --
+    # inflating logical_evictions/resurrections, and dropping the window
+    # protection that keeps a concurrent speculative ensure from overwriting
+    # rows still being copied out (Bugbot, gnf4#112).
+    slots = (tier.ensure(layer, experts) if ensure
+             else [tier.slot_of(layer, e) for e in experts])
+    if any(s is None for s in slots):
+        missing = [e for e, s in zip(experts, slots) if s is None]
+        raise KeyError(
+            f"ensure=False but (layer {layer}) experts {missing[:8]} are not "
+            f"resident — the caller must ensure them before asking for their "
+            f"bytes")
     pinned = tier.pinned_tensor() if tier.pinned else None
     for r, e, slot in zip(dst_rows, experts, slots):
         if widen:

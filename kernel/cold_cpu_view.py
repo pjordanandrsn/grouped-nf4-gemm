@@ -252,8 +252,14 @@ class ColdCpuView:
                 continue
             if not self.direct:
                 for suffix in self.segments:
+                    # ensure=False: tier.ensure above already made this row
+                    # resident AND protected it. Letting segment_into issue
+                    # its own demand ensure per segment would replace that
+                    # window and demote the siblings this batch is still
+                    # materializing (Bugbot, gnf4#112).
                     segment_into(self.tier, self.index, layer, [e], suffix,
-                                 self.stacks[suffix], rows=[slot])
+                                 self.stacks[suffix], rows=[slot],
+                                 ensure=False)
             # direct: tier.ensure() above already scattered this row into
             # these stacks through landing(), so there is nothing to copy.
             # The stamp below still runs — it is what makes a later hit
