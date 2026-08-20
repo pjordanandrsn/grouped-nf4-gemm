@@ -1,0 +1,9 @@
+=== round 1 cold_direct=false ===
+  prot= 384 median=   64.61 ms reads=  450 logEv=    0 resurr=    0 overwr=    0 P=- toks_ok=True
+=== round 1 cold_direct=true ===
+  prot= 384 median=   58.48 ms reads=  450 logEv=    0 resurr=    0 overwr=    0 P=- toks_ok=True
+=== round 2 cold_direct=false ===
+  prot= 384 median=   64.96 ms reads=  450 logEv=    0 resurr=    0 overwr=    0 P=- toks_ok=True
+=== round 2 cold_direct=true ===
+  prot= 384 median=   58.04 ms reads=  450 logEv=    0 resurr=    0 overwr=    0 P=- toks_ok=True
+DIRECT_AB_DONE
