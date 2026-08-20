@@ -1,0 +1,14 @@
++ export PYTHONPATH=/root/g/kernel PYTHONUNBUFFERED=1
++ PYTHONPATH=/root/g/kernel
++ PYTHONUNBUFFERED=1
++ /root/venv/bin/python /root/g/bench/cold-engine/routing-trace/wall_hard_vs_soft.py --trace /root/g/bench/cold-engine/routing-trace/olmoe_routing_seq.jsonl --arena /root/big.arena --rows 128,384 --repeats 2 --pinned --protected-frac 0.5 --out /root/wall_r2.json
+arena: 16L x 64E, row 3342336 B, pinned=True
+trace: 512 steps, 16 layers, top-8 of 64
+
+  rows   prot |     hard ms     soft ms   d wall | hard reads soft reads  d reads | resurrections
+   128     64 |    117446.7    120095.5    +2.3% |      44298      44939    +1.4% |    6991 (10.67% of routed)
+   384    192 |     67201.6     72118.5    +7.3% |      21890      22129    +1.1% |   15961 (24.35% of routed)
+
+receipt -> /root/wall_r2.json
++ echo WALL2_DONE
+WALL2_DONE

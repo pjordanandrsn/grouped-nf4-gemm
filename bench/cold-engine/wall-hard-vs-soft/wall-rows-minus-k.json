@@ -1,0 +1,79 @@
+{
+  "meta": {
+    "model": "/root/models/olmoe",
+    "steps": 512,
+    "layers": 16,
+    "top_k": 8,
+    "n_experts": 64,
+    "prompt_tokens": 64,
+    "decode": true
+  },
+  "arena_row_bytes": 3342336,
+  "pinned": true,
+  "repeats": 3,
+  "points": [
+    {
+      "rows": 128,
+      "protected": 120,
+      "hard_wall_ns": [
+        117711677490,
+        117771928693,
+        117376001167
+      ],
+      "soft_wall_ns": [
+        121237227965,
+        121301860942,
+        121099669744
+      ],
+      "hard_wall_median_ns": 117711677490,
+      "soft_wall_median_ns": 121237227965,
+      "delta_wall_pct": 2.9950728340435955,
+      "hard_reads": 44298,
+      "soft_reads": 44964,
+      "delta_reads_pct": 1.5034538805363673,
+      "soft_resurrections": 187
+    },
+    {
+      "rows": 256,
+      "protected": 248,
+      "hard_wall_ns": [
+        91551632882,
+        91599546510,
+        91483664160
+      ],
+      "soft_wall_ns": [
+        97106953636,
+        96609008422,
+        96818373696
+      ],
+      "hard_wall_median_ns": 91551632882,
+      "soft_wall_median_ns": 96818373696,
+      "delta_wall_pct": 5.752754645881905,
+      "hard_reads": 32169,
+      "soft_reads": 32605,
+      "delta_reads_pct": 1.355342099536821,
+      "soft_resurrections": 256
+    },
+    {
+      "rows": 384,
+      "protected": 376,
+      "hard_wall_ns": [
+        66985083735,
+        67340887327,
+        66957728220
+      ],
+      "soft_wall_ns": [
+        73374479574,
+        73611946384,
+        73834970612
+      ],
+      "hard_wall_median_ns": 66985083735,
+      "soft_wall_median_ns": 73611946384,
+      "delta_wall_pct": 9.893042270748758,
+      "hard_reads": 21890,
+      "soft_reads": 22150,
+      "delta_reads_pct": 1.187756966651439,
+      "soft_resurrections": 314
+    }
+  ]
+}

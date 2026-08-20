@@ -1,0 +1,57 @@
+{
+  "meta": {
+    "model": "/root/models/olmoe",
+    "steps": 512,
+    "layers": 16,
+    "top_k": 8,
+    "n_experts": 64,
+    "prompt_tokens": 64,
+    "decode": true
+  },
+  "arena_row_bytes": 3342336,
+  "routed_slots": 65536,
+  "pinned": true,
+  "repeats": 2,
+  "points": [
+    {
+      "rows": 128,
+      "protected": 64,
+      "hard_wall_ns": [
+        117297691790,
+        117595779481
+      ],
+      "soft_wall_ns": [
+        119975700971,
+        120215329122
+      ],
+      "hard_wall_median_ns": 117446735635.5,
+      "soft_wall_median_ns": 120095515046.5,
+      "delta_wall_pct": 2.255302709494267,
+      "hard_reads": 44298,
+      "soft_reads": 44939,
+      "delta_reads_pct": 1.447017924059777,
+      "soft_resurrections": 6991,
+      "resurrection_frac_of_routed": 0.1066741943359375
+    },
+    {
+      "rows": 384,
+      "protected": 192,
+      "hard_wall_ns": [
+        67239249268,
+        67163979890
+      ],
+      "soft_wall_ns": [
+        72307770504,
+        71929156858
+      ],
+      "hard_wall_median_ns": 67201614579.0,
+      "soft_wall_median_ns": 72118463681.0,
+      "delta_wall_pct": 7.3165639438914285,
+      "hard_reads": 21890,
+      "soft_reads": 22129,
+      "delta_reads_pct": 1.0918227501142075,
+      "soft_resurrections": 15961,
+      "resurrection_frac_of_routed": 0.2435455322265625
+    }
+  ]
+}
