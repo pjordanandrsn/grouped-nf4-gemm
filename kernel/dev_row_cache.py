@@ -89,20 +89,33 @@ class DevRowCache:
             tier's own buffer strides by ``row_stride``, and a cache that
             strided by the unpadded size would start reading mid-row on slot
             1 and never fail loudly.
-        protected: rows the cache will not demote. Defaults to half, which
-            makes the other half the reclaimable ghost set. ``rows`` (the
-            :class:`VramSlots` default) would leave nothing demotable and
-            deadlock the allocator, so this class does NOT inherit it.
+        routed: the largest routed set a single ``want`` will ask for --
+            the engine's ``k``. Used only to pick ``protected``.
+        protected: rows the cache will not demote. Defaults to
+            ``rows - routed``: the demotable margin only has to absorb ONE
+            request, and every row beyond that margin is retention the cache
+            is paying VRAM for.
+
+            The old default of ``rows // 2`` threw half of it away, and it
+            was the single largest thing wrong with this class. Replayed
+            against a captured OLMoE decode trace at 384 rows, the default
+            made 49,708 fills where the same cache with a one-request margin
+            made 35,401 and an ideal LRU made 26,613
+            (`bench/cold-engine/routing-trace`). At the smallest size it was
+            worse than not having the cache at all. ``rows`` itself (the
+            :class:`VramSlots` default) leaves nothing demotable and
+            deadlocks the allocator, which is why that one is not inherited
+            either.
     """
 
     def __init__(self, rows: int, row_stride: int, *, device="cuda",
-                 protected: int | None = None):
+                 routed: int = 8, protected: int | None = None):
         rows, row_stride = int(rows), int(row_stride)
         if rows < 2:
             raise ValueError("rows must be >= 2: with one row every request "
                              "evicts the row it is about to read")
         if protected is None:
-            protected = max(1, rows // 2)
+            protected = max(1, rows - int(routed))
         if protected >= rows:
             raise ValueError(
                 f"protected={protected} must be < rows={rows}. At rows the "

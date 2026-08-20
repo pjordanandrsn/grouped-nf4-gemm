@@ -69,6 +69,12 @@ class VramSlots:
         self._gen: list = [0] * n_slots
         self._pending: dict = {}                  # slot -> caller's event tag
         self._clock = 0
+        # Last touch per slot. The clock was already here and was never READ:
+        # both victim selection and allocation walked range(n_slots), so the
+        # cache evicted by slot INDEX, not by recency. On a captured OLMoE
+        # decode trace that cost 1.12-1.33x more fills than an ideal LRU of
+        # the same capacity (bench/cold-engine/routing-trace).
+        self._used: list = [0] * n_slots
 
         self.gathers = 0            # slots that needed a real refill
         self.active_hits = 0        # already ACTIVE, nothing to do
@@ -158,13 +164,13 @@ class VramSlots:
 
     def _snapshot(self):
         return (list(self._holds), list(self._state), list(self._gen),
-                dict(self._pending), self._clock, self.gathers,
+                dict(self._pending), list(self._used), self._clock, self.gathers,
                 self.active_hits, self.resurrections, self.logical_evictions,
                 self.overwritten, self.blocked_by_retiring)
 
     def _restore(self, snap) -> None:
-        (self._holds, self._state, self._gen, self._pending, self._clock,
-         self.gathers, self.active_hits, self.resurrections,
+        (self._holds, self._state, self._gen, self._pending, self._used,
+         self._clock, self.gathers, self.active_hits, self.resurrections,
          self.logical_evictions, self.overwritten,
          self.blocked_by_retiring) = snap
 
@@ -189,6 +195,7 @@ class VramSlots:
             else:
                 self.active_hits += 1
             self._state[s] = ACTIVE
+            self._used[s] = self._clock
             assign[e] = s
 
         for e in experts:
@@ -197,6 +204,7 @@ class VramSlots:
             s = self._claim(set(assign.values()), event_tag)
             self._holds[s] = e
             self._state[s] = ACTIVE
+            self._used[s] = self._clock
             self._gen[s] += 1
             assign[e] = s
             need.append(e)
@@ -250,13 +258,19 @@ class VramSlots:
         order = ((RECLAIMABLE, ABSENT) if event_tag is not None
                  else (RECLAIMABLE, ABSENT, ACTIVE))
         for want in order:
-            for s in range(self.n_slots):
-                if s in protected_now or self._state[s] == RETIRING:
-                    continue
-                if self._state[s] == want:
-                    if want == RECLAIMABLE:
-                        self.overwritten += 1
-                    return s
+            # Least-recently-used within the class, not first-by-index. ABSENT
+            # slots hold nothing, so their order is arbitrary and _used is 0
+            # for all of them -- the tie is harmless there and load-bearing
+            # for RECLAIMABLE, where index order was overwriting the row about
+            # to be re-routed.
+            cands = [s for s in range(self.n_slots)
+                     if s not in protected_now and self._state[s] != RETIRING
+                     and self._state[s] == want]
+            if cands:
+                s = min(cands, key=lambda i: self._used[i])
+                if want == RECLAIMABLE:
+                    self.overwritten += 1
+                return s
         raise RuntimeError(
             "no slot available: every slot is either wanted by this request, "
             "RETIRING with readers still in flight, or ACTIVE with readers "
@@ -282,6 +296,7 @@ class VramSlots:
         over = (len(keep) + len(active)) - self.protected
         if over <= 0:
             return
+        active.sort(key=lambda i: self._used[i])      # oldest first
         for s in active[:over]:
             if event_tag is not None:
                 self._state[s] = RETIRING
