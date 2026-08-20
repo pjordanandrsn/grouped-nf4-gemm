@@ -102,7 +102,11 @@ class DevRowCache:
                 f"set of demotable slots is empty, so the first request that "
                 f"misses on a full cache has nowhere to land — VramSlots' own "
                 f"default is deliberately not inherited here.")
-        self.rows, self.row_stride = rows, row_stride
+        # Surfaced on the cache, not reached for through .slots: the engine's
+        # sizing guard needs it, and a guard that reaches into another
+        # object's internals raises AttributeError at construction instead of
+        # the message it was written to give.
+        self.rows, self.row_stride, self.protected = rows, row_stride, protected
         self.buf = torch.empty(rows * row_stride, dtype=torch.uint8,
                                device=device)
         self.base = self.buf.data_ptr()
