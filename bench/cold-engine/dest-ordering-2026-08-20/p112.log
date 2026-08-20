@@ -1,0 +1,25 @@
+=== round 1 tree=gnf4_buggy ===
+  control    patched=16 median=   39.05 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=ref
+  control#2  patched=16 median=   40.01 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=0.0000
+  cold-gpu   patched=16 median=   61.13 ms  cold cpu/gpu=     0/24364  win_reads=  385 dmax=16.4375
+  cold-cpu   patched=16 median=   57.87 ms  cold cpu/gpu= 23671/0      win_reads=  450 dmax=0.0000
+  dynamic    patched=16 median=   64.13 ms  cold cpu/gpu= 13979/10462  win_reads=  458 dmax=17.7812
+=== round 1 tree=gnf4 ===
+  control    patched=16 median=   39.66 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=ref
+  control#2  patched=16 median=   39.94 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=0.0000
+  cold-gpu   patched=16 median=   62.45 ms  cold cpu/gpu=     0/24364  win_reads=  401 dmax=16.4375
+  cold-cpu   patched=16 median=   57.66 ms  cold cpu/gpu= 23671/0      win_reads=  450 dmax=0.0000
+  dynamic    patched=16 median=   65.08 ms  cold cpu/gpu= 13979/10462  win_reads=  564 dmax=17.7812
+=== round 2 tree=gnf4_buggy ===
+  control    patched=16 median=   40.10 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=ref
+  control#2  patched=16 median=   40.02 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=0.0000
+  cold-gpu   patched=16 median=   62.06 ms  cold cpu/gpu=     0/24364  win_reads=  385 dmax=16.4375
+  cold-cpu   patched=16 median=   58.18 ms  cold cpu/gpu= 23671/0      win_reads=  450 dmax=0.0000
+  dynamic    patched=16 median=   64.17 ms  cold cpu/gpu= 13979/10462  win_reads=  458 dmax=17.7812
+=== round 2 tree=gnf4 ===
+  control    patched=16 median=   40.34 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=ref
+  control#2  patched=16 median=   39.53 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=0.0000
+  cold-gpu   patched=16 median=   64.05 ms  cold cpu/gpu=     0/24364  win_reads=  401 dmax=16.4375
+  cold-cpu   patched=16 median=   57.57 ms  cold cpu/gpu= 23671/0      win_reads=  450 dmax=0.0000
+  dynamic    patched=16 median=   63.92 ms  cold cpu/gpu= 13979/10462  win_reads=  564 dmax=17.7812
+PAIR112_DONE

@@ -1,0 +1,117 @@
+{
+  "schema": "e4b-gpu-stacks-via-view/1",
+  "box": {
+    "gpu": "NVIDIA GeForce RTX 5090",
+    "b_dram_gbs": 417.39,
+    "g0_verdict": "proceed",
+    "b_nvme_seq_gbs": 5.68
+  },
+  "config": {
+    "model": "/root/models/olmoe",
+    "arena": "/root/models/olmoe.arena",
+    "profile": "/root/olmoe_profile_ORIGINAL.jsonl",
+    "calib": "/root/calib.json",
+    "sweep": "0.05,0.20",
+    "hot_rows": 384,
+    "steps": 128,
+    "warmup": 6,
+    "vram_frac": 0.25,
+    "seq": 64,
+    "repeats": 2,
+    "out": "/root/receipts/viewstack2.json"
+  },
+  "points": [
+    {
+      "cold_frac": 0.05033414909638554,
+      "experts_moved": 265,
+      "arms": {
+        "rebuild#1": {
+          "median_ns": 56015534.5,
+          "reads_in_window": 37,
+          "view_hits": null,
+          "materializations": null,
+          "rows_requested": null,
+          "cold_rows_gpu": 8483,
+          "serve_gpu_stacks": false,
+          "tokens_match": true
+        },
+        "rebuild#2": {
+          "median_ns": 55467202.5,
+          "reads_in_window": 37,
+          "view_hits": null,
+          "materializations": null,
+          "rows_requested": null,
+          "cold_rows_gpu": 8483,
+          "serve_gpu_stacks": false,
+          "tokens_match": true
+        },
+        "view#1": {
+          "median_ns": 52455122.0,
+          "reads_in_window": 37,
+          "view_hits": 17079,
+          "materializations": 249,
+          "rows_requested": 17328,
+          "cold_rows_gpu": 8483,
+          "serve_gpu_stacks": true,
+          "tokens_match": true
+        },
+        "view#2": {
+          "median_ns": 52456474.0,
+          "reads_in_window": 37,
+          "view_hits": 17079,
+          "materializations": 249,
+          "rows_requested": 17328,
+          "cold_rows_gpu": 8483,
+          "serve_gpu_stacks": true,
+          "tokens_match": true
+        }
+      }
+    },
+    {
+      "cold_frac": 0.2002776731927711,
+      "experts_moved": 505,
+      "arms": {
+        "rebuild#1": {
+          "median_ns": 69994374.5,
+          "reads_in_window": 401,
+          "view_hits": null,
+          "materializations": null,
+          "rows_requested": null,
+          "cold_rows_gpu": 24364,
+          "serve_gpu_stacks": false,
+          "tokens_match": true
+        },
+        "rebuild#2": {
+          "median_ns": 72615579.0,
+          "reads_in_window": 401,
+          "view_hits": null,
+          "materializations": null,
+          "rows_requested": null,
+          "cold_rows_gpu": 24364,
+          "serve_gpu_stacks": false,
+          "tokens_match": true
+        },
+        "view#1": {
+          "median_ns": 61695613.0,
+          "reads_in_window": 401,
+          "view_hits": 38007,
+          "materializations": 2889,
+          "rows_requested": 40896,
+          "cold_rows_gpu": 24364,
+          "serve_gpu_stacks": true,
+          "tokens_match": true
+        },
+        "view#2": {
+          "median_ns": 63641536.0,
+          "reads_in_window": 401,
+          "view_hits": 38007,
+          "materializations": 2889,
+          "rows_requested": 40896,
+          "cold_rows_gpu": 24364,
+          "serve_gpu_stacks": true,
+          "tokens_match": true
+        }
+      }
+    }
+  ]
+}
