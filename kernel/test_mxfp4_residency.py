@@ -834,3 +834,145 @@ def test_a_sole_owner_still_skips_re_reading(tmp_path):
                                           "users": 1, "claims": claims}
     finally:
         tier.close()
+
+
+# ------------------------------------------- 7. the device row cache ----
+def _tiered_cached(path, index, hot_ids, hot_rows, biases, cache):
+    from mxfp4_residency import Mxfp4NvmeResidency
+    return Mxfp4NvmeResidency(
+        path, LAYER, hot_ids=hot_ids, k_slots=K_SLOTS, hot_rows=hot_rows,
+        gate_up_bias=biases[0] if biases else None,
+        down_bias=biases[1] if biases else None,
+        device="cuda", alpha=ALPHA, limit=LIMIT, index=index, dev_cache=cache)
+
+
+@cuda
+def test_dev_row_cache_answers_bit_for_bit_like_no_cache(arena):
+    """The cache may not change a single output bit.
+
+    It relocates WHERE a row is read from, never what the row is. Anything
+    else is the cache reinterpreting packed bytes, which is the one thing the
+    whole cold path is forbidden to do.
+    """
+    _needs_gather_kernel()
+    from dev_row_cache import DevRowCache
+    stacks, path, index = arena
+    _res, biases = _resident(stacks, ())
+    x, idx, sc = _route(24, seed=11)
+
+    plain = _tiered(path, index, (), K_SLOTS, biases)
+    try:
+        want = [plain.forward(x[t], idx[t:t + 1], sc[t:t + 1]).clone()
+                for t in range(x.shape[0])]
+        plain_pcie = plain.traffic()["cold_pcie_bytes"]
+    finally:
+        plain.tier.close()
+
+    # 2*k is the floor (see _init_dev_cache): the previous step's k rows are
+    # still ACTIVE while this step claims its own k. Eviction is exercised by
+    # the k_slots=2 test below, where 8 experts contend for 4 rows.
+    cache = DevRowCache(2 * K_SLOTS, plain.row_stride, device="cuda",
+                        protected=K_SLOTS)
+    cached = _tiered_cached(path, index, (), K_SLOTS, biases, cache)
+    try:
+        for t in range(x.shape[0]):
+            got = cached.forward(x[t], idx[t:t + 1], sc[t:t + 1])
+            assert torch.equal(got, want[t]), (
+                t, (got - want[t]).abs().max().item())
+        tr = cached.traffic()
+    finally:
+        cached.tier.close()
+
+    dc = tr["dev_cache"]
+    routed_cold = sum(len({int(e) for e in idx[t]}) for t in range(idx.shape[0]))
+    assert dc["gathers"] < routed_cold, (
+        f"the cache filled {dc['gathers']} rows for {routed_cold} routed cold "
+        f"experts -- nothing was reused, so it is pure overhead here")
+    assert tr["host_to_device_bytes"] < plain_pcie, (
+        tr["host_to_device_bytes"], plain_pcie)
+    assert dc["rows"] == 2 * K_SLOTS and dc["protected"] == K_SLOTS
+
+
+@cuda
+def test_dev_row_cache_reuses_a_row_the_router_moved(arena):
+    """The property the positional cache does not have. Route the SAME expert
+    set in a different order and the second step must fill nothing."""
+    _needs_gather_kernel()
+    from dev_row_cache import DevRowCache
+    stacks, path, index = arena
+    _res, biases = _resident(stacks, ())
+    x, idx, sc = _route(2, seed=5)
+    idx[1] = idx[0].flip(0)                      # same experts, reversed
+
+    cache = DevRowCache(8, _probe_stride(path, index), device="cuda",
+                        protected=4)
+    eng = _tiered_cached(path, index, (), K_SLOTS, biases, cache)
+    try:
+        eng.forward(x[0], idx[0:1], sc[0:1])
+        after_first = eng.traffic()["dev_cache"]["gathers"]
+        eng.forward(x[1], idx[1:2], sc[1:2])
+        after_second = eng.traffic()["dev_cache"]["gathers"]
+    finally:
+        eng.tier.close()
+    assert after_second == after_first, (
+        f"a re-routed expert was re-fetched: {after_first} -> {after_second}")
+
+
+def _probe_stride(path, index):
+    """The tier's padded row size, without building an engine to ask."""
+    t = ColdTier(path, hot_rows=2, pinned=False, index=index)
+    try:
+        return t.row_stride
+    finally:
+        t.close()
+
+
+@cuda
+def test_dev_row_cache_still_matches_when_it_must_evict(arena):
+    """The cache is only interesting when it cannot hold everything.
+
+    k_slots=2 puts all E=8 experts through a 4-row arena, so rows are
+    logically evicted, resurrected, and overwritten during the trace -- and
+    the answers still have to be bit-for-bit what the uncached engine gives.
+    """
+    _needs_gather_kernel()
+    from dev_row_cache import DevRowCache
+    from mxfp4_residency import Mxfp4NvmeResidency
+    stacks, path, index = arena
+    _res, biases = _resident(stacks, ())
+
+    k = 2
+    g = torch.Generator(device="cuda").manual_seed(21)
+    x = torch.randn(40, 1, H, dtype=torch.bfloat16, device="cuda", generator=g)
+    sc, idx = torch.topk(torch.softmax(
+        torch.randn(40, E, device="cuda", generator=g), -1), k=k, dim=-1)
+    sc = sc.to(torch.bfloat16)
+
+    def _eng(cache):
+        return Mxfp4NvmeResidency(
+            path, LAYER, hot_ids=(), k_slots=k, hot_rows=k,
+            gate_up_bias=biases[0], down_bias=biases[1], device="cuda",
+            alpha=ALPHA, limit=LIMIT, index=index, dev_cache=cache)
+
+    plain = _eng(None)
+    try:
+        want = [plain.forward(x[t], idx[t:t + 1], sc[t:t + 1]).clone()
+                for t in range(x.shape[0])]
+        stride = plain.row_stride
+    finally:
+        plain.tier.close()
+
+    cache = DevRowCache(2 * k, stride, device="cuda", protected=k)
+    eng = _eng(cache)
+    try:
+        for t in range(x.shape[0]):
+            got = eng.forward(x[t], idx[t:t + 1], sc[t:t + 1])
+            assert torch.equal(got, want[t]), (
+                t, (got - want[t]).abs().max().item())
+        dc = eng.traffic()["dev_cache"]
+    finally:
+        eng.tier.close()
+
+    assert dc["logical_evictions"] > 0, ("8 experts through 4 rows evicted "
+                                         f"nothing: {dc}")
+    assert dc["overwritten"] > 0, f"nothing was ever actually reused-then-lost: {dc}"
