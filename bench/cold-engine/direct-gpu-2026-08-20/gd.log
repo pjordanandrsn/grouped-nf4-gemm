@@ -1,0 +1,61 @@
+=== Thu Aug 20 15:32:57 UTC 2026 bootstrap start ===
+--- deps ok ---
+/opt/conda/lib/python3.11/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+e4b ok
+--- installs ok ---
+[32m✓ Downloaded[0m
+  path: /root/models/olmoe
+--- model ok: 13G ---
+/opt/conda/lib/python3.11/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+nf4 bake: L=16 E=64 (baking 64/layer) I=1024 H=2048 row=3538944 stride=3538944 total=3.6 GB
+  baked layer 3 (4/16, 0.9 GB, 4s)
+  baked layer 7 (8/16, 1.8 GB, 7s)
+  baked layer 11 (12/16, 2.7 GB, 10s)
+  baked layer 15 (16/16, 3.6 GB, 13s)
+nf4 bake complete: 1024 rows (3.6 GB) in 19s
+--- arena ok: 3.4G ---
+/root/bootstrap.sh: line 40: /root/olmoe_profile.jsonl: No such file or directory
+--- profile ok:  rows ---
+[calibrate] running CPU microbench (/usr/bin/cc -O3 -march=native)...
+[calibrate] running GPU benches...
+/opt/conda/lib/python3.11/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+
+calibration blob: /root/calib.json
+host: AMD EPYC 9755 128-Core Processor | 48 cpus | quota 46.08 | flags ['avx2', 'avx512_vnni', 'avx512bw', 'avx512f', 'avx512vbmi', 'avx512vl']
+B_dram triad best :    442.2 GB/s  (48t compact nt=1)
+grouped scatter   :    497.1 GB/s  (48t, 16 MiB blocks, E=512)
+GATE G0           : 112.4% of triad -> PROCEED
+cuda:0 NVIDIA GeForce RTX 5090: triad 1572.2 GB/s | link h2d 28.48 / d2h 28.25 GB/s
+B_nvme seq best   : 5.57 GB/s (o_direct=True)
+--- calib ok ---
+B_vram=1572.2 B_dram=442.2 B_nvme=None G0=proceed
+=== Thu Aug 20 15:37:33 UTC 2026 BOOTSTRAP DONE ===
+B_dram=442.2 GB/s  G0=112.4% verdict=proceed  (original gate-1 box: 380.1 GB/s, 131.8%, proceed)
+host class OK
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+########## tests (incl. the direct+GPU invariant) ##########
+    patched = enable(net, [torch.tensor([0]), torch.tensor([0])], device="cpu", **kwargs)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+35 passed, 1 skipped, 2 warnings in 7.07s
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+60 passed, 29 warnings in 8.39s
+########## A/B: direct landing on a GPU destination ##########
+  import pynvml  # type: ignore[import]
+box: {'gpu': 'NVIDIA GeForce RTX 5090', 'b_dram_gbs': 442.18, 'g0_verdict': 'proceed', 'b_nvme_seq_gbs': 5.57}
+=== cold 5% (265 experts) ===
+  direct#1   median=   58.07 ms reads=   24 view_hits=15375    materializations=237      toks_ok=True path= direct-scatter
+  direct#2   median=   58.03 ms reads=   24 view_hits=15375    materializations=237      toks_ok=True path= direct-scatter
+  copy#1     median=   57.49 ms reads=   24 view_hits=15375    materializations=237      toks_ok=True path= copy
+  copy#2     median=   58.15 ms reads=   24 view_hits=15375    materializations=237      toks_ok=True path= copy
+=== cold 20% (505 experts) ===
+  direct#1   median=   69.58 ms reads=  399 view_hits=37885    materializations=2899     toks_ok=True path= direct-scatter
+  direct#2   median=   67.85 ms reads=  399 view_hits=37885    materializations=2899     toks_ok=True path= direct-scatter
+  copy#1     median=   68.63 ms reads=  399 view_hits=37885    materializations=2899     toks_ok=True path= copy
+  copy#2     median=   68.07 ms reads=  399 view_hits=37885    materializations=2899     toks_ok=True path= copy
+DIRECT_GPU_DONE
+RUNNER_EXIT=0

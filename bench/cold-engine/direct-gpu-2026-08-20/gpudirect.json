@@ -1,0 +1,134 @@
+{
+  "schema": "e4b-gpu-stacks-via-view/1",
+  "box": {
+    "gpu": "NVIDIA GeForce RTX 5090",
+    "b_dram_gbs": 442.18,
+    "g0_verdict": "proceed",
+    "b_nvme_seq_gbs": 5.57
+  },
+  "config": {
+    "model": "/root/models/olmoe",
+    "arena": "/root/models/olmoe.arena",
+    "profile": "/root/olmoe_profile_ORIGINAL.jsonl",
+    "calib": "/root/calib.json",
+    "sweep": "0.05,0.20",
+    "hot_rows": 384,
+    "steps": 128,
+    "warmup": 6,
+    "vram_frac": 0.25,
+    "seq": 64,
+    "repeats": 2,
+    "direct": "both",
+    "out": "/root/receipts/gpudirect.json"
+  },
+  "points": [
+    {
+      "cold_frac": 0.05033414909638554,
+      "experts_moved": 265,
+      "arms": {
+        "direct#1": {
+          "median_ns": 58066681.0,
+          "reads_in_window": 24,
+          "view_hits": 15375,
+          "materializations": 237,
+          "rows_requested": 15612,
+          "cold_rows_gpu": 8061,
+          "serve_gpu_stacks": true,
+          "cold_direct": true,
+          "e4b_path": "direct-scatter",
+          "tokens_match": true
+        },
+        "direct#2": {
+          "median_ns": 58028459.5,
+          "reads_in_window": 24,
+          "view_hits": 15375,
+          "materializations": 237,
+          "rows_requested": 15612,
+          "cold_rows_gpu": 8061,
+          "serve_gpu_stacks": true,
+          "cold_direct": true,
+          "e4b_path": "direct-scatter",
+          "tokens_match": true
+        },
+        "copy#1": {
+          "median_ns": 57490912.0,
+          "reads_in_window": 24,
+          "view_hits": 15375,
+          "materializations": 237,
+          "rows_requested": 15612,
+          "cold_rows_gpu": 8061,
+          "serve_gpu_stacks": true,
+          "cold_direct": false,
+          "e4b_path": "copy",
+          "tokens_match": true
+        },
+        "copy#2": {
+          "median_ns": 58153066.0,
+          "reads_in_window": 24,
+          "view_hits": 15375,
+          "materializations": 237,
+          "rows_requested": 15612,
+          "cold_rows_gpu": 8061,
+          "serve_gpu_stacks": true,
+          "cold_direct": false,
+          "e4b_path": "copy",
+          "tokens_match": true
+        }
+      }
+    },
+    {
+      "cold_frac": 0.2002776731927711,
+      "experts_moved": 505,
+      "arms": {
+        "direct#1": {
+          "median_ns": 69584853.5,
+          "reads_in_window": 399,
+          "view_hits": 37885,
+          "materializations": 2899,
+          "rows_requested": 40784,
+          "cold_rows_gpu": 24350,
+          "serve_gpu_stacks": true,
+          "cold_direct": true,
+          "e4b_path": "direct-scatter",
+          "tokens_match": true
+        },
+        "direct#2": {
+          "median_ns": 67845965.5,
+          "reads_in_window": 399,
+          "view_hits": 37885,
+          "materializations": 2899,
+          "rows_requested": 40784,
+          "cold_rows_gpu": 24350,
+          "serve_gpu_stacks": true,
+          "cold_direct": true,
+          "e4b_path": "direct-scatter",
+          "tokens_match": true
+        },
+        "copy#1": {
+          "median_ns": 68627517.0,
+          "reads_in_window": 399,
+          "view_hits": 37885,
+          "materializations": 2899,
+          "rows_requested": 40784,
+          "cold_rows_gpu": 24350,
+          "serve_gpu_stacks": true,
+          "cold_direct": false,
+          "e4b_path": "copy",
+          "tokens_match": true
+        },
+        "copy#2": {
+          "median_ns": 68072402.0,
+          "reads_in_window": 399,
+          "view_hits": 37885,
+          "materializations": 2899,
+          "rows_requested": 40784,
+          "cold_rows_gpu": 24350,
+          "serve_gpu_stacks": true,
+          "cold_direct": false,
+          "e4b_path": "copy",
+          "tokens_match": true
+        }
+      }
+    }
+  ]
+}
