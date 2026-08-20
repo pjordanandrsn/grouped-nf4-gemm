@@ -24,7 +24,8 @@ scheduling gates missed, and the clear win came from a memory mechanism.
 |---|---|---|
 | **Gate 1** — can cold mass be admitted without proportional wall growth? | **MISS** | The hide-ratio clause is unreachable *by construction*: storage is 5–11% of cold-path cost at 1–10% cold mass, so a perfect prefetcher could remove at most ~10% of the exposure |
 | **Gate 2** — does choosing a destination by deadline beat a threshold? | **MISS** | Backlog changed 0 of 1975 decisions in the regime built to provoke it; the rule's own syncs cost 11.7–15.6% for routing identical to fixed-CPU |
-| **Reclaimable residency (R1, R5)** | **PARTLY WITHDRAWN** | The 11–60% P(reuse) is **contaminated** by a nested-ensure defect in the measurement path (see the correction in `RESULTS-tribrid-reclaimable.md`) and reverts to untested. What survives: physical reads −14.9/−29.6% at matched budgets, the ~4× ghost working set, and the feasibility finding — all of which rest on read counts or structure, not resurrection counts |
+| **Reclaimable residency (R1, R5)** | **CONFIRMED** (withdrawn, then re-measured) | P(reuse before overwrite) is **13.5 / 24.5 / 34.2%** at protected 96/64/32 on a decode-only window — one point inside the registered 5–20% band and two above it. Reads **−13.5% / −24.5%** at the two feasible budgets, wall −2.5% / −7.9%. The earlier 11–60% was withdrawn for a nested-ensure defect that does inflate P, but only by 7–15% relative; the real distortion was a measurement window that counted warmup prefills against decode-only wall. See `RESULTS-tribrid-reclaimable.md`. **No read count here is comparable to one published before that window fix** |
+| **VRAM reclaimable residency** | **Mechanism validated, not scored** | The device-side row cache is bitwise-equal to the uncached engine over 24 steps with 45 logical evictions in flight, and fills 19 rows for 96 routed cold expert-slots. But its fixture holds *every* expert in the layer, so the 21.6% byte figure is a best case and not a claim about real routing. Untimed. `bench/cold-engine/dev-row-cache/` |
 | **Direct scatter** (implementation, not a registered gate) | **Real, regime-bound** | −43% on the fill path in isolation; −12.5% end-to-end at 20% cold mass; **null** at 5% |
 
 ## The one prediction that mattered most was the directive's own
@@ -88,7 +89,18 @@ The receipts favour **residency over scheduling**, in three ways:
 
 Gate 3 (adaptive residency — promotion and demotion driven by observed
 reuse) is therefore the live thread, and R2, R3, R4 and R7–R10 remain
-untested, as does the VRAM side of reclaimable residency entirely.
+untested. The VRAM side of reclaimable residency now has a validated
+mechanism but no scored measurement: what it lacks is a real routing trace
+against a cache sized far below the expert count, which is the regime where
+its hit rate stops being a foregone conclusion.
+
+**One correction still outstanding.** The measurement-window defect that
+distorted R1 is also present in `run_gate1.py`, and was fixed there by the
+same PR — but **gate 1's published read counts were taken with it and are
+uncorrected.** They are warmup-inclusive where they claim to be decode-only.
+Gate 1's MISS verdict does not rest on them (it rests on prefetch coverage
+and the storage-share attribution), so the verdict stands; the read
+absolutes in that document should not be quoted until it is re-run.
 
 ## Cost of the campaign
 
