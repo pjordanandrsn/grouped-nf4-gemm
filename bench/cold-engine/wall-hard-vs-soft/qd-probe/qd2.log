@@ -1,0 +1,25 @@
++ export PYTHONPATH=/root/g/kernel
++ PYTHONPATH=/root/g/kernel
++ W=/root/g/bench/cold-engine/routing-trace/wall_hard_vs_soft.py
++ T=/root/g/bench/cold-engine/routing-trace/olmoe_routing_seq.jsonl
++ python /root/g/bench/cold-engine/routing-trace/wall_hard_vs_soft.py --trace /root/g/bench/cold-engine/routing-trace/olmoe_routing_seq.jsonl --build /root/snap --arena /root/big.arena --rows 256 --repeats 5 --pinned --qd 4 --out /root/qd4.json
+building 16L x 64E snapshot, 3.34 MB/row (3.4 GB arena)...
+  snapshot in 8s; baking...
+  baked in 9s
+arena: 16L x 64E, row 3342336 B, pinned=True
+trace: 512 steps, 16 layers, top-8 of 64
+
+  rows   prot |     hard ms     soft ms   d wall | hard reads soft reads  d reads | resurrections
+   256    248 |     24279.4     25799.1    +6.3% |      32169      32603    +1.3% |     257 (0.39% of routed)
+
+receipt -> /root/qd4.json
++ python /root/g/bench/cold-engine/routing-trace/wall_hard_vs_soft.py --trace /root/g/bench/cold-engine/routing-trace/olmoe_routing_seq.jsonl --arena /root/big.arena --rows 256 --repeats 5 --pinned --qd 1 --out /root/qd1.json
+arena: 16L x 64E, row 3342336 B, pinned=True
+trace: 512 steps, 16 layers, top-8 of 64
+
+  rows   prot |     hard ms     soft ms   d wall | hard reads soft reads  d reads | resurrections
+   256    248 |     36302.6     38659.6    +6.5% |      32169      32605    +1.4% |     255 (0.39% of routed)
+
+receipt -> /root/qd1.json
++ echo QD_DONE
+QD_DONE
