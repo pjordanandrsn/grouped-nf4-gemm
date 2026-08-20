@@ -17,7 +17,7 @@ the pre-Stage-3 tier exactly.
 | prediction | result |
 |---|---|
 | **R1** — 5–20% of logical evictions reused before overwrite | **CONFIRMED, exceeded** — 11–60% measured |
-| **R5** — soft eviction ≤ hard eviction in cost | **CONFIRMED** — flat uncontended, *faster* contended |
+| **R5** — soft eviction ≤ hard eviction in cost | **CONFIRMED** — flat uncontended, *faster* contended — ⚠️ the *contended* half is scored on capacity-unmatched arms; see the reconciliation |
 | **R6** — best gains at moderate capacity pressure | **shape confirmed** — see below |
 | ≥10% fewer physical NVMe reads (Arm A vs Arm B) | **CONFIRMED** — −14.9% and −29.6% |
 | no numerical/correctness difference | **CONFIRMED** — token-identical, every arm |
@@ -49,6 +49,15 @@ P(reuse) falls to 0.11–0.32 from 0.29–0.60 — reclaimable slots are taken
 faster when something wants them, which is R6's predicted shape.
 
 ## The registered comparison: Arm A (hard) vs Arm B (reclaimable)
+
+> **⚠️ The arms below do not hold the same amount of memory.** Arm A's pool is
+> `protected` rows; Arm B's is 128. Matched-capacity controls reverse the sign
+> of every result in this section — reads (#145), the knee (#147), and wall on
+> real NVMe (#153) — and the feasibility extension turns out to be a pool-size
+> fact that hard eviction reproduces when given the same 128 rows. The
+> measurements reproduce; the attribution does not. See
+> [`reconciliation/RESULTS-r5-reconciled.md`](reconciliation/RESULTS-r5-reconciled.md).
+> The numbers are kept exactly as published.
 
 Identical protected budgets, 20% cold mass. Arm A sets
 `hot_rows == protected_rows` so nothing can be reclaimable; Arm B keeps a
