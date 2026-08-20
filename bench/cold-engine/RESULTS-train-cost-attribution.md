@@ -7,18 +7,23 @@ Registered in [`PREREG-train-cost-attribution.md`](PREREG-train-cost-attribution
 ## Headline: in training, cold cost is **0% storage**
 
 RTX 5090 + EPYC 9755 (Zen 5), OLMoE-1B-7B NF4 arena, 256-token microbatch,
-forward + backward + AdamW, gradient checkpointing on, `hot_rows=512`,
-gnf4 `ee1eb3d` / e4b `dc3712c`.
+forward + backward + AdamW over **58.7M trainable LoRA parameters**,
+`model.train()`, `use_cache=False`, gradient checkpointing on,
+`hot_rows=512`, gnf4 `0a10eab` / e4b `36c0aee`.
 
-| arm | median step | Δ vs control | disk reads in window | tier hits | tier misses |
-|---|---|---|---|---|---|
-| control (0% cold) | 566.1 ms | — | 0 | 0 | 0 |
-| cold-5 | 1140.3 ms | **+574 ms (+101%)** | **0** | 28,944 | **0** |
-| cold-20 | 1889.5 ms | **+1323 ms (+234%)** | **0** | 61,920 | **0** |
+| arm | median step | Δ vs control | disk reads | tier hits | tier misses | **disk share of Δ** |
+|---|---|---|---|---|---|---|
+| control (0% cold) | 634.0 ms | — | 0 | 0 | 0 | — |
+| cold-5 | 1155.4 ms | **+521 ms (+82%)** | 7 | 28,013 | 7 | **0.1%** |
+| cold-20 | 2069.2 ms | **+1435 ms (+226%)** | 8 | 61,108 | 8 | **0.0%** |
 
-**Every cold access is a tier hit. Zero disk reads. And the step still
-doubles.** Forcing 5% of routed mass cold costs +101% of a training step
-with storage contributing exactly nothing.
+**Cold accesses are essentially all tier hits, disk time is 0.1% of the
+cost, and the step still nearly doubles.** Forcing 5% of routed mass cold
+costs +82% of a training step; storage accounts for 0.36 ms of the 521 ms.
+
+Disk is charged at the box's measured **sequential** ceiling (5.67 GB/s
+qd=16); the random peak (7.36) is deliberately ignored, since using it would
+understate the disk share.
 
 That is the decode finding, harder. In decode, storage was **5–11%** of cold
 cost at 1–10% cold mass ([gate 1 addendum](RESULTS-tribrid-gate1.md)); in
@@ -29,9 +34,9 @@ of magnitude more of the step.
 
 | clause | registered | measured | verdict |
 |---|---|---|---|
-| **T1** expert-weight *movement* is a minority of the step | <25% | **0%** (0 reads) | **PASS**, in the strongest form |
-| **T2** >95% of experts routed per layer | >95% | **92.4%** (59.1/64, max 63) | **MISS on the letter** |
-| **T3** tier hit rate >60% | >60% | **100%** (0 misses) | **PASS** |
+| **T1** expert-weight *movement* is a minority of the step | <25% | **0.1%** of the cold delta | **PASS**, in the strongest form |
+| **T2** >95% of experts routed per layer | >95% | **92.5%** (59.2/64, max 63) | **MISS on the letter** |
+| **T3** tier hit rate >60% | >60% | **99.98%** (28,013 hits / 7 misses) | **PASS** |
 
 **T2 is scored a miss.** 92.4% is not 95%, and the threshold was registered
 before the run. The substance it was testing — that a training microbatch

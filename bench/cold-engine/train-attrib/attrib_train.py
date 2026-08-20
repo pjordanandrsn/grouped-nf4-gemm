@@ -79,16 +79,29 @@ def main():
     a = ap.parse_args()
 
     calib = json.load(open(a.calib))
-    nv = (calib["cpu_bench"].get("nvme") or {})
-    b_nvme = None
-    for v in nv.values():
-        if isinstance(v, dict) and "gbs" in v:
-            b_nvme = max(b_nvme or 0, v["gbs"])
-        if isinstance(v, list):
-            for e in v:
-                if isinstance(e, dict) and "gbs" in e:
-                    b_nvme = max(b_nvme or 0, e["gbs"])
-    b_nvme = b_nvme or 5.0
+    # The prereg and gate 1's method both specify the measured SEQUENTIAL
+    # ceiling. Taking the max over every NVMe point pulls in random QD16,
+    # which is faster here (8.08 vs 6.07 GB/s) and would UNDERSTATE the disk
+    # share -- the opposite of the conservative direction. Caught by Bugbot
+    # on #129.
+    # The prereg and gate 1's method both specify the measured SEQUENTIAL
+    # ceiling. The blob records {"points": [{"mode": "seq"|"rand", "qd", "gbs"}]},
+    # so filter on mode rather than on a key name -- taking the max over every
+    # point pulls in random QD16 and would UNDERSTATE the disk share, the
+    # opposite of the conservative direction. Caught by Bugbot on #129.
+    pts = (calib["cpu_bench"].get("nvme") or {}).get("points") or []
+    seq = [p for p in pts if p.get("mode") == "seq" and p.get("ok")
+           and isinstance(p.get("gbs"), (int, float))]
+    if not seq:
+        raise ValueError(
+            "no usable sequential NVMe point in the calibration blob; the "
+            "disk share cannot be computed against a ceiling that was not "
+            "measured. Points: %r" % (pts,))
+    best = max(seq, key=lambda p: p["gbs"])
+    b_nvme = best["gbs"]
+    print("B_nvme SEQUENTIAL %.2f GB/s (qd=%s); random peak %.2f ignored"
+          % (b_nvme, best.get("qd"),
+             max((p["gbs"] for p in pts if p.get("mode") == "rand"), default=0.0)))
 
     from nvme_arena import load_index
     idx = load_index(a.arena)
@@ -99,8 +112,7 @@ def main():
                            dram_budget_bytes=L * E * rb, calibration=a.calib,
                            profile_path=a.profile, top_k=8, batch=1)
     assert not base["tiers"]["nvme"], "control must have no cold experts"
-    print("B_nvme %.2f GB/s | row %.2f MB | L=%d E=%d" % (
-        b_nvme, rb / 1e6, L, E))
+    print("row %.2f MB | L=%d E=%d" % (rb / 1e6, L, E))
 
     tk = AutoTokenizer.from_pretrained(a.model)
     PROSE = ("The question of how memory works has occupied philosophers "
@@ -116,9 +128,15 @@ def main():
         man = base if frac == 0 else force_cold_mass(
             base, mass, frac, order="tail", source="dram")
         tag = "control" if frac == 0 else "cold-%d" % round(frac * 100)
+        # arena_train=True is what builds the ExpertsLoRA wrappers and the
+        # trainable adapters. Without it the loader returns bare Experts4bit
+        # with ZERO requires_grad params, and a "training step" is a forward
+        # with a no-op backward -- the root cause under the symptom Bugbot
+        # flagged on #129 (it saw model.train() missing; this is why nothing
+        # was trainable in the first place).
         model, _ = load_moe_4bit_streaming(
             a.model, device="cuda", dtype=torch.bfloat16, r=8, alpha=16,
-            quant_type="nf4", arena=a.arena)
+            quant_type="nf4", arena=a.arena, arena_train=True)
         kw = {"hot_rows": a.hot_rows}
         if a.protected:
             kw["protected_rows"] = a.protected
@@ -129,8 +147,26 @@ def main():
             del model
             torch.cuda.empty_cache()
             continue
+        # A training step, actually. Every one of these was missing and the
+        # run measured three eval-mode forwards with a no-op backward
+        # (trainable_params=0 in every arm) -- caught by Bugbot on #129.
+        #   * model.train(): HF gradient checkpointing only runs while
+        #     self.training is True, so without it the registered
+        #     configuration was not the one executing;
+        #   * LoRA requires_grad: with no grad-requiring leaf the backward
+        #     has nothing to accumulate into and the optimizer never exists;
+        #   * use_cache=False: a training step does not build a KV cache,
+        #     and leaving it on measures a different forward.
+        model.train()
+        n_lora = sum(1 for _, pp in model.named_parameters() if pp.requires_grad)
+        if hasattr(model, "config"):
+            model.config.use_cache = False
         if hasattr(model, "gradient_checkpointing_enable"):
             model.gradient_checkpointing_enable()
+        assert n_lora > 0, (
+            "no LoRA parameters found to train — the step would be a forward "
+            "with a no-op backward, which is not what this measures")
+        assert model.training, "model must be in train mode for checkpointing"
         if tag == "control":
             out["routed_per_layer"] = routed_per_layer(model, ids, E)
 
