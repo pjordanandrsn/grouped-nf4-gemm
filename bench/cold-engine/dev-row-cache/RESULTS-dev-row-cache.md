@@ -6,13 +6,16 @@ triton 3.7.1, driver 580.159.03) and
 triton 3.6.0, driver 570.181). Both RTX 3060 12 GB, both boxes destroyed
 after their receipt was pulled and verified locally.
 
-The second run exists because Bugbot found two real defects in the cache
-*after* the first receipt was taken, which made that receipt a description of
-code that no longer existed. It was re-taken rather than reasoned about. The
-two runs agree exactly — same fills, same resurrections, same evictions,
-same overwrites, same zero stalls — on different torch, triton and driver
-versions, so the mechanism counts are a property of the code and not of a
-particular CUDA stack.
+A third, [`receipt-3060-final.json`](receipt-3060-final.json), was taken on
+the final code (91 tests, 0 skips).
+
+There are three receipts because Bugbot kept finding real defects *after*
+each one was taken, which each time made the standing receipt a description
+of code that no longer existed. Each was re-taken rather than reasoned
+about. **All three agree exactly** — same fills, same resurrections, same
+evictions, same overwrites, same zero stalls — across two different torch,
+triton and driver combinations, so the mechanism counts are a property of
+the code rather than of a particular CUDA stack.
 
 **This is not a performance result and does not claim to be.** A 3060 is not
 reference silicon and no timing was taken. What is measured here is an
