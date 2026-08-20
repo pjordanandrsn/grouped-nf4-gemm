@@ -262,3 +262,52 @@ def test_a_re_touched_row_stops_being_the_oldest():
     v.want([99])
     assert v.slot_of(11) is None, "recency was not updated on a hit"
     assert v.slot_of(10) is not None, "the just-used row was overwritten"
+
+
+def test_the_active_index_survives_a_long_random_workload():
+    """The ordered ACTIVE set is maintained at six call sites rather than
+    derived, so this proves it agrees with `_state` after every operation
+    instead of trusting them. A missed transition is a wrong victim, and a
+    wrong victim is one expert's bytes served as another's."""
+    import random
+    rng = random.Random(20260820)
+    v = VramSlots(64, protected=48)
+    prev = None
+    for i in range(3000):
+        if prev is not None and rng.random() < 0.7:
+            v.settle(lambda tag, p=prev: tag == p)
+        tag = f"t{i}" if rng.random() < 0.5 else None
+        v.want([("L", rng.randrange(40)) for _ in range(8)], event_tag=tag)
+        prev = tag
+        if rng.random() < 0.1:
+            v.discard([("L", rng.randrange(40))])
+        v._assert_active_index()
+
+
+def test_demote_takes_the_least_recently_used_first():
+    """`_demote` reads its victims off the front of the ordered set instead of
+    scanning and sorting. That is only correct if the front really is the
+    least-recently-used, so this pins the ordering rather than the mechanism."""
+    v = VramSlots(8, protected=4)
+    for e in range(4):                       # touch 0..3, oldest first
+        v.want([("L", e)])
+    held = {v.slot_of(("L", e)): e for e in range(4)}
+    v.want([("L", 99)])                      # forces one demotion
+    demoted = [s for s in held if v.state(s) != "active"]
+    assert demoted, "nothing was demoted; the fixture no longer exercises it"
+    assert held[demoted[0]] == 0, (
+        f"demoted the slot holding expert {held[demoted[0]]}, not the "
+        f"least-recently-used one (expert 0)")
+
+
+def test_the_active_index_round_trips_through_snapshot():
+    """`_snapshot`/`_restore` is how a refused allocation unwinds. A structure
+    left out of it would survive a rollback and disagree with the state it was
+    rolled back to."""
+    v = VramSlots(8, protected=4)
+    v.want([("L", 0), ("L", 1)])
+    snap = v._snapshot()
+    v.want([("L", 2), ("L", 3), ("L", 4)])
+    v._restore(snap)
+    v._assert_active_index()
+    assert set(v._active) == {s for s in range(8) if v.state(s) == "active"}
