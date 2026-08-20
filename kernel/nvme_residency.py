@@ -41,6 +41,7 @@ Usage::
 """
 from __future__ import annotations
 
+import heapq
 import threading
 import time
 from collections import Counter
@@ -544,8 +545,36 @@ class ColdTier:
                  if k not in self._reclaimable
                  and s not in self._demand_protected
                  and s not in self._reserved]
-        cands.sort(key=lambda k: (self._freq[k], self._last_use.get(k, 0)))
-        for k in cands[:over]:
+        # `over` is the routed set's overflow -- single digits -- against a
+        # candidate list the size of the resident set. Sorting all of it to
+        # take the smallest few is the O(n log n) half of a job that only
+        # needs the n-scan, and it is paid on EVERY demand ensure whether or
+        # not the tier is under pressure. Measured against the
+        # protected_rows == hot_rows path, which early-returns above and
+        # skips it: 1.24x at 128 rows, 1.40x at 256, 2.38x at 512 -- the
+        # shape gnf4#153 saw in wall and could not attribute to bytes.
+        #
+        # nsmallest keeps a bounded heap instead: same ordering, same ties
+        # (it is documented stable for equal keys, as sorted() is), without
+        # ordering the tail nobody reads.
+        # NO short-circuit when `over >= len(cands)`. Returning `cands`
+        # unsorted there looks free -- every candidate is demoted either way --
+        # but the LOOP ORDER is the insertion order of `_reclaimable`, which
+        # is the order `_victim` overwrites reclaimable rows in. nsmallest
+        # returns its result sorted, so this matches `sorted(...)[:over]` in
+        # set AND in order at every size, and the short-circuit is not worth
+        # reasoning about separately.
+        #
+        # (An earlier revision DID short-circuit, and a differential appeared
+        # to catch it moving resurrections by one. That difference was the
+        # tier's own run-to-run jitter, not the shortcut -- see the qd note in
+        # _demote_locked's caller-facing docs below. The short-circuit is
+        # still gone because matching the old order exactly is cheaper to
+        # justify than arguing about when order stops mattering.)
+        victims = heapq.nsmallest(over, cands,
+                                  key=lambda k: (self._freq[k],
+                                                 self._last_use.get(k, 0)))
+        for k in victims:
             self._reclaimable[k] = self._clock
             self.logical_evictions += 1
 
