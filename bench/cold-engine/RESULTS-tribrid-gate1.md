@@ -340,6 +340,13 @@ for **all** experts, not only the ones the arm moves. Run 1 is kept in
 
 ## Addendum: the hide-ratio clause is aimed at 5–11% of the cost
 
+> **⚠️ SUPERSEDED — see "Correction: this addendum has two instrument errors"
+> at the end of this document.** The ceiling named below is the box's
+> **random** ceiling, not its sequential one, and the read counts are
+> warmup-inclusive where they are described as decode-window. The table is
+> kept as published; the corrected arithmetic and what still needs a re-run
+> are stated in the correction.
+
 Derived from the committed receipts (`gate1_v2.json` + the calibration
 blob), no new measurement. Disk time is `win_reads × row_bytes / B_nvme`
 using **this box's measured sequential ceiling (6.26 GB/s)** and the arena's
@@ -439,3 +446,84 @@ it bitwise end to end on this box. A matched CPU arm does not accumulate past
 the tolerance; it does not accumulate at all. The 0.0703 belongs to the
 original run and is recorded as unexplained, not as a property of the
 metric.
+
+
+## Correction: this addendum has two instrument errors
+
+Found while re-running the R1 measurement (gnf4#132), which uncovered the
+same window defect in `run_reclaim.py` and then in `run_gate1.py`. Both
+errors are in the cost-attribution addendum above. **One is corrected here
+from committed data; the other needs a re-run and is not corrected.**
+
+### 1. The "sequential ceiling" is the random ceiling — corrected
+
+The addendum charges disk time at "this box's measured sequential ceiling
+(6.26 GB/s)". The calibration blob
+(`gate1-5090-zen5/receipts-hybrid-calib-gate1-5090-zen5.json`) records:
+
+| mode | qd1 | qd4 | qd8 | qd16 |
+|---|---|---|---|---|
+| seq | 0.52 | 2.79 | 4.59 | **5.51** |
+| rand | 0.93 | 3.49 | 5.44 | **6.26** |
+
+**6.26 GB/s is `rand qd16`.** The sequential ceiling is **5.51**. The
+addendum's own hedge — "using the sequential ceiling makes these a lower
+bound on the disk share" — does not hold, because the rate used was not the
+sequential one. Disk time was understated by a factor of 1.136.
+
+Recomputed at 5.51 GB/s, same reads, same wall deltas:
+
+| cold | arm | Δ ms/step | win reads | disk ms/step | **disk share of Δ** |
+|---|---|---|---|---|---|
+| 1% | cold-GPU | 8.33 | 105 | 0.53 | **6.3%** |
+| 1% | cold-CPU | 4.29 | 106 | 0.53 | **12.4%** |
+| 5% | cold-GPU | 10.30 | 238 | 1.19 | **11.6%** |
+| 5% | cold-CPU | 11.00 | 238 | 1.19 | **10.9%** |
+| 10% | cold-GPU | 16.66 | 340 | 1.71 | **10.2%** |
+| 10% | cold-CPU | 14.87 | 335 | 1.68 | **11.3%** |
+| 20% | cold-GPU | 24.53 | 3400 | 17.07 | 69.6% |
+| 20% | cold-CPU | 29.86 | 2025 | 10.16 | 34.0% |
+
+So **6–12%**, not 5–11%, at 1–10% cold mass. The claim the addendum is
+making — that storage is a minority of what cold work costs in that band —
+survives this correction comfortably.
+
+`run_gate1.py` no longer permits the substitution. It derived `b_nvme` from
+`calib["cpu_bench"]["nvme"]["seq_best_gbs"]`, **a key no calibration this
+repo has ever written** — the blobs carry `points[{mode,qd,gbs}]`. It
+therefore resolved to `None`, every gate-1 receipt recorded
+`b_nvme_gbs: null`, the run printed `B_nvme=None`, and the constant had to
+be chosen by hand from the blob. It is now computed from the sequential
+points and **raises** when there are none.
+
+### 2. The read counts are warmup-inclusive — NOT corrected
+
+`pre = cold_stats(...)` was snapshotted before `run_steps`, which performs
+warmup prefills, warmup decodes and the KV-building prefill *inside itself*.
+A prefill routes 62–64 of 64 experts per layer — the entire arena. So the
+wall deltas are decode-only while `win reads` counts prefill traffic too.
+
+The R1 re-measurement, same defect, same box class, measured the size of
+this: uncontended **218 → 4** reads, contended **3434 → 538**. About six
+sevenths of what was called cold-path disk traffic was warmup.
+
+**Every `win reads` figure above, and therefore every disk share in both
+tables, is inflated by an unknown factor of that order.** The direction is
+certain and it is much larger than the ceiling correction, so the true
+storage share at 1–10% cold is *well below* the 6–12% shown — plausibly
+1–2%, but this document does not claim a number it has not measured. The
+fix is in `run_gate1.py` (gnf4#132); the re-run is not done.
+
+### What this does and does not change
+
+**Gate 1's MISS stands, and its reframing gets stronger, not weaker.** The
+verdict rests on prefetch coverage — the prefetcher covers under 1% of
+demand misses because the tier already caches them — which is a ratio of
+two counters inside the same window and is unaffected by where that window
+starts. The reframing says a perfect prefetcher could remove only the
+storage fraction of cold cost; correcting the reads makes that fraction
+smaller, not larger.
+
+**No absolute read count in this document should be quoted** until gate 1 is
+re-run on the fixed window. That includes the "3400 reads against 340 at
+10%" thrashing observation, which is warmup-inclusive on both sides.

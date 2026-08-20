@@ -128,7 +128,25 @@ def main():
     b_vram = max(d["b_vram_triad_gbs"]
                  for d in calib["gpu_bench"]["devices"])
     b_dram = calib["cpu_bench"]["triad_best"]["gbs"]
-    b_nvme = (calib["cpu_bench"].get("nvme") or {}).get("seq_best_gbs")
+    # Derived from the SEQUENTIAL points, not read from a key. `seq_best_gbs`
+    # is not a field any calibration this repo has ever produced -- the blobs
+    # carry `nvme.points[{mode,qd,gbs}]` -- so this silently resolved to None
+    # and every gate-1 receipt recorded `b_nvme_gbs: null` while the printed
+    # line said `B_nvme=None`. The attribution constant then had to be picked
+    # by hand from the blob, and was picked wrong (rand qd16 6.26 GB/s in
+    # place of the sequential 5.51). Compute it, and refuse rather than
+    # default: a ceiling that was never measured cannot be charged against.
+    _nv = (calib["cpu_bench"].get("nvme") or {})
+    _seq = [q["gbs"] for q in (_nv.get("points") or [])
+            if str(q.get("mode", "")).startswith("seq") and q.get("ok")
+            and isinstance(q.get("gbs"), (int, float))]
+    if not _seq:
+        raise SystemExit(
+            "calibration has no usable SEQUENTIAL NVMe point; disk time is "
+            "charged against the sequential ceiling and there is nothing to "
+            "charge it against. Re-run bench/calibrate.py with --nvme-dir on "
+            f"the drive under test. nvme block: {_nv!r}")
+    b_nvme = max(_seq)
     print("calibration: B_vram=%.1f B_dram=%.1f B_nvme=%s (G0 %s)" % (
         b_vram, b_dram, b_nvme, calib["gate_g0"]["verdict"]))
 
