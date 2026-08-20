@@ -109,6 +109,13 @@ class DevRowCache:
         self.slots = VramSlots(rows, protected=protected)
         self.stalls = 0          # want() had to block on a previous step
         self.filled = 0          # rows written host -> cache
+        self.abandoned = 0       # steps that never reached their record()
+        # The PREVIOUS step is a property of the CACHE, not of any one engine.
+        # Tracking it per-engine meant every engine after the first started
+        # with prev=None, so it neither settled nor stall-waited, and a shared
+        # arena could not evict another layer's working set -- the second
+        # layer to touch a full cache just raised (Bugbot, gnf4#131).
+        self._last = None
 
     def rowview(self) -> torch.Tensor:
         return self.buf.view(self.rows, self.row_stride)
@@ -116,7 +123,7 @@ class DevRowCache:
     def addr(self, slot: int) -> int:
         return self.base + slot * self.row_stride
 
-    def want(self, layer: int, experts, tag: StepTag, prev: StepTag | None):
+    def want(self, layer: int, experts, tag: StepTag):
         """Resolve ``experts`` to cache slots for one step of one layer.
 
         Returns ``(assign, need)`` with ``assign`` keyed by the ORIGINAL
@@ -131,6 +138,15 @@ class DevRowCache:
         arena is too small for the routed set plus one step of pipelining;
         it does not mean anything is wrong.
         """
+        prev = self._last
+        if prev is not None and not prev.recorded:
+            # The step that owned it never reached its record() -- it raised.
+            # Its gather has either already run or will never run, so nothing
+            # is still reading those rows. Recording now marks the stream
+            # position past that step's work, which is what settle() needs;
+            # leaving it unrecorded would retire those rows permanently.
+            prev.record()
+            self.abandoned += 1
         if prev is not None:
             self.slots.settle(lambda t: t.done())
         keys = [(layer, e) for e in experts]
@@ -143,8 +159,13 @@ class DevRowCache:
             self.stalls += 1
             self.slots.settle(lambda t: t.done())
             assign, need = self.slots.want(keys, event_tag=tag)
+        self._last = tag
         return ({e: assign[(layer, e)] for e in experts},
                 [k[1] for k in need])
+
+    def discard(self, layer: int, experts) -> int:
+        """Unpublish rows a failed fill left mapped but not written."""
+        return self.slots.discard([(layer, e) for e in experts])
 
     def note_filled(self, n: int) -> None:
         self.filled += int(n)
@@ -153,5 +174,6 @@ class DevRowCache:
         s = dict(self.slots.stats())
         s.update({"rows": self.rows, "row_stride": self.row_stride,
                   "stalls": self.stalls, "host_to_cache_rows": self.filled,
+                  "abandoned_steps": self.abandoned,
                   "bytes": self.rows * self.row_stride})
         return s
