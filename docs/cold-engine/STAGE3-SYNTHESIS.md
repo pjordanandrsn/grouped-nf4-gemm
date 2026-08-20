@@ -24,7 +24,7 @@ scheduling gates missed, and the clear win came from a memory mechanism.
 |---|---|---|
 | **Gate 1** — can cold mass be admitted without proportional wall growth? | **MISS** | The hide-ratio clause is unreachable *by construction*: storage is 5–11% of cold-path cost at 1–10% cold mass, so a perfect prefetcher could remove at most ~10% of the exposure |
 | **Gate 2** — does choosing a destination by deadline beat a threshold? | **MISS** | Backlog changed 0 of 1975 decisions in the regime built to provoke it; the rule's own syncs cost 11.7–15.6% for routing identical to fixed-CPU |
-| **Reclaimable residency (R1, R5)** | **CONFIRMED, exceeded** | P(reuse before overwrite) 11–60% against 5–20% predicted; physical reads −14.9/−29.6% at matched protected budgets; ~4× ghost working set against 1.2–1.4× predicted |
+| **Reclaimable residency (R1, R5)** | **PARTLY WITHDRAWN** | The 11–60% P(reuse) is **contaminated** by a nested-ensure defect in the measurement path (see the correction in `RESULTS-tribrid-reclaimable.md`) and reverts to untested. What survives: physical reads −14.9/−29.6% at matched budgets, the ~4× ghost working set, and the feasibility finding — all of which rest on read counts or structure, not resurrection counts |
 | **Direct scatter** (implementation, not a registered gate) | **Real, regime-bound** | −43% on the fill path in isolation; −12.5% end-to-end at 20% cold mass; **null** at 5% |
 
 ## The one prediction that mattered most was the directive's own

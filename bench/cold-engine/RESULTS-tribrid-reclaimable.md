@@ -79,6 +79,42 @@ hard eviction and unremarkable under reclaimable residency. It was not a
 registered prediction and is reported as an observation, not a scored
 clause.
 
+## Correction — R1's numbers are contaminated and are withdrawn as measured
+
+A Bugbot finding on gnf4#112, **read late and merged past**, invalidates the
+headline number in this document.
+
+`ColdCpuView.ensure` materialized a batch by calling `segment_into` once per
+expert per segment, and `segment_into` issued its **own demand
+`ColdTier.ensure`** for that single expert. Every one of those replaced the
+demand window and ran the demotion pass — so materializing a batch logically
+evicted its own siblings, which the next outer expert's hit then
+"resurrected". Both counters were inflated by the measurement path itself.
+
+Every run in this document (`reclaim.json`, `reclaim_contended.json`,
+`armA_*`, `armB_*`) took that path, because the direct landing did not exist
+yet. So:
+
+* **P(reuse before overwrite) = 11–60% is withdrawn.** The true rate is
+  lower by an unknown amount; the inflation is self-inflicted and scales
+  with segments-per-expert (four here), so it is not a small correction.
+* **R1 is NOT confirmed by this document.** It reverts to untested.
+* The **Arm A vs Arm B read counts** (−14.9% / −29.6% physical NVMe reads)
+  are *less* affected — they count real disk reads, not eviction
+  bookkeeping — but both arms ran the same buggy path, so the comparison is
+  fair while the absolute rates are not trustworthy.
+* The **ghost working set** observation (protected capacity cut 75% with
+  zero additional disk reads) rests on read counts, not resurrection
+  counts, and survives.
+* The **feasibility finding** (hard eviction at `protected=32` cannot run at
+  all) is structural and survives.
+
+Fixed in the follow-up: `segment_into` takes `ensure=False`, and the view
+passes it, so a batch no longer demotes itself. **Re-measuring R1 needs a
+box and is not done here.** Recording the contamination rather than quietly
+re-running is the point — the number was published, and this is what
+corrects it.
+
 ## What this does not establish
 
 - **H2D refills were not measured.** These runs used `cold_dest="cpu"`,
