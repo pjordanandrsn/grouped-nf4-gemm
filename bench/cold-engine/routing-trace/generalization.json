@@ -1,0 +1,474 @@
+{
+  "prompts": [
+    "prose",
+    "code",
+    "math",
+    "dialogue"
+  ],
+  "rows": [
+    128,
+    384,
+    512
+  ],
+  "warm": 256,
+  "claims": {
+    "r4": {
+      "cells": [
+        {
+          "prompt": "prose",
+          "window": 4,
+          "rows": 128,
+          "recency": 0.7713205865974128,
+          "frequency": 0.8219096565359133,
+          "winner": "frequency"
+        },
+        {
+          "prompt": "prose",
+          "window": 4,
+          "rows": 384,
+          "recency": 0.20562426763559793,
+          "frequency": 0.46982383048093906,
+          "winner": "frequency"
+        },
+        {
+          "prompt": "prose",
+          "window": 4,
+          "rows": 512,
+          "recency": 0.10678187559098523,
+          "frequency": 0.4693356952169272,
+          "winner": "frequency"
+        },
+        {
+          "prompt": "prose",
+          "window": 8,
+          "rows": 128,
+          "recency": 0.8113826953863658,
+          "frequency": 0.8219096565359133,
+          "winner": "frequency"
+        },
+        {
+          "prompt": "prose",
+          "window": 8,
+          "rows": 384,
+          "recency": 0.3039289986869759,
+          "frequency": 0.46982383048093906,
+          "winner": "frequency"
+        },
+        {
+          "prompt": "prose",
+          "window": 8,
+          "rows": 512,
+          "recency": 0.17440984165586096,
+          "frequency": 0.4693356952169272,
+          "winner": "frequency"
+        },
+        {
+          "prompt": "code",
+          "window": 4,
+          "rows": 128,
+          "recency": 0.88776735024854,
+          "frequency": 0.8840802457639905,
+          "winner": "recency"
+        },
+        {
+          "prompt": "code",
+          "window": 4,
+          "rows": 384,
+          "recency": 0.36645790883637913,
+          "frequency": 0.49500162741799475,
+          "winner": "frequency"
+        },
+        {
+          "prompt": "code",
+          "window": 4,
+          "rows": 512,
+          "recency": 0.25700106365365144,
+          "frequency": 0.2898781482548409,
+          "winner": "frequency"
+        },
+        {
+          "prompt": "code",
+          "window": 8,
+          "rows": 128,
+          "recency": 0.9040948950117554,
+          "frequency": 0.8840802457639905,
+          "winner": "recency"
+        },
+        {
+          "prompt": "code",
+          "window": 8,
+          "rows": 384,
+          "recency": 0.4039206406921413,
+          "frequency": 0.49500162741799475,
+          "winner": "frequency"
+        },
+        {
+          "prompt": "code",
+          "window": 8,
+          "rows": 512,
+          "recency": 0.2382199985308189,
+          "frequency": 0.2898781482548409,
+          "winner": "frequency"
+        },
+        {
+          "prompt": "math",
+          "window": 4,
+          "rows": 128,
+          "recency": 0.8390432128866498,
+          "frequency": 0.7790941055412943,
+          "winner": "recency"
+        },
+        {
+          "prompt": "math",
+          "window": 4,
+          "rows": 384,
+          "recency": 0.1698804787381978,
+          "frequency": 0.237553624047223,
+          "winner": "frequency"
+        },
+        {
+          "prompt": "math",
+          "window": 4,
+          "rows": 512,
+          "recency": 0.03210738609296031,
+          "frequency": 0.0022586367116863154,
+          "winner": "no signal"
+        },
+        {
+          "prompt": "math",
+          "window": 8,
+          "rows": 128,
+          "recency": 0.8707099954492906,
+          "frequency": 0.7790941055412943,
+          "winner": "recency"
+        },
+        {
+          "prompt": "math",
+          "window": 8,
+          "rows": 384,
+          "recency": 0.21064331660001542,
+          "frequency": 0.237553624047223,
+          "winner": "frequency"
+        },
+        {
+          "prompt": "math",
+          "window": 8,
+          "rows": 512,
+          "recency": -0.0020491880904290704,
+          "frequency": 0.0022586367116863154,
+          "winner": "no signal"
+        },
+        {
+          "prompt": "dialogue",
+          "window": 4,
+          "rows": 128,
+          "recency": 0.8692108999042072,
+          "frequency": 0.7994060108139049,
+          "winner": "recency"
+        },
+        {
+          "prompt": "dialogue",
+          "window": 4,
+          "rows": 384,
+          "recency": 0.25443100115065387,
+          "frequency": 0.36019208726535995,
+          "winner": "frequency"
+        },
+        {
+          "prompt": "dialogue",
+          "window": 4,
+          "rows": 512,
+          "recency": 0.14018462421975503,
+          "frequency": 0.26631258479818243,
+          "winner": "frequency"
+        },
+        {
+          "prompt": "dialogue",
+          "window": 8,
+          "rows": 128,
+          "recency": 0.8536384752268806,
+          "frequency": 0.7994060108139049,
+          "winner": "recency"
+        },
+        {
+          "prompt": "dialogue",
+          "window": 8,
+          "rows": 384,
+          "recency": 0.3212776414054231,
+          "frequency": 0.36019208726535995,
+          "winner": "frequency"
+        },
+        {
+          "prompt": "dialogue",
+          "window": 8,
+          "rows": 512,
+          "recency": 0.16028881172833856,
+          "frequency": 0.26631258479818243,
+          "winner": "frequency"
+        }
+      ],
+      "tally": {
+        "frequency": 16,
+        "recency": 6
+      },
+      "holds": true
+    },
+    "dev_cache": {
+      "cells": [
+        {
+          "prompt": "prose",
+          "rows": 128,
+          "positional": 56408,
+          "cache": 43338,
+          "vs_positional": 0.7682952772656361
+        },
+        {
+          "prompt": "prose",
+          "rows": 384,
+          "positional": 56408,
+          "cache": 26460,
+          "vs_positional": 0.46908239965962273
+        },
+        {
+          "prompt": "prose",
+          "rows": 512,
+          "positional": 56408,
+          "cache": 17436,
+          "vs_positional": 0.3091050914763863
+        },
+        {
+          "prompt": "code",
+          "rows": 128,
+          "positional": 54435,
+          "cache": 39336,
+          "vs_positional": 0.7226233122072196
+        },
+        {
+          "prompt": "code",
+          "rows": 384,
+          "positional": 54435,
+          "cache": 15697,
+          "vs_positional": 0.28836226692385414
+        },
+        {
+          "prompt": "code",
+          "rows": 512,
+          "positional": 54435,
+          "cache": 8910,
+          "vs_positional": 0.16368145494626618
+        },
+        {
+          "prompt": "math",
+          "rows": 128,
+          "positional": 48945,
+          "cache": 29888,
+          "vs_positional": 0.6106446010828481
+        },
+        {
+          "prompt": "math",
+          "rows": 384,
+          "positional": 48945,
+          "cache": 4357,
+          "vs_positional": 0.08901828583103484
+        },
+        {
+          "prompt": "math",
+          "rows": 512,
+          "positional": 48945,
+          "cache": 2671,
+          "vs_positional": 0.05457145775870875
+        },
+        {
+          "prompt": "dialogue",
+          "rows": 128,
+          "positional": 55350,
+          "cache": 41520,
+          "vs_positional": 0.7501355013550135
+        },
+        {
+          "prompt": "dialogue",
+          "rows": 384,
+          "positional": 55350,
+          "cache": 24439,
+          "vs_positional": 0.4415356820234869
+        },
+        {
+          "prompt": "dialogue",
+          "rows": 512,
+          "positional": 55350,
+          "cache": 18338,
+          "vs_positional": 0.33130984643179767
+        }
+      ],
+      "holds": true
+    },
+    "gate3": {
+      "cells": [
+        {
+          "prompt": "prose",
+          "rows": 128,
+          "static": 22596,
+          "adaptive": 21167,
+          "ewma": 20569,
+          "hybrid": 21167,
+          "demand": 25105,
+          "oracle": 19818,
+          "adaptive_vs_static_pct": -6.324128164276862,
+          "winner": "ewma"
+        },
+        {
+          "prompt": "prose",
+          "rows": 384,
+          "static": 11708,
+          "adaptive": 10380,
+          "ewma": 9684,
+          "hybrid": 10380,
+          "demand": 13458,
+          "oracle": 8498,
+          "adaptive_vs_static_pct": -11.34267167748548,
+          "winner": "ewma"
+        },
+        {
+          "prompt": "prose",
+          "rows": 512,
+          "static": 7531,
+          "adaptive": 6226,
+          "ewma": 5742,
+          "hybrid": 6226,
+          "demand": 9308,
+          "oracle": 4773,
+          "adaptive_vs_static_pct": -17.328376045677864,
+          "winner": "ewma"
+        },
+        {
+          "prompt": "code",
+          "rows": 128,
+          "static": 17739,
+          "adaptive": 17645,
+          "ewma": 17773,
+          "hybrid": 17645,
+          "demand": 23788,
+          "oracle": 17364,
+          "adaptive_vs_static_pct": -0.5299058571509104,
+          "winner": "adaptive"
+        },
+        {
+          "prompt": "code",
+          "rows": 384,
+          "static": 6703,
+          "adaptive": 6526,
+          "ewma": 6796,
+          "hybrid": 6526,
+          "demand": 8190,
+          "oracle": 5963,
+          "adaptive_vs_static_pct": -2.6406086826793973,
+          "winner": "adaptive"
+        },
+        {
+          "prompt": "code",
+          "rows": 512,
+          "static": 3542,
+          "adaptive": 3480,
+          "ewma": 3718,
+          "hybrid": 3390,
+          "demand": 4529,
+          "oracle": 2995,
+          "adaptive_vs_static_pct": -1.7504234895539243,
+          "winner": "hybrid"
+        },
+        {
+          "prompt": "math",
+          "rows": 128,
+          "static": 11740,
+          "adaptive": 11045,
+          "ewma": 10637,
+          "hybrid": 11045,
+          "demand": 19488,
+          "oracle": 10121,
+          "adaptive_vs_static_pct": -5.919931856899488,
+          "winner": "ewma"
+        },
+        {
+          "prompt": "math",
+          "rows": 384,
+          "static": 2335,
+          "adaptive": 951,
+          "ewma": 599,
+          "hybrid": 55,
+          "demand": 54,
+          "oracle": 0,
+          "adaptive_vs_static_pct": -59.27194860813705,
+          "winner": "demand"
+        },
+        {
+          "prompt": "math",
+          "rows": 512,
+          "static": 1347,
+          "adaptive": 498,
+          "ewma": 318,
+          "hybrid": 40,
+          "demand": 41,
+          "oracle": 0,
+          "adaptive_vs_static_pct": -63.02895322939867,
+          "winner": "hybrid"
+        },
+        {
+          "prompt": "dialogue",
+          "rows": 128,
+          "static": 20006,
+          "adaptive": 19592,
+          "ewma": 19360,
+          "hybrid": 19592,
+          "demand": 24346,
+          "oracle": 18870,
+          "adaptive_vs_static_pct": -2.069379186244127,
+          "winner": "ewma"
+        },
+        {
+          "prompt": "dialogue",
+          "rows": 384,
+          "static": 7534,
+          "adaptive": 7188,
+          "ewma": 7178,
+          "hybrid": 7188,
+          "demand": 12151,
+          "oracle": 6758,
+          "adaptive_vs_static_pct": -4.59251393681975,
+          "winner": "ewma"
+        },
+        {
+          "prompt": "dialogue",
+          "rows": 512,
+          "static": 4135,
+          "adaptive": 3848,
+          "ewma": 3961,
+          "hybrid": 3848,
+          "demand": 8850,
+          "oracle": 3445,
+          "adaptive_vs_static_pct": -6.940749697702539,
+          "winner": "adaptive"
+        }
+      ],
+      "adaptive_beats_static_everywhere": true,
+      "gain_range_pct": [
+        -63.02895322939867,
+        -0.5299058571509104
+      ]
+    },
+    "policy": {
+      "winners": {
+        "ewma": 6,
+        "adaptive": 3,
+        "hybrid": 2,
+        "demand": 1
+      },
+      "ewma_wins_everywhere": false
+    }
+  },
+  "working_set": {
+    "prose": 899,
+    "code": 878,
+    "math": 377,
+    "dialogue": 783
+  }
+}
