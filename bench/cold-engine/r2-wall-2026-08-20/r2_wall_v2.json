@@ -11,25 +11,25 @@
     "rows": "12,16,24,32,48",
     "repeats": 2,
     "seed": 11,
-    "out": "/root/r2_wall.json"
+    "out": "/root/r2_wall_v2.json"
   },
   "arms": [
     {
-      "median_ns": 1829839.0,
+      "median_ns": 1821285.0,
       "steps": 256,
       "rows": 12,
       "protected": 3,
-      "fills": 770,
-      "resurrections": 172,
-      "per_routed": 0.16796875,
+      "fills": 730,
+      "resurrections": 161,
+      "per_routed": 0.1572265625,
       "dev_cache": {
         "n_slots": 12,
         "protected": 3,
-        "gathers": 778,
-        "active_hits": 139,
-        "resurrections": 172,
-        "logical_evictions": 946,
-        "overwritten": 770,
+        "gathers": 730,
+        "active_hits": 133,
+        "resurrections": 161,
+        "logical_evictions": 891,
+        "overwritten": 730,
         "blocked_by_retiring": 0,
         "retiring_now": 4,
         "reclaimable_now": 0,
@@ -37,33 +37,33 @@
         "rows": 12,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 778,
+        "host_to_cache_rows": 730,
         "abandoned_steps": 0,
-        "bytes": 158662656
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 10284537600
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 9650016000
       },
       "label": "quarter#1"
     },
     {
-      "median_ns": 1828440.0,
+      "median_ns": 1822242.0,
       "steps": 256,
       "rows": 12,
       "protected": 3,
-      "fills": 770,
-      "resurrections": 172,
-      "per_routed": 0.16796875,
+      "fills": 730,
+      "resurrections": 161,
+      "per_routed": 0.1572265625,
       "dev_cache": {
         "n_slots": 12,
         "protected": 3,
-        "gathers": 778,
-        "active_hits": 139,
-        "resurrections": 172,
-        "logical_evictions": 946,
-        "overwritten": 770,
+        "gathers": 730,
+        "active_hits": 133,
+        "resurrections": 161,
+        "logical_evictions": 891,
+        "overwritten": 730,
         "blocked_by_retiring": 0,
         "retiring_now": 4,
         "reclaimable_now": 0,
@@ -71,33 +71,33 @@
         "rows": 12,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 778,
+        "host_to_cache_rows": 730,
         "abandoned_steps": 0,
-        "bytes": 158662656
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 10284537600
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 9650016000
       },
       "label": "quarter#2"
     },
     {
-      "median_ns": 1825405.0,
+      "median_ns": 1819442.0,
       "steps": 256,
       "rows": 12,
       "protected": 6,
-      "fills": 707,
-      "resurrections": 159,
-      "per_routed": 0.1552734375,
+      "fills": 672,
+      "resurrections": 149,
+      "per_routed": 0.1455078125,
       "dev_cache": {
         "n_slots": 12,
         "protected": 6,
-        "gathers": 717,
-        "active_hits": 213,
-        "resurrections": 159,
-        "logical_evictions": 870,
-        "overwritten": 707,
+        "gathers": 672,
+        "active_hits": 203,
+        "resurrections": 149,
+        "logical_evictions": 821,
+        "overwritten": 672,
         "blocked_by_retiring": 0,
         "retiring_now": 4,
         "reclaimable_now": 0,
@@ -105,33 +105,33 @@
         "rows": 12,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 717,
+        "host_to_cache_rows": 672,
         "abandoned_steps": 0,
-        "bytes": 158662656
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 9478166400
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 8883302400
       },
       "label": "half#1"
     },
     {
-      "median_ns": 1828135.0,
+      "median_ns": 1819091.5,
       "steps": 256,
       "rows": 12,
       "protected": 6,
-      "fills": 707,
-      "resurrections": 159,
-      "per_routed": 0.1552734375,
+      "fills": 672,
+      "resurrections": 149,
+      "per_routed": 0.1455078125,
       "dev_cache": {
         "n_slots": 12,
         "protected": 6,
-        "gathers": 717,
-        "active_hits": 213,
-        "resurrections": 159,
-        "logical_evictions": 870,
-        "overwritten": 707,
+        "gathers": 672,
+        "active_hits": 203,
+        "resurrections": 149,
+        "logical_evictions": 821,
+        "overwritten": 672,
         "blocked_by_retiring": 0,
         "retiring_now": 4,
         "reclaimable_now": 0,
@@ -139,33 +139,33 @@
         "rows": 12,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 717,
+        "host_to_cache_rows": 672,
         "abandoned_steps": 0,
-        "bytes": 158662656
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 9478166400
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 8883302400
       },
       "label": "half#2"
     },
     {
-      "median_ns": 1361473.5,
+      "median_ns": 1355678.0,
       "steps": 256,
       "rows": 12,
       "protected": 8,
-      "fills": 624,
-      "resurrections": 144,
-      "per_routed": 0.140625,
+      "fills": 597,
+      "resurrections": 133,
+      "per_routed": 0.1298828125,
       "dev_cache": {
         "n_slots": 12,
         "protected": 8,
-        "gathers": 636,
-        "active_hits": 309,
-        "resurrections": 144,
-        "logical_evictions": 772,
-        "overwritten": 624,
+        "gathers": 597,
+        "active_hits": 294,
+        "resurrections": 133,
+        "logical_evictions": 730,
+        "overwritten": 597,
         "blocked_by_retiring": 0,
         "retiring_now": 4,
         "reclaimable_now": 0,
@@ -173,33 +173,33 @@
         "rows": 12,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 636,
+        "host_to_cache_rows": 597,
         "abandoned_steps": 0,
-        "bytes": 158662656
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 8407411200
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 7891862400
       },
       "label": "rows-k#1"
     },
     {
-      "median_ns": 1360513.5,
+      "median_ns": 1353649.0,
       "steps": 256,
       "rows": 12,
       "protected": 8,
-      "fills": 624,
-      "resurrections": 144,
-      "per_routed": 0.140625,
+      "fills": 597,
+      "resurrections": 133,
+      "per_routed": 0.1298828125,
       "dev_cache": {
         "n_slots": 12,
         "protected": 8,
-        "gathers": 636,
-        "active_hits": 309,
-        "resurrections": 144,
-        "logical_evictions": 772,
-        "overwritten": 624,
+        "gathers": 597,
+        "active_hits": 294,
+        "resurrections": 133,
+        "logical_evictions": 730,
+        "overwritten": 597,
         "blocked_by_retiring": 0,
         "retiring_now": 4,
         "reclaimable_now": 0,
@@ -207,33 +207,33 @@
         "rows": 12,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 636,
+        "host_to_cache_rows": 597,
         "abandoned_steps": 0,
-        "bytes": 158662656
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 8407411200
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 7891862400
       },
       "label": "rows-k#2"
     },
     {
-      "median_ns": 1828444.5,
+      "median_ns": 1825272.0,
       "steps": 256,
       "rows": 16,
       "protected": 4,
-      "fills": 770,
-      "resurrections": 172,
-      "per_routed": 0.16796875,
+      "fills": 730,
+      "resurrections": 161,
+      "per_routed": 0.1572265625,
       "dev_cache": {
         "n_slots": 16,
         "protected": 4,
-        "gathers": 778,
-        "active_hits": 139,
-        "resurrections": 172,
-        "logical_evictions": 946,
-        "overwritten": 770,
+        "gathers": 730,
+        "active_hits": 133,
+        "resurrections": 161,
+        "logical_evictions": 891,
+        "overwritten": 730,
         "blocked_by_retiring": 0,
         "retiring_now": 4,
         "reclaimable_now": 0,
@@ -241,33 +241,33 @@
         "rows": 16,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 778,
+        "host_to_cache_rows": 730,
         "abandoned_steps": 0,
-        "bytes": 211550208
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 10284537600
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 9650016000
       },
       "label": "quarter#1"
     },
     {
-      "median_ns": 1826199.5,
+      "median_ns": 1820204.0,
       "steps": 256,
       "rows": 16,
       "protected": 4,
-      "fills": 770,
-      "resurrections": 172,
-      "per_routed": 0.16796875,
+      "fills": 730,
+      "resurrections": 161,
+      "per_routed": 0.1572265625,
       "dev_cache": {
         "n_slots": 16,
         "protected": 4,
-        "gathers": 778,
-        "active_hits": 139,
-        "resurrections": 172,
-        "logical_evictions": 946,
-        "overwritten": 770,
+        "gathers": 730,
+        "active_hits": 133,
+        "resurrections": 161,
+        "logical_evictions": 891,
+        "overwritten": 730,
         "blocked_by_retiring": 0,
         "retiring_now": 4,
         "reclaimable_now": 0,
@@ -275,33 +275,33 @@
         "rows": 16,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 778,
+        "host_to_cache_rows": 730,
         "abandoned_steps": 0,
-        "bytes": 211550208
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 10284537600
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 9650016000
       },
       "label": "quarter#2"
     },
     {
-      "median_ns": 1360953.5,
+      "median_ns": 1352121.5,
       "steps": 256,
       "rows": 16,
       "protected": 8,
-      "fills": 624,
-      "resurrections": 144,
-      "per_routed": 0.140625,
+      "fills": 597,
+      "resurrections": 133,
+      "per_routed": 0.1298828125,
       "dev_cache": {
         "n_slots": 16,
         "protected": 8,
-        "gathers": 636,
-        "active_hits": 309,
-        "resurrections": 144,
-        "logical_evictions": 772,
-        "overwritten": 624,
+        "gathers": 597,
+        "active_hits": 294,
+        "resurrections": 133,
+        "logical_evictions": 730,
+        "overwritten": 597,
         "blocked_by_retiring": 0,
         "retiring_now": 4,
         "reclaimable_now": 0,
@@ -309,33 +309,33 @@
         "rows": 16,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 636,
+        "host_to_cache_rows": 597,
         "abandoned_steps": 0,
-        "bytes": 211550208
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 8407411200
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 7891862400
       },
       "label": "half#1"
     },
     {
-      "median_ns": 1364248.0,
+      "median_ns": 1357785.5,
       "steps": 256,
       "rows": 16,
       "protected": 8,
-      "fills": 624,
-      "resurrections": 144,
-      "per_routed": 0.140625,
+      "fills": 597,
+      "resurrections": 133,
+      "per_routed": 0.1298828125,
       "dev_cache": {
         "n_slots": 16,
         "protected": 8,
-        "gathers": 636,
-        "active_hits": 309,
-        "resurrections": 144,
-        "logical_evictions": 772,
-        "overwritten": 624,
+        "gathers": 597,
+        "active_hits": 294,
+        "resurrections": 133,
+        "logical_evictions": 730,
+        "overwritten": 597,
         "blocked_by_retiring": 0,
         "retiring_now": 4,
         "reclaimable_now": 0,
@@ -343,33 +343,33 @@
         "rows": 16,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 636,
+        "host_to_cache_rows": 597,
         "abandoned_steps": 0,
-        "bytes": 211550208
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 8407411200
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 7891862400
       },
       "label": "half#2"
     },
     {
-      "median_ns": 1352298.5,
+      "median_ns": 1345042.0,
       "steps": 256,
       "rows": 16,
       "protected": 12,
-      "fills": 483,
-      "resurrections": 135,
-      "per_routed": 0.1318359375,
+      "fills": 466,
+      "resurrections": 128,
+      "per_routed": 0.125,
       "dev_cache": {
         "n_slots": 16,
         "protected": 12,
-        "gathers": 499,
-        "active_hits": 455,
-        "resurrections": 135,
-        "logical_evictions": 622,
-        "overwritten": 483,
+        "gathers": 466,
+        "active_hits": 430,
+        "resurrections": 128,
+        "logical_evictions": 594,
+        "overwritten": 465,
         "blocked_by_retiring": 0,
         "retiring_now": 2,
         "reclaimable_now": 2,
@@ -377,33 +377,33 @@
         "rows": 16,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 499,
+        "host_to_cache_rows": 466,
         "abandoned_steps": 0,
-        "bytes": 211550208
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 6596380800
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 6160147200
       },
       "label": "three-quarter#1"
     },
     {
-      "median_ns": 1354398.0,
+      "median_ns": 1343805.0,
       "steps": 256,
       "rows": 16,
       "protected": 12,
-      "fills": 483,
-      "resurrections": 135,
-      "per_routed": 0.1318359375,
+      "fills": 466,
+      "resurrections": 128,
+      "per_routed": 0.125,
       "dev_cache": {
         "n_slots": 16,
         "protected": 12,
-        "gathers": 499,
-        "active_hits": 455,
-        "resurrections": 135,
-        "logical_evictions": 622,
-        "overwritten": 483,
+        "gathers": 466,
+        "active_hits": 430,
+        "resurrections": 128,
+        "logical_evictions": 594,
+        "overwritten": 465,
         "blocked_by_retiring": 0,
         "retiring_now": 2,
         "reclaimable_now": 2,
@@ -411,33 +411,33 @@
         "rows": 16,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 499,
+        "host_to_cache_rows": 466,
         "abandoned_steps": 0,
-        "bytes": 211550208
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 6596380800
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 6160147200
       },
       "label": "three-quarter#2"
     },
     {
-      "median_ns": 1353808.5,
+      "median_ns": 1343233.0,
       "steps": 256,
       "rows": 16,
       "protected": 12,
-      "fills": 483,
-      "resurrections": 135,
-      "per_routed": 0.1318359375,
+      "fills": 466,
+      "resurrections": 128,
+      "per_routed": 0.125,
       "dev_cache": {
         "n_slots": 16,
         "protected": 12,
-        "gathers": 499,
-        "active_hits": 455,
-        "resurrections": 135,
-        "logical_evictions": 622,
-        "overwritten": 483,
+        "gathers": 466,
+        "active_hits": 430,
+        "resurrections": 128,
+        "logical_evictions": 594,
+        "overwritten": 465,
         "blocked_by_retiring": 0,
         "retiring_now": 2,
         "reclaimable_now": 2,
@@ -445,33 +445,33 @@
         "rows": 16,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 499,
+        "host_to_cache_rows": 466,
         "abandoned_steps": 0,
-        "bytes": 211550208
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 6596380800
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 6160147200
       },
       "label": "rows-k#1"
     },
     {
-      "median_ns": 1350728.5,
+      "median_ns": 1342087.5,
       "steps": 256,
       "rows": 16,
       "protected": 12,
-      "fills": 483,
-      "resurrections": 135,
-      "per_routed": 0.1318359375,
+      "fills": 466,
+      "resurrections": 128,
+      "per_routed": 0.125,
       "dev_cache": {
         "n_slots": 16,
         "protected": 12,
-        "gathers": 499,
-        "active_hits": 455,
-        "resurrections": 135,
-        "logical_evictions": 622,
-        "overwritten": 483,
+        "gathers": 466,
+        "active_hits": 430,
+        "resurrections": 128,
+        "logical_evictions": 594,
+        "overwritten": 465,
         "blocked_by_retiring": 0,
         "retiring_now": 2,
         "reclaimable_now": 2,
@@ -479,33 +479,33 @@
         "rows": 16,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 499,
+        "host_to_cache_rows": 466,
         "abandoned_steps": 0,
-        "bytes": 211550208
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 6596380800
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 6160147200
       },
       "label": "rows-k#2"
     },
     {
-      "median_ns": 1831574.5,
+      "median_ns": 1824219.5,
       "steps": 256,
       "rows": 24,
       "protected": 6,
-      "fills": 707,
-      "resurrections": 159,
-      "per_routed": 0.1552734375,
+      "fills": 672,
+      "resurrections": 149,
+      "per_routed": 0.1455078125,
       "dev_cache": {
         "n_slots": 24,
         "protected": 6,
-        "gathers": 717,
-        "active_hits": 213,
-        "resurrections": 159,
-        "logical_evictions": 870,
-        "overwritten": 707,
+        "gathers": 672,
+        "active_hits": 203,
+        "resurrections": 149,
+        "logical_evictions": 821,
+        "overwritten": 672,
         "blocked_by_retiring": 0,
         "retiring_now": 4,
         "reclaimable_now": 0,
@@ -513,33 +513,33 @@
         "rows": 24,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 717,
+        "host_to_cache_rows": 672,
         "abandoned_steps": 0,
-        "bytes": 317325312
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 9478166400
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 8883302400
       },
       "label": "quarter#1"
     },
     {
-      "median_ns": 1830249.0,
+      "median_ns": 1816863.0,
       "steps": 256,
       "rows": 24,
       "protected": 6,
-      "fills": 707,
-      "resurrections": 159,
-      "per_routed": 0.1552734375,
+      "fills": 672,
+      "resurrections": 149,
+      "per_routed": 0.1455078125,
       "dev_cache": {
         "n_slots": 24,
         "protected": 6,
-        "gathers": 717,
-        "active_hits": 213,
-        "resurrections": 159,
-        "logical_evictions": 870,
-        "overwritten": 707,
+        "gathers": 672,
+        "active_hits": 203,
+        "resurrections": 149,
+        "logical_evictions": 821,
+        "overwritten": 672,
         "blocked_by_retiring": 0,
         "retiring_now": 4,
         "reclaimable_now": 0,
@@ -547,33 +547,33 @@
         "rows": 24,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 717,
+        "host_to_cache_rows": 672,
         "abandoned_steps": 0,
-        "bytes": 317325312
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 9478166400
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 8883302400
       },
       "label": "quarter#2"
     },
     {
-      "median_ns": 1354278.0,
+      "median_ns": 1347760.5,
       "steps": 256,
       "rows": 24,
       "protected": 12,
-      "fills": 483,
-      "resurrections": 135,
-      "per_routed": 0.1318359375,
+      "fills": 466,
+      "resurrections": 128,
+      "per_routed": 0.125,
       "dev_cache": {
         "n_slots": 24,
         "protected": 12,
-        "gathers": 499,
-        "active_hits": 455,
-        "resurrections": 135,
-        "logical_evictions": 622,
-        "overwritten": 483,
+        "gathers": 466,
+        "active_hits": 430,
+        "resurrections": 128,
+        "logical_evictions": 594,
+        "overwritten": 465,
         "blocked_by_retiring": 0,
         "retiring_now": 2,
         "reclaimable_now": 2,
@@ -581,33 +581,33 @@
         "rows": 24,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 499,
+        "host_to_cache_rows": 466,
         "abandoned_steps": 0,
-        "bytes": 317325312
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 6596380800
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 6160147200
       },
       "label": "half#1"
     },
     {
-      "median_ns": 1354073.5,
+      "median_ns": 1347185.0,
       "steps": 256,
       "rows": 24,
       "protected": 12,
-      "fills": 483,
-      "resurrections": 135,
-      "per_routed": 0.1318359375,
+      "fills": 466,
+      "resurrections": 128,
+      "per_routed": 0.125,
       "dev_cache": {
         "n_slots": 24,
         "protected": 12,
-        "gathers": 499,
-        "active_hits": 455,
-        "resurrections": 135,
-        "logical_evictions": 622,
-        "overwritten": 483,
+        "gathers": 466,
+        "active_hits": 430,
+        "resurrections": 128,
+        "logical_evictions": 594,
+        "overwritten": 465,
         "blocked_by_retiring": 0,
         "retiring_now": 2,
         "reclaimable_now": 2,
@@ -615,33 +615,33 @@
         "rows": 24,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 499,
+        "host_to_cache_rows": 466,
         "abandoned_steps": 0,
-        "bytes": 317325312
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 6596380800
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 6160147200
       },
       "label": "half#2"
     },
     {
-      "median_ns": 883722.0,
+      "median_ns": 874997.0,
       "steps": 256,
       "rows": 24,
       "protected": 18,
-      "fills": 322,
-      "resurrections": 99,
-      "per_routed": 0.0966796875,
+      "fills": 314,
+      "resurrections": 98,
+      "per_routed": 0.095703125,
       "dev_cache": {
         "n_slots": 24,
         "protected": 18,
-        "gathers": 344,
-        "active_hits": 646,
-        "resurrections": 99,
-        "logical_evictions": 425,
-        "overwritten": 322,
+        "gathers": 314,
+        "active_hits": 612,
+        "resurrections": 98,
+        "logical_evictions": 412,
+        "overwritten": 312,
         "blocked_by_retiring": 0,
         "retiring_now": 2,
         "reclaimable_now": 2,
@@ -649,33 +649,33 @@
         "rows": 24,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 344,
+        "host_to_cache_rows": 314,
         "abandoned_steps": 0,
-        "bytes": 317325312
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 4547404800
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 4150828800
       },
       "label": "three-quarter#1"
     },
     {
-      "median_ns": 882093.0,
+      "median_ns": 874396.0,
       "steps": 256,
       "rows": 24,
       "protected": 18,
-      "fills": 322,
-      "resurrections": 99,
-      "per_routed": 0.0966796875,
+      "fills": 314,
+      "resurrections": 98,
+      "per_routed": 0.095703125,
       "dev_cache": {
         "n_slots": 24,
         "protected": 18,
-        "gathers": 344,
-        "active_hits": 646,
-        "resurrections": 99,
-        "logical_evictions": 425,
-        "overwritten": 322,
+        "gathers": 314,
+        "active_hits": 612,
+        "resurrections": 98,
+        "logical_evictions": 412,
+        "overwritten": 312,
         "blocked_by_retiring": 0,
         "retiring_now": 2,
         "reclaimable_now": 2,
@@ -683,33 +683,33 @@
         "rows": 24,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 344,
+        "host_to_cache_rows": 314,
         "abandoned_steps": 0,
-        "bytes": 317325312
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 4547404800
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 4150828800
       },
       "label": "three-quarter#2"
     },
     {
-      "median_ns": 880847.5,
+      "median_ns": 872013.0,
       "steps": 256,
       "rows": 24,
       "protected": 20,
-      "fills": 279,
-      "resurrections": 87,
-      "per_routed": 0.0849609375,
+      "fills": 274,
+      "resurrections": 86,
+      "per_routed": 0.083984375,
       "dev_cache": {
         "n_slots": 24,
         "protected": 20,
-        "gathers": 303,
-        "active_hits": 699,
-        "resurrections": 87,
-        "logical_evictions": 370,
-        "overwritten": 279,
+        "gathers": 274,
+        "active_hits": 664,
+        "resurrections": 86,
+        "logical_evictions": 360,
+        "overwritten": 272,
         "blocked_by_retiring": 0,
         "retiring_now": 2,
         "reclaimable_now": 2,
@@ -717,33 +717,33 @@
         "rows": 24,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 303,
+        "host_to_cache_rows": 274,
         "abandoned_steps": 0,
-        "bytes": 317325312
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 4005417600
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 3622060800
       },
       "label": "rows-k#1"
     },
     {
-      "median_ns": 882643.0,
+      "median_ns": 871411.5,
       "steps": 256,
       "rows": 24,
       "protected": 20,
-      "fills": 279,
-      "resurrections": 87,
-      "per_routed": 0.0849609375,
+      "fills": 274,
+      "resurrections": 86,
+      "per_routed": 0.083984375,
       "dev_cache": {
         "n_slots": 24,
         "protected": 20,
-        "gathers": 303,
-        "active_hits": 699,
-        "resurrections": 87,
-        "logical_evictions": 370,
-        "overwritten": 279,
+        "gathers": 274,
+        "active_hits": 664,
+        "resurrections": 86,
+        "logical_evictions": 360,
+        "overwritten": 272,
         "blocked_by_retiring": 0,
         "retiring_now": 2,
         "reclaimable_now": 2,
@@ -751,33 +751,33 @@
         "rows": 24,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 303,
+        "host_to_cache_rows": 274,
         "abandoned_steps": 0,
-        "bytes": 317325312
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 4005417600
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 3622060800
       },
       "label": "rows-k#2"
     },
     {
-      "median_ns": 1366524.0,
+      "median_ns": 1356323.5,
       "steps": 256,
       "rows": 32,
       "protected": 8,
-      "fills": 624,
-      "resurrections": 144,
-      "per_routed": 0.140625,
+      "fills": 597,
+      "resurrections": 133,
+      "per_routed": 0.1298828125,
       "dev_cache": {
         "n_slots": 32,
         "protected": 8,
-        "gathers": 636,
-        "active_hits": 309,
-        "resurrections": 144,
-        "logical_evictions": 772,
-        "overwritten": 624,
+        "gathers": 597,
+        "active_hits": 294,
+        "resurrections": 133,
+        "logical_evictions": 730,
+        "overwritten": 597,
         "blocked_by_retiring": 0,
         "retiring_now": 4,
         "reclaimable_now": 0,
@@ -785,33 +785,33 @@
         "rows": 32,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 636,
+        "host_to_cache_rows": 597,
         "abandoned_steps": 0,
-        "bytes": 423100416
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 8407411200
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 7891862400
       },
       "label": "quarter#1"
     },
     {
-      "median_ns": 1364584.0,
+      "median_ns": 1362913.5,
       "steps": 256,
       "rows": 32,
       "protected": 8,
-      "fills": 624,
-      "resurrections": 144,
-      "per_routed": 0.140625,
+      "fills": 597,
+      "resurrections": 133,
+      "per_routed": 0.1298828125,
       "dev_cache": {
         "n_slots": 32,
         "protected": 8,
-        "gathers": 636,
-        "active_hits": 309,
-        "resurrections": 144,
-        "logical_evictions": 772,
-        "overwritten": 624,
+        "gathers": 597,
+        "active_hits": 294,
+        "resurrections": 133,
+        "logical_evictions": 730,
+        "overwritten": 597,
         "blocked_by_retiring": 0,
         "retiring_now": 4,
         "reclaimable_now": 0,
@@ -819,33 +819,33 @@
         "rows": 32,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 636,
+        "host_to_cache_rows": 597,
         "abandoned_steps": 0,
-        "bytes": 423100416
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 8407411200
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 7891862400
       },
       "label": "quarter#2"
     },
     {
-      "median_ns": 894927.5,
+      "median_ns": 882883.5,
       "steps": 256,
       "rows": 32,
       "protected": 16,
-      "fills": 374,
+      "fills": 363,
       "resurrections": 102,
       "per_routed": 0.099609375,
       "dev_cache": {
         "n_slots": 32,
         "protected": 16,
-        "gathers": 394,
-        "active_hits": 593,
+        "gathers": 363,
+        "active_hits": 559,
         "resurrections": 102,
-        "logical_evictions": 480,
-        "overwritten": 374,
+        "logical_evictions": 465,
+        "overwritten": 361,
         "blocked_by_retiring": 0,
         "retiring_now": 2,
         "reclaimable_now": 2,
@@ -853,33 +853,33 @@
         "rows": 32,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 394,
+        "host_to_cache_rows": 363,
         "abandoned_steps": 0,
-        "bytes": 423100416
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 5208364800
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 4798569600
       },
       "label": "half#1"
     },
     {
-      "median_ns": 890746.5,
+      "median_ns": 882238.5,
       "steps": 256,
       "rows": 32,
       "protected": 16,
-      "fills": 374,
+      "fills": 363,
       "resurrections": 102,
       "per_routed": 0.099609375,
       "dev_cache": {
         "n_slots": 32,
         "protected": 16,
-        "gathers": 394,
-        "active_hits": 593,
+        "gathers": 363,
+        "active_hits": 559,
         "resurrections": 102,
-        "logical_evictions": 480,
-        "overwritten": 374,
+        "logical_evictions": 465,
+        "overwritten": 361,
         "blocked_by_retiring": 0,
         "retiring_now": 2,
         "reclaimable_now": 2,
@@ -887,33 +887,33 @@
         "rows": 32,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 394,
+        "host_to_cache_rows": 363,
         "abandoned_steps": 0,
-        "bytes": 423100416
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 5208364800
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 4798569600
       },
       "label": "half#2"
     },
     {
-      "median_ns": 402296.0,
+      "median_ns": 391452.0,
       "steps": 256,
       "rows": 32,
       "protected": 24,
-      "fills": 145,
+      "fills": 144,
       "resurrections": 105,
       "per_routed": 0.1025390625,
       "dev_cache": {
         "n_slots": 32,
         "protected": 24,
-        "gathers": 172,
-        "active_hits": 812,
+        "gathers": 144,
+        "active_hits": 775,
         "resurrections": 105,
-        "logical_evictions": 253,
-        "overwritten": 145,
+        "logical_evictions": 249,
+        "overwritten": 143,
         "blocked_by_retiring": 0,
         "retiring_now": 1,
         "reclaimable_now": 2,
@@ -921,33 +921,33 @@
         "rows": 32,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 172,
+        "host_to_cache_rows": 144,
         "abandoned_steps": 0,
-        "bytes": 423100416
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 2273702400
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 1903564800
       },
       "label": "three-quarter#1"
     },
     {
-      "median_ns": 401096.0,
+      "median_ns": 391242.5,
       "steps": 256,
       "rows": 32,
       "protected": 24,
-      "fills": 145,
+      "fills": 144,
       "resurrections": 105,
       "per_routed": 0.1025390625,
       "dev_cache": {
         "n_slots": 32,
         "protected": 24,
-        "gathers": 172,
-        "active_hits": 812,
+        "gathers": 144,
+        "active_hits": 775,
         "resurrections": 105,
-        "logical_evictions": 253,
-        "overwritten": 145,
+        "logical_evictions": 249,
+        "overwritten": 143,
         "blocked_by_retiring": 0,
         "retiring_now": 1,
         "reclaimable_now": 2,
@@ -955,30 +955,30 @@
         "rows": 32,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 172,
+        "host_to_cache_rows": 144,
         "abandoned_steps": 0,
-        "bytes": 423100416
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 2273702400
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 1903564800
       },
       "label": "three-quarter#2"
     },
     {
-      "median_ns": 382636.0,
+      "median_ns": 375535.0,
       "steps": 256,
       "rows": 32,
       "protected": 28,
-      "fills": 58,
+      "fills": 61,
       "resurrections": 55,
       "per_routed": 0.0537109375,
       "dev_cache": {
         "n_slots": 32,
         "protected": 28,
-        "gathers": 88,
-        "active_hits": 946,
+        "gathers": 61,
+        "active_hits": 908,
         "resurrections": 55,
         "logical_evictions": 115,
         "overwritten": 58,
@@ -989,30 +989,30 @@
         "rows": 32,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 88,
+        "host_to_cache_rows": 61,
         "abandoned_steps": 0,
-        "bytes": 423100416
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 1163289600
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 806371200
       },
       "label": "rows-k#1"
     },
     {
-      "median_ns": 383576.5,
+      "median_ns": 376485.0,
       "steps": 256,
       "rows": 32,
       "protected": 28,
-      "fills": 58,
+      "fills": 61,
       "resurrections": 55,
       "per_routed": 0.0537109375,
       "dev_cache": {
         "n_slots": 32,
         "protected": 28,
-        "gathers": 88,
-        "active_hits": 946,
+        "gathers": 61,
+        "active_hits": 908,
         "resurrections": 55,
         "logical_evictions": 115,
         "overwritten": 58,
@@ -1023,33 +1023,33 @@
         "rows": 32,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 88,
+        "host_to_cache_rows": 61,
         "abandoned_steps": 0,
-        "bytes": 423100416
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 1163289600
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 806371200
       },
       "label": "rows-k#2"
     },
     {
-      "median_ns": 1360073.5,
+      "median_ns": 1350139.0,
       "steps": 256,
       "rows": 48,
       "protected": 12,
-      "fills": 483,
-      "resurrections": 135,
-      "per_routed": 0.1318359375,
+      "fills": 466,
+      "resurrections": 128,
+      "per_routed": 0.125,
       "dev_cache": {
         "n_slots": 48,
         "protected": 12,
-        "gathers": 499,
-        "active_hits": 455,
-        "resurrections": 135,
-        "logical_evictions": 622,
-        "overwritten": 483,
+        "gathers": 466,
+        "active_hits": 430,
+        "resurrections": 128,
+        "logical_evictions": 594,
+        "overwritten": 465,
         "blocked_by_retiring": 0,
         "retiring_now": 2,
         "reclaimable_now": 2,
@@ -1057,33 +1057,33 @@
         "rows": 48,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 499,
+        "host_to_cache_rows": 466,
         "abandoned_steps": 0,
-        "bytes": 634650624
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 6596380800
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 6160147200
       },
       "label": "quarter#1"
     },
     {
-      "median_ns": 1369333.5,
+      "median_ns": 1351250.5,
       "steps": 256,
       "rows": 48,
       "protected": 12,
-      "fills": 483,
-      "resurrections": 135,
-      "per_routed": 0.1318359375,
+      "fills": 466,
+      "resurrections": 128,
+      "per_routed": 0.125,
       "dev_cache": {
         "n_slots": 48,
         "protected": 12,
-        "gathers": 499,
-        "active_hits": 455,
-        "resurrections": 135,
-        "logical_evictions": 622,
-        "overwritten": 483,
+        "gathers": 466,
+        "active_hits": 430,
+        "resurrections": 128,
+        "logical_evictions": 594,
+        "overwritten": 465,
         "blocked_by_retiring": 0,
         "retiring_now": 2,
         "reclaimable_now": 2,
@@ -1091,33 +1091,33 @@
         "rows": 48,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 499,
+        "host_to_cache_rows": 466,
         "abandoned_steps": 0,
-        "bytes": 634650624
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 6596380800
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 6160147200
       },
       "label": "quarter#2"
     },
     {
-      "median_ns": 445870.5,
+      "median_ns": 388283.0,
       "steps": 256,
       "rows": 48,
       "protected": 24,
-      "fills": 145,
+      "fills": 144,
       "resurrections": 105,
       "per_routed": 0.1025390625,
       "dev_cache": {
         "n_slots": 48,
         "protected": 24,
-        "gathers": 172,
-        "active_hits": 812,
+        "gathers": 144,
+        "active_hits": 775,
         "resurrections": 105,
-        "logical_evictions": 253,
-        "overwritten": 145,
+        "logical_evictions": 249,
+        "overwritten": 143,
         "blocked_by_retiring": 0,
         "retiring_now": 1,
         "reclaimable_now": 2,
@@ -1125,33 +1125,33 @@
         "rows": 48,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 172,
+        "host_to_cache_rows": 144,
         "abandoned_steps": 0,
-        "bytes": 634650624
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 2273702400
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 1903564800
       },
       "label": "half#1"
     },
     {
-      "median_ns": 393671.0,
+      "median_ns": 415719.0,
       "steps": 256,
       "rows": 48,
       "protected": 24,
-      "fills": 145,
+      "fills": 144,
       "resurrections": 105,
       "per_routed": 0.1025390625,
       "dev_cache": {
         "n_slots": 48,
         "protected": 24,
-        "gathers": 172,
-        "active_hits": 812,
+        "gathers": 144,
+        "active_hits": 775,
         "resurrections": 105,
-        "logical_evictions": 253,
-        "overwritten": 145,
+        "logical_evictions": 249,
+        "overwritten": 143,
         "blocked_by_retiring": 0,
         "retiring_now": 1,
         "reclaimable_now": 2,
@@ -1159,30 +1159,30 @@
         "rows": 48,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 172,
+        "host_to_cache_rows": 144,
         "abandoned_steps": 0,
-        "bytes": 634650624
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 2273702400
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 1903564800
       },
       "label": "half#2"
     },
     {
-      "median_ns": 375501.5,
+      "median_ns": 396074.0,
       "steps": 256,
       "rows": 48,
       "protected": 36,
-      "fills": 0,
+      "fills": 5,
       "resurrections": 0,
       "per_routed": 0.0,
       "dev_cache": {
         "n_slots": 48,
         "protected": 36,
-        "gathers": 32,
-        "active_hits": 1057,
+        "gathers": 5,
+        "active_hits": 1019,
         "resurrections": 0,
         "logical_evictions": 0,
         "overwritten": 0,
@@ -1193,30 +1193,30 @@
         "rows": 48,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 32,
+        "host_to_cache_rows": 5,
         "abandoned_steps": 0,
-        "bytes": 634650624
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 423014400
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 66096000
       },
       "label": "three-quarter#1"
     },
     {
-      "median_ns": 376131.0,
+      "median_ns": 373640.5,
       "steps": 256,
       "rows": 48,
       "protected": 36,
-      "fills": 0,
+      "fills": 5,
       "resurrections": 0,
       "per_routed": 0.0,
       "dev_cache": {
         "n_slots": 48,
         "protected": 36,
-        "gathers": 32,
-        "active_hits": 1057,
+        "gathers": 5,
+        "active_hits": 1019,
         "resurrections": 0,
         "logical_evictions": 0,
         "overwritten": 0,
@@ -1227,30 +1227,30 @@
         "rows": 48,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 32,
+        "host_to_cache_rows": 5,
         "abandoned_steps": 0,
-        "bytes": 634650624
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 423014400
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 66096000
       },
       "label": "three-quarter#2"
     },
     {
-      "median_ns": 373246.0,
+      "median_ns": 379164.5,
       "steps": 256,
       "rows": 48,
       "protected": 44,
-      "fills": 0,
+      "fills": 5,
       "resurrections": 0,
       "per_routed": 0.0,
       "dev_cache": {
         "n_slots": 48,
         "protected": 44,
-        "gathers": 32,
-        "active_hits": 1057,
+        "gathers": 5,
+        "active_hits": 1019,
         "resurrections": 0,
         "logical_evictions": 0,
         "overwritten": 0,
@@ -1261,30 +1261,30 @@
         "rows": 48,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 32,
+        "host_to_cache_rows": 5,
         "abandoned_steps": 0,
-        "bytes": 634650624
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 423014400
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 66096000
       },
       "label": "rows-k#1"
     },
     {
-      "median_ns": 374716.0,
+      "median_ns": 376165.0,
       "steps": 256,
       "rows": 48,
       "protected": 44,
-      "fills": 0,
+      "fills": 5,
       "resurrections": 0,
       "per_routed": 0.0,
       "dev_cache": {
         "n_slots": 48,
         "protected": 44,
-        "gathers": 32,
-        "active_hits": 1057,
+        "gathers": 5,
+        "active_hits": 1019,
         "resurrections": 0,
         "logical_evictions": 0,
         "overwritten": 0,
@@ -1295,14 +1295,14 @@
         "rows": 48,
         "row_stride": 13221888,
         "stalls": 0,
-        "host_to_cache_rows": 32,
+        "host_to_cache_rows": 5,
         "abandoned_steps": 0,
-        "bytes": 634650624
+        "bytes": 0
       },
       "traffic": {
         "hot_d2d_bytes": 0,
-        "cold_pcie_bytes": 13840502400,
-        "host_to_device_bytes": 423014400
+        "cold_pcie_bytes": 13020912000,
+        "host_to_device_bytes": 66096000
       },
       "label": "rows-k#2"
     }

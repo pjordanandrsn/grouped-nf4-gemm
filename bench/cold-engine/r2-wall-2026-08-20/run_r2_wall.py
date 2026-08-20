@@ -96,26 +96,63 @@ def run_arm(path, index, layer, k, hot_rows, rows, protected, seq, x, warmup):
     eng = Mxfp4NvmeResidency(path, layer, hot_ids=(), k_slots=k,
                              hot_rows=hot_rows, device="cuda", index=index,
                              dev_cache=cache)
+    def snap(e=eng):          # bound by value: `eng` is deleted in `finally`
+        t = e.traffic() if hasattr(e, "traffic") else {}
+        return (t, dict(t.get("dev_cache", {})) if isinstance(t, dict) else {})
+
     try:
         with torch.no_grad():
             for i in range(warmup):
                 idx, sc = seq[i % len(seq)]
                 eng.forward(x, idx, sc)
             torch.cuda.synchronize()
+            # THE measurement boundary. traffic() and the cache counters are
+            # LIFETIME totals -- they include _prime and every warmup forward.
+            # Pairing them with a wall timed only over `seq` would describe two
+            # different windows, which is the defect gnf4#132 fixed in
+            # run_gate1.py and #152 reintroduced here (Bugbot). Snapshot here
+            # and difference, so every number below covers the timed steps and
+            # nothing else.
+            pre_t, pre_dc = snap()
             per = []
             for idx, sc in seq:
                 t0 = time.perf_counter_ns()
                 eng.forward(x, idx, sc)
                 torch.cuda.synchronize()
                 per.append(time.perf_counter_ns() - t0)
-        t = eng.traffic() if hasattr(eng, "traffic") else {}
-        dc = t.get("dev_cache", {}) if isinstance(t, dict) else {}
+        post_t, post_dc = snap()
+        # Difference only counters that are numeric on BOTH sides. Some keys
+        # are not counters at all (rows, protected, row_stride) and some are
+        # derived and NULL until they have a value -- reuse_before_overwrite
+        # is None until an eviction resolves, so post-minus-pre is float minus
+        # None the first time it populates. Post-value is carried through for
+        # those rather than differenced.
+        STATIC = {"rows", "protected", "n_slots", "row_stride",
+                  "reclaimable_now", "retiring_now", "reuse_before_overwrite"}
+
+        def diff(post, pre):
+            out = {}
+            for kk, pv in post.items():
+                qv = pre.get(kk)
+                if kk not in STATIC and isinstance(pv, (int, float)) \
+                        and isinstance(qv, (int, float)):
+                    out[kk] = pv - qv
+                else:
+                    out[kk] = pv
+            return out
+
+        dc = diff(post_dc, pre_dc)
+        t = diff(post_t, pre_t)
         res = (dc.get("resurrections", 0) or 0) + (dc.get("spec_resurrections", 0) or 0)
         routed = len(seq) * k
         # Reported beside wall on purpose: a resurrection is an avoided fill,
         # so a wall change that the fill count already explains must not be
         # credited to resurrection (see the module docstring).
-        fills = dc.get("fills", dc.get("misses", dc.get("overwritten")))
+        # host_to_cache_rows is the real transfer count; there is no "fills"
+        # key and defaulting to `overwritten` mislabels an eviction counter as
+        # a transfer one (they are near-collinear here, which is how it went
+        # unnoticed until the implied bandwidth came out at 6 TB/s).
+        fills = dc.get("host_to_cache_rows")
         return {"median_ns": statistics.median(per), "steps": len(per),
                 "rows": rows, "protected": protected, "fills": fills,
                 "resurrections": res, "per_routed": res / routed if routed else 0.0,
