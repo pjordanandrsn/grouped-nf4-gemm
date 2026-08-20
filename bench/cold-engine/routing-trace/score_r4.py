@@ -36,11 +36,17 @@ def score(recs, rows, window):
     for step, r in enumerate(recs):
         for L, experts in r["routed"].items():
             layer = int(L)
-            # BEFORE the request: which of these are reclaimable right now?
+            # Settle FIRST, exactly as want() does internally, then read
+            # the state. Reading it before the settle put rows demoted by the
+            # previous request in RETIRING rather than RECLAIMABLE, so they
+            # were not counted -- at 128 rows that missed every single event
+            # (0 recorded against VramSlots' own 22,198) and about half of
+            # them elsewhere (Bugbot, gnf4#142).
+            cache.slots.settle(lambda tg: tg.done())
             res = set()
             for e in experts:
-                s = cache.slots.slot_of((layer, e))
-                if s is not None and cache.slots.state(s) == "reclaimable":
+                slot = cache.slots.slot_of((layer, e))
+                if slot is not None and cache.slots.state(slot) == "reclaimable":
                     res.add(e)
             t = StepTag("cpu")
             cache.want(layer, experts, t)
@@ -48,7 +54,14 @@ def score(recs, rows, window):
             for e in experts:
                 prof.observe((layer, e), step, resurrected=(e in res))
             n_res += len(res)
-    return prof.predictor_scores(), n_res, cache.stats()
+    st = cache.stats()
+    if n_res != st["resurrections"]:
+        raise AssertionError(
+            f"labelled {n_res} resurrections but VramSlots counted "
+            f"{st['resurrections']} -- the per-expert ground truth and the "
+            f"aggregate counter must agree, or the ranking is built on a "
+            f"different event than the one being predicted")
+    return prof.predictor_scores(), n_res, st
 
 
 def main():

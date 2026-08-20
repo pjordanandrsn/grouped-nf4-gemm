@@ -1,88 +1,104 @@
-# R4 — REFUTED on a real routing sequence
+# R4 — REFUTED as stated: recurrence only competes once it stops being short
 
 Receipt: [`r4.json`](r4.json). Harness: [`score_r4.py`](score_r4.py). Trace:
-[`olmoe_routing_seq.jsonl`](olmoe_routing_seq.jsonl). No box; this replays a
+[`olmoe_routing_seq.jsonl`](olmoe_routing_seq.jsonl). No box; replays a
 captured trace and runs anywhere.
 
 ## As registered
 
-> **R4** — short-window recurrence predicts resurrection better than long-run
-> expert frequency. **Refuted if global frequency predicts as well or
-> better.** (`PREREG-tribrid-stage3.md`)
+> **R4** — **short-window** recurrence predicts resurrection better than
+> long-run expert frequency. **Refuted if global frequency predicts as well
+> or better.** (`PREREG-tribrid-stage3.md`)
 
-`reuse_profile.ReuseProfile` was built to answer this rather than assume it —
-it computes both predictors and `predictor_scores` reports each as a
-Spearman rank agreement against the resurrections an expert actually
-accumulated. What was missing was ground truth on a real trace. It now exists.
+`reuse_profile.ReuseProfile` computed both predictors from the start so this
+could be settled by a trace. The trace now exists; this scores it.
 
-## Result
+## The result turns on the word "short"
 
-**Frequency wins.** 512 autoregressive decode steps of OLMoE-1B-7B, swept
-across six cache capacities × six recurrence windows:
+512 autoregressive decode steps of OLMoE-1B-7B, six cache capacities × six
+recurrence windows. Counting only cells where either predictor has any signal
+(max |ρ| ≥ 0.15):
 
-| rows | resurrections | max abs ρ | recency wins | frequency wins |
-|---|---|---|---|---|
-| 192 | 134 | 0.283 | 3 | 3 |
-| 256 | 148 | 0.335 | 0 | **6** |
-| 384 | 284 | 0.374 | 0 | **6** |
-| 512 | 417 | 0.359 | 0 | **6** |
-| 768 | 110 | **0.036** | 6 | 0 |
+| recurrence window | frequency wins | recency wins |
+|---|---|---|
+| **4 ticks** | **5 of 5** | 0 |
+| **8 ticks** | **5 of 5** | 0 |
+| 16 | 3 | 2 |
+| 32 | 3 | 2 |
+| 64 | 3 | 2 |
+| 128 | 3 | 2 |
 
-Restricted to cells where either predictor has any signal at all
-(max |ρ| ≥ 0.15): **frequency 21, recency 3.**
+**At genuinely short windows, long-run frequency wins at every capacity that
+carries signal.** Recurrence only starts winning at 16 ticks and up, and only
+at the two smallest capacities. R4 is refuted on its own terms.
 
-**Recency's only clean sweep is at 768 rows, where the largest correlation of
-either predictor is 0.036.** That is not a regime where recency wins; it is a
-regime where nothing predicts anything, and one noise value happens to sit
-above another. Counting it as support for R4 would be reading the sign of
-noise.
+## Full grid — recency ρ by window, against frequency
 
-In the three capacities carrying the most resurrections — 148, 284 and 417
-events — frequency wins **all eighteen** cells.
+| rows | events | max abs ρ | w=4 | w=8 | w=16 | w=32 | w=64 | w=128 | **frequency** |
+|---|---|---|---|---|---|---|---|---|---|
+| 128 | 22,198 | 0.848 | 0.771 | 0.811 | 0.825 | 0.834 | 0.847 | 0.848 | **0.822** |
+| 192 | 265 | 0.384 | 0.253 | 0.323 | 0.362 | 0.376 | 0.384 | 0.381 | **0.353** |
+| 256 | 266 | 0.375 | 0.212 | 0.290 | 0.326 | 0.358 | 0.365 | 0.371 | **0.375** |
+| 384 | 552 | 0.476 | 0.232 | 0.320 | 0.375 | 0.420 | 0.439 | 0.466 | **0.476** |
+| 512 | 740 | 0.445 | 0.088 | 0.149 | 0.222 | 0.273 | 0.307 | 0.365 | **0.445** |
+| 768 | 128 | 0.038 | 0.012 | −0.018 | −0.012 | 0.007 | −0.004 | −0.011 | **−0.038** |
 
-## The mechanism, which is the part worth keeping
+**Recency's ρ rises monotonically with window width at every single
+capacity.** It converges on frequency from below. Where it does overtake —
+128 and 192 rows — it does so only after the window has grown to a sixth or a
+quarter of the entire trace, and by small margins (0.848 vs 0.822 at best).
+Where retention matters most (384, 512 rows) frequency wins at every window
+including 128.
 
-Recency's ρ rises monotonically with the window at every capacity:
+So the mechanism is consistent across the whole grid: **recurrence predicts
+better the more it is allowed to behave like frequency.** That is the
+opposite of what R4 asserts.
 
-| rows | w=4 | w=8 | w=16 | w=32 | w=64 | w=128 | frequency |
-|---|---|---|---|---|---|---|---|
-| 384 | 0.167 | 0.252 | 0.304 | 0.329 | 0.342 | 0.367 | **0.375** |
-| 512 | 0.097 | 0.121 | 0.191 | 0.234 | 0.256 | 0.302 | **0.359** |
+The one place recency sweeps every window is 768 rows, where the largest
+correlation of either predictor is **0.038** — nothing predicting anything,
+with one noise value above another. Reported and discounted, not tallied as
+support.
 
-**Short-window recurrence improves only as it stops being short**, converging
-towards long-run frequency from below and never reaching it — at w=128, a
-quarter of the whole trace, it is still behind. The prediction was that a
-*locally* hot expert is worth retaining over a uniformly warm one. On this
-trace the local signal is strictly the weaker one, and the shorter the
-window, the weaker it gets.
+## Consequences stated, not acted on
 
-## What this costs the design, and what it does not
+R4 was the argument for making gate 3's loop **recency-driven**. On this trace
+it should be frequency-driven — also simpler: a counter per expert, no window,
+no deque.
 
-Gate 3 is the loop *placement → execution → observed reuse → new placement*.
-R4 was the argument for making that loop **recency-driven**. It should be
-frequency-driven instead, which is both simpler and cheaper: a counter per
-expert, no window, no deque.
+`ReuseProfile.classify` still uses recency and is **deliberately unchanged.**
+Gate 3 has not been run, and swapping a policy on one trace would repeat the
+mistake this measurement exists to catch. What the data does support is
+narrower: if a windowed predictor is kept, the window should be wide (≥64),
+which is close to admitting frequency.
 
-That is a genuine simplification of `ReuseProfile.classify`, which currently
-uses recency. It is **not** changed here — the classifier feeds gate 3, gate 3
-has not been run, and swapping a policy on the strength of one trace would
-repeat the mistake this measurement exists to catch.
+**Headroom is limited either way** at the capacities where the cache is worth
+running. Frequency's best rank agreement outside the 128-row point is
+**ρ = 0.476**. Neither predictor is strong, which is worth knowing before gate
+3 is designed around one.
 
-**The headroom is small either way.** Frequency's best rank agreement is
-**ρ = 0.374**. Neither predictor is strong, so an adaptive residency policy
-driven by either has limited room before it is guessing. That is worth
-knowing before gate 3 is designed around it.
+## Ground truth, and a correction to the first pass
+
+A resurrection is a hit on a row that lost capacity ownership but was not yet
+overwritten, so it exists only relative to a cache of some size — hence the
+capacity sweep.
+
+**The first version of this harness mislabelled it.** It read slot state
+*before* `want`, but `want` settles the previous tag *first* and only then
+resolves hits, so rows demoted by the previous request were still `RETIRING`
+at the check and were never counted. That recorded **0** events at 128 rows
+against the tier's own 22,198, and roughly half elsewhere — and it inverted
+the verdict at the two smallest capacities. The harness now settles first,
+mirroring `want`, and **asserts its per-expert labels equal
+`VramSlots.resurrections`**, so the ranking cannot silently be built on a
+different event than the one being predicted.
 
 ## Limits
 
-- **One model, one prompt, 512 decode steps.** OLMoE routes top-8 of 64 with
-  high churn; a model with sharper routing locality could plausibly favour
-  recency, and this does not test that.
-- **Resurrection is capacity-relative.** It only exists against a cache of
-  some size, which is why capacity is swept rather than fixed. At 128 rows
-  there are **zero** resurrections — with a one-request demotable margin every
-  demoted row is reclaimed by the next layer's request before its own expert
-  comes round again — so that point is undefined, not a zero.
-- **Rank agreement, not accuracy.** Spearman answers "does this predictor
-  order experts the way the outcome did", which is the question a promotion
-  policy asks. It is not a claim about calibration.
+- One model, one prompt, 512 decode steps. OLMoE routes top-8 of 64 with high
+  churn; a model with sharper locality could favour recurrence, and this does
+  not test that.
+- The 128-row point dominates the event count (22,198 of 24,149). It is the
+  regime where the cache is smallest and thrashes hardest — informative, but
+  one point.
+- Spearman is rank agreement, not calibration, which is the question a
+  promotion policy actually asks.
