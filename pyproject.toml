@@ -86,6 +86,7 @@ py-modules = [
     # Gate 3: observed-reuse classification for adaptive residency, and
     # reclaimable residency for the VRAM slot arena (R2/R3).
     "reuse_profile", "vram_slots",
+    "dev_row_cache",
 ]
 
 [tool.setuptools.package-data]
