@@ -278,6 +278,65 @@ was specific to the original box instance is **not determined here**, and
 this run cannot distinguish them — the original box is destroyed. Recorded
 as unexplained rather than resolved.
 
+## Addendum: the hide-ratio clause is aimed at 5–11% of the cost
+
+Derived from the committed receipts (`gate1_v2.json` + the calibration
+blob), no new measurement. Disk time is `win_reads × row_bytes / B_nvme`
+using **this box's measured sequential ceiling (6.26 GB/s)** and the arena's
+3.54 MB row, charged against the arm's own wall delta over 128 steps.
+
+| cold | arm | Δ ms/step | win reads | disk ms/step | **disk share of Δ** |
+|---|---|---|---|---|---|
+| 1% | cold-GPU | 8.33 | 105 | 0.46 | **5.6%** |
+| 1% | cold-CPU | 4.29 | 106 | 0.47 | **10.9%** |
+| 5% | cold-GPU | 10.30 | 238 | 1.05 | **10.2%** |
+| 5% | cold-CPU | 11.00 | 238 | 1.05 | **9.6%** |
+| 10% | cold-GPU | 16.66 | 340 | 1.50 | **9.0%** |
+| 10% | cold-CPU | 14.87 | 335 | 1.48 | **9.9%** |
+| 20% | cold-GPU | 24.53 | 3400 | 15.02 | 61.2% |
+| 20% | cold-CPU | 29.86 | 2025 | 8.94 | 29.9% |
+
+**At 1–10% cold mass, storage is ~5–11% of what cold work costs.** The
+other ~90% is the cold path's own software cost — tier `ensure` bookkeeping,
+`ColdCpuView` materialization and `segment_into` host copies on the CPU
+side, `_TieredStack` gather plus H2D on the GPU side. Only at 20%, where
+the tier genuinely thrashes (3400 reads against 340 at 10%), does disk
+become the dominant term.
+
+Using the sequential ceiling makes these a **lower bound on the disk
+share**: if the real achieved rate on 3.54 MB routed reads is below 6.26
+GB/s, disk time is larger than shown. Even at half that rate it stays a
+minority of Δ at 1–10%.
+
+**This reframes the gate-1 hide-ratio MISS.** The clause asks whether NVMe
+latency can be hidden underneath scheduled work. At the cold masses the
+prereg targets for its strongest prediction (1–5%), NVMe latency is only
+~10% of the exposure — so a *perfect* prefetcher, hiding 100% of disk,
+could remove at most ~10% of the cost. **A 70% hide ratio is unreachable by
+construction on this workload**, and the prefetcher's 1% coverage is not
+the binding constraint it looked like.
+
+It also explains the prefetch probe. 1,555 of ~1,590 speculative rows hit
+because the predictor **already filters to `nvme_set`** (`want = sorted(ids
+& nxt.nvme_set)`) and the tier is an effective cache: at 5% cold, 265 cold
+rows fit a 384-slot pool, so after first touch they stay resident. The
+prefetcher is not failing to hide disk; there is little disk left to hide.
+The earlier note that it "prefetches warm rows and misses the cold ones"
+was wrong about the mechanism — it prefetches cold rows that are already
+cached.
+
+**This is the directive's own most-worth-falsifying prediction, confirmed**:
+*"NVMe itself will cease being the interesting bottleneck surprisingly
+quickly. Once reads overlap and hot misses get retained, the next wall may
+become staging/copy orchestration."* Retention did it, and staging/copy
+orchestration is the wall.
+
+The lever that follows is **not** a better prefetcher. It is the per-call
+cost of the cold path itself, and the named follow-up already on record —
+landing NVMe segments directly into the kernel-shaped stacks (the `preadv`
+iovec scatter `ArenaExpertSource` already uses) instead of arena row →
+`segment_into` → stack — attacks exactly that term.
+
 ## What this run does NOT establish
 
 - **Prediction 3 (CPU wins more cold assignments than intuition suggests)**
