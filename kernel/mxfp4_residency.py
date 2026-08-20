@@ -505,11 +505,18 @@ class Mxfp4NvmeResidency(Mxfp4PipelinedGptOss):
                 f"dev_cache row_stride {cache.row_stride} != engine "
                 f"{self.row_stride}: the cache strides the tier's PADDED row, "
                 f"and a mismatch reads mid-row from slot 1 onward")
-        if cache.rows <= self.k:
+        if cache.rows < 2 * self.k:
             raise ValueError(
-                f"dev_cache rows={cache.rows} must EXCEED k={self.k}. At k "
-                f"the routed set fills the arena, so a miss can only be served "
-                f"by a slot this step is about to read.")
+                f"dev_cache rows={cache.rows} must be at least 2*k="
+                f"{2 * self.k}. VramSlots demotes AFTER it allocates, so the "
+                f"previous step's k rows are still ACTIVE -- and unprovably "
+                f"quiescent -- while this step claims its own k. A step that "
+                f"misses on all k therefore needs k free rows beside them. "
+                f"Waiting does not help: settle() releases RETIRING rows, and "
+                f"these are ACTIVE. (Demoting the displaced rows against the "
+                f"PREVIOUS step's tag before allocating would relax this to "
+                f"k+1; it is not done here because it reorders an allocator "
+                f"that is still under review.)")
 
     def _init_tier_state(self):
         k = self.k
