@@ -38,6 +38,8 @@ to catch late.
 """
 from __future__ import annotations
 
+from collections import OrderedDict
+
 ACTIVE, RETIRING, RECLAIMABLE, ABSENT = (
     "active", "retiring", "reclaimable", "absent")
 
@@ -75,6 +77,17 @@ class VramSlots:
         # decode trace that cost 1.12-1.33x more fills than an ideal LRU of
         # the same capacity (bench/cold-engine/routing-trace).
         self._used: list = [0] * n_slots
+        # ACTIVE slots in least-recently-used order. _demote used to rebuild
+        # this by scanning every slot and sorting, on EVERY request, whether
+        # or not anything needed demoting -- O(n log n) per request against
+        # an O(over) job. Measured at 1.49x the no-demote path at 64 slots
+        # rising to 2.77x at 2048, which is the shape gnf4#153 saw in wall
+        # and could not attribute to bytes.
+        #
+        # Kept in sync at every ACTIVE transition rather than derived, and
+        # _assert_active_index() exists so the tests can prove the two agree
+        # instead of trusting six call sites.
+        self._active: "OrderedDict[int, None]" = OrderedDict()
 
         self.gathers = 0            # slots that needed a real refill
         self.active_hits = 0        # already ACTIVE, nothing to do
@@ -84,6 +97,27 @@ class VramSlots:
         self.blocked_by_retiring = 0
 
     # ----------------------------------------------------------- helpers --
+    def _enter_active(self, slot: int) -> None:
+        """Mark `slot` ACTIVE and newest. Safe on a slot already ACTIVE (the
+        `_claim` victim path hands one back), which is why this moves rather
+        than only inserts."""
+        self._state[slot] = ACTIVE
+        self._active.pop(slot, None)
+        self._active[slot] = None
+
+    def _leave_active(self, slot: int, new_state: str) -> None:
+        self._state[slot] = new_state
+        self._active.pop(slot, None)
+
+    def _assert_active_index(self) -> None:
+        """The ordered set agrees with `_state`. Called by tests, not by the
+        hot path -- it is O(n) and defeats the point if it runs per request."""
+        derived = {s for s in range(self.n_slots) if self._state[s] == ACTIVE}
+        if set(self._active) != derived:
+            raise AssertionError(
+                f"_active {sorted(self._active)} != ACTIVE slots "
+                f"{sorted(derived)} — a transition did not maintain it")
+
     def state(self, slot: int) -> str:
         return self._state[slot]
 
@@ -124,7 +158,7 @@ class VramSlots:
             # resurrection; this is the second lock on the same door.
             if self._state[slot] != RETIRING:
                 continue
-            self._state[slot] = RECLAIMABLE
+            self._leave_active(slot, RECLAIMABLE)   # not ACTIVE; pop is a no-op
             n += 1
         return n
 
@@ -164,13 +198,15 @@ class VramSlots:
 
     def _snapshot(self):
         return (list(self._holds), list(self._state), list(self._gen),
-                dict(self._pending), list(self._used), self._clock, self.gathers,
+                dict(self._pending), list(self._used), self._clock,
+                OrderedDict(self._active), self.gathers,
                 self.active_hits, self.resurrections, self.logical_evictions,
                 self.overwritten, self.blocked_by_retiring)
 
     def _restore(self, snap) -> None:
         (self._holds, self._state, self._gen, self._pending, self._used,
-         self._clock, self.gathers, self.active_hits, self.resurrections,
+         self._clock, self._active, self.gathers, self.active_hits,
+         self.resurrections,
          self.logical_evictions, self.overwritten,
          self.blocked_by_retiring) = snap
 
@@ -194,7 +230,7 @@ class VramSlots:
                 self.resurrections += 1
             else:
                 self.active_hits += 1
-            self._state[s] = ACTIVE
+            self._enter_active(s)
             self._used[s] = self._clock
             assign[e] = s
 
@@ -203,7 +239,7 @@ class VramSlots:
                 continue
             s = self._claim(set(assign.values()), event_tag)
             self._holds[s] = e
-            self._state[s] = ACTIVE
+            self._enter_active(s)
             self._used[s] = self._clock
             self._gen[s] += 1
             assign[e] = s
@@ -230,7 +266,7 @@ class VramSlots:
             if s is None:
                 continue
             self._holds[s] = None
-            self._state[s] = ABSENT
+            self._leave_active(s, ABSENT)
             self._gen[s] += 1
             self._pending.pop(s, None)
             n += 1
@@ -291,18 +327,31 @@ class VramSlots:
         """
         if self.protected >= self.n_slots:
             return
-        active = [s for s in range(self.n_slots)
-                  if self._state[s] == ACTIVE and s not in keep]
-        over = (len(keep) + len(active)) - self.protected
+        over = len(self._active) - self.protected
         if over <= 0:
             return
-        active.sort(key=lambda i: self._used[i])      # oldest first
-        for s in active[:over]:
+        # `_active` is already least-recently-used first, so the victims are
+        # its front. Taken lazily and stopped at `over`, this is O(over + the
+        # keeps skipped) instead of the O(n log n) scan-and-sort this used to
+        # do on every request regardless of how many rows needed demoting.
+        #
+        # The keeps sit at the BACK by construction -- every one was just
+        # touched by this request -- so skipping them costs nothing in
+        # practice, and the loop still bounds itself if that ever stops being
+        # true. Collected before mutating, because demotion removes from the
+        # very mapping being walked.
+        victims = []
+        for s in self._active:
+            if len(victims) >= over:
+                break
+            if s not in keep:
+                victims.append(s)
+        for s in victims:
             if event_tag is not None:
-                self._state[s] = RETIRING
+                self._leave_active(s, RETIRING)
                 self._pending[s] = event_tag
             else:
-                self._state[s] = RECLAIMABLE
+                self._leave_active(s, RECLAIMABLE)
             self.logical_evictions += 1
 
     # ------------------------------------------------------------- stats --
