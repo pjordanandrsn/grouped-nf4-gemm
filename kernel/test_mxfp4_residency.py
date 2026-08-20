@@ -128,6 +128,65 @@ def test_geometry_recovered_from_the_arena(arena):
                    H, INTER // 2, INTER // MX_BLOCK), got
 
 
+def _seg(suffix, shape, length, off=0):
+    return {"suffix": suffix, "shape_per_expert": list(shape),
+            "length": length, "seg_off": off, "dtype": "U8"}
+
+
+def _gptoss_index(three_d=True):
+    """A gpt-oss-shaped index: blocks [n, nblocks, 16] as the checkpoint (and
+    therefore the bake) records them, scales [n, nblocks]."""
+    from mxfp4_residency import engine_segment_map          # noqa: F401
+    nb, gu_n, dn_n = 90, 5760, 2880
+    gb = list((gu_n, nb, 16)) if three_d else [gu_n, nb * 16]
+    db = list((dn_n, nb, 16)) if three_d else [dn_n, nb * 16]
+    segs, off = [], 0
+    for suf, shp, ln in (("mlp.experts.gate_up_proj_blocks", gb, gu_n * nb * 16),
+                         ("mlp.experts.gate_up_proj_scales", [gu_n, nb], gu_n * nb),
+                         ("mlp.experts.down_proj_blocks", db, dn_n * nb * 16),
+                         ("mlp.experts.down_proj_scales", [dn_n, nb], dn_n * nb)):
+        segs.append(_seg(suf, shp, ln, off))
+        off += ln
+    return {"segments": segs, "align": 4096, "row_bytes": off,
+            "n_experts_per_layer": 32, "n_layers": 24}
+
+
+def test_a_gpt_oss_arena_is_accepted_with_its_checkpoint_shape():
+    """bake records [n, nblocks, 16] because that is what the checkpoint says,
+    and that fidelity is what makes sha256(arena)==sha256(source) mean
+    anything. The engine must therefore accept it: on the unflattened shape
+    the blocks-vs-scales discriminator sees nblocks on BOTH sides and the 16x
+    signal disappears, which is why this used to raise 'is not [n, k]'."""
+    from mxfp4_residency import engine_segment_map
+    groups_3d, geo_3d = engine_segment_map(_gptoss_index(three_d=True))
+    groups_2d, geo_2d = engine_segment_map(_gptoss_index(three_d=False))
+    assert geo_3d == geo_2d, (geo_3d, geo_2d)
+    assert groups_3d == groups_2d
+
+
+def test_the_index_is_not_mutated_by_being_read():
+    """The flattening happens on a copy. An arena index is provenance; a
+    consumer that rewrites it in passing makes the next reader's view depend
+    on who looked first."""
+    from mxfp4_residency import engine_segment_map
+    idx = _gptoss_index(three_d=True)
+    before = [list(g["shape_per_expert"]) for g in idx["segments"]]
+    engine_segment_map(idx)
+    after = [list(g["shape_per_expert"]) for g in idx["segments"]]
+    assert before == after, (before, after)
+
+
+def test_a_shape_that_would_reinterpret_the_bytes_is_refused():
+    """The flatten is checked, not assumed. Every dtype here is a packed BYTE
+    dtype, so n*k must equal the segment's own per-expert length; a shape that
+    fails that is not a reshape of these bytes."""
+    from mxfp4_residency import engine_segment_map
+    idx = _gptoss_index(three_d=True)
+    idx["segments"][0]["shape_per_expert"] = [5760, 91, 16]     # one block too many
+    with pytest.raises(ValueError, match="reinterpret"):
+        engine_segment_map(idx)
+
+
 def test_geometry_matches_the_engine_that_will_read_it(arena):
     """The runtime layout gate: offsets/lengths/row_bytes the bake wrote must
     equal what Mxfp4PipelinedGptOss computes, or every segment is misread."""
