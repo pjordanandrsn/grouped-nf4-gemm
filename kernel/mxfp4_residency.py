@@ -517,6 +517,15 @@ class Mxfp4NvmeResidency(Mxfp4PipelinedGptOss):
                 f"PREVIOUS step's tag before allocating would relax this to "
                 f"k+1; it is not done here because it reorders an allocator "
                 f"that is still under review.)")
+        if cache.protected > cache.rows - self.k:
+            raise ValueError(
+                f"dev_cache protected={cache.protected} must be at most "
+                f"rows-k={cache.rows - self.k}. _demote reduces the ACTIVE set "
+                f"to `protected`, not to k, so a larger budget leaves fewer "
+                f"than k rows demotable and an all-miss step cannot be served "
+                f"-- and settle() cannot help, because those rows are ACTIVE "
+                f"rather than RETIRING. rows >= 2*k alone does not imply this "
+                f"(Bugbot, gnf4#131).")
 
     def _init_tier_state(self):
         k = self.k

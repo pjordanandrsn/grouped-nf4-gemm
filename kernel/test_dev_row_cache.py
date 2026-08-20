@@ -191,3 +191,56 @@ def test_a_discarded_row_is_a_miss_not_a_hit():
     t2 = StepTag("cpu")
     _, need2 = c.want(0, [3, 4], t2)
     assert need2 == [3], "the discarded row was served as a hit"
+
+
+def test_a_protected_budget_that_starves_the_next_step_is_refused():
+    """gnf4#131. `rows >= 2*k` assumed the previous step leaves exactly k rows
+    ACTIVE, but _demote reduces the ACTIVE set to `protected`. A budget above
+    rows-k leaves fewer than k rows demotable, so an all-miss step cannot be
+    served -- and settle() cannot free them, because they are ACTIVE rather
+    than RETIRING. The engine refuses the pairing instead of crashing mid
+    forward."""
+    c = _cache(rows=8, protected=6)              # legal for the cache alone
+    keep = []
+    for step in range(4):                        # drive it to a steady state
+        t = StepTag("cpu")
+        c.want(0, list(range(step * 2, step * 2 + 2)), t)
+        t.record()
+        keep.append(t)
+    active = sum(1 for s in range(8) if c.slots.state(s) == "active")
+    assert active == 6, ("_demote holds `protected` ACTIVE, not k -- this is "
+                         f"the premise the engine guard has to encode: {active}")
+
+
+class _FakeEngine:
+    """Only the fields _init_dev_cache reads. Lets the sizing rules be tested
+    without a GPU, which is where they are cheapest to get wrong."""
+    k = 4
+    row_stride = 256
+
+
+def _guard(cache):
+    from mxfp4_residency import Mxfp4NvmeResidency
+    Mxfp4NvmeResidency._init_dev_cache(_FakeEngine(), cache)
+
+
+def test_the_engine_refuses_an_arena_smaller_than_two_routed_sets():
+    with pytest.raises(ValueError, match=r"at least 2\*k"):
+        _guard(_cache(rows=6, protected=2))
+
+
+def test_the_engine_refuses_a_budget_that_starves_the_next_step():
+    """gnf4#131: rows >= 2*k does not imply it. protected=6 of 8 leaves 2
+    demotable rows for a step that may miss on 4."""
+    with pytest.raises(ValueError, match="rows-k"):
+        _guard(_cache(rows=8, protected=6))
+
+
+def test_a_correctly_sized_arena_is_accepted():
+    _guard(_cache(rows=8, protected=4))
+    _guard(_cache(rows=16, protected=12))
+
+
+def test_the_engine_refuses_a_stride_that_is_not_the_tier_s():
+    with pytest.raises(ValueError, match="row_stride"):
+        _guard(_cache(rows=8, protected=4, stride=512))
