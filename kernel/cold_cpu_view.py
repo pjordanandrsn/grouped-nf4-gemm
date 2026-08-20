@@ -154,6 +154,7 @@ class ColdCpuView:
         self._held: list[tuple | None] = [None] * tier.hot_rows
 
         self.materializations = 0
+        self.unlanded_refills = 0
         self.view_hits = 0
         self.rows_requested = 0
 
@@ -214,6 +215,26 @@ class ColdCpuView:
         nothing at all.
         """
         experts = [int(e) for e in experts]
+        if self.direct:
+            # BEFORE the ensure, because ensure protects everything it
+            # resolves and invalidate refuses a row in the demand window.
+            #
+            # A tier HIT means no fill ran, so the landing never scattered
+            # anything. If this view never materialized that slot, its
+            # stacks hold whatever was there before — which is the normal
+            # case whenever the tier had residency first (an engine builds
+            # its resident stacks through the same tier at load). Drop those
+            # rows so the ensure below re-lands them. Stamping instead would
+            # mark uninitialized bytes valid, the one failure this class
+            # exists to prevent.
+            for e in dict.fromkeys(experts):
+                slot = self.tier.slot_of(layer, e)
+                if slot is None:
+                    continue
+                g = self.tier.generations([slot])[0]
+                if self._held[slot] != ((layer, e), g):
+                    if self.tier.invalidate(layer, e):
+                        self.unlanded_refills += 1
         slots = self.tier.ensure(layer, experts)
         self.rows_requested += len(experts)
         # Dedupe while preserving the caller's order: repeats in one request
@@ -263,6 +284,7 @@ class ColdCpuView:
             "view_hits": self.view_hits,
             "materializations": self.materializations,
             "view_hit_rate": (self.view_hits / total) if total else 0.0,
+            "unlanded_refills": self.unlanded_refills,
             "capacity_rows": self.tier.hot_rows,
             "segments": list(self.segments),
         }
