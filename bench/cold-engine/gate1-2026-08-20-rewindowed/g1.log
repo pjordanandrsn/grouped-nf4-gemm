@@ -1,0 +1,111 @@
+=== Thu Aug 20 12:13:30 UTC 2026 bootstrap start ===
+--- deps ok ---
+/opt/conda/lib/python3.11/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+e4b ok
+--- installs ok ---
+[32m✓ Downloaded[0m
+  path: /root/models/olmoe
+--- model ok: 13G ---
+/opt/conda/lib/python3.11/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+nf4 bake: L=16 E=64 (baking 64/layer) I=1024 H=2048 row=3538944 stride=3538944 total=3.6 GB
+  baked layer 3 (4/16, 0.9 GB, 3s)
+  baked layer 7 (8/16, 1.8 GB, 6s)
+  baked layer 11 (12/16, 2.7 GB, 9s)
+  baked layer 15 (16/16, 3.6 GB, 11s)
+nf4 bake complete: 1024 rows (3.6 GB) in 16s
+--- arena ok: 3.4G ---
+/root/bootstrap.sh: line 40: /root/olmoe_profile.jsonl: No such file or directory
+--- profile ok:  rows ---
+[calibrate] running CPU microbench (/usr/bin/cc -O3 -march=native)...
+[calibrate] running GPU benches...
+/opt/conda/lib/python3.11/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+
+calibration blob: /root/calib.json
+host: AMD EPYC 9655 96-Core Processor | 48 cpus | quota 46.08 | flags ['avx2', 'avx512_vnni', 'avx512bw', 'avx512f', 'avx512vbmi', 'avx512vl']
+B_dram triad best :    394.4 GB/s  (48t compact nt=1)
+grouped scatter   :    439.8 GB/s  (48t, 8 MiB blocks, E=1024)
+GATE G0           : 111.5% of triad -> PROCEED
+cuda:0 NVIDIA GeForce RTX 5090: triad 1572.8 GB/s | link h2d 28.47 / d2h 28.24 GB/s
+B_nvme seq best   : 3.19 GB/s (o_direct=True)
+--- calib ok ---
+B_vram=1572.8 B_dram=394.4 B_nvme=None G0=proceed
+=== Thu Aug 20 12:16:54 UTC 2026 BOOTSTRAP DONE ===
+B_dram=394.4 GB/s  G0=111.5% verdict=proceed  (original gate-1 box: 380.1 GB/s, 131.8%, proceed)
+host class OK
+########## gate1_v2 : source=dram, no prefetch ##########
+  import pynvml  # type: ignore[import]
+=== cold 1% (achieved 0.0102, 127 experts) ===
+  control    patched=16 median=   39.40 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=ref
+  control#2  patched=16 median=   39.55 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=0.0000
+  cold-gpu   patched=16 median=   49.31 ms  cold cpu/gpu=     0/1752   win_reads=   19 dmax=18.9375
+  cold-cpu   patched=16 median=   44.41 ms  cold cpu/gpu=  1812/0      win_reads=   19 dmax=0.0000
+  dynamic    patched=16 median=   47.81 ms  cold cpu/gpu=   182/1602   win_reads=   19 dmax=17.2734
+=== cold 5% (achieved 0.0503, 265 experts) ===
+  control    patched=16 median=   39.65 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=ref
+  control#2  patched=16 median=   39.35 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=0.0000
+  cold-gpu   patched=16 median=   52.58 ms  cold cpu/gpu=     0/7623   win_reads=   28 dmax=15.4688
+  cold-cpu   patched=16 median=   52.28 ms  cold cpu/gpu=  7492/0      win_reads=   26 dmax=0.0000
+  dynamic    patched=16 median=   52.34 ms  cold cpu/gpu=  3108/4512   win_reads=   28 dmax=15.5312
+=== cold 10% (achieved 0.1001, 364 experts) ===
+  control    patched=16 median=   39.38 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=ref
+  control#2  patched=16 median=   39.60 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=0.0000
+  cold-gpu   patched=16 median=   54.90 ms  cold cpu/gpu=     0/12926  win_reads=   28 dmax=16.1992
+  cold-cpu   patched=16 median=   54.47 ms  cold cpu/gpu= 13090/0      win_reads=   29 dmax=0.0000
+  dynamic    patched=16 median=   55.37 ms  cold cpu/gpu=  6860/6080   win_reads=   28 dmax=20.4102
+=== cold 20% (achieved 0.2003, 505 experts) ===
+  control    patched=16 median=   39.53 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=ref
+  control#2  patched=16 median=   39.93 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=0.0000
+  cold-gpu   patched=16 median=   68.08 ms  cold cpu/gpu=     0/23664  win_reads=  237 dmax=16.8438
+  cold-cpu   patched=16 median=   57.85 ms  cold cpu/gpu= 23092/0      win_reads=  301 dmax=0.0000
+  dynamic    patched=16 median=   71.27 ms  cold cpu/gpu= 14000/10308  win_reads=  464 dmax=14.8125
+########## gate1_prefetch : source=dram, prefetch ##########
+  import pynvml  # type: ignore[import]
+=== cold 1% (achieved 0.0102, 127 experts) ===
+  control    patched=16 median=   41.34 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=ref
+  control#2  patched=16 median=   39.54 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=0.0000
+  cold-gpu   patched=16 median=   51.09 ms  cold cpu/gpu=     0/1752   win_reads=   25 dmax=18.9375
+  cold-cpu   patched=16 median=   46.34 ms  cold cpu/gpu=  1812/0      win_reads=   30 dmax=0.0000
+  dynamic    patched=16 median=   52.10 ms  cold cpu/gpu=   182/1602   win_reads=   25 dmax=17.2734
+=== cold 5% (achieved 0.0503, 265 experts) ===
+  control    patched=16 median=   39.52 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=ref
+  control#2  patched=16 median=   39.84 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=0.0000
+  cold-gpu   patched=16 median=   57.00 ms  cold cpu/gpu=     0/7623   win_reads=   32 dmax=15.4688
+  cold-cpu   patched=16 median=   53.99 ms  cold cpu/gpu=  7492/0      win_reads=   40 dmax=0.0000
+  dynamic    patched=16 median=   57.00 ms  cold cpu/gpu=  3108/4512   win_reads=   33 dmax=15.5312
+=== cold 10% (achieved 0.1001, 364 experts) ===
+  control    patched=16 median=   39.62 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=ref
+  control#2  patched=16 median=   39.86 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=0.0000
+  cold-gpu   patched=16 median=   56.98 ms  cold cpu/gpu=     0/12926  win_reads=   34 dmax=16.1992
+  cold-cpu   patched=16 median=   56.62 ms  cold cpu/gpu= 13090/0      win_reads=   44 dmax=0.0000
+  dynamic    patched=16 median=   58.86 ms  cold cpu/gpu=  6860/6080   win_reads=   34 dmax=20.4102
+=== cold 20% (achieved 0.2003, 505 experts) ===
+  control    patched=16 median=   39.48 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=ref
+  control#2  patched=16 median=   39.85 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=0.0000
+  cold-gpu   patched=16 median=   68.86 ms  cold cpu/gpu=     0/23664  win_reads=  314 dmax=16.8438
+  cold-cpu   patched=16 median=   60.44 ms  cold cpu/gpu= 23092/0      win_reads=  549 dmax=0.0000
+  dynamic    patched=16 median=   77.15 ms  cold cpu/gpu= 14000/10308  win_reads=  603 dmax=14.8125
+########## gate1_vram : source=vram, no prefetch ##########
+  import pynvml  # type: ignore[import]
+=== cold 1% (achieved 0.0110, 10 experts) ===
+  control    patched=16 median=   39.63 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=ref
+  control#2  patched=16 median=   39.47 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=0.0000
+  cold-gpu   patched=16 median=   49.25 ms  cold cpu/gpu=     0/1001   win_reads=    0 dmax=0.0000
+  cold-cpu   patched=16 median=   41.76 ms  cold cpu/gpu=   999/0      win_reads=    0 dmax=15.5156
+  dynamic    patched=16 median=   46.35 ms  cold cpu/gpu=   763/167    win_reads=    0 dmax=17.0938
+=== cold 5% (achieved 0.0505, 44 experts) ===
+  control    patched=16 median=   39.47 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=ref
+  control#2  patched=16 median=   39.40 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=0.0000
+  cold-gpu   patched=16 median=   45.23 ms  cold cpu/gpu=     0/4772   win_reads=    0 dmax=0.0000
+  cold-cpu   patched=16 median=   46.70 ms  cold cpu/gpu=  4504/0      win_reads=    0 dmax=16.9688
+  dynamic    patched=16 median=   46.54 ms  cold cpu/gpu=  3668/829    win_reads=    0 dmax=16.9688
+=== cold 10% (achieved 0.1011, 84 experts) ===
+  control    patched=16 median=   39.36 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=ref
+  control#2  patched=16 median=   39.56 ms  cold cpu/gpu=     0/0      win_reads=    0 dmax=0.0000
+  cold-gpu   patched=16 median=   50.69 ms  cold cpu/gpu=     0/8369   win_reads=    1 dmax=0.0000
+  cold-cpu   patched=16 median=   50.98 ms  cold cpu/gpu=  8036/0      win_reads=    1 dmax=17.0938
+  dynamic    patched=16 median=   48.82 ms  cold cpu/gpu=  6384/1762   win_reads=    1 dmax=12.9062
+GATE1_ALL_DONE
+RUNNER_EXIT=0

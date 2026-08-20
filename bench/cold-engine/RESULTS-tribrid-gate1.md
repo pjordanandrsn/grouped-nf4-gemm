@@ -527,3 +527,116 @@ smaller, not larger.
 **No absolute read count in this document should be quoted** until gate 1 is
 re-run on the fixed window. That includes the "3400 reads against 340 at
 10%" thrashing observation, which is warmup-inclusive on both sides.
+
+---
+
+# Correction (2026-08-20) — the read counts were warmup, and the ceiling was the wrong one
+
+Two defects in this document's arithmetic, found while re-measuring R1.
+**No verdict changes. Every count and every disk-share figure does.**
+Re-run receipts: `gate1-2026-08-20-rewindowed/`.
+
+## Defect 1: `reads_in_window` counted the warmup
+
+`run_gate1.py` snapshotted the tier counters **before** `run_steps()`, and
+`run_steps()` performs six warmup prefills, twenty-four warmup decode steps
+and a KV-building prefill **inside itself**. A prefill routes 62–64 of 64
+experts per layer — the whole arena — so all of it landed in what this
+document calls the measured window, while wall stayed decode-only.
+
+The code carried a comment asserting the opposite: *"Reads charged to the
+MEASURED window, not the whole process: warmup cold-start traffic is not
+what gate 1 asks about."* That was the intent; it was never implemented.
+Caught by Bugbot on gnf4#132, fixed there via an `on_measure_start`
+callback fired at the true boundary.
+
+| cold | arm | published reads | corrected | factor |
+|---|---|---|---|---|
+| 1% | cold-GPU | 105 | **19** | 5.5× |
+| 1% | cold-CPU | 106 | **19** | 5.6× |
+| 5% | cold-GPU | 238 | **28** | 8.5× |
+| 5% | cold-CPU | 238 | **26** | 9.2× |
+| 10% | cold-GPU | 340 | **28** | 12.1× |
+| 10% | cold-CPU | 335 | **29** | 11.6× |
+| 20% | cold-GPU | 3400 | **237** | 14.3× |
+| 20% | cold-CPU | 2025 | **301** | 6.7× |
+
+## Defect 2: `B_nvme` was the random-QD16 peak, not the sequential ceiling
+
+The addendum states it uses *"this box's measured sequential ceiling (6.26
+GB/s)"*. On that box 6.26 GB/s is `rand` QD16; the sequential ceiling is
+**5.51 GB/s** (`seq` QD16). Using the faster random figure makes disk time
+smaller, so it **understated** the disk share by ~12% — while the
+surrounding text claimed the choice made the numbers a lower bound. Same
+error class Bugbot flagged in the training-cost harness (gnf4#129).
+
+## The corrected attribution
+
+Decode-only window, each box's own **sequential** ceiling. Re-run box is an
+EPYC 9655 at 394.43 GB/s triad, G0 111.5% clean `proceed` — matched to the
+original's 380.1 GB/s / 131.8%. Its NVMe is slower (3.19 vs 5.51 GB/s seq),
+which makes each read *more* expensive here, so the collapse below is
+despite a worse disk, not because of a better one.
+
+| cold | arm | Δ ms/step | reads | disk ms/step | **disk share of Δ** |
+|---|---|---|---|---|---|
+| 1% | cold-GPU | 9.90 | 19 | 0.16 | **1.7%** |
+| 1% | cold-CPU | 5.01 | 19 | 0.16 | **3.3%** |
+| 5% | cold-GPU | 12.93 | 28 | 0.24 | **1.9%** |
+| 5% | cold-CPU | 12.63 | 26 | 0.23 | **1.8%** |
+| 10% | cold-GPU | 15.51 | 28 | 0.24 | **1.6%** |
+| 10% | cold-CPU | 15.09 | 29 | 0.25 | **1.7%** |
+| 20% | cold-GPU | 28.55 | 237 | 2.05 | **7.2%** |
+| 20% | cold-CPU | 18.32 | 301 | 2.61 | **14.2%** |
+
+**Storage is ~2% of what cold work costs at 1–10%, not ~5–11%.** The
+addendum's conclusion is not merely preserved, it is sharpened: a *perfect*
+prefetcher hiding 100% of disk could remove about **2%** of the exposure,
+not ~10%. A 70% hide ratio is further out of reach than stated.
+
+**The claim that 20% is disk-dominant is withdrawn.** The addendum reads
+*"Only at 20%, where the tier genuinely thrashes (3400 reads against 340 at
+10%), does disk become the dominant term."* The thrash was warmup. At 20%
+the real figures are 237 and 301 reads, and disk is **7–14%** of Δ — the
+largest share measured anywhere, and still a minority. **Disk never becomes
+the dominant term at any cold mass this gate tested.** Every point is
+staging-and-orchestration bound.
+
+## What did not change
+
+Re-run on the matched box, prefetch off:
+
+| cold | control | cold-GPU | cold-CPU | dynamic |
+|---|---|---|---|---|
+| 1% | 39.40 | 49.31 (+25%) | **44.41 (+13%)** | 47.81 (+21%) |
+| 5% | 39.65 | 52.58 (+33%) | 52.28 (+32%) | 52.34 (+32%) |
+| 10% | 39.38 | 54.90 (+39%) | 54.47 (+38%) | 55.37 (+41%) |
+| 20% | 39.53 | 68.08 (+72%) | **57.85 (+46%)** | 71.27 (+80%) |
+
+* **hide ratio ≥ 70% — MISS**, unchanged and now for a better-established
+  reason: 5% cold still costs 32–33% wall, and only ~2% of that is disk.
+* **beats both fixed arms — MISS**, unchanged. At 20% dynamic (+80%) is
+  worse than either fixed arm; it never wins.
+* **< 5% proportional slowdown — MISS**, unchanged. The cheapest point is
+  1% cold-CPU at **+13%** (published +11%).
+* **≥ 1 destination flip — PASS**, unchanged. The threshold arm's CPU/GPU
+  row split moves with cold mass: 182/1602 at 1%, 3108/4512 at 5%,
+  6860/6080 at 10%, 14000/10308 at 20%.
+* **Self-pair disagreement 0.4–1.0%** across the four points, so the wall
+  deltas above are far outside the instrument's own noise.
+
+One genuine difference from the published run, reported rather than
+smoothed: at 20% cold the **destination ordering flips**. Published had
+cold-GPU (+62%) beating cold-CPU (+75%); here cold-CPU (+46%) beats
+cold-GPU (+72%). Both boxes are the same class, so this is either
+run-to-run variation at the noisiest point or a genuine sensitivity — it is
+prediction 4's territory (the optimal destination flips with load) and is
+recorded as an observation, not a scored result.
+
+## Scope
+
+Gate 2 was checked and does **not** share defect 1. `run_gate2.py` reads
+`cold_stats` once at the end and never labels the result as windowed; its
+headline metric is decode-only wall; and its central finding — zero flips
+in the regime built to provoke them — is monotone-safe, since counting
+warmup can only add flips. No re-run needed there.
