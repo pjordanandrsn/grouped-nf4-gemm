@@ -1,0 +1,54 @@
+### thinflip.py
+routed experts: [2, 3, 4, 5, 6, 7, 8]
+STAY (dram in both arms) = [2, 3, 4, 5]   MOVE (dram -> nvme) = [6, 7, 8]
+
+ offload_thin_uniq   control n_dram/thin    cold n_dram/thin     rel RMS  bitwise
+              None            (7, False)          (4, False)   0.000e+00  True
+                 4            (7, False)           (4, True)   3.654e-03  False
+                 8             (7, True)           (4, True)   3.362e-03  False
+
+### destination_gap.py (T=1,8,64)
+-- tokens=1
+control_dram  cold rows gpu/cpu = 0/0
+control_vram  cold rows gpu/cpu = 0/0
+cold_gpu      cold rows gpu/cpu = 4/0
+cold_cpu      cold rows gpu/cpu = 0/4
+
+|y| rms = 0.15578   tokens=1 k=4 H=2048 I=1024 experts-under-test=8
+pair                                   rel RMS     max abs  bitwise
+control_dram vs cold_cpu             0.000e+00   0.000e+00  True
+control_vram vs cold_gpu             0.000e+00   0.000e+00  True
+control_dram vs cold_gpu             4.590e-03   2.441e-03  False
+control_dram vs control_vram         4.590e-03   2.441e-03  False
+cold_cpu vs cold_gpu                 4.590e-03   2.441e-03  False
+-- tokens=8
+control_dram  cold rows gpu/cpu = 0/0
+control_vram  cold rows gpu/cpu = 0/0
+cold_gpu      cold rows gpu/cpu = 32/0
+cold_cpu      cold rows gpu/cpu = 0/32
+
+|y| rms = 0.12471   tokens=8 k=4 H=2048 I=1024 experts-under-test=8
+pair                                   rel RMS     max abs  bitwise
+control_dram vs cold_cpu             0.000e+00   0.000e+00  True
+control_vram vs cold_gpu             0.000e+00   0.000e+00  True
+control_dram vs cold_gpu             4.622e-03   3.906e-03  False
+control_dram vs control_vram         4.622e-03   3.906e-03  False
+cold_cpu vs cold_gpu                 4.622e-03   3.906e-03  False
+-- tokens=64
+control_dram  cold rows gpu/cpu = 0/0
+control_vram  cold rows gpu/cpu = 0/0
+cold_gpu      cold rows gpu/cpu = 256/0
+cold_cpu      cold rows gpu/cpu = 0/256
+
+|y| rms = 0.14984   tokens=64 k=4 H=2048 I=1024 experts-under-test=8
+pair                                   rel RMS     max abs  bitwise
+control_dram vs cold_cpu             0.000e+00   0.000e+00  True
+control_vram vs cold_gpu             0.000e+00   0.000e+00  True
+control_dram vs cold_gpu             4.627e-03   3.906e-03  False
+control_dram vs control_vram         4.627e-03   3.906e-03  False
+cold_cpu vs cold_gpu                 4.627e-03   3.906e-03  False
+
+### box
+NVIDIA RTX A2000 12GB, 575.64.05
+torch 2.8.0+cu128 triton 3.4.0
+gnf4_native {'avx2': True, 'avx512f': False, 'avx512vbmi': False, 'avx512vnni': False, 'compiled_avx512': False, 'openmp': True}
