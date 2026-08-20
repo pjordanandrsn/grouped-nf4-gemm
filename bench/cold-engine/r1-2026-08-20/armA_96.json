@@ -1,0 +1,51 @@
+{
+  "schema": "e4b-tribrid-reclaimable/2",
+  "supersedes": "e4b-tribrid-reclaimable/1 (WITHDRAWN, gnf4#130)",
+  "hot_rows": 96,
+  "dest": "cpu",
+  "cold_direct": true,
+  "cold_frac_achieved": 0.2002776731927711,
+  "box": {
+    "gpu": "NVIDIA GeForce RTX 5090",
+    "b_vram_gbs": 1573.1,
+    "b_dram_gbs": 425.27,
+    "b_nvme_seq_gbs": 5.11,
+    "g0_verdict": "proceed"
+  },
+  "config": {
+    "model": "/root/models/olmoe",
+    "arena": "/root/models/olmoe.arena",
+    "profile": "/root/olmoe_profile_ORIGINAL.jsonl",
+    "calib": "/root/calib.json",
+    "cold_frac": 0.2,
+    "hot_rows": 96,
+    "protected": "96",
+    "order": "tail",
+    "source": "dram",
+    "steps": 24,
+    "warmup": 6,
+    "vram_frac": 0.25,
+    "seq": 64,
+    "cold_direct": "true",
+    "out": "/root/receipts/armA_96.json"
+  },
+  "arms": [
+    {
+      "protected_rows": 96,
+      "median_ns": 72481702.5,
+      "reads_in_window": 622,
+      "logical_evictions": 0,
+      "resurrections": 0,
+      "spec_resurrections": 0,
+      "reclaimable_overwritten": 0,
+      "reuse_before_overwrite": null,
+      "reuse_before_overwrite_cumulative": null,
+      "resurrection_bytes_saved": 0,
+      "physical_evictions": 622,
+      "mean_ticks_to_overwrite_cumulative": null,
+      "mean_ticks_to_resurrection_cumulative": null,
+      "tokens_match": true
+    }
+  ],
+  "all_tokens_identical": true
+}
