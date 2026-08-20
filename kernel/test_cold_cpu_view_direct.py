@@ -219,3 +219,41 @@ def test_unmaterialized_segments_become_scratch(arena):
     plan = scatter_layout(index, one)
     assert sum(ln for _, ln in plan) == index["row_stride"]
     assert {s for s, _ in plan if s is not None} == set(one)
+
+
+# ----------------------------------------------------- late attachment --
+
+def test_attach_landing_closes_the_mutual_reference(arena):
+    """The tier needs the view's callback and the view needs the tier, so
+    one is built first and the loop closes here."""
+    path, index = arena
+    t = ColdTier(path, hot_rows=AL * AE, pinned=False, index=index)
+    v = ColdCpuView(t, index, _sufs(index), direct=True)
+    t.attach_landing(v.landing)
+    try:
+        slots = v.ensure(0, range(AE))
+        assert len(slots) == AE
+        ref_t, ref_v = _copy_view(path, index, _sufs(index))
+        try:
+            rs = ref_v.ensure(0, range(AE))
+            for s in _sufs(index):
+                assert torch.equal(v.stack(s)[list(slots)],
+                                   ref_v.stack(s)[list(rs)])
+        finally:
+            ref_t.close()
+    finally:
+        t.close()
+
+
+def test_attach_landing_after_a_fill_is_refused(arena):
+    """Rows already in the tier's own buffer would become unreachable the
+    moment the landing redirects — two meanings of 'resident'."""
+    path, index = arena
+    t = ColdTier(path, hot_rows=4, pinned=False, index=index)
+    v = ColdCpuView(t, index, _sufs(index), direct=True)
+    try:
+        t.ensure(0, [0])
+        with pytest.raises(RuntimeError, match="after 1 request"):
+            t.attach_landing(v.landing)
+    finally:
+        t.close()

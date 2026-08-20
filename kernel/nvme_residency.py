@@ -539,6 +539,28 @@ class ColdTier:
         with self._lock:
             return (layer, int(expert)) in self._slot_of
 
+    def attach_landing(self, callback) -> None:
+        """Set the external landing AFTER construction.
+
+        The tier and its consumer are mutually referential — the tier needs
+        the consumer's ``landing`` callback, the consumer needs the tier's
+        ``hot_rows`` and geometry — so one of them has to be built first.
+        This closes the loop without a two-phase constructor.
+
+        Refused once any fill has happened: rows already in this tier's own
+        buffer would become unreachable the moment the landing redirects
+        (``row()`` starts refusing), and rows filled after it would be the
+        only readable ones. A tier that served both would be handing out two
+        different meanings of "resident".
+        """
+        if self.requests:
+            raise RuntimeError(
+                f"attach_landing() after {self.requests} request(s): rows "
+                f"already filled into this tier's own buffer would become "
+                f"unreachable when the landing redirects. Attach before the "
+                f"first ensure().")
+        self._landing = callback
+
     def reclaimable(self, layer: int, expert: int) -> bool:
         """True iff this row is mapped but has lost capacity ownership — a
         request for it now is a resurrection, not a read."""
