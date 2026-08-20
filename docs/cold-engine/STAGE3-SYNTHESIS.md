@@ -148,19 +148,32 @@ conclusion if anything does.
 
 ## Two arms that were never capacity-matched
 
-R1's read clause — *"≥10% fewer physical NVMe reads (Arm A vs Arm B)"*,
-recorded CONFIRMED at −14.9% and −29.6% — compares a pool of **P** rows
-against a pool of **128**. Arm B has more memory.
+**Three** results in `RESULTS-tribrid-reclaimable.md` rest on one comparison:
+Arm A's pool is `protected` rows, Arm B's is **128**. Arm B has 33%, 100% or
+300% more memory depending on the point.
 
-Reproducing that arm shape on the captured trace reproduces the result
-(−5.9 / −13.5 / −22.2%). Holding capacity fixed reverses it to **+1.4%**.
+| claim | as recorded | matched control |
+|---|---|---|
+| R5 — soft ≤ hard, *"faster contended"* | wall 79.02→76.31, 80.46→76.91 ms | **soft +2.3% to +9.9% SLOWER** on real NVMe (#153) |
+| ≥10% fewer NVMe reads | −14.9%, −29.6% | **+0.7% to +1.5% worse**, 10 of 10 (#145) |
+| feasibility extension | Arm A at protected=32 "does not run" | **hard eviction runs it fine** given the same 128 rows |
 
-On that trace the reads fell because Arm B held more rows, not because the
-extra rows were *reclaimable*. **This does not make R1's measurements wrong**
-— they reproduce — but the attribution needs the matched control, run on R1's
-own setup, before the clause is relied on. In particular the control here is
-**uncontended**, and R5 reports soft eviction *faster* than hard under
-contention, which is where a ghost row could pay for itself.
+Every sign reverses. The feasibility one settles without a trace: the refusal
+is `request of 36 unique rows exceeds hot_rows=32`, a statement about the
+**pool**, and `hot_rows=128, protected=128` serves the same request.
+
+**The measurements reproduce; the attribution does not.** A-vs-B varies
+capacity and ownership together and cannot separate them.
+
+R5 is refuted by the half its escape clause does not cover: the clause
+exempts regressions "attributable to metadata/sync", and the +0.8–8.7% wall
+residual *is* the `_demote` walk — but the +1.1–1.5% extra **reads** are
+eviction quality, not metadata. Worth recording that the clause exempts one
+of the only two channels through which this mechanism could ever lose, which
+is the same defect shape as R3's unpinned budget and R2's two denominators.
+
+Full working: `bench/cold-engine/reconciliation/RESULTS-r5-reconciled.md`.
+R6 is untouched, and the uncontended half of R5 stands.
 
 ## A metric this campaign leaned on does not carry weight
 
