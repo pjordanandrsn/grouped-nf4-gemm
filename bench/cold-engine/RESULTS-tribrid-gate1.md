@@ -496,7 +496,7 @@ therefore resolved to `None`, every gate-1 receipt recorded
 be chosen by hand from the blob. It is now computed from the sequential
 points and **raises** when there are none.
 
-### 2. The read counts are warmup-inclusive — NOT corrected
+### 2. The read counts are warmup-inclusive — CORRECTED by the re-run below
 
 `pre = cold_stats(...)` was snapshotted before `run_steps`, which performs
 warmup prefills, warmup decodes and the KV-building prefill *inside itself*.
@@ -512,7 +512,14 @@ tables, is inflated by an unknown factor of that order.** The direction is
 certain and it is much larger than the ceiling correction, so the true
 storage share at 1–10% cold is *well below* the 6–12% shown — plausibly
 1–2%, but this document does not claim a number it has not measured. The
-fix is in `run_gate1.py` (gnf4#132); the re-run is not done.
+fix is in `run_gate1.py` (gnf4#132).
+
+> **The re-run has since been done** (gnf4#137, final section of this
+> document). The estimate above was right: measured **1.6–1.9%** at 1–10%
+> cold on the GPU arm. The factor on the read counts is 5.5–14.3×, and the
+> "3400 reads at 20%" thrashing observation is withdrawn — the real count
+> is 237, and disk is never the dominant term at any cold mass this gate
+> tested.
 
 ### What this does and does not change
 
@@ -524,9 +531,10 @@ starts. The reframing says a perfect prefetcher could remove only the
 storage fraction of cold cost; correcting the reads makes that fraction
 smaller, not larger.
 
-**No absolute read count in this document should be quoted** until gate 1 is
-re-run on the fixed window. That includes the "3400 reads against 340 at
-10%" thrashing observation, which is warmup-inclusive on both sides.
+**No absolute read count above this line should be quoted** — use the
+re-run's figures in the final section instead. That includes the "3400
+reads against 340 at 10%" thrashing observation, which is warmup-inclusive
+on both sides.
 
 ---
 
@@ -562,6 +570,13 @@ callback fired at the true boundary.
 | 20% | cold-CPU | 2025 | **301** | 6.7× |
 
 ## Defect 2: `B_nvme` was the random-QD16 peak, not the sequential ceiling
+
+**Independently found and corrected in gnf4#136**, which landed while this
+re-run was executing; it also traced the root cause this section does not —
+the harness read `cpu_bench.nvme.seq_best_gbs`, a key no calibration in
+this repo has ever written, so it resolved to `None` and the constant was
+picked by hand. Restated here because the corrected attribution below
+depends on it, not as a separate finding.
 
 The addendum states it uses *"this box's measured sequential ceiling (6.26
 GB/s)"*. On that box 6.26 GB/s is `rand` QD16; the sequential ceiling is
