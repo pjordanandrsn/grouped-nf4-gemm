@@ -80,3 +80,60 @@ than a proven one.
 
 **R5 is unchanged.** Its refutation rested on #153's wall numbers, and those
 reproduce.
+
+---
+
+## Follow-up: three more candidates eliminated
+
+`_victim` was named above as "the next candidate, not a proven one". It was
+not tested directly; three cheaper eliminations came first and none of them
+found the residual either. Recorded so the next attempt does not repeat them.
+
+### 1. The demote path as a whole — worth ≤0.8 of 4.1 points
+
+A CPU profile of both arms (qd=1, offline replay) put the largest
+soft-minus-hard entry at the **key lambda inside `_demote_locked`**: +0.404 s
+across 1,965,572 calls. `#159` removed the *sort* but kept one key evaluation
+per candidate per request, so that cost survived — which looked like #161's
+negative result being an incomplete fix rather than a wrong target.
+
+It is not. Replacing the victim choice with an O(over) arbitrary pick — a
+deliberately **incorrect** policy, purely as a cost ceiling — closes only
+**32%** of the offline soft-hard gap (0.56 s → 0.38 s). Scaled against the
+real run's 23.5 s wall, the entire demote path is worth **≤0.8 of the 4.1
+residual points**, and all tier bookkeeping combined about 2.4.
+
+### 2. "Soft achieves lower effective bandwidth" — a restatement, not a mechanism
+
+The soft arm's bytes/second deficit tracks the residual across all seven
+measurements to within 0.8 points (−1.4/1.5, −4.2/4.4, −7.9/8.7, +1.6/−1.6,
+−7.3/7.9, −4.7/5.0, −3.9/4.1). That agreement is exact because it is
+algebraic: `residual = wallΔ − readsΔ`, bandwidth is `bytes/wall`, so the
+deficit **is** the residual rearranged. It buys a redirect — the residual is
+a per-read cost, not a read-count effect — and nothing more.
+
+### 3. CPU–I/O overlap interference — flat across queue depth
+
+If bookkeeping between reads cost bandwidth by letting the queue drain, the
+residual should shrink at qd=1 where there is no queue to lose. Same box,
+same arena, 5 repeats, only queue depth varying:
+
+| qd | hard | soft | wall Δ | reads Δ | residual |
+|---|---|---|---|---|---|
+| 4 | 24279 ms | 25799 ms | +6.3% | +1.3% | **+5.0** |
+| 1 | 36303 ms | 38660 ms | +6.5% | +1.4% | **+5.1** |
+
+qd=1 is 50% slower overall, so the knob works and overlap is real — the
+soft-hard gap simply does not depend on it. Receipts in `qd-probe/`.
+
+### Where that leaves it
+
+The residual is a **per-read cost, invariant to queue depth, not accounted
+for by tier bookkeeping**. The remaining shape worth testing is read
+*locality*: whether the soft arm's slot-reuse pattern spreads its reads
+across the arena differently at the same count. That needs offset tracing,
+which nothing here records.
+
+Four eliminations and a characterisation is where this stops rather than a
+fifth hypothesis — two of the four were positions this campaign had already
+started drafting as conclusions.
