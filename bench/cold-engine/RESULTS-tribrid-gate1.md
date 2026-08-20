@@ -249,12 +249,34 @@ weighting. e4b#171 was correctly closed.
 
 Receipts: `gate1_vram.json`, `receipts-hybrid-calib-vram-arm.json`.
 
-**Checks still open**: (b) re-run cold-CPU against the control with
-`offload_thin_uniq=None` and see whether 0.0703 goes to 0.0000 — note this
-arm now has a sharper framing, since cold-GPU *does* reproduce its matched
-reference bitwise while cold-CPU does not reproduce its own to better than
-0.0703; (c) record the engine kwargs in the receipt so (b) is answerable
-from the artifact next time.
+**Check (b): RUN — cold-CPU IS bitwise against its matched control, and
+the `dram_thin` hypothesis is not the explanation.** Receipts
+`check_b.json` / `check_b.py`, same box and trees as check (a).
+
+    cold-CPU vs matched DRAM control: dmax = 0.000000, bitwise, tokens identical
+
+Check (c) is folded in: the engine state is now recorded per module in both
+arms, so this is answerable from the artifact rather than inferred.
+
+    control   dram_thin 0/16 layers | n_dram 42..54 | offload_rows=None | fused_ffn=False
+    cold-cpu  dram_thin 0/16 layers | n_dram 21..41 | offload_rows=None | fused_ffn=False
+
+`force_cold_mass` does shrink the DRAM population exactly as the hypothesis
+says (per-layer 45→34, 46→41, 45→34, 45→27, 42→21, 51→32 …), but **no layer
+crosses a thin threshold in either arm, because `offload_thin_uniq` is
+`None` and `dram_thin` is therefore False on all 16 modules in both.** The
+flip it describes is real machinery and would bite a run that sets that
+knob; it is not what these arms did.
+
+**So both cold destinations are now bitwise against their matched control**
+— cold-GPU vs VRAM-sourced (check a) and cold-CPU vs DRAM-sourced (check b).
+
+What remains genuinely open: the original run's **0.0703 does not
+reproduce** on current main (gnf4 `5b4463e` / e4b `2e88bd1`, which include
+#172 and #173). Whether that residual was removed by one of those merges or
+was specific to the original box instance is **not determined here**, and
+this run cannot distinguish them — the original box is destroyed. Recorded
+as unexplained rather than resolved.
 
 ## What this run does NOT establish
 
