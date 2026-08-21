@@ -134,6 +134,31 @@ class DevRowCache:
         self.stalls = 0          # want() had to block on a previous step
         self.filled = 0          # rows written host -> cache
         self.abandoned = 0       # steps that never reached their record()
+        # Rows one decode STEP asks for, learned from what actually arrives:
+        # every layer contributes its routed set, so this is layers x k. A
+        # cache smaller than that cannot retain ANYTHING across steps -- it is
+        # evicted before its own next request -- and then the extra
+        # host->cache write per miss makes it worse than the positional cache
+        # already in the engine. Measured across two models and four prompts,
+        # `rows >= per_step` separated every configuration where this cache
+        # helped from every one where it lost, 24 of 24
+        # (bench/cold-engine/routing-trace/RESULTS-concentration.md).
+        # Accumulated for the CURRENT step only. The engines walk layers in
+        # ASCENDING order once per step, so a layer index that does not
+        # increase is a new step -- which covers both a layer repeating and a
+        # layer that was silent becoming active again with a lower index than
+        # the last one seen. Watching only for repeats missed the second case
+        # and folded two steps into one; summing each layer's last-seen count
+        # instead kept a silent layer in the total forever. Both reported
+        # historical demand as one step (Bugbot, gnf4#165, twice).
+        #
+        # The residency engine skips want() entirely for a layer with no cold
+        # experts, so which layers appear varies step to step and neither a
+        # fixed layer count nor a repeat test is safe.
+        self._cur: dict = {}
+        self._last_layer = None
+        self._per_step = None            # last COMPLETED step
+        self._per_step_max = 0
         # The PREVIOUS step is a property of the CACHE, not of any one engine.
         # Tracking it per-engine meant every engine after the first started
         # with prev=None, so it neither settled nor stall-waited, and a shared
@@ -173,6 +198,14 @@ class DevRowCache:
             self.abandoned += 1
         if prev is not None:
             self.slots.settle(lambda t: t.done())
+        if self._cur and self._last_layer is not None \
+                and layer <= self._last_layer:     # a step just ended
+            done = sum(self._cur.values())
+            self._per_step = done
+            self._per_step_max = max(self._per_step_max, done)
+            self._cur = {}
+        self._cur[layer] = len(set(experts))
+        self._last_layer = layer
         keys = [(layer, e) for e in experts]
         try:
             assign, need = self.slots.want(keys, event_tag=tag)
@@ -201,8 +234,20 @@ class DevRowCache:
 
     def stats(self) -> dict:
         s = dict(self.slots.stats())
+        # The last COMPLETED step. None until one has completed, so a cache
+        # driven for half a step does not report a ratio against a partial
+        # count -- and never a ratio against zero.
+        per_step = self._per_step
         s.update({"rows": self.rows, "row_stride": self.row_stride,
                   "stalls": self.stalls, "host_to_cache_rows": self.filled,
                   "abandoned_steps": self.abandoned,
-                  "bytes": self.rows * self.row_stride})
+                  "bytes": self.rows * self.row_stride,
+                  "per_step_rows": per_step,
+                  "per_step_rows_max": self._per_step_max or None,
+                  "steps_held": (self.rows / per_step) if per_step else None,
+                  # Judged against the WORST step seen, not the last one:
+                  # capacity that cannot hold the heaviest step retains
+                  # nothing across it, whatever the average does.
+                  "too_small_to_retain": (self._per_step_max > self.rows)
+                                         if self._per_step_max else None})
         return s

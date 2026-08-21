@@ -295,3 +295,92 @@ def test_the_stall_path_waits_on_every_pending_tag():
     t2 = StepTag("cpu")
     c.want(0, [7], t2)
     assert old.synced, "the older tag's rows would have stayed stuck"
+
+
+def test_the_cache_reports_whether_it_can_retain_at_all():
+    """A cache smaller than ONE decode step's routed set is evicted before its
+    own next request, and then its extra host->cache write per miss makes it
+    worse than the positional cache already in the engine. Measured across two
+    models and four prompts, rows >= per_step separated every configuration
+    where it helped from every one where it lost, 24 of 24. The cache learns
+    per_step from what arrives rather than being told, because the engine that
+    drives it does not know how many layers share it."""
+    c = _cache(rows=16, protected=8)
+    assert c.stats()["steps_held"] is None, "nothing seen yet; no ratio"
+    assert c.stats()["too_small_to_retain"] is None
+
+    for _step in range(2):                       # 4 layers x 8 = 32 > 16 rows
+        for layer in range(4):
+            t = StepTag("cpu")
+            c.want(layer, list(range(layer * 8, layer * 8 + 8)), t)
+            t.record()
+    st = c.stats()
+    assert st["per_step_rows"] == 32
+    assert st["steps_held"] == 0.5
+    assert st["too_small_to_retain"] is True
+
+    big = _cache(rows=64, protected=56)
+    for _step in range(2):
+        for layer in range(4):
+            t = StepTag("cpu")
+            big.want(layer, list(range(layer * 8, layer * 8 + 8)), t)
+            t.record()
+    st = big.stats()
+    assert st["steps_held"] == 2.0 and st["too_small_to_retain"] is False
+
+
+def test_a_layer_that_stops_asking_is_not_counted_forever():
+    """gnf4#165. The engine skips want() for a layer with no cold experts.
+    Summing every layer's last-seen count would keep that layer in the total
+    forever, reporting historical demand as though it were one step."""
+    c = _cache(rows=64, protected=56)
+    for _step in range(2):                       # 4 layers asking
+        for layer in range(4):
+            t = StepTag("cpu")
+            c.want(layer, list(range(layer * 8, layer * 8 + 8)), t)
+            t.record()
+    assert c.stats()["per_step_rows"] == 32
+
+    for _step in range(3):                       # layers 2 and 3 go all-hot
+        for layer in range(2):
+            t = StepTag("cpu")
+            c.want(layer, list(range(layer * 8, layer * 8 + 8)), t)
+            t.record()
+    st = c.stats()
+    assert st["per_step_rows"] == 16, "a silent layer stayed in the total"
+    assert st["steps_held"] == 4.0
+    # the worst step is still the heavy one, and capacity is judged on it
+    assert st["per_step_rows_max"] == 32
+    assert st["too_small_to_retain"] is False
+
+
+def test_a_layer_becoming_active_does_not_fold_two_steps_together():
+    """gnf4#165, the mirror of the silent-layer case. If a layer that was
+    quiet becomes active with a LOWER index than the last one seen, a
+    boundary rule watching only for repeats folds its demand into the
+    previous step and finalises a count spanning two."""
+    c = _cache(rows=64, protected=56)
+    for _step in range(2):                       # only layers 1 and 2 ask
+        for layer in (1, 2):
+            t = StepTag("cpu")
+            c.want(layer, list(range(layer * 8, layer * 8 + 8)), t)
+            t.record()
+    assert c.stats()["per_step_rows"] == 16
+
+    for _step in range(2):                       # layer 0 wakes up, index 0
+        for layer in (0, 1, 2):
+            t = StepTag("cpu")
+            c.want(layer, list(range(layer * 8, layer * 8 + 8)), t)
+            t.record()
+    st = c.stats()
+    assert st["per_step_rows"] == 24, "layer 0's demand landed in the old step"
+    assert st["per_step_rows_max"] == 24
+
+
+def test_a_single_layer_cache_closes_a_step_every_request():
+    c = _cache(rows=32, protected=24)
+    for _ in range(3):
+        t = StepTag("cpu")
+        c.want(0, [1, 2, 3, 4], t)
+        t.record()
+    assert c.stats()["per_step_rows"] == 4
