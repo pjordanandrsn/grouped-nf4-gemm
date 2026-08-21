@@ -18,8 +18,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dev_row_cache import DevRowCache, StepTag       # noqa: E402
 
 
-def _cache(rows=8, stride=256, protected=None):
-    return DevRowCache(rows, stride, device="cpu", protected=protected)
+def _cache(rows=8, stride=256, protected=None, routed=None):
+    kw = {} if routed is None else {"routed": routed}
+    return DevRowCache(rows, stride, device="cpu",
+                       protected=protected, **kw)
 
 
 def test_a_reroute_to_a_new_position_is_a_hit():
@@ -384,3 +386,128 @@ def test_a_single_layer_cache_closes_a_step_every_request():
         c.want(0, [1, 2, 3, 4], t)
         t.record()
     assert c.stats()["per_step_rows"] == 4
+
+
+# --------------------------------------------------------------- routed --
+# `routed` is the engine's k and it sets `protected = rows - routed`. It
+# defaults to 8, and a harness that left it there sized every non-top-8
+# model's demotion budget for a top-8 one. The cost was total, not marginal:
+# a PERFECTLY STATIC working set of exactly per_step keys in per_step rows --
+# ideal is one fill per key, forever -- missed on every single access at k=2
+# and k=4 while k=8 was exact. That artifact is what made a top-4 model look
+# like it refuted the one-step crossover
+# (bench/cold-engine/routing-trace/RESULTS-third-model.md).
+
+@pytest.mark.parametrize("layers,k", [(32, 2), (24, 4), (16, 8), (32, 8)])
+def test_static_working_set_is_retained_at_exactly_one_step(layers, k):
+    """per_step rows must hold a per_step-key working set that never changes.
+
+    This is the easiest case the cache will ever see. If it cannot do this,
+    nothing measured on top of it means anything.
+    """
+    per_step = layers * k
+    c = _cache(rows=per_step, routed=k)
+    fills = 0
+    for _step in range(8):
+        for layer in range(layers):
+            t = StepTag("cpu")
+            _assign, need = c.want(layer, list(range(k)), t)
+            t.record()
+            fills += len(need)
+    assert fills == per_step, (
+        f"{fills} fills for a static {per_step}-key working set in "
+        f"{per_step} rows; ideal is {per_step} (fill once, hit forever)")
+
+
+@pytest.mark.parametrize("layers,k", [(32, 2), (24, 4)])
+def test_wrong_routed_thrashes_and_is_not_silent_about_it(layers, k):
+    """The bug, pinned so the fix cannot be quietly reverted.
+
+    Sizing the budget for k=8 when the model routes k makes the SAME static
+    workload miss on every access. Asserted as a real inequality rather than
+    a comment, because the failure is invisible in aggregate numbers -- it
+    looks like a model that simply does not benefit from caching.
+    """
+    per_step, steps = layers * k, 8
+
+    def fills_with(routed):
+        c = _cache(rows=per_step, routed=routed)
+        n = 0
+        for _step in range(steps):
+            for layer in range(layers):
+                t = StepTag("cpu")
+                _a, need = c.want(layer, list(range(k)), t)
+                t.record()
+                n += len(need)
+        return n
+
+    assert fills_with(k) == per_step               # fill once, hit forever
+    # Not "worse" -- every single access misses, the total-thrash value.
+    assert fills_with(8) == steps * per_step
+
+
+def test_routed_defaults_to_eight_so_callers_must_pass_it():
+    """Pinning the default itself: it is a real value, not 'unset'."""
+    assert _cache(rows=64).protected == 64 - 8
+    assert _cache(rows=64, routed=2).protected == 64 - 2
+
+
+# ------------------------------------------------- margin vs observed k --
+# `rows - protected` must be at most k. Measured on a static working set of
+# exactly per_step keys, margin <= k fills exactly per_step and margin > k
+# misses on EVERY access, at k = 2, 4 and 8 alike. The engine's attach check
+# is the other side of the same bound (protected <= rows - k), so the two
+# together pin protected == rows - k. Harnesses that build a cache and drive
+# it directly skip the engine's check entirely, so the cache reports it.
+
+def _drive_static(layers, k, rows, routed=None, protected=None, steps=6):
+    c = _cache(rows=rows, stride=8, protected=protected, routed=routed)
+    fills = 0
+    for _ in range(steps):
+        for layer in range(layers):
+            t = StepTag("cpu")
+            _a, need = c.want(layer, list(range(k)), t)
+            t.record()
+            fills += len(need)
+    return fills, c.stats()
+
+
+@pytest.mark.parametrize("layers,k,routed,thrashes", [
+    (24, 4, 8, True),        # the bug: margin 8 on a top-4 model
+    (24, 4, 4, False),
+    (32, 2, 8, True),
+    (32, 2, 2, False),
+    (16, 8, 8, False),
+    (16, 8, 4, False),       # over-protecting is safe; under-protecting is not
+])
+def test_margin_flag_agrees_with_whether_it_actually_thrashes(
+        layers, k, routed, thrashes):
+    per_step = layers * k
+    fills, st = _drive_static(layers, k, per_step, routed=routed)
+    assert (fills > per_step) is thrashes, fills
+    assert st["margin_over_observed_k"] is thrashes
+
+
+def test_observed_k_is_the_largest_set_actually_requested():
+    """Learned from use, so a caller's wrong promise is still detectable."""
+    _f, st = _drive_static(8, 3, 24, routed=8)
+    assert st["observed_k"] == 3
+
+
+def test_observed_k_is_none_before_any_request():
+    c = _cache(rows=16)
+    assert c.stats()["observed_k"] is None
+    assert c.stats()["margin_over_observed_k"] is None
+
+
+def test_a_layer_routing_fewer_does_not_trip_the_flag():
+    """Judged on the LARGEST set seen: a thin layer is not a mis-sizing."""
+    c = _cache(rows=64, routed=8)
+    for _ in range(4):
+        for layer in range(8):
+            t = StepTag("cpu")
+            c.want(layer, list(range(8 if layer else 2)), t)
+            t.record()
+    st = c.stats()
+    assert st["observed_k"] == 8
+    assert st["margin_over_observed_k"] is False

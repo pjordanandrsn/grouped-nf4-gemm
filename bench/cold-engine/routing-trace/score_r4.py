@@ -29,8 +29,14 @@ from dev_row_cache import DevRowCache, StepTag        # noqa: E402
 from reuse_profile import ReuseProfile                 # noqa: E402
 
 
-def score(recs, rows, window):
-    cache = DevRowCache(rows, 8, device="cpu")
+def score(recs, rows, window, routed):
+    # `routed` MUST come from the trace. It sets `protected = rows - routed`,
+    # and a margin wider than the routed set thrashes the cache on a cyclic
+    # pattern -- silently, and hard enough to invert a conclusion. The default
+    # of 8 was right by accident here (this study is olmoe, top-8) and would
+    # not be on the top-4 traces now sitting in this directory
+    # (RESULTS-third-model.md).
+    cache = DevRowCache(rows, 8, device="cpu", routed=routed)
     prof = ReuseProfile(window=window)
     n_res = 0
     for step, r in enumerate(recs):
@@ -85,7 +91,7 @@ def main():
           f"{'frequency ρ':>12} {'verdict':>22}")
     out = {"meta": meta, "window": a.window, "points": []}
     for rows in [int(x) for x in a.rows.split(",")]:
-        sc, n_res, st = score(recs, rows, a.window)
+        sc, n_res, st = score(recs, rows, a.window, meta["top_k"])
         rec_, frq = sc.get("recency"), sc.get("frequency")
         if rec_ is None or frq is None:
             verdict = "undefined"
@@ -112,7 +118,7 @@ def main():
         if not pt["resurrections"]:
             continue
         for w in wins:
-            sc, n, _ = score(recs, pt["rows"], w)
+            sc, n, _ = score(recs, pt["rows"], w, meta["top_k"])
             r, f = sc.get("recency"), sc.get("frequency")
             if r is None or f is None:
                 who = "undefined"

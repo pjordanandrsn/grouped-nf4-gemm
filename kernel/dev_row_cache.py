@@ -91,10 +91,36 @@ class DevRowCache:
             1 and never fail loudly.
         routed: the largest routed set a single ``want`` will ask for --
             the engine's ``k``. Used only to pick ``protected``.
+
+            **Pass the real k.** The default of 8 is a value, not "unset",
+            and leaving it there for a model that routes fewer sizes the
+            demotion budget for a top-8 engine. The failure is total rather
+            than gradual, and silent: on a PERFECTLY STATIC working set of
+            exactly ``per_step`` keys in ``per_step`` rows -- ideal is one
+            fill per key, forever -- k=4 took 6144 fills instead of 96 and
+            k=2 took 4096 instead of 64, while k=8 was exact. An over-large
+            ``protected`` leaves too few rows demotable, and ``_claim``
+            prefers RECLAIMABLE over ABSENT, so those few rows thrash in a
+            cycle while virgin rows are never touched.
+
+            It reads as "this model does not benefit from caching," which is
+            how it survived into a published result before being caught
+            (bench/cold-engine/routing-trace/RESULTS-third-model.md).
         protected: rows the cache will not demote. Defaults to
-            ``rows - routed``: the demotable margin only has to absorb ONE
-            request, and every row beyond that margin is retention the cache
-            is paying VRAM for.
+            ``rows - routed``, and that is not merely a good default -- it is
+            the only correct one. The margin ``rows - protected`` must absorb
+            one request, so it must be at least ``k``; and it must be no MORE
+            than ``k``, because ``_claim`` takes RECLAIMABLE least-recently-
+            used first and on a cyclic routing pattern that is exactly the row
+            wanted next. Measured on a static working set of ``per_step`` keys
+            in ``per_step`` rows, margin <= k fills once per key and margin
+            > k misses on every access, at k = 2, 4 and 8 alike. With the
+            engine's attach check (``protected <= rows - k``) the two bounds
+            meet: ``protected == rows - k``.
+
+            ``stats()["margin_over_observed_k"]`` reports a violation against
+            the largest routed set actually seen, for callers that build a
+            cache directly and never pass through the engine's check.
 
             The old default of ``rows // 2`` threw half of it away, and it
             was the single largest thing wrong with this class. Replayed
@@ -141,19 +167,18 @@ class DevRowCache:
         # host->cache write per miss makes it worse than the positional cache
         # already in the engine.
         #
-        # `rows >= per_step` is NECESSARY BUT NOT SUFFICIENT. Below one step
-        # the cache has never won: 36 of 36 configurations across three models
-        # and four prompts. AT exactly one step it wins on OLMoE (top-8) and
-        # Granite (top-8) but LOSES on all four Qwen1.5-MoE prompts (top-4),
-        # which crosses two to three rows higher and then plateaus at
-        # per_step + top_k. An earlier version of this comment claimed the
-        # rule separated helped from lost 24 of 24; that was two models, and
-        # a preregistered third refuted it
-        # (bench/cold-engine/routing-trace/RESULTS-third-model.md).
+        # Measured across THREE models and four prompts, `rows >= per_step`
+        # separated every configuration where this cache helped from every one
+        # where it lost, 36 of 36 -- two top-8 models and one top-4
+        # (bench/cold-engine/routing-trace/RESULTS-third-model.md). No top-2
+        # model has been captured; the top-2 numbers anywhere near this are
+        # synthetic and are not evidence.
         #
-        # So size ABOVE one step, not at it. `too_small_to_retain` below still
-        # means what it says -- it flags the regime where retention is
-        # impossible -- but its absence does not promise the cache wins.
+        # A preregistered third model briefly appeared to refute this. It did
+        # not: the replay harness left `routed` at its default 8 while the
+        # model routed 4, so `protected` was sized for a top-8 engine and the
+        # cache thrashed. See `routed` in __init__ -- that mis-sizing, not the
+        # threshold, was the real finding.
         # Accumulated for the CURRENT step only. The engines walk layers in
         # ASCENDING order once per step, so a layer index that does not
         # increase is a new step -- which covers both a layer repeating and a
@@ -170,6 +195,13 @@ class DevRowCache:
         self._last_layer = None
         self._per_step = None            # last COMPLETED step
         self._per_step_max = 0
+        # The largest routed set any single want() has actually asked for.
+        # `routed` is a promise the CALLER makes at construction and nothing
+        # checks it; when it is wrong, `protected = rows - routed` is wrong,
+        # too few rows are demotable, and the cache thrashes without ever
+        # raising. Learning k from use is the only way this class can notice
+        # (bench/cold-engine/routing-trace/RESULTS-third-model.md).
+        self._max_want = 0
         # The PREVIOUS step is a property of the CACHE, not of any one engine.
         # Tracking it per-engine meant every engine after the first started
         # with prev=None, so it neither settled nor stall-waited, and a shared
@@ -215,6 +247,7 @@ class DevRowCache:
             self._per_step = done
             self._per_step_max = max(self._per_step_max, done)
             self._cur = {}
+        self._max_want = max(self._max_want, len(set(experts)))
         self._cur[layer] = len(set(experts))
         self._last_layer = layer
         keys = [(layer, e) for e in experts]
@@ -259,6 +292,30 @@ class DevRowCache:
                   # Judged against the WORST step seen, not the last one:
                   # capacity that cannot hold the heaviest step retains
                   # nothing across it, whatever the average does.
+                  # k as OBSERVED, and whether the demotable margin is
+                  # sized for it. The margin `rows - protected` must be at
+                  # most k: measured on a STATIC working set of exactly
+                  # per_step keys -- where the ideal is one fill per key --
+                  # margin <= k fills exactly per_step and margin > k misses
+                  # on EVERY access, at k = 2, 4 and 8 alike. More demotable
+                  # rows is not slack, it is thrash: _claim takes RECLAIMABLE
+                  # LRU-first, and on a cyclic pattern that is precisely the
+                  # row wanted next.
+                  #
+                  # The engine's attach check is the other side of the same
+                  # bound (`protected <= rows - k`, so an all-miss step can be
+                  # served), which together pin `protected == rows - k`. But a
+                  # harness that builds a cache and drives it directly never
+                  # goes through that check, which is how a top-4 trace got
+                  # run against a top-8 budget and produced a false refutation
+                  # (bench/cold-engine/routing-trace/RESULTS-third-model.md).
+                  #
+                  # Reported, not raised: a layer may legitimately route fewer
+                  # than k, so this is judged on the largest set actually seen.
+                  "observed_k": self._max_want or None,
+                  "margin_over_observed_k": (
+                      (self.rows - self.protected) > self._max_want
+                      if self._max_want else None),
                   "too_small_to_retain": (self._per_step_max > self.rows)
                                          if self._per_step_max else None})
         return s

@@ -1,23 +1,26 @@
 # The one-step threshold is real; my explanation of it was not
 
-> **Out of sample on a third model, this is now two claims, one of which
-> failed.** Qwen1.5-MoE-A2.7B (24L × 60E, **top-4**) was preregistered and
-> tested in [`RESULTS-third-model.md`](RESULTS-third-model.md).
-> **Held:** LRU and FIFO take zero hits below one step and random does not —
-> 12 cells of 12, a third model and a third cycle length.
-> **Failed:** the crossover is *not* at one step on this model. At exactly
-> `layers × top-k` = 96 rows the cache still loses on all four prompts; it
-> crosses at 98–99. `steps_held ≥ 1` is **necessary but not sufficient** —
-> below one step the cache never wins on any of three models, at one step it
-> wins on two of three.
+> **Held out of sample on a third model.** Qwen1.5-MoE-A2.7B (24L × 60E,
+> **top-4**) was preregistered and tested in
+> [`RESULTS-third-model.md`](RESULTS-third-model.md). Both claims held: the
+> crossover is at one step on the third model too — 12 traces of 12 across
+> three models, every cell below one step losing and every cell at it
+> winning — and LRU and FIFO take zero hits below one step where random does
+> not, 12 cells of 12 at a third cycle length.
 >
-> **Also:** the counts below come from the pure-LRU simulation in
-> `score_crossover.py`, not from the shipped `DevRowCache`. The two disagree at
-> capacity == one step on all 12 traces (sim pessimistic by 6–15k on OLMoE and
-> Granite, optimistic by 4–6k on Qwen). The crossover *location* reported here
-> still matches the real cache on both models derived on; the hit *counts* are
-> a simulation's and are not labelled as such below.
-
+> An earlier version of this banner said the crossover claim had been
+> **refuted**. It had not. The replay harness left `DevRowCache(routed=...)`
+> at its default of 8 while the model routes 4, sizing the demotion budget
+> for a top-8 engine; the cache thrashed and the top-4 model looked like a
+> counterexample. `RESULTS-third-model.md` has the full account.
+>
+> **Still true, and unrelated to that:** the counts below come from the
+> pure-LRU simulation in `score_crossover.py`, not from the shipped
+> `DevRowCache`. The two disagree at capacity == one step on all 12 traces —
+> the simulation is pessimistic by 1.5k–15k, everywhere, because the cache
+> resurrects reclaimable rows and picks victims LFU-then-LRU. The crossover
+> *location* reported here matches the real cache on every model; the hit
+> *counts* are a simulation's and are not labelled as such below.
 
 Receipt: [`crossover.json`](crossover.json). Harness:
 [`score_crossover.py`](score_crossover.py). Eight traces, two models, 48
