@@ -3,6 +3,12 @@
  "prereg_sha256": "523fe8b7de966699bb71eefd513e400acfb099ee7263d42eed03145f694a3a94",
  "model": "qwen",
  "arena": 1440,
+ "prompts": [
+  "prose",
+  "code",
+  "math",
+  "dialogue"
+ ],
  "traces_sha256": {
   "qwen_prose.jsonl": "dfb07d0249e41adfab0346417d0caa72be276124ef7dee7154be4190fff41cbc",
   "qwen_code.jsonl": "144582ef9e5c8117aca76a68fabe3b53eda078ea33beabdd538af3cb2b06dc02",

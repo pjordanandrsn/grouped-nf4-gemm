@@ -37,10 +37,10 @@ def sha(p):
     return h.hexdigest()
 
 
-def p1(d, model, extra=()):
+def p1(d, model, extra=(), prompts=PROMPTS):
     """Cache vs positional across the registered steps_held sweep."""
     cells, zero_below = [], []
-    for p in PROMPTS:
+    for p in prompts:
         meta, recs = load(os.path.join(d, "%s_%s.jsonl" % (model, p)))
         per = meta["layers"] * meta["top_k"]
         pos = positional_transfers(meta, recs)
@@ -72,9 +72,9 @@ def p1(d, model, extra=()):
                                                 len(zero_below))}
 
 
-def p2(d, model, arena, warm=256):
+def p2(d, model, arena, warm=256, prompts=PROMPTS):
     cells = []
-    for p in PROMPTS:
+    for p in prompts:
         meta, recs = load(os.path.join(d, "%s_%s.jsonl" % (model, p)))
         wm, ev = recs[:warm], recs[warm:]
         ws = len(counts(ev))
@@ -100,12 +100,17 @@ def main():
     ap.add_argument("--model", default="qwen")
     ap.add_argument("--arena", type=int, default=1440)
     ap.add_argument("--probe", default="97,98,99,100,104")
+    ap.add_argument("--prompts", default=",".join(PROMPTS),
+                    help="subset for robustness checks; the REGISTERED "
+                         "result is all four and is what the receipt in "
+                         "RESULTS-third-model.json holds")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
     extra = [int(x) for x in a.probe.split(",") if x]
 
-    r1 = p1(a.dir, a.model, extra)
-    r2 = p2(a.dir, a.model, a.arena)
+    prompts = tuple(x for x in a.prompts.split(",") if x)
+    r1 = p1(a.dir, a.model, extra, prompts)
+    r2 = p2(a.dir, a.model, a.arena, prompts=prompts)
 
     print("P1  -- crossover at layers x top-k rows")
     print("%-9s %6s %5s %10s %10s %8s %s"
@@ -135,12 +140,13 @@ def main():
     if a.out:
         traces = {"%s_%s.jsonl" % (a.model, p):
                   sha(os.path.join(a.dir, "%s_%s.jsonl" % (a.model, p)))
-                  for p in PROMPTS}
+                  for p in prompts}
         with open(a.out, "w") as f:
             json.dump({"prereg": "PREREG-third-model.md",
                        "prereg_sha256": sha(os.path.join(
                            a.dir, "PREREG-third-model.md")),
                        "model": a.model, "arena": a.arena,
+                       "prompts": list(prompts),
                        "traces_sha256": traces,
                        "steps_held_sweep": list(STEPS_HELD),
                        "fracs_sweep": list(FRACS),

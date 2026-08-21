@@ -142,6 +142,60 @@ reports still matches the real cache on both derivation models. But its hit
 *counts* describe a simulation, not the shipped cache, and that distinction was
 not drawn in it. A banner has been added there.
 
+## Exploratory, after the fact — not preregistered
+
+Everything above is the registered test. What follows was measured after
+seeing the result and is **hypothesis-generating, not confirmatory**; it is
+here so the next preregistration has something to aim at.
+
+### A cache sized at exactly one step can only capture step-to-step reuse
+
+Mean overlap between a step's routed set and the previous step's:
+
+| model | top-k | overlap with previous step | wins at one step |
+|---|---|---|---|
+| OLMoE | 8 | 41.3% | yes |
+| Granite | 8 | 43.6% | yes |
+| **Qwen1.5-MoE** | **4** | **13.4%** | **no** |
+
+A 3× gap with no overlap between the two groups across 12 traces. It is a
+better-motivated candidate than top-k alone — a cache holding exactly one step
+can only win on rows the *next* step asks for again — but with three models
+**overlap and top-k are perfectly confounded** and this cannot separate them.
+Both are one-bit hypotheses fitted to three points. Naming which one it is
+needs a top-8 model with low overlap, or a top-4 model with high overlap.
+
+### One trace is a degenerate repetition loop
+
+Qwen's **math** trace alternates with period 2 — overlap by lag:
+
+| lag | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|
+| qwen math | 10.5% | **84.6%** | 10.0% | **83.1%** | 10.0% | **82.0%** |
+
+Even lags ~83%, odd lags ~10%. No other trace of the twelve shows this.
+Capture is greedy (`argmax`, no sampling) over 512 steps, which falls into
+repetition loops readily; the trace does not record tokens, so this is
+inferred from the routing alone, not confirmed.
+
+It is the likely cause of that trace's two outliers — the two largest P2
+misses (`math` at frac 0.15 and 0.20, +89.8% and +97.3%) and random
+beating LRU by 40% above the threshold, both of which are what a period-2
+alternation does to a one-step cache.
+
+**Every verdict above is robust to dropping it.** Rescored on the other three
+prompts (`--prompts prose,code,dialogue`):
+
+| | all four (registered) | without math |
+|---|---|---|
+| P1 | REFUTED, 4 violations | REFUTED, 3 violations |
+| P1b | CONFIRMED, 12 of 12 | CONFIRMED, 9 of 9 |
+| P2 | CONFIRMED, 0 FP of 48 | CONFIRMED, 0 FP of 36 |
+
+Future captures should record the generated tokens so a degenerate loop is
+visible without having to infer it, and should consider whether 512 greedy
+steps is the right decode for a routing trace at all.
+
 ## What now holds, across three models and twelve traces
 
 | claim | status |
