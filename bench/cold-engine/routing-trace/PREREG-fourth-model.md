@@ -1,5 +1,58 @@
 # Preregistration — separating top-k from k/E
 
+> # ⛔ WITHDRAWN, before any box was rented
+>
+> Every question this file was written to answer turned out to be void or
+> undecidable. Kept, unedited below the line, because a preregistration that
+> quietly disappears when it stops being convenient is worth nothing.
+>
+> **1. Its premise was an artifact.** This file exists because Qwen1.5-MoE
+> (top-4) appeared to refute the one-step crossover while the two top-8
+> models did not, which made `k` and `k/E` the two candidate explanations.
+> Qwen did not refute it. The replay harness left `DevRowCache(routed=...)`
+> at its default of 8 while the model routes 4, sizing the demotion budget
+> for a top-8 engine; corrected, the threshold holds on all three models.
+> There is no anomaly left to explain, so there is nothing for P3 to
+> discriminate between. See
+> [`RESULTS-third-model.md`](RESULTS-third-model.md).
+>
+> **2. P3 could not have failed anyway.**
+> [`structural_check.py`](structural_check.py) drives the same cache with
+> synthetic routing from independent-uniform to 95%-sticky and flat to
+> heavily skewed popularity, at all four geometries. The verdict moves in
+> **0 of 24** conditions. The threshold is arithmetic on
+> `protected = rows - k`, not a property of routing, so no captured model
+> can test it — Mixtral included.
+>
+> **3. P4b is not testable at this geometry.** Mixtral's arena is
+> `32 x 8 = 256` rows, which is also its entire key space, and 256 warm steps
+> route essentially all of it. So `headroom = working set / capacity <= 1`
+> only at `capacity = 256`, where static placement already holds every key,
+> makes zero transfers, and demand-paging cannot beat it. The one cell where
+> the rule makes a positive prediction is the one cell where the comparison
+> is vacuous. Scored as registered, P2 would have "refuted" on four
+> false positives that are all arithmetic. For the record the same check
+> finds **0 vacuous cells in all 144 captured cells** across the three real
+> models, so this is specific to a small-E geometry and does not touch any
+> published result.
+>
+> **What would be worth capturing instead** — noted so the next
+> preregistration starts from something real:
+>
+> * **P1b is not forced.** That LRU and FIFO take zero hits below one step
+>   while random does not is a policy fact, not arithmetic, and it is the
+>   part of the crossover story that survives. A geometry where the routed
+>   set is small relative to the arena would stress it hardest.
+> * **P2 is not forced either**, and it is the only rule here whose
+>   confirmation carried real information. It needs a model whose eval
+>   working set is meaningfully *smaller* than its arena — that is, large E —
+>   which is the opposite of what this file selected for.
+>
+> Nothing below this line has been edited.
+
+---
+
+
 [`RESULTS-third-model.md`](RESULTS-third-model.md) refuted the rule that the
 device row cache crosses at `layers × top-k` rows. It crosses there on OLMoE
 and Granite (8 traces of 8) and **not** on Qwen1.5-MoE, which needs two to
@@ -23,18 +76,28 @@ a model where they do not, **before it is captured**.
 
 ## The model
 
-**Mixtral-8x7B-Instruct-v0.1** — expected 32 layers × 8 experts, **top-2**.
-It inverts the confound: the **smallest** `k` of any candidate and the
-**largest** `k/E`.
+**Mixtral-8x7B-Instruct-v0.1** — 32 layers × 8 experts, **top-2**, read from
+the published `config.json` (`num_hidden_layers` 32, `num_local_experts` 8,
+`num_experts_per_tok` 2, `torch_dtype` bfloat16). It inverts the confound: the
+**smallest** `k` of any candidate and the **largest** `k/E`.
 
 | | layers | E | k | `k/E` | arena | per-step rows |
 |---|---|---|---|---|---|---|
 | **Mixtral (test)** | **32** | **8** | **2** | **25.0%** | **256** | **64** |
 
-Geometry will be read from the router probe at capture and reported. If it
-does not match — a different layer count, a different top-k — the predicted
-capacities below are recomputed from the *observed* geometry, which is what
-the third-model prereg did and what kept its P1 test honest.
+Geometry is still read from the router probe at capture and reported, and if
+it does not match the config — a different layer count, a different top-k, a
+router the probe reads differently — the capacities below are recomputed from
+the *observed* geometry. That clause is what kept the third model's P1 test
+honest and it stays, config or no config.
+
+**Size, and the precision that follows from it.** Mixtral is 46.7B parameters:
+~93 GB in bf16, which does not fit one 80 GB card. So the capture is either
+bf16 across two GPUs or reduced precision on one. Registered in advance
+because the choice is not free — quantization perturbs router logits and can
+flip a borderline top-2 decision, and top-2 has the least margin of any model
+captured. Preference order, and the results will say which was used:
+**bf16 on two cards > 8-bit on one > 4-bit on one.**
 
 Same protocol as the third model: four prompts (prose, code, math, dialogue),
 512 decode steps, 64-token prompt, profile on 0–255 and score on 256–511.

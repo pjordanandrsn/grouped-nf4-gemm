@@ -47,8 +47,29 @@ def positional_transfers(meta, recs):
     return total
 
 
-def replay(meta, recs, rows, protected=None):
-    c = DevRowCache(rows, 8, device="cpu", protected=protected)
+def replay(meta, recs, rows, protected=None, routed=None):
+    """Drive the real cache over `recs` with a `rows`-row arena.
+
+    `routed` is the engine's k, and it MUST come from the trace. DevRowCache
+    defaults it to 8 and derives `protected = rows - routed` from it, so
+    leaving it unset silently sized every non-top-8 model's demotion budget
+    for a top-8 model. The effect is not subtle: on a PERFECTLY STATIC
+    working set of exactly `per_step` keys in `per_step` rows -- the easiest
+    case there is, ideal is one fill per key -- top-4 took 6144 fills instead
+    of 96 and top-2 took 4096 instead of 64, while top-8 was already exact.
+    An over-large `protected` leaves too few rows demotable, and _claim
+    prefers RECLAIMABLE over ABSENT, so the few unprotected rows thrash in a
+    cycle while virgin rows sit unused.
+
+    That artifact is what made Qwen (top-4) appear to refute the one-step
+    crossover in RESULTS-third-model.md. With `routed` taken from the trace
+    the refutation disappears entirely and the threshold holds on all three
+    models. Defaulting to meta's top_k rather than 8 is the fix; the
+    parameter stays overridable for deliberate mis-sizing experiments.
+    """
+    if routed is None:
+        routed = int(meta["top_k"])
+    c = DevRowCache(rows, 8, device="cpu", protected=protected, routed=routed)
     fills = 0
     for r in recs:
         for L, ex in r["routed"].items():
