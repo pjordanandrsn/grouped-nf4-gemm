@@ -1,5 +1,19 @@
 # RESULTS — Reclaimable residency (R1–R10), first measurement
 
+> **R10 re-scored on four models instead of one.**
+> [`RESULTS-verdict-audit.md`](RESULTS-verdict-audit.md) runs R10 against
+> OLMoE, Granite, Qwen1.5-MoE and gpt-oss-20b — 160 cells against the 40 here.
+> **The refutation replicates: 153 REFUTED, 7 holds.** All seven are at the
+> largest capacity swept (rows = 512) and all are under 1% on both reads and
+> churn, on the two top-4 models; the scorer's verdict is binary, so any
+> improvement at all reads as *holds*.
+>
+> That audit also checks whether these verdicts were falsifiable in the first
+> place. R4 and R10 are — synthetic routing flips them in 1 of 9 and 5 of 9
+> conditions — which is what makes re-scoring them worth doing, and is not
+> true of the crossover and demand-paging claims elsewhere in this program.
+
+
 Registered in [`PREREG-tribrid-stage3.md`](PREREG-tribrid-stage3.md)
 (stamped `7bf5b2be…`) as a hypothesis **separate** from the base tribrid
 gate: *the interval between logical eviction and physical overwrite
