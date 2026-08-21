@@ -66,6 +66,13 @@ def main():
     ap.add_argument("--model", required=True)
     ap.add_argument("--steps", type=int, default=512)
     ap.add_argument("--prompt-tokens", type=int, default=64)
+    ap.add_argument("--device", default="cuda",
+                    help="where to run the capture. 'cpu' is not a fallback "
+                         "for a small box -- gpt-oss-20b ships mxfp4 and "
+                         "dequantizes to ~40 GB without triton_kernels, so a "
+                         "32 GB card spills the experts and torch._grouped_mm "
+                         "dies on mixed devices. Routing is exact either way; "
+                         "only speed differs.")
     ap.add_argument("--router-suffix", default=None,
                     help="restrict router discovery to modules whose name "
                          "ends with this; probing finds them without it")
@@ -77,7 +84,7 @@ def main():
     from transformers import AutoModelForCausalLM, AutoTokenizer
     tk = AutoTokenizer.from_pretrained(a.model)
     model = AutoModelForCausalLM.from_pretrained(
-        a.model, dtype=torch.bfloat16, device_map="cuda")
+        a.model, dtype=torch.bfloat16, device_map=a.device)
     model.eval()
 
     # Every offline result in this campaign rests on ONE captured trace, and
@@ -118,7 +125,7 @@ def main():
         sys.exit("--prompt must be one of %s" % sorted(PROMPTS))
     text = PROMPTS[a.prompt]
     reps = max(2, -(-a.prompt_tokens // max(1, len(tk(text).input_ids))) + 1)
-    ids = tk(text * reps, return_tensors="pt").input_ids[:, :a.prompt_tokens].to("cuda")
+    ids = tk(text * reps, return_tensors="pt").input_ids[:, :a.prompt_tokens].to(a.device)
 
     k = (getattr(model.config, "num_experts_per_tok", None)
          or getattr(model.config, "top_k", None)
