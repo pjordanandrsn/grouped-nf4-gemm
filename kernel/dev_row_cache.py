@@ -139,10 +139,21 @@ class DevRowCache:
         # cache smaller than that cannot retain ANYTHING across steps -- it is
         # evicted before its own next request -- and then the extra
         # host->cache write per miss makes it worse than the positional cache
-        # already in the engine. Measured across two models and four prompts,
-        # `rows >= per_step` separated every configuration where this cache
-        # helped from every one where it lost, 24 of 24
-        # (bench/cold-engine/routing-trace/RESULTS-concentration.md).
+        # already in the engine.
+        #
+        # `rows >= per_step` is NECESSARY BUT NOT SUFFICIENT. Below one step
+        # the cache has never won: 36 of 36 configurations across three models
+        # and four prompts. AT exactly one step it wins on OLMoE (top-8) and
+        # Granite (top-8) but LOSES on all four Qwen1.5-MoE prompts (top-4),
+        # which crosses two to three rows higher and then plateaus at
+        # per_step + top_k. An earlier version of this comment claimed the
+        # rule separated helped from lost 24 of 24; that was two models, and
+        # a preregistered third refuted it
+        # (bench/cold-engine/routing-trace/RESULTS-third-model.md).
+        #
+        # So size ABOVE one step, not at it. `too_small_to_retain` below still
+        # means what it says -- it flags the regime where retention is
+        # impossible -- but its absence does not promise the cache wins.
         # Accumulated for the CURRENT step only. The engines walk layers in
         # ASCENDING order once per step, so a layer index that does not
         # increase is a new step -- which covers both a layer repeating and a
