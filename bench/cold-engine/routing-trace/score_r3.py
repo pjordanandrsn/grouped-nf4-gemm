@@ -47,9 +47,9 @@ def build_arena(tmp, layers, experts):
     return path, load_index(path)
 
 
-def dram_side(path, index, recs, rows, protected):
+def dram_side(path, index, recs, rows, protected, qd=1):
     t = ColdTier(path, hot_rows=rows, pinned=False, index=index,
-                 protected_rows=protected)
+                 protected_rows=protected, qd=qd)
     try:
         for r in recs:
             for L, experts in r["routed"].items():
@@ -92,6 +92,8 @@ def main():
                     help="protected budgets to sweep. R3 does not pin one, "
                          "and the verdict turns out to depend on it.")
     ap.add_argument("--k", type=int, default=8, help="routed set size")
+    ap.add_argument("--qd", type=int, default=1,
+                    help="reader queue depth. ColdTier defaults to None, which sizes the queue from the host CPU count -- so counters are neither reproducible run-to-run nor comparable across boxes. qd=1 forces completion order and makes this replay a pure function of the trace; see qd_jitter.py.")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
 
@@ -119,7 +121,7 @@ def main():
         for rows, budget in combos:
             prot = (max(1, rows // 2) if budget == "half"
                     else max(1, rows - a.k))
-            d, v = (dram_side(path, index, recs, rows, prot),
+            d, v = (dram_side(path, index, recs, rows, prot, a.qd),
                     vram_side(recs, rows, prot))
             dr, vr = rate(d), rate(v)
             if dr is None or vr is None:
