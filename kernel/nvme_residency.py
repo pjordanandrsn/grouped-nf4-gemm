@@ -206,12 +206,21 @@ class ColdTier:
         budget set the reclaimable set is empty and the ranking is exactly the
         pre-Stage-3 (freq, last_use) pair.
         """
+        # Hoisted lookups and a direct index instead of .get: this loop runs
+        # hot_rows times per eviction and was 40% of the tier's CPU, with its
+        # inner `_last_use.get` another 16% across 8.2M calls. Every occupied
+        # slot's key is guaranteed present in _last_use -- ensure() writes
+        # _freq/_last_use for every requested key before any slot is published,
+        # and nothing ever deletes from it -- so the default was unreachable.
         best, best_key = None, None
+        freq = self._freq
+        last = self._last_use
+        recl = self._reclaimable
+        reserved = self._reserved
         for slot, key in enumerate(self._key_of):
-            if slot in excluded or slot in self._reserved or key is None:
+            if key is None or slot in excluded or slot in reserved:
                 continue
-            k = (0 if key in self._reclaimable else 1,
-                 self._freq[key], self._last_use.get(key, 0))
+            k = (0 if key in recl else 1, freq[key], last[key])
             if best_key is None or k < best_key:
                 best, best_key = slot, k
         if best is None:
