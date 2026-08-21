@@ -70,6 +70,21 @@ binding constraint.
 This is the same confound [`RESULTS-r10.md`](RESULTS-r10.md) identifies in
 R1's read clause, in its clearest form.
 
+## Re-verified under the qd pin
+
+`ColdTier`'s read queue depth defaulted to the host CPU count, which made
+counters non-reproducible above `qd=1` (gnf4#169). This document's numbers
+were taken at that default, like `score_r3/r8/r9/r10`'s were.
+
+Re-run at the pinned `qd=1`: **three cells of twelve differ, by one or two
+reads** — 41,646→41,644 at 160 rows, 38,620→38,619 at 192, 22,149→22,150 at
+384. Every other cell is identical. The knee is unmoved at **+0.0%** and the
+verdict is unchanged.
+
+That is the same small-blast-radius ordering effect #169 measured, and it
+does not reach any conclusion here. `score_r7.py` inherits the pin through
+`score_r10.run`, whose default is now 1.
+
 ## Limits
 
 - One model, one prompt, 512 decode steps, **uncontended**. R5 reports soft
