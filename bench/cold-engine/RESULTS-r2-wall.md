@@ -1,5 +1,25 @@
 # R2, scored — resurrections reach 15.7% of routed work and move wall by nothing
 
+> **Re-measured on real routing and it holds.**
+> [`RESULTS-wall-real-routing.md`](RESULTS-wall-real-routing.md) drives this
+> same arena and engine with **gpt-oss-20b's own captured routing** — the
+> model this arena was baked from — instead of `routes()`, whose fresh
+> `torch.randn` logits leave step-to-step reuse at chance. The layer under
+> test goes from 12.9% to 28.3% overlap, 2.2× more reuse for the mechanism to
+> work with, and transfers fall 21–72% at matched capacity.
+>
+> Wall stays transfer-bound: **r = +0.9872** against transfers/step (this page
+> reports +0.9748), and the residual attributable to resurrection is
+> **−0.3443** — still not positive. The refutation below stands, now on
+> routing that gave resurrection its best case.
+>
+> One correction to that document rather than to this one: its preregistered
+> W2 restated this page's null as "the arms differ by under 2% in wall", which
+> is not what this page claims — the sweep below spans 0.376 to 1.823 ms. The
+> claim here is about the RESIDUAL once transfers are accounted for, and that
+> is what was replicated.
+
+
 Registered (`PREREG-tribrid-stage3`, R2):
 
 > VRAM resurrection is disproportionately valuable — **even 2–5% of routed
