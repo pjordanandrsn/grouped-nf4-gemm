@@ -387,3 +387,40 @@ def test_a_submit_failure_after_earlier_keys_launched_strands_nothing(arena):
         assert done.wait(20), "ensure blocked on a stranded pending event"
     finally:
         t.close()
+
+
+def test_victim_heap_stays_bounded_and_correct(tmp_path):
+    """Superseded entries leave the heap only when they reach the top, so a
+    workload that PUSHES without evicting grows it without bound. Every hit
+    re-pushes the touched key's rank, and a working set that fits evicts
+    nothing -- so nothing pops. Compaction has to cap that.
+
+    The bound is fixed rather than derived from _VHEAP_SLACK: computing it
+    from the constant under test would make the assertion vacuous, since
+    raising the constant would raise the bound with it.
+    """
+    import nvme_residency as nr
+    from nvme_arena import bake, load_index
+    from test_nvme_arena import make_snapshot
+
+    snap = tmp_path / "snap"
+    make_snapshot(str(snap))
+    arena = str(tmp_path / "a.arena")
+    bake(str(snap), arena, align=4096, log=lambda *a: None)
+    index = load_index(arena)
+    rows = 8
+    t = nr.ColdTier(arena, hot_rows=rows, pinned=False, index=index, qd=1)
+    try:
+        cap = 16 * rows
+        assert nr._VHEAP_SLACK * rows <= cap, "slack outgrew the fixed bound"
+        # One layer, two experts: resident after the first call, so every
+        # later call is a pure hit -- two pushes, zero evictions, zero pops.
+        for step in range(500):
+            t.ensure(0, [0, 1])
+            assert len(t._vheap) <= cap, (
+                f"heap grew to {len(t._vheap)} at step {step}, cap {cap}")
+        assert t.hits > 900, "workload was meant to be almost all hits"
+        excluded: set = set()
+        assert t._victim(excluded) == t._victim_scan(excluded)
+    finally:
+        t.close()
