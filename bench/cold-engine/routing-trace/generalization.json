@@ -1,20 +1,25 @@
 {
+  "models": {
+    "olmoe": 1024,
+    "granite": 1280
+  },
   "prompts": [
     "prose",
     "code",
     "math",
     "dialogue"
   ],
-  "rows": [
-    128,
-    384,
-    512
+  "fracs": [
+    0.125,
+    0.375,
+    0.5
   ],
   "warm": 256,
   "claims": {
     "r4": {
       "cells": [
         {
+          "model": "olmoe",
           "prompt": "prose",
           "window": 4,
           "rows": 128,
@@ -23,6 +28,7 @@
           "winner": "frequency"
         },
         {
+          "model": "olmoe",
           "prompt": "prose",
           "window": 4,
           "rows": 384,
@@ -31,6 +37,7 @@
           "winner": "frequency"
         },
         {
+          "model": "olmoe",
           "prompt": "prose",
           "window": 4,
           "rows": 512,
@@ -39,6 +46,7 @@
           "winner": "frequency"
         },
         {
+          "model": "olmoe",
           "prompt": "prose",
           "window": 8,
           "rows": 128,
@@ -47,6 +55,7 @@
           "winner": "frequency"
         },
         {
+          "model": "olmoe",
           "prompt": "prose",
           "window": 8,
           "rows": 384,
@@ -55,6 +64,7 @@
           "winner": "frequency"
         },
         {
+          "model": "olmoe",
           "prompt": "prose",
           "window": 8,
           "rows": 512,
@@ -63,6 +73,7 @@
           "winner": "frequency"
         },
         {
+          "model": "olmoe",
           "prompt": "code",
           "window": 4,
           "rows": 128,
@@ -71,6 +82,7 @@
           "winner": "recency"
         },
         {
+          "model": "olmoe",
           "prompt": "code",
           "window": 4,
           "rows": 384,
@@ -79,6 +91,7 @@
           "winner": "frequency"
         },
         {
+          "model": "olmoe",
           "prompt": "code",
           "window": 4,
           "rows": 512,
@@ -87,6 +100,7 @@
           "winner": "frequency"
         },
         {
+          "model": "olmoe",
           "prompt": "code",
           "window": 8,
           "rows": 128,
@@ -95,6 +109,7 @@
           "winner": "recency"
         },
         {
+          "model": "olmoe",
           "prompt": "code",
           "window": 8,
           "rows": 384,
@@ -103,6 +118,7 @@
           "winner": "frequency"
         },
         {
+          "model": "olmoe",
           "prompt": "code",
           "window": 8,
           "rows": 512,
@@ -111,6 +127,7 @@
           "winner": "frequency"
         },
         {
+          "model": "olmoe",
           "prompt": "math",
           "window": 4,
           "rows": 128,
@@ -119,6 +136,7 @@
           "winner": "recency"
         },
         {
+          "model": "olmoe",
           "prompt": "math",
           "window": 4,
           "rows": 384,
@@ -127,6 +145,7 @@
           "winner": "frequency"
         },
         {
+          "model": "olmoe",
           "prompt": "math",
           "window": 4,
           "rows": 512,
@@ -135,6 +154,7 @@
           "winner": "no signal"
         },
         {
+          "model": "olmoe",
           "prompt": "math",
           "window": 8,
           "rows": 128,
@@ -143,6 +163,7 @@
           "winner": "recency"
         },
         {
+          "model": "olmoe",
           "prompt": "math",
           "window": 8,
           "rows": 384,
@@ -151,6 +172,7 @@
           "winner": "frequency"
         },
         {
+          "model": "olmoe",
           "prompt": "math",
           "window": 8,
           "rows": 512,
@@ -159,6 +181,7 @@
           "winner": "no signal"
         },
         {
+          "model": "olmoe",
           "prompt": "dialogue",
           "window": 4,
           "rows": 128,
@@ -167,6 +190,7 @@
           "winner": "recency"
         },
         {
+          "model": "olmoe",
           "prompt": "dialogue",
           "window": 4,
           "rows": 384,
@@ -175,6 +199,7 @@
           "winner": "frequency"
         },
         {
+          "model": "olmoe",
           "prompt": "dialogue",
           "window": 4,
           "rows": 512,
@@ -183,6 +208,7 @@
           "winner": "frequency"
         },
         {
+          "model": "olmoe",
           "prompt": "dialogue",
           "window": 8,
           "rows": 128,
@@ -191,6 +217,7 @@
           "winner": "recency"
         },
         {
+          "model": "olmoe",
           "prompt": "dialogue",
           "window": 8,
           "rows": 384,
@@ -199,16 +226,233 @@
           "winner": "frequency"
         },
         {
+          "model": "olmoe",
           "prompt": "dialogue",
           "window": 8,
           "rows": 512,
           "recency": 0.16028881172833856,
           "frequency": 0.26631258479818243,
           "winner": "frequency"
+        },
+        {
+          "model": "granite",
+          "prompt": "prose",
+          "window": 4,
+          "rows": 160,
+          "recency": null,
+          "frequency": null,
+          "winner": "no signal"
+        },
+        {
+          "model": "granite",
+          "prompt": "prose",
+          "window": 4,
+          "rows": 480,
+          "recency": 0.3009893840302796,
+          "frequency": 0.5481466634715602,
+          "winner": "frequency"
+        },
+        {
+          "model": "granite",
+          "prompt": "prose",
+          "window": 4,
+          "rows": 640,
+          "recency": 0.2636464539734669,
+          "frequency": 0.4530096073369659,
+          "winner": "frequency"
+        },
+        {
+          "model": "granite",
+          "prompt": "prose",
+          "window": 8,
+          "rows": 160,
+          "recency": null,
+          "frequency": null,
+          "winner": "no signal"
+        },
+        {
+          "model": "granite",
+          "prompt": "prose",
+          "window": 8,
+          "rows": 480,
+          "recency": 0.3893251680694102,
+          "frequency": 0.5481466634715602,
+          "winner": "frequency"
+        },
+        {
+          "model": "granite",
+          "prompt": "prose",
+          "window": 8,
+          "rows": 640,
+          "recency": 0.3037472169939904,
+          "frequency": 0.4530096073369659,
+          "winner": "frequency"
+        },
+        {
+          "model": "granite",
+          "prompt": "code",
+          "window": 4,
+          "rows": 160,
+          "recency": null,
+          "frequency": null,
+          "winner": "no signal"
+        },
+        {
+          "model": "granite",
+          "prompt": "code",
+          "window": 4,
+          "rows": 480,
+          "recency": 0.263874495732752,
+          "frequency": 0.5110691857254253,
+          "winner": "frequency"
+        },
+        {
+          "model": "granite",
+          "prompt": "code",
+          "window": 4,
+          "rows": 640,
+          "recency": 0.3077487817386637,
+          "frequency": 0.4743203221483843,
+          "winner": "frequency"
+        },
+        {
+          "model": "granite",
+          "prompt": "code",
+          "window": 8,
+          "rows": 160,
+          "recency": null,
+          "frequency": null,
+          "winner": "no signal"
+        },
+        {
+          "model": "granite",
+          "prompt": "code",
+          "window": 8,
+          "rows": 480,
+          "recency": 0.31973313936824843,
+          "frequency": 0.5110691857254253,
+          "winner": "frequency"
+        },
+        {
+          "model": "granite",
+          "prompt": "code",
+          "window": 8,
+          "rows": 640,
+          "recency": 0.30201727512307797,
+          "frequency": 0.4743203221483843,
+          "winner": "frequency"
+        },
+        {
+          "model": "granite",
+          "prompt": "math",
+          "window": 4,
+          "rows": 160,
+          "recency": null,
+          "frequency": null,
+          "winner": "no signal"
+        },
+        {
+          "model": "granite",
+          "prompt": "math",
+          "window": 4,
+          "rows": 480,
+          "recency": 0.2889229857654274,
+          "frequency": 0.3957462353248109,
+          "winner": "frequency"
+        },
+        {
+          "model": "granite",
+          "prompt": "math",
+          "window": 4,
+          "rows": 640,
+          "recency": 0.2995549956916599,
+          "frequency": 0.502588820184452,
+          "winner": "frequency"
+        },
+        {
+          "model": "granite",
+          "prompt": "math",
+          "window": 8,
+          "rows": 160,
+          "recency": null,
+          "frequency": null,
+          "winner": "no signal"
+        },
+        {
+          "model": "granite",
+          "prompt": "math",
+          "window": 8,
+          "rows": 480,
+          "recency": 0.33097799780101383,
+          "frequency": 0.3957462353248109,
+          "winner": "frequency"
+        },
+        {
+          "model": "granite",
+          "prompt": "math",
+          "window": 8,
+          "rows": 640,
+          "recency": 0.37556534481356885,
+          "frequency": 0.502588820184452,
+          "winner": "frequency"
+        },
+        {
+          "model": "granite",
+          "prompt": "dialogue",
+          "window": 4,
+          "rows": 160,
+          "recency": null,
+          "frequency": null,
+          "winner": "no signal"
+        },
+        {
+          "model": "granite",
+          "prompt": "dialogue",
+          "window": 4,
+          "rows": 480,
+          "recency": 0.29138959043724627,
+          "frequency": 0.4106036524851369,
+          "winner": "frequency"
+        },
+        {
+          "model": "granite",
+          "prompt": "dialogue",
+          "window": 4,
+          "rows": 640,
+          "recency": 0.21615672259951635,
+          "frequency": 0.32358557960021694,
+          "winner": "frequency"
+        },
+        {
+          "model": "granite",
+          "prompt": "dialogue",
+          "window": 8,
+          "rows": 160,
+          "recency": null,
+          "frequency": null,
+          "winner": "no signal"
+        },
+        {
+          "model": "granite",
+          "prompt": "dialogue",
+          "window": 8,
+          "rows": 480,
+          "recency": 0.35646992882617856,
+          "frequency": 0.4106036524851369,
+          "winner": "frequency"
+        },
+        {
+          "model": "granite",
+          "prompt": "dialogue",
+          "window": 8,
+          "rows": 640,
+          "recency": 0.26350906979038147,
+          "frequency": 0.32358557960021694,
+          "winner": "frequency"
         }
       ],
       "tally": {
-        "frequency": 16,
+        "frequency": 32,
         "recency": 6
       },
       "holds": true
@@ -216,6 +460,7 @@
     "dev_cache": {
       "cells": [
         {
+          "model": "olmoe",
           "prompt": "prose",
           "rows": 128,
           "positional": 56408,
@@ -223,6 +468,7 @@
           "vs_positional": 0.7682952772656361
         },
         {
+          "model": "olmoe",
           "prompt": "prose",
           "rows": 384,
           "positional": 56408,
@@ -230,6 +476,7 @@
           "vs_positional": 0.46908239965962273
         },
         {
+          "model": "olmoe",
           "prompt": "prose",
           "rows": 512,
           "positional": 56408,
@@ -237,6 +484,7 @@
           "vs_positional": 0.3091050914763863
         },
         {
+          "model": "olmoe",
           "prompt": "code",
           "rows": 128,
           "positional": 54435,
@@ -244,6 +492,7 @@
           "vs_positional": 0.7226233122072196
         },
         {
+          "model": "olmoe",
           "prompt": "code",
           "rows": 384,
           "positional": 54435,
@@ -251,6 +500,7 @@
           "vs_positional": 0.28836226692385414
         },
         {
+          "model": "olmoe",
           "prompt": "code",
           "rows": 512,
           "positional": 54435,
@@ -258,6 +508,7 @@
           "vs_positional": 0.16368145494626618
         },
         {
+          "model": "olmoe",
           "prompt": "math",
           "rows": 128,
           "positional": 48945,
@@ -265,6 +516,7 @@
           "vs_positional": 0.6106446010828481
         },
         {
+          "model": "olmoe",
           "prompt": "math",
           "rows": 384,
           "positional": 48945,
@@ -272,6 +524,7 @@
           "vs_positional": 0.08901828583103484
         },
         {
+          "model": "olmoe",
           "prompt": "math",
           "rows": 512,
           "positional": 48945,
@@ -279,6 +532,7 @@
           "vs_positional": 0.05457145775870875
         },
         {
+          "model": "olmoe",
           "prompt": "dialogue",
           "rows": 128,
           "positional": 55350,
@@ -286,6 +540,7 @@
           "vs_positional": 0.7501355013550135
         },
         {
+          "model": "olmoe",
           "prompt": "dialogue",
           "rows": 384,
           "positional": 55350,
@@ -293,18 +548,116 @@
           "vs_positional": 0.4415356820234869
         },
         {
+          "model": "olmoe",
           "prompt": "dialogue",
           "rows": 512,
           "positional": 55350,
           "cache": 18338,
           "vs_positional": 0.33130984643179767
+        },
+        {
+          "model": "granite",
+          "prompt": "prose",
+          "rows": 160,
+          "positional": 101076,
+          "cache": 131072,
+          "vs_positional": 1.2967667893466304
+        },
+        {
+          "model": "granite",
+          "prompt": "prose",
+          "rows": 480,
+          "positional": 101076,
+          "cache": 54140,
+          "vs_positional": 0.5356365507143139
+        },
+        {
+          "model": "granite",
+          "prompt": "prose",
+          "rows": 640,
+          "positional": 101076,
+          "cache": 36178,
+          "vs_positional": 0.3579286873243896
+        },
+        {
+          "model": "granite",
+          "prompt": "code",
+          "rows": 160,
+          "positional": 102629,
+          "cache": 131072,
+          "vs_positional": 1.2771438872053709
+        },
+        {
+          "model": "granite",
+          "prompt": "code",
+          "rows": 480,
+          "positional": 102629,
+          "cache": 50237,
+          "vs_positional": 0.4895010182307145
+        },
+        {
+          "model": "granite",
+          "prompt": "code",
+          "rows": 640,
+          "positional": 102629,
+          "cache": 28721,
+          "vs_positional": 0.2798526732210194
+        },
+        {
+          "model": "granite",
+          "prompt": "math",
+          "rows": 160,
+          "positional": 106820,
+          "cache": 131072,
+          "vs_positional": 1.2270361355551396
+        },
+        {
+          "model": "granite",
+          "prompt": "math",
+          "rows": 480,
+          "positional": 106820,
+          "cache": 51316,
+          "vs_positional": 0.48039692941396744
+        },
+        {
+          "model": "granite",
+          "prompt": "math",
+          "rows": 640,
+          "positional": 106820,
+          "cache": 31909,
+          "vs_positional": 0.2987174686388317
+        },
+        {
+          "model": "granite",
+          "prompt": "dialogue",
+          "rows": 160,
+          "positional": 104308,
+          "cache": 131072,
+          "vs_positional": 1.256586263757334
+        },
+        {
+          "model": "granite",
+          "prompt": "dialogue",
+          "rows": 480,
+          "positional": 104308,
+          "cache": 52130,
+          "vs_positional": 0.4997699121831499
+        },
+        {
+          "model": "granite",
+          "prompt": "dialogue",
+          "rows": 640,
+          "positional": 104308,
+          "cache": 31146,
+          "vs_positional": 0.2985964643172144
         }
       ],
-      "holds": true
+      "holds": false
     },
     "gate3": {
       "cells": [
         {
+          "model": "olmoe",
           "prompt": "prose",
           "rows": 128,
           "static": 22596,
@@ -317,6 +670,7 @@
           "winner": "ewma"
         },
         {
+          "model": "olmoe",
           "prompt": "prose",
           "rows": 384,
           "static": 11708,
@@ -329,6 +683,7 @@
           "winner": "ewma"
         },
         {
+          "model": "olmoe",
           "prompt": "prose",
           "rows": 512,
           "static": 7531,
@@ -341,6 +696,7 @@
           "winner": "ewma"
         },
         {
+          "model": "olmoe",
           "prompt": "code",
           "rows": 128,
           "static": 17739,
@@ -353,6 +709,7 @@
           "winner": "adaptive"
         },
         {
+          "model": "olmoe",
           "prompt": "code",
           "rows": 384,
           "static": 6703,
@@ -365,6 +722,7 @@
           "winner": "adaptive"
         },
         {
+          "model": "olmoe",
           "prompt": "code",
           "rows": 512,
           "static": 3542,
@@ -377,6 +735,7 @@
           "winner": "hybrid"
         },
         {
+          "model": "olmoe",
           "prompt": "math",
           "rows": 128,
           "static": 11740,
@@ -389,6 +748,7 @@
           "winner": "ewma"
         },
         {
+          "model": "olmoe",
           "prompt": "math",
           "rows": 384,
           "static": 2335,
@@ -401,6 +761,7 @@
           "winner": "demand"
         },
         {
+          "model": "olmoe",
           "prompt": "math",
           "rows": 512,
           "static": 1347,
@@ -413,6 +774,7 @@
           "winner": "hybrid"
         },
         {
+          "model": "olmoe",
           "prompt": "dialogue",
           "rows": 128,
           "static": 20006,
@@ -425,6 +787,7 @@
           "winner": "ewma"
         },
         {
+          "model": "olmoe",
           "prompt": "dialogue",
           "rows": 384,
           "static": 7534,
@@ -437,6 +800,7 @@
           "winner": "ewma"
         },
         {
+          "model": "olmoe",
           "prompt": "dialogue",
           "rows": 512,
           "static": 4135,
@@ -447,28 +811,188 @@
           "oracle": 3445,
           "adaptive_vs_static_pct": -6.940749697702539,
           "winner": "adaptive"
+        },
+        {
+          "model": "granite",
+          "prompt": "prose",
+          "rows": 160,
+          "static": 44491,
+          "adaptive": 44316,
+          "ewma": 44505,
+          "hybrid": 44316,
+          "demand": 65536,
+          "oracle": 43938,
+          "adaptive_vs_static_pct": -0.39333797846755525,
+          "winner": "adaptive"
+        },
+        {
+          "model": "granite",
+          "prompt": "prose",
+          "rows": 480,
+          "static": 21191,
+          "adaptive": 21033,
+          "ewma": 21381,
+          "hybrid": 21033,
+          "demand": 26469,
+          "oracle": 20350,
+          "adaptive_vs_static_pct": -0.7455995469774904,
+          "winner": "adaptive"
+        },
+        {
+          "model": "granite",
+          "prompt": "prose",
+          "rows": 640,
+          "static": 13043,
+          "adaptive": 12854,
+          "ewma": 13222,
+          "hybrid": 12854,
+          "demand": 17865,
+          "oracle": 12286,
+          "adaptive_vs_static_pct": -1.4490531319481714,
+          "winner": "adaptive"
+        },
+        {
+          "model": "granite",
+          "prompt": "code",
+          "rows": 160,
+          "static": 47239,
+          "adaptive": 46711,
+          "ewma": 46754,
+          "hybrid": 46711,
+          "demand": 65536,
+          "oracle": 45091,
+          "adaptive_vs_static_pct": -1.1177205275302187,
+          "winner": "adaptive"
+        },
+        {
+          "model": "granite",
+          "prompt": "code",
+          "rows": 480,
+          "static": 24592,
+          "adaptive": 23508,
+          "ewma": 24195,
+          "hybrid": 23508,
+          "demand": 26432,
+          "oracle": 21404,
+          "adaptive_vs_static_pct": -4.407937540663631,
+          "winner": "adaptive"
+        },
+        {
+          "model": "granite",
+          "prompt": "code",
+          "rows": 640,
+          "static": 16180,
+          "adaptive": 15465,
+          "ewma": 15862,
+          "hybrid": 14468,
+          "demand": 15938,
+          "oracle": 13211,
+          "adaptive_vs_static_pct": -4.419035846724351,
+          "winner": "hybrid"
+        },
+        {
+          "model": "granite",
+          "prompt": "math",
+          "rows": 160,
+          "static": 41597,
+          "adaptive": 41598,
+          "ewma": 41697,
+          "hybrid": 41598,
+          "demand": 65536,
+          "oracle": 41344,
+          "adaptive_vs_static_pct": 0.002404019520638508,
+          "winner": "adaptive"
+        },
+        {
+          "model": "granite",
+          "prompt": "math",
+          "rows": 480,
+          "static": 16134,
+          "adaptive": 16141,
+          "ewma": 16408,
+          "hybrid": 16141,
+          "demand": 25710,
+          "oracle": 15847,
+          "adaptive_vs_static_pct": 0.043386636915829925,
+          "winner": "adaptive"
+        },
+        {
+          "model": "granite",
+          "prompt": "math",
+          "rows": 640,
+          "static": 8428,
+          "adaptive": 8444,
+          "ewma": 8601,
+          "hybrid": 8444,
+          "demand": 15581,
+          "oracle": 8200,
+          "adaptive_vs_static_pct": 0.18984337921214997,
+          "winner": "adaptive"
+        },
+        {
+          "model": "granite",
+          "prompt": "dialogue",
+          "rows": 160,
+          "static": 40268,
+          "adaptive": 40152,
+          "ewma": 40163,
+          "hybrid": 40152,
+          "demand": 65536,
+          "oracle": 39900,
+          "adaptive_vs_static_pct": -0.2880699314592232,
+          "winner": "adaptive"
+        },
+        {
+          "model": "granite",
+          "prompt": "dialogue",
+          "rows": 480,
+          "static": 15517,
+          "adaptive": 15224,
+          "ewma": 15221,
+          "hybrid": 15224,
+          "demand": 25329,
+          "oracle": 14836,
+          "adaptive_vs_static_pct": -1.8882515950248115,
+          "winner": "ewma"
+        },
+        {
+          "model": "granite",
+          "prompt": "dialogue",
+          "rows": 640,
+          "static": 8427,
+          "adaptive": 8206,
+          "ewma": 8331,
+          "hybrid": 8206,
+          "demand": 15069,
+          "oracle": 7920,
+          "adaptive_vs_static_pct": -2.6225228432419603,
+          "winner": "adaptive"
         }
       ],
-      "adaptive_beats_static_everywhere": true,
+      "adaptive_beats_static_everywhere": false,
       "gain_range_pct": [
         -63.02895322939867,
-        -0.5299058571509104
+        0.18984337921214997
       ]
     },
     "policy": {
       "winners": {
-        "ewma": 6,
-        "adaptive": 3,
-        "hybrid": 2,
+        "ewma": 7,
+        "adaptive": 13,
+        "hybrid": 3,
         "demand": 1
       },
       "ewma_wins_everywhere": false
     }
   },
   "working_set": {
-    "prose": 899,
-    "code": 878,
-    "math": 377,
-    "dialogue": 783
+    "olmoe/prose": 899,
+    "olmoe/code": 878,
+    "olmoe/math": 377,
+    "olmoe/dialogue": 783,
+    "granite/prose": 1210,
+    "granite/code": 1235,
+    "granite/math": 1150,
+    "granite/dialogue": 1091
   }
 }

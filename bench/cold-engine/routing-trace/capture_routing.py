@@ -16,11 +16,59 @@ import sys
 import torch
 
 
+def routed_ids(out, k):
+    """The routed expert ids, however this transformers version spells them.
+
+    Two shapes exist in the wild and both have to work, because the
+    module named `mlp.gate` is not the same object across versions:
+
+    * a **router module** (OLMoE's `OlmoeTopKRouter` in current
+      transformers) returns `(scores[T,E], weights[T,k], indices[T,k])`
+      and hands the ids over directly;
+    * a bare **`nn.Linear`** (older transformers) returns float logits
+      `[T, E]`, and the ids have to be recomputed with top-k.
+
+    Indices are preferred when present and picked by SHAPE AND DTYPE, not
+    by position -- an integer tensor whose last dim is k is the index
+    tensor and nothing else is. Reading position 2 would break silently
+    the first time the tuple is reordered, and a silent break here is a
+    plausible-looking routing trace rather than an exception.
+    """
+    ts = [t for t in (out if isinstance(out, (tuple, list)) else [out])
+          if isinstance(t, torch.Tensor)]
+    idx = [t for t in ts if t.dtype in (torch.int32, torch.int64)
+           and t.shape[-1] == k]
+    if len(idx) == 1:
+        return idx[0]
+    if len(idx) > 1:
+        raise RuntimeError(
+            f"ambiguous router output: {len(idx)} integer [*, k={k}] "
+            f"tensors, cannot tell which holds the routed ids "
+            f"({[tuple(t.shape) for t in idx]})")
+    # No index tensor: this is the raw-logits form. Take the widest
+    # float tensor -- scores over all E experts -- and redo the top-k.
+    lg = [t for t in ts if t.is_floating_point()]
+    if not lg:
+        raise RuntimeError(
+            "router output has neither an integer [*, k] index tensor "
+            f"nor a float logit tensor: "
+            f"{[(tuple(t.shape), str(t.dtype)) for t in ts]}")
+    wide = max(lg, key=lambda t: t.shape[-1])
+    if wide.shape[-1] < k:
+        raise RuntimeError(
+            f"router logits have {wide.shape[-1]} columns, fewer than "
+            f"top_k={k}; this is not a router output")
+    return torch.topk(wide.reshape(-1, wide.shape[-1]), k=k, dim=-1).indices
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
     ap.add_argument("--steps", type=int, default=512)
     ap.add_argument("--prompt-tokens", type=int, default=64)
+    ap.add_argument("--router-suffix", default=None,
+                    help="restrict router discovery to modules whose name "
+                         "ends with this; probing finds them without it")
     ap.add_argument("--prompt", default="prose",
                     choices=["prose", "code", "math", "dialogue"])
     ap.add_argument("--out", required=True)
@@ -72,68 +120,68 @@ def main():
     reps = max(2, -(-a.prompt_tokens // max(1, len(tk(text).input_ids))) + 1)
     ids = tk(text * reps, return_tensors="pt").input_ids[:, :a.prompt_tokens].to("cuda")
 
-    # Hook every router gate. Reading the gate's OWN logits and redoing topk
-    # with the config's k is the only way to see the ids without depending on
-    # a particular HF version's return shape.
-    layers, gates = [], []
-    for name, mod in model.named_modules():
-        if name.endswith("mlp.gate"):
-            layers.append(name)
-            gates.append(mod)
-    if not gates:
-        sys.exit("no `mlp.gate` modules found — wrong architecture?")
-    k = getattr(model.config, "num_experts_per_tok", None) or \
-        getattr(model.config, "top_k", None)
+    k = (getattr(model.config, "num_experts_per_tok", None)
+         or getattr(model.config, "top_k", None)
+         or getattr(model.config, "moe_top_k", None)
+         or getattr(model.config, "num_experts_per_token", None))
     if k is None:
-        sys.exit("cannot determine num_experts_per_tok from config")
+        sys.exit("cannot determine the routed-expert count from config; "
+                 "looked for num_experts_per_tok, top_k, moe_top_k, "
+                 "num_experts_per_token")
+
+    # Router discovery is BY PROBE, not by name. `mlp.gate` is OLMoE's
+    # spelling; GraniteMoE says `block_sparse_moe.router.layer`, Mixtral
+    # `block_sparse_moe.gate`, and a name list would need editing for every
+    # new architecture -- which is how a capture harness quietly becomes
+    # single-model. Candidates are anything plausibly a router; the ones kept
+    # are those whose output a probe forward can actually read routed ids out
+    # of, one per layer.
+    cands = [(n, m) for n, m in model.named_modules()
+             if n.rsplit(".", 1)[-1] in ("gate", "router", "layer", "gate_proj")
+             or n.endswith("router.layer")]
+    if a.router_suffix:
+        cands = [(n, m) for n, m in cands if n.endswith(a.router_suffix)]
+    seen, probe = {}, {}
+
+    def _probe(nm):
+        def h(_m, _i, out):
+            probe[nm] = out
+        return h
+
+    hs = [m.register_forward_hook(_probe(n)) for n, m in cands]
+    with torch.no_grad():
+        model(ids[:, :2])
+    for h in hs:
+        h.remove()
+
+    layers, gates = [], []
+    for n, m in cands:
+        out = probe.get(n)
+        if out is None:
+            continue
+        try:
+            routed_ids(out, k)
+        except Exception:
+            continue
+        # One router per layer: keyed on the `model.layers.N` prefix, so a
+        # nested `router.layer` does not also register its parent.
+        key = ".".join(n.split(".")[:3])
+        if key in seen:
+            continue
+        seen[key] = n
+        layers.append(n)
+        gates.append(m)
+    if not gates:
+        sys.exit("no readable router modules found. Probed %d candidates: %s"
+                 % (len(cands), [n for n, _ in cands[:6]]))
+    print("routers: %s ..." % ", ".join(layers[:2]))
     print(f"{len(gates)} routers, top_k={k}, "
           f"E={getattr(model.config,'num_experts',None)}")
 
     step_rec = {}
 
     def _indices(out):
-        """The routed expert ids, however this transformers version spells them.
-
-        Two shapes exist in the wild and both have to work, because the
-        module named `mlp.gate` is not the same object across versions:
-
-        * a **router module** (OLMoE's `OlmoeTopKRouter` in current
-          transformers) returns `(scores[T,E], weights[T,k], indices[T,k])`
-          and hands the ids over directly;
-        * a bare **`nn.Linear`** (older transformers) returns float logits
-          `[T, E]`, and the ids have to be recomputed with top-k.
-
-        Indices are preferred when present and picked by SHAPE AND DTYPE, not
-        by position -- an integer tensor whose last dim is k is the index
-        tensor and nothing else is. Reading position 2 would break silently
-        the first time the tuple is reordered, and a silent break here is a
-        plausible-looking routing trace rather than an exception.
-        """
-        ts = [t for t in (out if isinstance(out, (tuple, list)) else [out])
-              if isinstance(t, torch.Tensor)]
-        idx = [t for t in ts if t.dtype in (torch.int32, torch.int64)
-               and t.shape[-1] == k]
-        if len(idx) == 1:
-            return idx[0]
-        if len(idx) > 1:
-            raise RuntimeError(
-                f"ambiguous router output: {len(idx)} integer [*, k={k}] "
-                f"tensors, cannot tell which holds the routed ids "
-                f"({[tuple(t.shape) for t in idx]})")
-        # No index tensor: this is the raw-logits form. Take the widest
-        # float tensor -- scores over all E experts -- and redo the top-k.
-        lg = [t for t in ts if t.is_floating_point()]
-        if not lg:
-            raise RuntimeError(
-                "router output has neither an integer [*, k] index tensor "
-                f"nor a float logit tensor: "
-                f"{[(tuple(t.shape), str(t.dtype)) for t in ts]}")
-        wide = max(lg, key=lambda t: t.shape[-1])
-        if wide.shape[-1] < k:
-            raise RuntimeError(
-                f"router logits have {wide.shape[-1]} columns, fewer than "
-                f"top_k={k}; this is not a router output")
-        return torch.topk(wide.reshape(-1, wide.shape[-1]), k=k, dim=-1).indices
+        return routed_ids(out, k)
 
     def mk(i):
         def hook(_m, _inp, out):
