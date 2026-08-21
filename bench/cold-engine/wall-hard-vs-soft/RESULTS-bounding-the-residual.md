@@ -79,6 +79,13 @@ enumeration index, which is real complexity for no gain.
 
 7.2% remains unaccounted, which is the honest error bar on this decomposition.
 
+## Done: see `RESULTS-demote-heap.md`
+
+The fix below was implemented and **confirmed**: the scan is replaced by a lazy
+heap, closing **76–82%** of the soft-hard gap (`_demote_locked` 0.575 s →
+0.102 s), with the accounting *improving* to 97.0% attributed. Preregistered at
+≥70%.
+
 ## The fix this implies, and why it is not in this commit
 
 `_demote_locked` needs what `_victim` got in #176: an incremental structure

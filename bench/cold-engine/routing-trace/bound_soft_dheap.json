@@ -1,0 +1,14 @@
+{
+  "rows": 256,
+  "protected": 248,
+  "reps": 5,
+  "gap_s": 0.1574340000000003,
+  "terms": {
+    "_demote_locked": 0.102165923,
+    "_resurrect_locked": 0.000880733,
+    "_victim (reclaimable rank term)": -0.002003952,
+    "436 extra reads x rest-of-tier": 0.010192319819329167
+  },
+  "accounted_s": 0.11123502381932918,
+  "unaccounted_s": 0.04619897618067112
+}

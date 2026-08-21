@@ -55,6 +55,7 @@ from nvme_reader import ArenaReader, alloc_landing, buffer_address
 # Cross-check every heap selection against the full sweep. Off by default
 # (it reinstates the O(hot_rows) cost); on for the equivalence runs.
 _VICTIM_VERIFY = bool(os.environ.get("COLD_VICTIM_VERIFY"))
+_DEMOTE_VERIFY = bool(os.environ.get("COLD_DEMOTE_VERIFY"))
 
 # Rebuild the victim heap once it holds this many entries per slot. Bounds
 # both memory and pop cost; the rebuild is O(hot_rows) and amortises over the
@@ -158,6 +159,19 @@ class ColdTier:
         # that stale entry. It never perturbs ordering: slot is unique among
         # live entries, so comparison is decided before the key is reached.
         self._vheap: list = []
+        # Demote's own lazy heap of ((freq, last_use, pubseq), key) over
+        # eligible rows -- resident, not reclaimable. _vheap is NOT reusable
+        # here despite ranking the same keys: it leads with the reclaimable
+        # flag and breaks ties by slot, where demote filters reclaimables out
+        # and breaks ties by _slot_of insertion order.
+        self._dheap: list = []
+        # Publish order, the third rank element. nsmallest with key= is stable,
+        # so equal (freq, last_use) fall to position in `cands` -- which is
+        # _slot_of insertion order. Ties ARE reachable: _last_use is a
+        # per-request clock, so every key one ensure() touches shares a value.
+        # Ranking by (freq, last, key) instead would reorder demotions.
+        self._pubseq: dict[tuple[int, int], int] = {}
+        self._pubseq_next = 0
         self._pending: dict[tuple[int, int], threading.Event] = {}
         self._demand_protected: set[int] = set()
         # Reclaimable residency: key -> the clock tick at its logical
@@ -531,7 +545,10 @@ class ColdTier:
                 with self._lock:
                     self._key_of[slot] = key
                     self._slot_of[key] = slot
+                    self._pubseq[key] = self._pubseq_next
+                    self._pubseq_next += 1
                     self._vpush(key, slot)        # first rank for this slot
+                    self._dpush(key)              # eligible to be demoted
                     self._reserved.discard(slot)
                     self._pending.pop(key).set()
             with self._lock:
@@ -619,6 +636,7 @@ class ColdTier:
             old = self._key_of[slot]
             if old is not None:
                 del self._slot_of[old]
+                self._pubseq.pop(old, None)
                 self._key_of[slot] = None         # unpublish before refilling
                 self.evictions += 1
                 born = self._reclaimable.pop(old, None)
@@ -640,13 +658,108 @@ class ColdTier:
         born = self._reclaimable.pop(key, None)
         if born is None:
             return
+        if key in self._pubseq:
+            self._dpush(key)          # eligible again; self-heal cannot add it
         self._resurrect_ticks += self._clock - born
         if speculative:
             self.spec_resurrections += 1
         else:
             self.resurrections += 1
 
+    def _dcompact(self) -> None:
+        """Rebuild the demote heap with one entry per eligible row."""
+        recl = self._reclaimable
+        freq = self._freq
+        last = self._last_use
+        seq = self._pubseq
+        fresh = [((freq[k], last[k], seq[k]), k)
+                 for k in self._slot_of if k not in recl and k in seq]
+        heapq.heapify(fresh)
+        self._dheap = fresh
+
+    def _dpush(self, key) -> None:
+        """Record this key's current demote rank. Call when it becomes
+        ELIGIBLE -- on publish, and on resurrection out of _reclaimable."""
+        prot = self.protected_rows
+        if prot is None or prot >= self.hot_rows:
+            # Demotion is impossible, so _demote_locked never drains and every
+            # push would leak: measured 753 entries -- one per miss -- on the
+            # DEFAULT configuration before this guard.
+            return
+        heap = self._dheap
+        if len(heap) > _VHEAP_SLACK * self.hot_rows:
+            # The rebuild reads _slot_of, which already contains `key` (both
+            # callers set it first), so pushing after it would leave a
+            # DUPLICATE -- two live entries for one key, both validating, both
+            # entering `victims`. That under-demotes unique rows and inflates
+            # logical_evictions (Bugbot, gnf4#182).
+            self._dcompact()
+            return
+        heapq.heappush(heap, ((self._freq[key], self._last_use[key],
+                               self._pubseq[key]), key))
+
     def _demote_locked(self) -> None:
+        """The same demotions as :meth:`_demote_scan_locked`, off a heap.
+
+        The scan it replaces was 90.9% of the soft-hard gap: an O(resident)
+        candidate list plus a rank evaluated for every candidate, on every
+        request, to choose ~4 victims.
+
+        Stale entries are dropped; entries whose rank moved on are re-filed at
+        the current rank. That self-heal is sound for the same reason as
+        _victim's: a touch only ever RAISES freq and last_use, so an entry
+        sinks and cannot hide a better candidate. Becoming eligible is the
+        change that would need an eager push, and it has one (_dpush on
+        resurrect).
+        """
+        if self.protected_rows is None or self.protected_rows >= self.hot_rows:
+            return
+        over = (len(self._slot_of) - len(self._reclaimable)) - self.protected_rows
+        if over <= 0:
+            return
+        heap = self._dheap
+        slot_of = self._slot_of
+        recl = self._reclaimable
+        protected = self._demand_protected
+        freq = self._freq
+        last = self._last_use
+        pubseq = self._pubseq
+        victims: list = []
+        held: list = []
+        while heap and len(victims) < over:
+            rank, key = heap[0]
+            s = slot_of.get(key)
+            if s is None or pubseq.get(key) != rank[2]:
+                heapq.heappop(heap)              # evicted, or re-published
+                continue
+            if key in recl:
+                heapq.heappop(heap)              # already reclaimable
+                continue
+            live = (freq[key], last[key], rank[2])
+            if rank != live:
+                heapq.heapreplace(heap, (live, key))
+                continue
+            if s in protected:
+                held.append(heapq.heappop(heap))  # in the demand window
+                continue
+            victims.append(key)
+            heapq.heappop(heap)
+        for entry in held:
+            heapq.heappush(heap, entry)
+        if _DEMOTE_VERIFY:
+            expect = self._demote_scan_locked(dry=True) or []
+            if list(expect) != victims:
+                raise AssertionError(
+                    f"demote heap chose {victims}, scan chose {list(expect)} "
+                    f"(over={over})")
+        for k in victims:
+            self._reclaimable[k] = self._clock
+            self.logical_evictions += 1
+            sl = slot_of.get(k)
+            if sl is not None:
+                self._vpush(k, sl)
+
+    def _demote_scan_locked(self, dry: bool = False) -> None:
         """Revoke capacity ownership from the worst-ranked ACTIVE rows until
         the active set fits ``protected_rows``.
 
@@ -661,10 +774,10 @@ class ColdTier:
         a resurrection for a row that was never at risk.
         """
         if self.protected_rows >= self.hot_rows:
-            return                    # nothing can be reclaimable: today's tier
+            return [] if dry else None   # nothing can be reclaimable
         over = (len(self._slot_of) - len(self._reclaimable)) - self.protected_rows
         if over <= 0:
-            return
+            return [] if dry else None
         cands = [k for k, s in self._slot_of.items()
                  if k not in self._reclaimable
                  and s not in self._demand_protected
@@ -710,6 +823,8 @@ class ColdTier:
         freq = self._freq
         last = self._last_use
         victims = heapq.nsmallest(over, cands, key=lambda k: (freq[k], last[k]))
+        if dry:
+            return victims
         for k in victims:
             self._reclaimable[k] = self._clock
             sl = self._slot_of.get(k)
@@ -799,6 +914,7 @@ class ColdTier:
             if slot in self._reserved or slot in self._demand_protected:
                 return False
             del self._slot_of[key]
+            self._pubseq.pop(key, None)
             self._key_of[slot] = None
             self._reclaimable.pop(key, None)
             self._gen[slot] += 1
