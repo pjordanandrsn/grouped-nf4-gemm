@@ -483,3 +483,51 @@ def test_victim_heap_agrees_with_the_sweep_under_eviction(tmp_path):
                     "one self-healing cannot cover -- went untested")
         finally:
             t.close()
+
+
+def test_demote_heap_agrees_with_the_scan(tmp_path):
+    """The heap must demote exactly what the scan would, in the same ORDER.
+
+    Order matters, not just the set: it is the order `_victim` overwrites
+    reclaimable rows in. And a wrong demotion set raises nothing -- it changes
+    which rows are reclaimable, hence resurrections, hence reads. This is the
+    property COLD_DEMOTE_VERIFY=1 checks against the routing trace; here it is
+    in CI on a workload that actually demotes.
+    """
+    import nvme_residency as nr
+    from nvme_arena import bake, load_index
+    from test_nvme_arena import make_snapshot
+
+    snap = tmp_path / "snap"
+    make_snapshot(str(snap))
+    arena = str(tmp_path / "a.arena")
+    bake(str(snap), arena, align=4096, log=lambda *a: None)
+    index = load_index(arena)
+    layers, experts = index["n_layers"], index["n_experts_per_layer"]
+
+    for protected in (6, 4):
+        t = nr.ColdTier(arena, hot_rows=8, pinned=False, index=index,
+                        protected_rows=protected, qd=1)
+        checked = 0
+        try:
+            heap_pick = t._demote_locked
+
+            def both(_h=heap_pick, _t=t):
+                nonlocal checked
+                expect = list(_t._demote_scan_locked(dry=True) or [])
+                before = dict(_t._reclaimable)
+                _h()
+                got = [k for k in _t._reclaimable if k not in before]
+                assert got == expect, (
+                    f"heap demoted {got}, scan would demote {expect}, "
+                    f"protected={protected}")
+                checked += 1
+
+            t._demote_locked = both
+            for step in range(300):
+                t.ensure(step % layers,
+                         [step % experts, (step * 3 + 1) % experts])
+            assert t.stats()["logical_evictions"] > 50, "nothing demoted"
+            assert checked > 100, f"only {checked} demote calls exercised"
+        finally:
+            t.close()
