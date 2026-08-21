@@ -149,6 +149,7 @@ def main():
     if a.router_suffix:
         cands = [(n, m) for n, m in cands if n.endswith(a.router_suffix)]
     seen, probe = {}, {}
+    routers = None
 
     def _probe(nm):
         def h(_m, _i, out):
@@ -178,6 +179,39 @@ def main():
         seen[key] = n
         layers.append(n)
         gates.append(m)
+    # FALLBACK: derive routing from the router's own weights.
+    #
+    # A fused MoE path may never CALL the router submodule at all. gpt-oss on
+    # transformers 5.x with `kernels` installed computes routing inside the
+    # mxfp4 kernel and hands `mlp.experts` a triton_kernels RoutingData; the
+    # `mlp.router` module exists, is hookable, and never fires, so the
+    # output-probe above finds 24 candidates and reads nothing from any of
+    # them. Dequantizing to bf16 restores the module call, but that is a
+    # different numerical path from the one the arena was baked from -- and on
+    # a 32 GB card it does not fit.
+    #
+    # The router is a plain Linear over the MLP's input, and gpt-oss's own
+    # config excludes it from quantization (`modules_to_not_convert` lists
+    # `model.layers.*.mlp.router`), so its weights are bf16 either way and
+    # top-k over `linear(h, W, b)` is exactly what the kernel does.
+    #
+    # VERIFIED, not assumed: against the kernel's own `RoutingData.expt_hist`
+    # over 8 tokens, the derived assignment reproduces the histogram on
+    # 24 layers of 24.
+    if not gates:
+        derived = []
+        for n, mod in model.named_modules():
+            r = getattr(mod, "router", None)
+            if r is not None and hasattr(r, "weight") and n.endswith("mlp"):
+                derived.append((n, mod, r))
+        if derived:
+            derived.sort(key=lambda t: int(t[0].split(".")[2]))
+            layers = [n + ".router (derived)" for n, _, _ in derived]
+            gates = [mod for _, mod, _ in derived]
+            routers = [r for _, _, r in derived]
+            print("router modules never fired; deriving from router weights "
+                  "for %d layers" % len(derived))
+
     if not gates:
         sys.exit("no readable router modules found. Probed %d candidates: %s"
                  % (len(cands), [n for n, _ in cands[:6]]))
@@ -209,7 +243,21 @@ def main():
             step_rec.setdefault(i, []).append(sorted(idx[-1].tolist()))
         return hook
 
-    hs = [g.register_forward_hook(mk(i)) for i, g in enumerate(gates)]
+    def mk_derived(i, router):
+        def hook(_m, args):
+            h = args[0]
+            lg = torch.nn.functional.linear(
+                h.reshape(-1, h.shape[-1]), router.weight,
+                getattr(router, "bias", None))
+            idx = torch.topk(lg, k=k, dim=-1).indices
+            step_rec.setdefault(i, []).append(sorted(idx[-1].tolist()))
+        return hook
+
+    if routers is not None:
+        hs = [g.register_forward_pre_hook(mk_derived(i, routers[i]))
+              for i, g in enumerate(gates)]
+    else:
+        hs = [g.register_forward_hook(mk(i)) for i, g in enumerate(gates)]
 
     out = []
     with torch.no_grad():
