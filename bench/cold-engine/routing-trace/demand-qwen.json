@@ -100,13 +100,13 @@
       "model": "qwen",
       "prompt": "prose",
       "frac": 0.7,
-      "cap": 1007,
+      "cap": 1008,
       "working_set": 1406,
-      "headroom": 1.3962264150943395,
-      "static": 3751,
-      "demand": 4121,
+      "headroom": 1.3948412698412698,
+      "static": 3738,
+      "demand": 4111,
       "win": false,
-      "margin": -0.09864036256998134
+      "margin": -0.09978598180845372
     },
     {
       "model": "qwen",
@@ -244,9 +244,9 @@
       "model": "qwen",
       "prompt": "code",
       "frac": 0.7,
-      "cap": 1007,
+      "cap": 1008,
       "working_set": 864,
-      "headroom": 0.8579940417080437,
+      "headroom": 0.8571428571428571,
       "static": 837,
       "demand": 75,
       "win": true,
@@ -388,13 +388,13 @@
       "model": "qwen",
       "prompt": "math",
       "frac": 0.7,
-      "cap": 1007,
+      "cap": 1008,
       "working_set": 390,
-      "headroom": 0.3872889771598808,
-      "static": 920,
+      "headroom": 0.3869047619047619,
+      "static": 918,
       "demand": 37,
       "win": true,
-      "margin": 0.9597826086956521
+      "margin": 0.9596949891067538
     },
     {
       "model": "qwen",
@@ -532,13 +532,13 @@
       "model": "qwen",
       "prompt": "dialogue",
       "frac": 0.7,
-      "cap": 1007,
+      "cap": 1008,
       "working_set": 1354,
-      "headroom": 1.3445878848063555,
-      "static": 2213,
-      "demand": 3906,
+      "headroom": 1.3432539682539681,
+      "static": 2202,
+      "demand": 3900,
       "win": false,
-      "margin": -0.7650248531405333
+      "margin": -0.771117166212534
     },
     {
       "model": "qwen",

@@ -29,7 +29,8 @@ sys.path.insert(0, os.path.join(HERE, "..", "..", "..", "kernel"))
 sys.path.insert(0, HERE)
 
 from reuse_profile import _spearman                    # noqa: E402
-from score_policies import demand_p, load, static_p    # noqa: E402
+from score_policies import (capacity, demand_p, load,   # noqa: E402
+                            static_p)
 
 
 def counts(recs):
@@ -61,7 +62,7 @@ def main():
             ws = len(counts(ev))
             marks = []
             for f in fracs:
-                cap = int(arena * f)
+                cap = capacity(arena, f)
                 s = static_p(warm, ev, cap)[0]
                 d = demand_p(warm, ev, cap)[0]
                 rows.append({"model": m, "prompt": p, "frac": f, "cap": cap,

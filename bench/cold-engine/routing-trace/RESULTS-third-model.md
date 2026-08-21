@@ -93,6 +93,17 @@ two to three rows later than the cycle length, not at it.
 [`score_demand.py`](score_demand.py)). Demand-paging wins in 18; always-say-no
 scores 0.625.
 
+Both receipts cited here — `demand-qwen.json` and the registered
+`RESULTS-third-model.json` — now derive every capacity from one shared
+`capacity()` helper, so they agree on all 48 by construction. They did not
+at first: the two harnesses used `int(arena * f)` and `int(round(arena * f))`,
+and `1440 * 0.7` is `1007.9999999999999` in binary, so one said 1007 and the
+other 1008 (Bugbot, #177). The rule is a floor and stays a floor; going
+through `Fraction` on the decimal text removes the error. Across the three
+arenas and twelve fractions it moves exactly one cell, no win flips, the
+derivation receipt `demand.json` is byte-identical, and every number in this
+document is unchanged.
+
 | rule | accuracy | TP | FP | FN | TN |
 |---|---|---|---|---|---|
 | headroom ≤ 0.9 | 0.854 | 11 | 0 | 7 | 30 |

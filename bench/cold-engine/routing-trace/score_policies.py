@@ -29,7 +29,29 @@ a policy.
 import argparse
 import json
 from collections import Counter, OrderedDict
+from fractions import Fraction
 
+
+
+
+def capacity(arena, frac, floor=1):
+    """`frac` of `arena` rows, floored, without binary floating-point error.
+
+    `int(arena * frac)` is a floor, and it is the right rule -- a capacity
+    should not exceed its budget. The bug is that binary floating point makes
+    the floor wrong for fractions that are exact in decimal and not in binary:
+    1440 * 0.7 is 1007.9999999999999, so int() yields 1007 for a product whose
+    true value is exactly 1008. Two harnesses disagreeing on int() vs
+    int(round()) then produced two receipts for the same experiment with
+    different capacities at that fraction (Bugbot, gnf4#177).
+
+    Going through Fraction on the DECIMAL text keeps the floor and removes the
+    error, so this changes results only where the float was lying. Across the
+    three arenas captured (1024, 1280, 1440) and the twelve registered
+    fractions, that is exactly one cell: 1440 at 0.7. Rounding instead would
+    have moved five more that were never wrong.
+    """
+    return max(floor, (Fraction(str(frac)) * int(arena)).__floor__())
 
 def load(path):
     with open(path) as f:

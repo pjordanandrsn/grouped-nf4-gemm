@@ -27,6 +27,7 @@ sys.path.insert(0, HERE)
 
 from replay_dev_cache import positional_transfers                 # noqa: E402
 from score_policies import load                                   # noqa: E402
+from score_policies import capacity  # noqa: E402
 
 
 def simulate(recs, cap, policy, seed=0):
@@ -89,7 +90,7 @@ def main():
             routed = sum(len(v) for r in recs for v in r["routed"].values())
             pos = positional_transfers(meta, recs)
             for sh in shs:
-                cap = max(2, int(round(per * sh)))
+                cap = capacity(per, sh, floor=2)
                 res = {q: simulate(recs, cap, q)
                        for q in ("lru", "fifo", "random")}
                 zero_lru += res["lru"] == routed

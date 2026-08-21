@@ -563,14 +563,8 @@
     "cap": 72,
     "ws": 1406,
     "headroom": 19.52777777777778,
-    "static": [
-     22006,
-     0
-    ],
-    "demand": [
-     24576,
-     0
-    ],
+    "static": 22006,
+    "demand": 24576,
     "demand_wins": false
    },
    {
@@ -579,14 +573,8 @@
     "cap": 144,
     "ws": 1406,
     "headroom": 9.76388888888889,
-    "static": [
-     19947,
-     0
-    ],
-    "demand": [
-     20543,
-     0
-    ],
+    "static": 19947,
+    "demand": 20543,
     "demand_wins": false
    },
    {
@@ -595,14 +583,8 @@
     "cap": 216,
     "ws": 1406,
     "headroom": 6.5092592592592595,
-    "static": [
-     18133,
-     0
-    ],
-    "demand": [
-     18324,
-     0
-    ],
+    "static": 18133,
+    "demand": 18324,
     "demand_wins": false
    },
    {
@@ -611,14 +593,8 @@
     "cap": 288,
     "ws": 1406,
     "headroom": 4.881944444444445,
-    "static": [
-     16538,
-     0
-    ],
-    "demand": [
-     16737,
-     0
-    ],
+    "static": 16538,
+    "demand": 16737,
     "demand_wins": false
    },
    {
@@ -627,14 +603,8 @@
     "cap": 432,
     "ws": 1406,
     "headroom": 3.2546296296296298,
-    "static": [
-     13409,
-     0
-    ],
-    "demand": [
-     14284,
-     0
-    ],
+    "static": 13409,
+    "demand": 14284,
     "demand_wins": false
    },
    {
@@ -643,14 +613,8 @@
     "cap": 576,
     "ws": 1406,
     "headroom": 2.4409722222222223,
-    "static": [
-     10410,
-     0
-    ],
-    "demand": [
-     11473,
-     0
-    ],
+    "static": 10410,
+    "demand": 11473,
     "demand_wins": false
    },
    {
@@ -659,14 +623,8 @@
     "cap": 720,
     "ws": 1406,
     "headroom": 1.9527777777777777,
-    "static": [
-     8064,
-     0
-    ],
-    "demand": [
-     9191,
-     0
-    ],
+    "static": 8064,
+    "demand": 9191,
     "demand_wins": false
    },
    {
@@ -675,14 +633,8 @@
     "cap": 864,
     "ws": 1406,
     "headroom": 1.6273148148148149,
-    "static": [
-     5795,
-     0
-    ],
-    "demand": [
-     6819,
-     0
-    ],
+    "static": 5795,
+    "demand": 6819,
     "demand_wins": false
    },
    {
@@ -691,14 +643,8 @@
     "cap": 1008,
     "ws": 1406,
     "headroom": 1.3948412698412698,
-    "static": [
-     3738,
-     0
-    ],
-    "demand": [
-     4111,
-     0
-    ],
+    "static": 3738,
+    "demand": 4111,
     "demand_wins": false
    },
    {
@@ -707,14 +653,8 @@
     "cap": 1152,
     "ws": 1406,
     "headroom": 1.2204861111111112,
-    "static": [
-     1995,
-     0
-    ],
-    "demand": [
-     2265,
-     0
-    ],
+    "static": 1995,
+    "demand": 2265,
     "demand_wins": false
    },
    {
@@ -723,14 +663,8 @@
     "cap": 1296,
     "ws": 1406,
     "headroom": 1.0848765432098766,
-    "static": [
-     613,
-     0
-    ],
-    "demand": [
-     593,
-     0
-    ],
+    "static": 613,
+    "demand": 593,
     "demand_wins": true
    },
    {
@@ -739,14 +673,8 @@
     "cap": 1440,
     "ws": 1406,
     "headroom": 0.9763888888888889,
-    "static": [
-     11,
-     0
-    ],
-    "demand": [
-     5,
-     0
-    ],
+    "static": 11,
+    "demand": 5,
     "demand_wins": true
    },
    {
@@ -755,14 +683,8 @@
     "cap": 72,
     "ws": 864,
     "headroom": 12.0,
-    "static": [
-     20066,
-     0
-    ],
-    "demand": [
-     24576,
-     0
-    ],
+    "static": 20066,
+    "demand": 24576,
     "demand_wins": false
    },
    {
@@ -771,14 +693,8 @@
     "cap": 144,
     "ws": 864,
     "headroom": 6.0,
-    "static": [
-     16648,
-     0
-    ],
-    "demand": [
-     21621,
-     0
-    ],
+    "static": 16648,
+    "demand": 21621,
     "demand_wins": false
    },
    {
@@ -787,14 +703,8 @@
     "cap": 216,
     "ws": 864,
     "headroom": 4.0,
-    "static": [
-     13898,
-     0
-    ],
-    "demand": [
-     19565,
-     0
-    ],
+    "static": 13898,
+    "demand": 19565,
     "demand_wins": false
    },
    {
@@ -803,14 +713,8 @@
     "cap": 288,
     "ws": 864,
     "headroom": 3.0,
-    "static": [
-     11671,
-     0
-    ],
-    "demand": [
-     18386,
-     0
-    ],
+    "static": 11671,
+    "demand": 18386,
     "demand_wins": false
    },
    {
@@ -819,14 +723,8 @@
     "cap": 432,
     "ws": 864,
     "headroom": 2.0,
-    "static": [
-     8447,
-     0
-    ],
-    "demand": [
-     15568,
-     0
-    ],
+    "static": 8447,
+    "demand": 15568,
     "demand_wins": false
    },
    {
@@ -835,14 +733,8 @@
     "cap": 576,
     "ws": 864,
     "headroom": 1.5,
-    "static": [
-     5264,
-     0
-    ],
-    "demand": [
-     12470,
-     0
-    ],
+    "static": 5264,
+    "demand": 12470,
     "demand_wins": false
    },
    {
@@ -851,14 +743,8 @@
     "cap": 720,
     "ws": 864,
     "headroom": 1.2,
-    "static": [
-     2827,
-     0
-    ],
-    "demand": [
-     8966,
-     0
-    ],
+    "static": 2827,
+    "demand": 8966,
     "demand_wins": false
    },
    {
@@ -867,14 +753,8 @@
     "cap": 864,
     "ws": 864,
     "headroom": 1.0,
-    "static": [
-     1568,
-     0
-    ],
-    "demand": [
-     100,
-     0
-    ],
+    "static": 1568,
+    "demand": 100,
     "demand_wins": true
    },
    {
@@ -883,14 +763,8 @@
     "cap": 1008,
     "ws": 864,
     "headroom": 0.8571428571428571,
-    "static": [
-     837,
-     0
-    ],
-    "demand": [
-     75,
-     0
-    ],
+    "static": 837,
+    "demand": 75,
     "demand_wins": true
    },
    {
@@ -899,14 +773,8 @@
     "cap": 1152,
     "ws": 864,
     "headroom": 0.75,
-    "static": [
-     506,
-     0
-    ],
-    "demand": [
-     54,
-     0
-    ],
+    "static": 506,
+    "demand": 54,
     "demand_wins": true
    },
    {
@@ -915,14 +783,8 @@
     "cap": 1296,
     "ws": 864,
     "headroom": 0.6666666666666666,
-    "static": [
-     212,
-     0
-    ],
-    "demand": [
-     29,
-     0
-    ],
+    "static": 212,
+    "demand": 29,
     "demand_wins": true
    },
    {
@@ -931,14 +793,8 @@
     "cap": 1440,
     "ws": 864,
     "headroom": 0.6,
-    "static": [
-     139,
-     0
-    ],
-    "demand": [
-     19,
-     0
-    ],
+    "static": 139,
+    "demand": 19,
     "demand_wins": true
    },
    {
@@ -947,14 +803,8 @@
     "cap": 72,
     "ws": 390,
     "headroom": 5.416666666666667,
-    "static": [
-     17286,
-     0
-    ],
-    "demand": [
-     24576,
-     0
-    ],
+    "static": 17286,
+    "demand": 24576,
     "demand_wins": false
    },
    {
@@ -963,14 +813,8 @@
     "cap": 144,
     "ws": 390,
     "headroom": 2.7083333333333335,
-    "static": [
-     12187,
-     0
-    ],
-    "demand": [
-     21877,
-     0
-    ],
+    "static": 12187,
+    "demand": 21877,
     "demand_wins": false
    },
    {
@@ -979,14 +823,8 @@
     "cap": 216,
     "ws": 390,
     "headroom": 1.8055555555555556,
-    "static": [
-     9481,
-     0
-    ],
-    "demand": [
-     971,
-     0
-    ],
+    "static": 9481,
+    "demand": 971,
     "demand_wins": true
    },
    {
@@ -995,14 +833,8 @@
     "cap": 288,
     "ws": 390,
     "headroom": 1.3541666666666667,
-    "static": [
-     7167,
-     0
-    ],
-    "demand": [
-     194,
-     0
-    ],
+    "static": 7167,
+    "demand": 194,
     "demand_wins": true
    },
    {
@@ -1011,14 +843,8 @@
     "cap": 432,
     "ws": 390,
     "headroom": 0.9027777777777778,
-    "static": [
-     4313,
-     0
-    ],
-    "demand": [
-     93,
-     0
-    ],
+    "static": 4313,
+    "demand": 93,
     "demand_wins": true
    },
    {
@@ -1027,14 +853,8 @@
     "cap": 576,
     "ws": 390,
     "headroom": 0.6770833333333334,
-    "static": [
-     2747,
-     0
-    ],
-    "demand": [
-     74,
-     0
-    ],
+    "static": 2747,
+    "demand": 74,
     "demand_wins": true
    },
    {
@@ -1043,14 +863,8 @@
     "cap": 720,
     "ws": 390,
     "headroom": 0.5416666666666666,
-    "static": [
-     1992,
-     0
-    ],
-    "demand": [
-     62,
-     0
-    ],
+    "static": 1992,
+    "demand": 62,
     "demand_wins": true
    },
    {
@@ -1059,14 +873,8 @@
     "cap": 864,
     "ws": 390,
     "headroom": 0.4513888888888889,
-    "static": [
-     1406,
-     0
-    ],
-    "demand": [
-     48,
-     0
-    ],
+    "static": 1406,
+    "demand": 48,
     "demand_wins": true
    },
    {
@@ -1075,14 +883,8 @@
     "cap": 1008,
     "ws": 390,
     "headroom": 0.3869047619047619,
-    "static": [
-     918,
-     0
-    ],
-    "demand": [
-     37,
-     0
-    ],
+    "static": 918,
+    "demand": 37,
     "demand_wins": true
    },
    {
@@ -1091,14 +893,8 @@
     "cap": 1152,
     "ws": 390,
     "headroom": 0.3385416666666667,
-    "static": [
-     477,
-     0
-    ],
-    "demand": [
-     22,
-     0
-    ],
+    "static": 477,
+    "demand": 22,
     "demand_wins": true
    },
    {
@@ -1107,14 +903,8 @@
     "cap": 1296,
     "ws": 390,
     "headroom": 0.30092592592592593,
-    "static": [
-     477,
-     0
-    ],
-    "demand": [
-     22,
-     0
-    ],
+    "static": 477,
+    "demand": 22,
     "demand_wins": true
    },
    {
@@ -1123,14 +913,8 @@
     "cap": 1440,
     "ws": 390,
     "headroom": 0.2708333333333333,
-    "static": [
-     477,
-     0
-    ],
-    "demand": [
-     22,
-     0
-    ],
+    "static": 477,
+    "demand": 22,
     "demand_wins": true
    },
    {
@@ -1139,14 +923,8 @@
     "cap": 72,
     "ws": 1354,
     "headroom": 18.805555555555557,
-    "static": [
-     21246,
-     0
-    ],
-    "demand": [
-     24576,
-     0
-    ],
+    "static": 21246,
+    "demand": 24576,
     "demand_wins": false
    },
    {
@@ -1155,14 +933,8 @@
     "cap": 144,
     "ws": 1354,
     "headroom": 9.402777777777779,
-    "static": [
-     18578,
-     0
-    ],
-    "demand": [
-     21331,
-     0
-    ],
+    "static": 18578,
+    "demand": 21331,
     "demand_wins": false
    },
    {
@@ -1171,14 +943,8 @@
     "cap": 216,
     "ws": 1354,
     "headroom": 6.268518518518518,
-    "static": [
-     16346,
-     0
-    ],
-    "demand": [
-     19435,
-     0
-    ],
+    "static": 16346,
+    "demand": 19435,
     "demand_wins": false
    },
    {
@@ -1187,14 +953,8 @@
     "cap": 288,
     "ws": 1354,
     "headroom": 4.701388888888889,
-    "static": [
-     14401,
-     0
-    ],
-    "demand": [
-     17977,
-     0
-    ],
+    "static": 14401,
+    "demand": 17977,
     "demand_wins": false
    },
    {
@@ -1203,14 +963,8 @@
     "cap": 432,
     "ws": 1354,
     "headroom": 3.134259259259259,
-    "static": [
-     11044,
-     0
-    ],
-    "demand": [
-     15508,
-     0
-    ],
+    "static": 11044,
+    "demand": 15508,
     "demand_wins": false
    },
    {
@@ -1219,14 +973,8 @@
     "cap": 576,
     "ws": 1354,
     "headroom": 2.3506944444444446,
-    "static": [
-     8172,
-     0
-    ],
-    "demand": [
-     12681,
-     0
-    ],
+    "static": 8172,
+    "demand": 12681,
     "demand_wins": false
    },
    {
@@ -1235,14 +983,8 @@
     "cap": 720,
     "ws": 1354,
     "headroom": 1.8805555555555555,
-    "static": [
-     5770,
-     0
-    ],
-    "demand": [
-     10265,
-     0
-    ],
+    "static": 5770,
+    "demand": 10265,
     "demand_wins": false
    },
    {
@@ -1251,14 +993,8 @@
     "cap": 864,
     "ws": 1354,
     "headroom": 1.5671296296296295,
-    "static": [
-     3790,
-     0
-    ],
-    "demand": [
-     6349,
-     0
-    ],
+    "static": 3790,
+    "demand": 6349,
     "demand_wins": false
    },
    {
@@ -1267,14 +1003,8 @@
     "cap": 1008,
     "ws": 1354,
     "headroom": 1.3432539682539681,
-    "static": [
-     2202,
-     0
-    ],
-    "demand": [
-     3900,
-     0
-    ],
+    "static": 2202,
+    "demand": 3900,
     "demand_wins": false
    },
    {
@@ -1283,14 +1013,8 @@
     "cap": 1152,
     "ws": 1354,
     "headroom": 1.1753472222222223,
-    "static": [
-     1033,
-     0
-    ],
-    "demand": [
-     2217,
-     0
-    ],
+    "static": 1033,
+    "demand": 2217,
     "demand_wins": false
    },
    {
@@ -1299,14 +1023,8 @@
     "cap": 1296,
     "ws": 1354,
     "headroom": 1.0447530864197532,
-    "static": [
-     347,
-     0
-    ],
-    "demand": [
-     569,
-     0
-    ],
+    "static": 347,
+    "demand": 569,
     "demand_wins": false
    },
    {
@@ -1315,14 +1033,8 @@
     "cap": 1440,
     "ws": 1354,
     "headroom": 0.9402777777777778,
-    "static": [
-     94,
-     0
-    ],
-    "demand": [
-     25,
-     0
-    ],
+    "static": 94,
+    "demand": 25,
     "demand_wins": true
    }
   ],

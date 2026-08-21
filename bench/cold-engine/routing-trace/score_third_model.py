@@ -20,7 +20,8 @@ sys.path.insert(0, os.path.join(HERE, "..", "..", "..", "kernel"))
 sys.path.insert(0, HERE)
 
 from replay_dev_cache import positional_transfers, replay   # noqa: E402
-from score_policies import demand_p, load, static_p         # noqa: E402
+from score_policies import (capacity, demand_p, load,       # noqa: E402
+                            static_p)
 from score_demand import counts                             # noqa: E402
 
 PROMPTS = ("prose", "code", "math", "dialogue")
@@ -45,7 +46,7 @@ def p1(d, model, extra=(), prompts=PROMPTS):
         per = meta["layers"] * meta["top_k"]
         pos = positional_transfers(meta, recs)
         for sh in STEPS_HELD:
-            cap = max(2, int(round(per * sh)))
+            cap = capacity(per, sh, floor=2)
             f, _ = replay(meta, recs, cap)
             # A cache that retains nothing transfers one row per routed
             # row-slot; that is the zero-hit signature P1b names.
@@ -79,9 +80,10 @@ def p2(d, model, arena, warm=256, prompts=PROMPTS):
         wm, ev = recs[:warm], recs[warm:]
         ws = len(counts(ev))
         for fr in FRACS:
-            cap = max(1, int(round(arena * fr)))
-            s = static_p(wm, ev, cap)
-            dm = demand_p(wm, ev, cap)
+            cap = capacity(arena, fr)
+            # [0] is reads; score_demand.py compares the same field.
+            s = static_p(wm, ev, cap)[0]
+            dm = demand_p(wm, ev, cap)[0]
             cells.append({"prompt": p, "frac": fr, "cap": cap, "ws": ws,
                           "headroom": ws / cap, "static": s, "demand": dm,
                           "demand_wins": dm < s})
