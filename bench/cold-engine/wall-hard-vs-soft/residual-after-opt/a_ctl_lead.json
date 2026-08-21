@@ -1,0 +1,55 @@
+{
+  "meta": {
+    "model": "/root/models/olmoe",
+    "steps": 512,
+    "layers": 16,
+    "top_k": 8,
+    "n_experts": 64,
+    "prompt_tokens": 64,
+    "decode": true
+  },
+  "arena_row_bytes": 3342336,
+  "routed_slots": 65536,
+  "pinned": true,
+  "repeats": 9,
+  "qd": 4,
+  "points": [
+    {
+      "rows": 256,
+      "protected": 248,
+      "hard_wall_ns": [
+        37512046972,
+        37648167700,
+        37598976302,
+        37609591092,
+        37480503446,
+        37468609994,
+        37624688066,
+        37322091379,
+        37582395926
+      ],
+      "soft_wall_ns": [
+        40723095979,
+        40811756032,
+        40595840066,
+        40570491917,
+        40602870625,
+        40744569888,
+        40749513348,
+        40782679725,
+        40686257526
+      ],
+      "hard_wall_median_ns": 37582395926,
+      "soft_wall_median_ns": 40723095979,
+      "delta_wall_pct": 8.356838289884605,
+      "hard_reads": 32169,
+      "soft_reads": 32605,
+      "delta_reads_pct": 1.355342099536821,
+      "soft_resurrections": 255,
+      "reader_mode": "O_DIRECT",
+      "page_cache_dropped": false,
+      "drop_caches_attempts": 18,
+      "resurrection_frac_of_routed": 0.0038909912109375
+    }
+  ]
+}

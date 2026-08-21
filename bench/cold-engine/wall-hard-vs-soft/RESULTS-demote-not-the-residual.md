@@ -128,7 +128,12 @@ same arena, 5 repeats, only queue depth varying:
 qd=1 is 50% slower overall, so the knob works and overlap is real — the
 soft-hard gap simply does not depend on it. Receipts in `qd-probe/`.
 
-> **Closed.** The residual was partitioned in
+> **Still open after optimisation.** Making the tier 41-49% cheaper did NOT
+> dissolve the residual: 61% less non-read work, 16% less soft-hard gap, and
+> the residual is now 101.9% outside the read
+> ([`RESULTS-residual-after-opt.md`](RESULTS-residual-after-opt.md)).
+>
+> **Partitioned.** The residual was measured in
 > [`RESULTS-read-timing.md`](RESULTS-read-timing.md): at qd=1 the soft arm's
 > reads cost what their count says (+2.2% on +1.4% more reads) while its work
 > *around* the reads costs **+26.6%**. 86.5% of the residual is outside the
