@@ -1,5 +1,24 @@
 # The one-step threshold is real; my explanation of it was not
 
+> **Out of sample on a third model, this is now two claims, one of which
+> failed.** Qwen1.5-MoE-A2.7B (24L × 60E, **top-4**) was preregistered and
+> tested in [`RESULTS-third-model.md`](RESULTS-third-model.md).
+> **Held:** LRU and FIFO take zero hits below one step and random does not —
+> 12 cells of 12, a third model and a third cycle length.
+> **Failed:** the crossover is *not* at one step on this model. At exactly
+> `layers × top-k` = 96 rows the cache still loses on all four prompts; it
+> crosses at 98–99. `steps_held ≥ 1` is **necessary but not sufficient** —
+> below one step the cache never wins on any of three models, at one step it
+> wins on two of three.
+>
+> **Also:** the counts below come from the pure-LRU simulation in
+> `score_crossover.py`, not from the shipped `DevRowCache`. The two disagree at
+> capacity == one step on all 12 traces (sim pessimistic by 6–15k on OLMoE and
+> Granite, optimistic by 4–6k on Qwen). The crossover *location* reported here
+> still matches the real cache on both models derived on; the hit *counts* are
+> a simulation's and are not labelled as such below.
+
+
 Receipt: [`crossover.json`](crossover.json). Harness:
 [`score_crossover.py`](score_crossover.py). Eight traces, two models, 48
 configurations. No box.

@@ -29,7 +29,56 @@ a policy.
 import argparse
 import json
 from collections import Counter, OrderedDict
+from fractions import Fraction
 
+
+
+
+def capacity(arena, frac, floor=1):
+    """`frac` of `arena` rows, floored, without binary floating-point error.
+
+    `int(arena * frac)` is a floor, and it is the right rule -- a capacity
+    should not exceed its budget. The bug is that binary floating point makes
+    the floor wrong for fractions that are exact in decimal and not in binary:
+    1440 * 0.7 is 1007.9999999999999, so int() yields 1007 for a product whose
+    true value is exactly 1008. Two harnesses disagreeing on int() vs
+    int(round()) then produced two receipts for the same experiment with
+    different capacities at that fraction (Bugbot, gnf4#177).
+
+    Going through Fraction on the DECIMAL text keeps the floor and removes the
+    error, so this changes results only where the float was lying. Across the
+    three arenas captured (1024, 1280, 1440) and the twelve registered
+    fractions, that is exactly one cell: 1440 at 0.7. Rounding instead would
+    have moved five more that were never wrong.
+    """
+    return max(floor, (Fraction(str(frac)) * int(arena)).__floor__())
+
+
+def steps_capacity(per_step, steps_held, floor=2):
+    """`steps_held` steps' worth of rows, ROUNDED, not floored.
+
+    A separate function from capacity() on purpose. The two sweeps measure
+    different things and round differently, and collapsing them into one
+    helper silently moved the P1 grid (Bugbot, gnf4#177, second pass):
+
+      * an ARENA FRACTION is a budget -- 70% of the arena must not exceed 70%
+        of the arena, so capacity() floors;
+      * STEPS_HELD is a position on a continuum -- 0.9 steps of a 64-row step
+        is 57.6 rows, and the registered grids have always taken the nearest
+        row, `int(round(per * sh))`.
+
+    They agree for every `per_step` captured so far (96, 128, 256), which is
+    exactly why the mistake was invisible: 0.9 of each is x.4 or x.2 and
+    floors and rounds alike. They part on the NEXT one -- Mixtral's per_step
+    is 64, 0.9 of it is 57.6, and PREREG-fourth-model.md registered 58.
+
+    Half-up, which differs from Python's banker's rounding only on an exact
+    .5. No registered sweep on any captured or preregistered geometry lands
+    on one; test_capacity.py pins that.
+    """
+    return max(floor,
+               (Fraction(str(steps_held)) * int(per_step)
+                + Fraction(1, 2)).__floor__())
 
 def load(path):
     with open(path) as f:

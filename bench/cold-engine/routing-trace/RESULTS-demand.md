@@ -1,5 +1,13 @@
 # When demand-paging beats placement — the question I twice declined to answer
 
+> **Held out of sample.** Preregistered and retested on a third model in
+> [`RESULTS-third-model.md`](RESULTS-third-model.md) — Qwen1.5-MoE-A2.7B, 48
+> new cells: **15 TP / 0 FP / 3 FN / 30 TN**, ρ(headroom, wins) = **−0.792**
+> against −0.720 here. Zero false positives at `headroom ≤ 1` again, and the
+> misses are again all above the threshold. Sufficient, not necessary, on
+> three models.
+
+
 Receipt: [`demand.json`](demand.json). Harness:
 [`score_demand.py`](score_demand.py). 96 configurations, two models, four
 prompts. No box.
