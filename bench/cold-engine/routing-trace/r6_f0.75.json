@@ -1,0 +1,134 @@
+{
+  "meta": {
+    "model": "/root/models/olmoe",
+    "steps": 512,
+    "layers": 16,
+    "top_k": 8,
+    "n_experts": 64,
+    "prompt_tokens": 64,
+    "decode": true
+  },
+  "working_set": 989,
+  "points": [
+    {
+      "rows": 128,
+      "protected": 96,
+      "pressure": 10.302083333333334,
+      "hard_refills": 44298,
+      "soft_refills": 44948,
+      "gain": -650,
+      "gain_pct": -1.4673348683913494,
+      "hard_evictions": 44170,
+      "soft_evictions": 44820,
+      "soft_P_reuse_before_overwrite": 0.05925319564259177
+    },
+    {
+      "rows": 192,
+      "protected": 144,
+      "pressure": 6.868055555555555,
+      "hard_refills": 38086,
+      "soft_refills": 38611,
+      "gain": -525,
+      "gain_pct": -1.3784592763745207,
+      "hard_evictions": 37894,
+      "soft_evictions": 38419,
+      "soft_P_reuse_before_overwrite": 0.09523585238913879
+    },
+    {
+      "rows": 256,
+      "protected": 192,
+      "pressure": 5.151041666666667,
+      "hard_refills": 32169,
+      "soft_refills": 32574,
+      "gain": -405,
+      "gain_pct": -1.2589760328266344,
+      "hard_evictions": 31913,
+      "soft_evictions": 32318,
+      "soft_P_reuse_before_overwrite": 0.14579478775704394
+    },
+    {
+      "rows": 384,
+      "protected": 288,
+      "pressure": 3.4340277777777777,
+      "hard_refills": 21890,
+      "soft_refills": 22133,
+      "gain": -243,
+      "gain_pct": -1.1100959342165373,
+      "hard_evictions": 21506,
+      "soft_evictions": 21749,
+      "soft_P_reuse_before_overwrite": 0.25191758676435183
+    },
+    {
+      "rows": 512,
+      "protected": 384,
+      "pressure": 2.5755208333333335,
+      "hard_refills": 13616,
+      "soft_refills": 13711,
+      "gain": -95,
+      "gain_pct": -0.6977085781433607,
+      "hard_evictions": 13104,
+      "soft_evictions": 13199,
+      "soft_P_reuse_before_overwrite": 0.38258957807091404
+    },
+    {
+      "rows": 640,
+      "protected": 480,
+      "pressure": 2.060416666666667,
+      "hard_refills": 7389,
+      "soft_refills": 7429,
+      "gain": -40,
+      "gain_pct": -0.5413452429286778,
+      "hard_evictions": 6749,
+      "soft_evictions": 6789,
+      "soft_P_reuse_before_overwrite": 0.542366026289181
+    },
+    {
+      "rows": 768,
+      "protected": 576,
+      "pressure": 1.7170138888888888,
+      "hard_refills": 3340,
+      "soft_refills": 3339,
+      "gain": 1,
+      "gain_pct": 0.029940119760479042,
+      "hard_evictions": 2572,
+      "soft_evictions": 2571,
+      "soft_P_reuse_before_overwrite": 0.7270121044807815
+    },
+    {
+      "rows": 896,
+      "protected": 672,
+      "pressure": 1.4717261904761905,
+      "hard_refills": 1311,
+      "soft_refills": 1308,
+      "gain": 3,
+      "gain_pct": 0.2288329519450801,
+      "hard_evictions": 415,
+      "soft_evictions": 412,
+      "soft_P_reuse_before_overwrite": 0.9212538226299695
+    },
+    {
+      "rows": 1024,
+      "protected": 768,
+      "pressure": 1.2877604166666667,
+      "hard_refills": 989,
+      "soft_refills": 989,
+      "gain": 0,
+      "gain_pct": 0.0,
+      "hard_evictions": 0,
+      "soft_evictions": 0,
+      "soft_P_reuse_before_overwrite": 1.0
+    },
+    {
+      "rows": 1280,
+      "protected": 960,
+      "pressure": 1.0302083333333334,
+      "hard_refills": 989,
+      "soft_refills": 989,
+      "gain": 0,
+      "gain_pct": 0.0,
+      "hard_evictions": 0,
+      "soft_evictions": 0,
+      "soft_P_reuse_before_overwrite": 1.0
+    }
+  ]
+}
