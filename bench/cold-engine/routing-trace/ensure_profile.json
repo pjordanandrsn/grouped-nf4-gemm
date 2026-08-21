@@ -1,0 +1,338 @@
+{
+  "meta": {
+    "model": "/root/models/olmoe",
+    "steps": 512,
+    "layers": 16,
+    "top_k": 8,
+    "n_experts": 64,
+    "prompt_tokens": 64,
+    "decode": true
+  },
+  "rows": 256,
+  "protected": 248,
+  "qd": 1,
+  "hard_reads": 32169,
+  "soft_reads": 32605,
+  "top": [
+    {
+      "fn": "~:0(<built-in method posix.preadv>)",
+      "delta_tottime": 1.5843510180000002,
+      "excess_over_read_scaling": 1.5824636096590508,
+      "delta_ncalls": 436,
+      "hard": 0.13925697,
+      "soft": 1.7236079880000001
+    },
+    {
+      "fn": "nvme_residency.py:575(<lambda>)",
+      "delta_tottime": 0.42191990500000004,
+      "excess_over_read_scaling": 0.42191990500000004,
+      "delta_ncalls": 1965572,
+      "hard": 0.0,
+      "soft": 0.42191990500000004
+    },
+    {
+      "fn": "heapq.py:477(nsmallest)",
+      "delta_tottime": 0.38339952200000005,
+      "excess_over_read_scaling": 0.38339952200000005,
+      "delta_ncalls": 8054,
+      "hard": 0.0,
+      "soft": 0.38339952200000005
+    },
+    {
+      "fn": "nvme_residency.py:525(_demote_locked)",
+      "delta_tottime": 0.279446903,
+      "excess_over_read_scaling": 0.27942568440110044,
+      "delta_ncalls": 0,
+      "hard": 0.0015655530000000001,
+      "soft": 0.281012456
+    },
+    {
+      "fn": "~:0(<method 'acquire' of '_thread.lock' objects>)",
+      "delta_tottime": 0.22386941900000004,
+      "excess_over_read_scaling": 0.22248537471239394,
+      "delta_ncalls": 75648,
+      "hard": 0.102117708,
+      "soft": 0.32598712700000004
+    },
+    {
+      "fn": "~:0(<method 'get' of 'dict' objects>)",
+      "delta_tottime": 0.2277900089999999,
+      "excess_over_read_scaling": 0.21651072999909837,
+      "delta_ncalls": 2077015,
+      "hard": 0.8322090050000001,
+      "soft": 1.059999014
+    },
+    {
+      "fn": "nvme_residency.py:198(_victim)",
+      "delta_tottime": 0.1656175270000002,
+      "excess_over_read_scaling": 0.13673724155749323,
+      "delta_ncalls": 436,
+      "hard": 2.1308484,
+      "soft": 2.2964659270000003
+    },
+    {
+      "fn": "threading.py:337(wait)",
+      "delta_tottime": 0.110676509,
+      "excess_over_read_scaling": 0.10897107044797785,
+      "delta_ncalls": 18692,
+      "hard": 0.12583085500000002,
+      "soft": 0.23650736400000003
+    },
+    {
+      "fn": "~:0(<built-in method _heapq.heapreplace_max>)",
+      "delta_tottime": 0.058328483,
+      "excess_over_read_scaling": 0.058328483,
+      "delta_ncalls": 231941,
+      "hard": 0.0,
+      "soft": 0.058328483
+    },
+    {
+      "fn": "~:0(<method 'release' of '_thread.lock' objects>)",
+      "delta_tottime": 0.049300208000000005,
+      "excess_over_read_scaling": 0.048940944745438156,
+      "delta_ncalls": 36956,
+      "hard": 0.026507201,
+      "soft": 0.075807409
+    },
+    {
+      "fn": "_base.py:193(as_completed)",
+      "delta_tottime": 0.046520689000000004,
+      "excess_over_read_scaling": 0.04549963542879791,
+      "delta_ncalls": 444,
+      "hard": 0.075335487,
+      "soft": 0.12185617600000001
+    },
+    {
+      "fn": "nvme_reader.py:163(_read)",
+      "delta_tottime": 0.034475848,
+      "excess_over_read_scaling": 0.03369315845739687,
+      "delta_ncalls": 436,
+      "hard": 0.057748486,
+      "soft": 0.092224334
+    },
+    {
+      "fn": "threading.py:651(wait)",
+      "delta_tottime": 0.020171100999999997,
+      "excess_over_read_scaling": 0.019981984112686126,
+      "delta_ncalls": 18264,
+      "hard": 0.013953443000000001,
+      "soft": 0.034124544
+    },
+    {
+      "fn": "threading.py:408(notify)",
+      "delta_tottime": 0.017756571,
+      "excess_over_read_scaling": 0.01721745557011408,
+      "delta_ncalls": 1316,
+      "hard": 0.039777074,
+      "soft": 0.057533645
+    },
+    {
+      "fn": "threading.py:313(__enter__)",
+      "delta_tottime": 0.017445299000000004,
+      "excess_over_read_scaling": 0.01662515972877615,
+      "delta_ncalls": 39588,
+      "hard": 0.060511606,
+      "soft": 0.077956905
+    },
+    {
+      "fn": "threading.py:316(__exit__)",
+      "delta_tottime": 0.01725056700000001,
+      "excess_over_read_scaling": 0.016477759866548543,
+      "delta_ncalls": 39588,
+      "hard": 0.057019341,
+      "soft": 0.07426990800000001
+    },
+    {
+      "fn": "~:0(<built-in method builtins.min>)",
+      "delta_tottime": 0.015219010000000002,
+      "excess_over_read_scaling": 0.015219010000000002,
+      "delta_ncalls": 451,
+      "hard": 0.0,
+      "soft": 0.015219010000000002
+    },
+    {
+      "fn": "_base.py:536(set_result)",
+      "delta_tottime": 0.01544355,
+      "excess_over_read_scaling": 0.014791762284248805,
+      "delta_ncalls": 436,
+      "hard": 0.048090273,
+      "soft": 0.063533823
+    },
+    {
+      "fn": "_base.py:171(_yield_finished_futures)",
+      "delta_tottime": 0.014336608,
+      "excess_over_read_scaling": 0.013720645188100344,
+      "delta_ncalls": 18708,
+      "hard": 0.045447036,
+      "soft": 0.059783644000000004
+    },
+    {
+      "fn": "thread.py:81(run)",
+      "delta_tottime": 0.012499771000000003,
+      "excess_over_read_scaling": 0.012105874363486587,
+      "delta_ncalls": 436,
+      "hard": 0.029062525000000002,
+      "soft": 0.041562296000000006
+    },
+    {
+      "fn": "_base.py:75(add_result)",
+      "delta_tottime": 0.011967296000000002,
+      "excess_over_read_scaling": 0.011479612373775996,
+      "delta_ncalls": 436,
+      "hard": 0.035982327,
+      "soft": 0.047949623000000004
+    },
+    {
+      "fn": "~:0(<method '__enter__' of '_thread.lock' objects>)",
+      "delta_tottime": 0.011496712999999999,
+      "excess_over_read_scaling": 0.010938236860611142,
+      "delta_ncalls": 58296,
+      "hard": 0.041205548,
+      "soft": 0.052702261
+    },
+    {
+      "fn": "~:0(<method 'get' of '_queue.SimpleQueue' objects>)",
+      "delta_tottime": 0.011680969000000006,
+      "excess_over_read_scaling": 0.01084494285594828,
+      "delta_ncalls": 8,
+      "hard": 0.061683773000000004,
+      "soft": 0.07336474200000001
+    },
+    {
+      "fn": "~:0(<method '__exit__' of '_thread.lock' objects>)",
+      "delta_tottime": 0.010612768000000002,
+      "excess_over_read_scaling": 0.010099689410177498,
+      "delta_ncalls": 58296,
+      "hard": 0.037856021000000004,
+      "soft": 0.048468789000000005
+    },
+    {
+      "fn": "threading.py:641(clear)",
+      "delta_tottime": 0.01005222,
+      "excess_over_read_scaling": 0.009957052635021295,
+      "delta_ncalls": 18264,
+      "hard": 0.0070216490000000005,
+      "soft": 0.017073869000000002
+    },
+    {
+      "fn": "thread.py:71(run)",
+      "delta_tottime": 0.009723579,
+      "excess_over_read_scaling": 0.00947993877369517,
+      "delta_ncalls": 436,
+      "hard": 0.017976290000000002,
+      "soft": 0.027699869000000002
+    },
+    {
+      "fn": "nvme_residency.py:471(_claim_slot)",
+      "delta_tottime": 0.009691338,
+      "excess_over_read_scaling": 0.009100305757281851,
+      "delta_ncalls": 436,
+      "hard": 0.043607606,
+      "soft": 0.053298944
+    },
+    {
+      "fn": "nvme_residency.py:226(ensure)",
+      "delta_tottime": 0.009116073999999995,
+      "excess_over_read_scaling": 0.008592819108644963,
+      "delta_ncalls": 0,
+      "hard": 0.038606850000000005,
+      "soft": 0.047722924
+    },
+    {
+      "fn": "threading.py:438(notify_all)",
+      "delta_tottime": 0.008919464000000002,
+      "excess_over_read_scaling": 0.008384351247722965,
+      "delta_ncalls": 1308,
+      "hard": 0.039481748000000004,
+      "soft": 0.048401212000000006
+    },
+    {
+      "fn": "threading.py:630(set)",
+      "delta_tottime": 0.008786693999999998,
+      "excess_over_read_scaling": 0.00822036449345643,
+      "delta_ncalls": 872,
+      "hard": 0.041784986,
+      "soft": 0.05057168
+    },
+    {
+      "fn": "~:0(<method 'sort' of 'list' objects>)",
+      "delta_tottime": 0.006509356,
+      "excess_over_read_scaling": 0.006509356,
+      "delta_ncalls": 7603,
+      "hard": 0.0,
+      "soft": 0.006509356
+    },
+    {
+      "fn": "threading.py:328(_is_owned)",
+      "delta_tottime": 0.006713238000000003,
+      "excess_over_read_scaling": 0.006373287543597877,
+      "delta_ncalls": 19572,
+      "hard": 0.025082262,
+      "soft": 0.031795500000000004
+    },
+    {
+      "fn": "threading.py:325(_acquire_restore)",
+      "delta_tottime": 0.005952582,
+      "excess_over_read_scaling": 0.005828069730175012,
+      "delta_ncalls": 18692,
+      "hard": 0.009186778000000001,
+      "soft": 0.015139360000000001
+    },
+    {
+      "fn": "threading.py:322(_release_save)",
+      "delta_tottime": 0.005518345000000001,
+      "excess_over_read_scaling": 0.005398826854083124,
+      "delta_ncalls": 18692,
+      "hard": 0.008818301,
+      "soft": 0.014336646000000001
+    },
+    {
+      "fn": "~:0(<built-in method _heapq.heapify_max>)",
+      "delta_tottime": 0.00518419,
+      "excess_over_read_scaling": 0.00518419,
+      "delta_ncalls": 7603,
+      "hard": 0.0,
+      "soft": 0.00518419
+    },
+    {
+      "fn": "_base.py:424(result)",
+      "delta_tottime": 0.005268698999999998,
+      "excess_over_read_scaling": 0.0049395213176349866,
+      "delta_ncalls": 436,
+      "hard": 0.024287424000000002,
+      "soft": 0.029556123
+    },
+    {
+      "fn": "~:0(<built-in method builtins.iter>)",
+      "delta_tottime": 0.004563986,
+      "excess_over_read_scaling": 0.004563986,
+      "delta_ncalls": 8054,
+      "hard": 0.0,
+      "soft": 0.004563986
+    },
+    {
+      "fn": "~:0(<built-in method builtins.len>)",
+      "delta_tottime": 0.004530217999999999,
+      "excess_over_read_scaling": 0.004287393133948832,
+      "delta_ncalls": 26135,
+      "hard": 0.017916131000000002,
+      "soft": 0.022446349
+    },
+    {
+      "fn": "_base.py:55(__init__)",
+      "delta_tottime": 0.003953143,
+      "excess_over_read_scaling": 0.003904834541546209,
+      "delta_ncalls": 8,
+      "hard": 0.0035643000000000003,
+      "soft": 0.007517443
+    },
+    {
+      "fn": "thread.py:199(submit)",
+      "delta_tottime": 0.004830687,
+      "excess_over_read_scaling": 0.0037643601098883983,
+      "delta_ncalls": 436,
+      "hard": 0.078675848,
+      "soft": 0.083506535
+    }
+  ]
+}

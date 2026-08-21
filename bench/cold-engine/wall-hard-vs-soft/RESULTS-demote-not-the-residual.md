@@ -93,7 +93,9 @@ found the residual either. Recorded so the next attempt does not repeat them.
 
 A CPU profile of both arms (qd=1, offline replay) put the largest
 soft-minus-hard entry at the **key lambda inside `_demote_locked`**: +0.404 s
-across 1,965,572 calls. `#159` removed the *sort* but kept one key evaluation
+across 1,965,572 calls. (That profile was run ad hoc and its instrument was
+never committed; `routing-trace/profile_ensure.py` now reproduces it —
++0.422 s across the same 1,965,572 calls. See `RESULTS-ensure-profile.md`.) `#159` removed the *sort* but kept one key evaluation
 per candidate per request, so that cost survived — which looked like #161's
 negative result being an incomplete fix rather than a wrong target.
 
