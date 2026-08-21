@@ -8,6 +8,11 @@ cache and the rest of ensure().
 Reports MIN of many trials, the standard microbenchmark estimator: noise only
 ever adds time, so the minimum is the least-contaminated sample. Median is
 shown too, so a change that only moves the median is visible as such.
+
+This measures the cost of ONE FULL SCAN. The batched path that serves most
+real calls is measured by count_victim_scans.py instead, because its cost is
+a 16-element list walk whose interest is how OFTEN it replaces a scan, not
+how long it takes.
 """
 import argparse
 import os
@@ -33,6 +38,13 @@ class FakeTier:
         self._last_use = {k: rng.randint(1, 100000) for k in self._key_of}
         n = int(rows * reclaimable_frac)
         self._reclaimable = {k: 0 for k in rng.sample(self._key_of, n)}
+        # _victim consults the batched ranking first. Without this attribute
+        # the borrowed method raises AttributeError; WITH it but never reset,
+        # every call after the first is served from the cache and this would
+        # time a list scan of 16 rather than the full O(hot_rows) sweep it
+        # claims to measure -- reporting a large fake speedup. bench() clears
+        # it per call for that reason. (Bugbot, gnf4#175.)
+        self._victim_batch = None
 
 
 def bench(rows, frac, calls, trials):
@@ -43,6 +55,7 @@ def bench(rows, frac, calls, trials):
     for _ in range(trials):
         c0 = time.process_time()
         for _ in range(calls):
+            t._victim_batch = None        # force the full scan, see FakeTier
             best = t._victim(excluded)
         times.append(time.process_time() - c0)
     return min(times), statistics.median(times), best
