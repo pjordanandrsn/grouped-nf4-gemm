@@ -381,10 +381,10 @@
     {
       "measure": "coverage",
       "outcome": "gate3_gain",
-      "predicted_sign": -1,
+      "predicted_sign": 1,
       "rho": 0.46761217436853303,
       "supported": false,
-      "why": "less coverage -> more for re-placement to gain"
+      "why": "less coverage -> more for re-placement to gain (gain is negative when adaptive wins, so this is a POSITIVE rho)"
     }
   ]
 }

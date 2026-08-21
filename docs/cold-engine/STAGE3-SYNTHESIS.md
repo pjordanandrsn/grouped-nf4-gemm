@@ -199,11 +199,25 @@ it might — *"it pays only if re-routing to a new position is common"* — and
 four prompts of one model could not reach that failure mode, while one prompt
 of a second model did.
 
-**The variable underneath all of it is concentration**: how much of the arena
-a generation actually touches. OLMoE mathematics touches 377 of 1024 pairs and
-demand-paging wins outright; Granite code touches 1235 of 1280 and every cache
-thrashes. Neither the prompt nor the architecture fixes that on its own, which
-is why claims keyed to either one did not transfer.
+**That "concentration" explanation was then scored, and does not hold.**
+Coverage of the arena predicts the cache outcome at ρ = 0.276 and entropy at
+0.363 — nothing. Against the gate-3 gain it reaches ρ = +0.468, the right sign
+but under the 0.5 every hypothesis was held to: weak, not supporting. It was
+a story fitted to two salient cells.
+
+**What separates is arithmetic: `steps_held` = capacity ÷ (layers × top-k)**,
+the rows one decode step asks for. Every configuration where the device cache
+loses has `steps_held < 1`; every one where it wins has ≥ 1 — **24 of 24**,
+ρ = −0.895. A cache smaller than one step is fully evicted before its own next
+request, so it retains nothing, and the extra host→cache write per miss
+becomes pure loss.
+
+That also corrects how the two models were compared. Granite routes 256 rows
+per step from a 1280 arena; OLMoE routes 128 from 1024. **Fraction of the
+arena was the wrong normaliser** — at "12.5%" Granite held 0.62 of a step and
+OLMoE held exactly 1.00, so they were never at the same pressure.
+`DevRowCache.stats()` now reports `steps_held` and `too_small_to_retain` so a
+deployment below 1.0 says so.
 
 **What this says about how the next stage should be registered.** Three
 predictions here (R3, R5, R2) were unfalsifiable because their verdict turned

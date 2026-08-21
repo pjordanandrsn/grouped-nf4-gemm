@@ -19,11 +19,19 @@ the sign each predicts stated before the numbers:
 | coverage | cache/positional | +1 | +0.276 | **not supported** |
 | entropy | cache/positional | +1 | +0.363 | **not supported** |
 | headroom | demand vs static | +1 | +0.055 | **not supported** |
-| coverage | gate-3 gain | −1 | +0.468 | **not supported** (wrong sign) |
+| coverage | gate-3 gain | +1 | +0.468 | **not supported** (right sign, below threshold) |
 
 **Coverage and entropy — the two measures that are actually about the
 generation — predict nothing.** Concentration was a story fitted to two
 salient cells (OLMoE mathematics, Granite code), not a rule.
+
+The gate-3 row is the closest concentration comes to working: ρ = +0.468 is
+the *right* sign (`gate3_gain` is negative when adaptive wins, so less
+coverage predicting more gain is a positive correlation) and still short of
+the 0.5 the other hypotheses were held to. Weak support is not support, but
+it is not the refutation the first version of this document called it — that
+version had the predicted sign inverted and reported a right-signed result as
+wrong-signed.
 
 `headroom` (working set ÷ capacity) correlates strongly, but within any one
 trace it varies *only* with capacity, so it is largely restating "a bigger
@@ -60,11 +68,23 @@ the same pressure; *fraction of the arena* was the wrong normaliser, and
 
 ## Now instrumented rather than remembered
 
-`DevRowCache.stats()` reports `per_step_rows`, `steps_held` and
-`too_small_to_retain`, learned from the requests that arrive — the cache
-cannot be told how many layers share it, but it can count them. A deployment
-below 1.0 is reporting that it cannot retain, instead of quietly costing
-1.2–1.3× the cache it replaced.
+`DevRowCache.stats()` reports `per_step_rows`, `per_step_rows_max`,
+`steps_held` and `too_small_to_retain`, learned from the requests that arrive
+— the cache cannot be told how many layers share it, but it can count them. A
+deployment below 1.0 is reporting that it cannot retain, instead of quietly
+costing 1.2–1.3× the cache it replaced.
+
+The count is per **step**, not per layer-ever-seen. The boundary is a layer
+index that does not increase, because the engines walk layers in ascending
+order once per step. That is load-bearing in two directions, because the
+residency engine **skips `want()` for a layer with no cold experts** and which
+layers appear therefore varies step to step: summing each layer's last-seen
+count keeps a *silent* layer in the total forever, while watching only for
+repeats folds a *newly active* lower-indexed layer into the previous step.
+Both report demand spanning two steps as one.
+`too_small_to_retain` is judged against the **worst** step seen rather than
+the last, because capacity that cannot hold the heaviest step retains nothing
+across it whatever the average does.
 
 ## What is still unexplained
 

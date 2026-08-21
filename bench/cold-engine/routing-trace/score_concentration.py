@@ -124,8 +124,15 @@ def main():
              "flatter routing -> cache helps less"),
             ("headroom", "demand_vs_static", +1,
              "cache covers the working set -> demand-paging wins"),
-            ("coverage", "gate3_gain", -1,
-             "less coverage -> more for re-placement to gain")]
+            # gate3_gain is (adaptive - static)/static, so it is NEGATIVE
+            # when adaptive wins and "more gain" means MORE negative. Less
+            # coverage predicting more gain is therefore a POSITIVE
+            # correlation: as coverage rises the gain rises toward zero. The
+            # sign was -1 here, which reported a right-signed result as a
+            # wrong-signed one (Bugbot, gnf4#165).
+            ("coverage", "gate3_gain", +1,
+             "less coverage -> more for re-placement to gain (gain is "
+             "negative when adaptive wins, so this is a POSITIVE rho)")]
     print("\n%-10s %-18s %6s %8s   %s" % ("measure", "outcome", "sign",
                                           "rho", "verdict"))
     out = {"cells": cells, "hypotheses": []}
