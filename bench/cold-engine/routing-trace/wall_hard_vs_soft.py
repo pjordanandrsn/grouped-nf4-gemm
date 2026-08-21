@@ -79,9 +79,31 @@ def drop_caches():
         return False
 
 
-def run(path, index, recs, rows, protected, pinned, qd=4):
+def run(path, index, recs, rows, protected, pinned, qd=4, time_reads=False):
+    """One arm. With time_reads, also partitions the wall into time spent
+    INSIDE read_row and time spent everywhere else.
+
+    #153's residual is a per-read cost that survives five eliminations. The
+    one question that splits it cleanly is whether the extra time is inside
+    the read or outside it, and nothing so far has measured that. The reader
+    is wrapped rather than edited, the same non-invasive capture
+    score_locality.py uses; the wrapper costs both arms the same per read, so
+    it biases `read_ns` upward equally and cannot manufacture a difference
+    beyond the read-count difference already being accounted for.
+    """
     t = ColdTier(path, hot_rows=rows, pinned=pinned, index=index,
                  protected_rows=protected, qd=qd)
+    read_ns = 0
+    real_read_row = t.reader.read_row
+    if time_reads:
+        def timed(*a, **k):
+            nonlocal read_ns
+            s0 = time.perf_counter_ns()
+            try:
+                return real_read_row(*a, **k)
+            finally:
+                read_ns += time.perf_counter_ns() - s0
+        t.reader.read_row = timed
     try:
         t0 = time.perf_counter_ns()
         for r in recs:
@@ -91,8 +113,13 @@ def run(path, index, recs, rows, protected, pinned, qd=4):
         st = dict(t.stats())
         st["wall_ns"] = wall
         st["reads"] = t.reader.traffic()["reads"]
+        if time_reads:
+            st["read_ns"] = read_ns
+            st["non_read_ns"] = wall - read_ns
         return st
     finally:
+        if time_reads:
+            t.reader.read_row = real_read_row
         t.close()
 
 
@@ -121,6 +148,14 @@ def main():
                          "row size), and CPU work between reads can only cost "
                          "bandwidth when there is a queue to drain -- so qd=1 "
                          "vs qd=4 separates direct CPU cost from overlap loss.")
+    ap.add_argument("--time-reads", action="store_true",
+                    help="partition the wall into time inside read_row vs "
+                         "everywhere else. This is the targeted instrument "
+                         "for #153's residual: five candidates are eliminated "
+                         "and the surviving shape is a per-read cost, so the "
+                         "question is whether it lives in the read or around "
+                         "it. Run WITHOUT this flag too -- the residual must "
+                         "be unchanged by measuring it.")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
 
@@ -161,20 +196,42 @@ def main():
         prot = (max(1, int(rows * a.protected_frac)) if a.protected_frac
                 else max(1, rows - a.k))
         hw, sw, hr, sr, res = [], [], None, None, None
+        hrd, srd = [], []          # per-repeat ns spent INSIDE read_row
         # A/B/A: alternate the arms so a drift in the box shows up as
         # disagreement between the two A runs rather than as a result.
         for i in range(a.repeats):
             drop_caches()
-            h = run(a.arena, index, recs, rows, rows, a.pinned, a.qd)
+            h = run(a.arena, index, recs, rows, rows, a.pinned, a.qd,
+                    a.time_reads)
             drop_caches()
-            s = run(a.arena, index, recs, rows, prot, a.pinned, a.qd)
+            s = run(a.arena, index, recs, rows, prot, a.pinned, a.qd,
+                    a.time_reads)
             hw.append(h["wall_ns"])
             sw.append(s["wall_ns"])
+            if a.time_reads:
+                hrd.append(h["read_ns"])
+                srd.append(s["read_ns"])
             hr, sr = h["reads"], s["reads"]
             res = (s.get("resurrections", 0) or 0) + \
                   (s.get("spec_resurrections", 0) or 0)
         hm, sm = statistics.median(hw), statistics.median(sw)
-        out["points"].append({
+        part = {}
+        if a.time_reads:
+            # Medians are taken per-quantity, so read and non-read medians need
+            # not sum to the wall median. Reported anyway because the COMPARISON
+            # is hard-vs-soft within each quantity, not the decomposition.
+            hrm, srm = statistics.median(hrd), statistics.median(srd)
+            hnm, snm = hm - hrm, sm - srm
+            part = {
+                "hard_read_ns": hrd, "soft_read_ns": srd,
+                "hard_read_median_ns": hrm, "soft_read_median_ns": srm,
+                "delta_read_ns_pct": (srm - hrm) / hrm * 100 if hrm else None,
+                "hard_non_read_median_ns": hnm, "soft_non_read_median_ns": snm,
+                "delta_non_read_pct": (snm - hnm) / hnm * 100 if hnm else None,
+                "hard_read_frac_of_wall": hrm / hm if hm else None,
+                "soft_read_frac_of_wall": srm / sm if sm else None,
+            }
+        out["points"].append({**part,
             "rows": rows, "protected": prot,
             "hard_wall_ns": hw, "soft_wall_ns": sw,
             "hard_wall_median_ns": hm, "soft_wall_median_ns": sm,
@@ -187,6 +244,19 @@ def main():
               "%7d (%.2f%% of routed)" % (
                   rows, prot, hm / 1e6, sm / 1e6, (sm - hm) / hm * 100,
                   hr, sr, (sr - hr) / hr * 100, res, res / routed * 100))
+        if a.time_reads:
+            print("        read_ns  %11.1f %11.1f %+7.1f%%   "
+                  "(read is %.1f%% / %.1f%% of wall)" % (
+                      part["hard_read_median_ns"] / 1e6,
+                      part["soft_read_median_ns"] / 1e6,
+                      part["delta_read_ns_pct"],
+                      part["hard_read_frac_of_wall"] * 100,
+                      part["soft_read_frac_of_wall"] * 100))
+            print("    non_read_ns  %11.1f %11.1f %+7.1f%%   <-- "
+                  "the residual lives in whichever of these tracks wall" % (
+                      part["hard_non_read_median_ns"] / 1e6,
+                      part["soft_non_read_median_ns"] / 1e6,
+                      part["delta_non_read_pct"]))
     if a.out:
         json.dump(out, open(a.out, "w"), indent=2)
         print("\nreceipt ->", a.out)
