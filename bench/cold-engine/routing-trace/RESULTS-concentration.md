@@ -59,6 +59,16 @@ nothing across steps — and then the extra host→cache write it pays on every
 miss (documented when it shipped) is pure loss against a positional cache
 that at least skips same-position hits for free.
 
+> **⚠️ That paragraph is half wrong; see
+> [`RESULTS-crossover.md`](RESULTS-crossover.md).** The threshold reproduces
+> exactly, but "retains nothing" is a property of **LRU**, not of capacity:
+> routing per step is a near-cyclic scan, and LRU below the cycle length is
+> the textbook zero-hit case. FIFO behaves identically (24 of 24); **random
+> eviction has no zero-hit region at all** (0 of 24). The guidance is
+> unchanged -- random only beats the positional cache right at the boundary --
+> but the failure is a cliff, not a slope, so adding rows below the threshold
+> buys nothing.
+
 This is **structural**, not a property of the workload. Granite routes
 32 × 8 = **256 rows per step** from an arena of 1280, so 12.5% of that arena
 is 160 rows — less than one step. OLMoE routes 16 × 8 = 128 from 1024, so the
