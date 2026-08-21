@@ -176,34 +176,43 @@ is the same defect shape as R3's unpinned budget and R2's two denominators.
 Full working: `bench/cold-engine/reconciliation/RESULTS-r5-reconciled.md`.
 R6 is untouched, and the uncontended half of R5 stands.
 
-## Four prompts: which conclusions were about routing
+## Two models, four prompts: one conclusion survives
 
-Every offline result here replayed one captured trace. Three more now exist —
-code, mathematics, dialogue, same model and decode shape. Re-run against all
-four:
+Every offline result here replayed one trace of one model. Eight traces now
+exist across two architectures — OLMoE (16×64, top-8) and Granite-3.0-3B-A800M
+(32×40, top-8) — compared at equal *fractions* of the arena rather than equal
+row counts.
 
-| conclusion | verdict |
-|---|---|
-| **R4 refuted** (frequency > short-window recurrence) | **holds** — 20 of 22 signal cells, all four prompts |
-| **Device row cache beats the positional cache** | **holds, and prose was the WORST case** — 8.9% of positional on math at 384 rows |
-| **Gate 3** — adaptive beats static | **direction holds, magnitude does not** — the published 6–41% is prose's; on code it is **0.5–2.6%** |
-| **EWMA is the better policy** | **does not hold** — plain adaptive beats it on code at every capacity |
-| **Placement beats demand-paging when the tier is scarce** | **does not hold** — on math, demand does 54 reads against static's 2,335 |
+| conclusion | four prompts | + second model |
+|---|---|---|
+| **R4 refuted** (frequency > short-window recurrence) | holds 20/22 | **holds 18/18 — 38 of 40 overall** |
+| **Device row cache beats the positional cache** | holds | **BREAKS — 123–130% of positional at 12.5%** |
+| **Gate 3** — adaptive beats static | direction holds | **BREAKS — +0.0% on Granite math** |
+| **EWMA is the better policy** | refuted | adaptive wins 13 of 24 |
+| **Placement beats demand-paging when the tier is scarce** | refuted | — |
 
-The variable is the **working set**, not the capacity: math's scored window
-touches 377 of 1024 pairs against prose's 899, so capacity covers it and
-recency wins outright. And decay helps only when the routing distribution
-drifts — prose drifts, code does not, which is why EWMA reverses.
+**One of five survived both axes.** R4 is the only result that looks like a
+property of MoE routing rather than of a trace.
 
-Two lessons for what gets registered next. **"Placement beats demand-paging
-below N rows" is the wrong shape of claim** — the threshold is
-working-set-relative, and a rule stated in rows cannot be scored across
-workloads. And a policy tuned on one generation should be assumed
-prompt-specific until it has been re-run, which is cheap: the capture is
-`bench/cold-engine/routing-trace/capture_routing.py` and costs about $0.02.
+The device row cache failed in exactly the way its own results document said
+it might — *"it pays only if re-routing to a new position is common"* — and
+four prompts of one model could not reach that failure mode, while one prompt
+of a second model did.
+
+**The variable underneath all of it is concentration**: how much of the arena
+a generation actually touches. OLMoE mathematics touches 377 of 1024 pairs and
+demand-paging wins outright; Granite code touches 1235 of 1280 and every cache
+thrashes. Neither the prompt nor the architecture fixes that on its own, which
+is why claims keyed to either one did not transfer.
+
+**What this says about how the next stage should be registered.** Three
+predictions here (R3, R5, R2) were unfalsifiable because their verdict turned
+on a parameter they never pinned. These five were falsifiable but keyed to the
+wrong variable. A clause of the form *"policy X beats Y below N rows"* cannot
+be scored across workloads; *"below N rows **relative to the scored working
+set**"* can.
 
 Full working: `bench/cold-engine/routing-trace/RESULTS-generalization.md`.
-
 ## A metric this campaign leaned on does not carry weight
 
 R1–R3 all use **resurrection rate** as though higher were better. Measured
