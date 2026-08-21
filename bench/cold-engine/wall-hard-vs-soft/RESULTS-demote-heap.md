@@ -9,10 +9,16 @@ implementing, on the strength of the accounting in
 
 Two measurements, two instruments:
 
-| | gap before | gap after | closed |
-|---|---|---|---|
-| interleaved A/B vs `main` (noise ref 6%) | 0.638 s | **0.152 s** | **76.1%** |
-| accounting instrument | 0.633 s | **0.113 s** | **82%** |
+| | gap before | gap after | closed | noise ref |
+|---|---|---|---|---|
+| interleaved A/B vs `main` | 0.638 s | 0.152 s | **76.1%** | 6% |
+| interleaved A/B, after the #182 fixes | 0.628 s | **0.083 s** | **86.8%** | 11% |
+| accounting instrument | 0.633 s | 0.113 s | **82%** | — |
+
+Three measurements, **76–87%**, all clearing the registered ≥70%. The spread is
+the laptop: the noise reference is 6–11% of the gap, so these are not separable
+from one another, only from the threshold. Reported as a range rather than
+picking the best.
 
 `_demote_locked`'s own measured time: **0.575 s → 0.102 s**. The soft arm now
 costs **14% more CPU than hard**, down from ~85% more. Read counts identical.
@@ -52,6 +58,30 @@ site that writes `_slot_of`, and dropped on eviction so stale entries fail
 validation and the map stays bounded. Replacing that element with a constant is
 one of the sabotages below, and it is caught.
 
+## Two bugs found after the first commit, one by Bugbot and one by probing it
+
+**Duplicate after compaction (Bugbot, High).** `_dpush` rebuilt the heap from
+`_slot_of` — which already holds the key being pushed — then pushed it again.
+Two live entries for one key both validate, so `_demote_locked` could put the
+same key in `victims` twice: fewer unique rows demoted than `over`, and
+`logical_evictions` inflated.
+
+The verifier is sound and never fired, because **compaction never runs on the
+trace**: the heap self-drains and peaks at 255 against a 2048 threshold. A
+verifier only checks paths the workload reaches — the same failure shape as the
+vacuous bound test in #176, in different clothes. The test added here *forces*
+the branch instead of hoping to reach it.
+
+**Leak on the default configuration (found while probing the above).** With
+`protected_rows=None`, `_demote_locked` early-returns and never drains, while
+publish keeps pushing: `_dheap` reached **753 entries, one per miss**. `_dpush`
+now returns immediately when demotion is impossible.
+
+Both reproduce on demand and both are caught by new tests. The leak fix also
+made the *hard* arm faster, which is why the accounting gap moved 0.113 →
+0.157 s while `_demote_locked` itself stayed at 0.102 s — a wider gap from a
+cheaper baseline, not new cost.
+
 ## Verification
 
 A wrong demotion set raises nothing. It changes which rows are reclaimable,
@@ -67,14 +97,14 @@ measurement in this campaign. So, as in #176:
 
 **Every sabotage is caught**, which is what makes the verifier worth having:
 
-| removed | caught by trace verifier | caught by CI test |
+| sabotage | trace verifier | CI test |
 |---|---|---|
-| publish push | yes | yes |
-| resurrect push | yes | yes |
-| publish-sequence tie-break | yes | — |
+| publish push removed | yes | yes |
+| resurrect push removed | yes | yes |
+| tie-break sequence → constant | yes | — |
 | demand-window exclusion | yes | — |
 
-425 tests pass.
+427 tests pass.
 
 ## What this does not show
 

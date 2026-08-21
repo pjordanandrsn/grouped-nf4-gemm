@@ -2,13 +2,13 @@
   "rows": 256,
   "protected": 248,
   "reps": 5,
-  "gap_s": 0.11287800000000026,
+  "gap_s": 0.1574340000000003,
   "terms": {
-    "_demote_locked": 0.102288393,
-    "_resurrect_locked": 0.000277571,
-    "_victim (reclaimable rank term)": -0.003567129,
-    "436 extra reads x rest-of-tier": 0.010494314625011653
+    "_demote_locked": 0.102165923,
+    "_resurrect_locked": 0.000880733,
+    "_victim (reclaimable rank term)": -0.002003952,
+    "436 extra reads x rest-of-tier": 0.010192319819329167
   },
-  "accounted_s": 0.10949314962501165,
-  "unaccounted_s": 0.0033848503749886044
+  "accounted_s": 0.11123502381932918,
+  "unaccounted_s": 0.04619897618067112
 }

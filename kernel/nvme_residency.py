@@ -666,19 +666,35 @@ class ColdTier:
         else:
             self.resurrections += 1
 
+    def _dcompact(self) -> None:
+        """Rebuild the demote heap with one entry per eligible row."""
+        recl = self._reclaimable
+        freq = self._freq
+        last = self._last_use
+        seq = self._pubseq
+        fresh = [((freq[k], last[k], seq[k]), k)
+                 for k in self._slot_of if k not in recl and k in seq]
+        heapq.heapify(fresh)
+        self._dheap = fresh
+
     def _dpush(self, key) -> None:
         """Record this key's current demote rank. Call when it becomes
         ELIGIBLE -- on publish, and on resurrection out of _reclaimable."""
+        prot = self.protected_rows
+        if prot is None or prot >= self.hot_rows:
+            # Demotion is impossible, so _demote_locked never drains and every
+            # push would leak: measured 753 entries -- one per miss -- on the
+            # DEFAULT configuration before this guard.
+            return
         heap = self._dheap
         if len(heap) > _VHEAP_SLACK * self.hot_rows:
-            recl = self._reclaimable
-            freq = self._freq
-            last = self._last_use
-            seq = self._pubseq
-            heap = [((freq[k], last[k], seq[k]), k)
-                    for k in self._slot_of if k not in recl and k in seq]
-            heapq.heapify(heap)
-            self._dheap = heap
+            # The rebuild reads _slot_of, which already contains `key` (both
+            # callers set it first), so pushing after it would leave a
+            # DUPLICATE -- two live entries for one key, both validating, both
+            # entering `victims`. That under-demotes unique rows and inflates
+            # logical_evictions (Bugbot, gnf4#182).
+            self._dcompact()
+            return
         heapq.heappush(heap, ((self._freq[key], self._last_use[key],
                                self._pubseq[key]), key))
 

@@ -531,3 +531,77 @@ def test_demote_heap_agrees_with_the_scan(tmp_path):
             assert checked > 100, f"only {checked} demote calls exercised"
         finally:
             t.close()
+
+
+def test_demote_heap_does_not_leak_when_demotion_is_impossible(tmp_path):
+    """With no protected budget, _demote_locked early-returns and never drains
+    the heap -- so pushing on publish leaked one entry per miss (753 measured)
+    on the DEFAULT configuration. _dpush must not push at all there."""
+    import nvme_residency as nr
+    from nvme_arena import bake, load_index
+    from test_nvme_arena import make_snapshot
+
+    snap = tmp_path / "snap"
+    make_snapshot(str(snap))
+    arena = str(tmp_path / "a.arena")
+    bake(str(snap), arena, align=4096, log=lambda *a: None)
+    index = load_index(arena)
+    layers = index["n_layers"]
+    for prot in (None, 8):        # None, and protected_rows >= hot_rows
+        t = nr.ColdTier(arena, hot_rows=8, pinned=False, index=index,
+                        protected_rows=prot, qd=1)
+        try:
+            for step in range(300):
+                t.ensure(step % layers, [step % 4, (step + 1) % 4])
+            assert t.stats()["misses"] > 100, "workload never missed"
+            assert not t._dheap, (
+                f"demote heap holds {len(t._dheap)} entries with "
+                f"protected_rows={prot}, where demotion cannot happen")
+        finally:
+            t.close()
+
+
+def test_demote_heap_compaction_leaves_no_duplicates(tmp_path):
+    """Compaction rebuilds from _slot_of, which already holds the key being
+    pushed -- so pushing after it left a duplicate, and two live entries for
+    one key both enter `victims` (Bugbot, gnf4#182).
+
+    The trace workloads never reach this branch: the heap self-drains and peaks
+    at 255 against a 2048 threshold. Force it instead of hoping.
+    """
+    import nvme_residency as nr
+    from nvme_arena import bake, load_index
+    from test_nvme_arena import make_snapshot
+
+    snap = tmp_path / "snap"
+    make_snapshot(str(snap))
+    arena = str(tmp_path / "a.arena")
+    bake(str(snap), arena, align=4096, log=lambda *a: None)
+    index = load_index(arena)
+    layers, experts = index["n_layers"], index["n_experts_per_layer"]
+    t = nr.ColdTier(arena, hot_rows=8, pinned=False, index=index,
+                    protected_rows=6, qd=1)
+    try:
+        fired = 0
+        for step in range(300):
+            t.ensure(step % layers, [step % experts, (step * 3 + 1) % experts])
+            # force the branch: stuff the heap past the threshold, then push
+            if step % 25 == 0:
+                eligible = [k for k in t._slot_of
+                            if k in t._pubseq and k not in t._reclaimable]
+                if not eligible:
+                    continue
+                # push the heap past the threshold so the next _dpush compacts.
+                # (The duplicates below are the SETUP; compaction must clear
+                # them AND must not re-add the pushed key on top.)
+                t._dheap = list(t._dheap) * 200
+                t._dpush(eligible[0])
+                fired += 1
+                keys = [e[1] for e in t._dheap]
+                assert len(keys) == len(set(keys)), (
+                    f"duplicate entries after compaction at step {step}: "
+                    f"{len(keys)} entries, {len(set(keys))} unique")
+                assert eligible[0] in keys, "compaction dropped the pushed key"
+        assert fired > 5, f"compaction branch only exercised {fired} times"
+    finally:
+        t.close()
