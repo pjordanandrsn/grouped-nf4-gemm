@@ -1,5 +1,12 @@
 # The residual is OUTSIDE the read, by about 6 to 1
 
+> **Re-measured after the tier optimisations** (#175, #176 cut tier CPU 41-49%):
+> the residual **SURVIVES**, and is now **101.9%** outside the read rather than
+> 86.5% — the per-read storage cost seen here is gone. Cutting 61% of non-read
+> work removed only 16% of the soft-hard gap. See
+> [`RESULTS-residual-after-opt.md`](RESULTS-residual-after-opt.md). The numbers
+> below stand as measured, on the pre-optimisation tier.
+
 **Registered outcome: OUTSIDE.** At qd=1, where the partition is
 interpretable, the soft arm's reads cost what their count says. Its work
 *around* the reads costs 26.6% more.

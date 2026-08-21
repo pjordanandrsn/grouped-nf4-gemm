@@ -1,0 +1,85 @@
+{
+  "meta": {
+    "model": "/root/models/olmoe",
+    "steps": 512,
+    "layers": 16,
+    "top_k": 8,
+    "n_experts": 64,
+    "prompt_tokens": 64,
+    "decode": true
+  },
+  "arena_row_bytes": 3342336,
+  "routed_slots": 65536,
+  "pinned": true,
+  "repeats": 9,
+  "qd": 1,
+  "points": [
+    {
+      "hard_read_ns": [
+        44710764031,
+        44748379318,
+        44843720943,
+        44712075019,
+        44805673326,
+        44660059917,
+        44597334714,
+        44811748326,
+        44843781303
+      ],
+      "soft_read_ns": [
+        45414917649,
+        45236316971,
+        45302912445,
+        46491040194,
+        45318754323,
+        45267470884,
+        45252530093,
+        45284124105,
+        45303815128
+      ],
+      "hard_read_median_ns": 44748379318,
+      "soft_read_median_ns": 45302912445,
+      "delta_read_ns_pct": 1.2392250522846076,
+      "hard_non_read_median_ns": 5175012411,
+      "soft_non_read_median_ns": 8096621086,
+      "delta_non_read_pct": 56.456070883807584,
+      "hard_read_frac_of_wall": 0.8963409289358462,
+      "soft_read_frac_of_wall": 0.8483765577970888,
+      "rows": 256,
+      "protected": 248,
+      "hard_wall_ns": [
+        49726595868,
+        49923391729,
+        49990204657,
+        49867588247,
+        49936026641,
+        49908793604,
+        49727815884,
+        50023570377,
+        50019381415
+      ],
+      "soft_wall_ns": [
+        53478427967,
+        53372152636,
+        53413778092,
+        54520499819,
+        53399533531,
+        53379683482,
+        53348297400,
+        53407704849,
+        53165311768
+      ],
+      "hard_wall_median_ns": 49923391729,
+      "soft_wall_median_ns": 53399533531,
+      "delta_wall_pct": 6.962951998272874,
+      "hard_reads": 32169,
+      "soft_reads": 32605,
+      "delta_reads_pct": 1.355342099536821,
+      "soft_resurrections": 255,
+      "reader_mode": "O_DIRECT",
+      "page_cache_dropped": false,
+      "drop_caches_attempts": 18,
+      "resurrection_frac_of_routed": 0.0038909912109375
+    }
+  ]
+}
