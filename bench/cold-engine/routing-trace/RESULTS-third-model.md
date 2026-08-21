@@ -146,28 +146,57 @@ not drawn in it. A banner has been added there.
 
 Everything above is the registered test. What follows was measured after
 seeing the result and is **hypothesis-generating, not confirmatory**; it is
-here so the next preregistration has something to aim at.
+here so the next preregistration has something to aim at. Harness:
+[`reuse_overlap.py`](reuse_overlap.py), receipt
+[`reuse-overlap.json`](reuse-overlap.json).
 
 ### A cache sized at exactly one step can only capture step-to-step reuse
 
 Mean overlap between a step's routed set and the previous step's:
 
-| model | top-k | overlap with previous step | wins at one step |
-|---|---|---|---|
-| OLMoE | 8 | 41.3% | yes |
-| Granite | 8 | 43.6% | yes |
-| **Qwen1.5-MoE** | **4** | **13.4%** | **no** |
+| model | top-k | E | raw overlap | wins at one step |
+|---|---|---|---|---|
+| OLMoE | 8 | 64 | 41.3% | yes |
+| Granite | 8 | ≥40 | 43.6% | yes |
+| **Qwen1.5-MoE** | **4** | **60** | **13.4%** | **no** |
 
-A 3× gap with no overlap between the two groups across 12 traces. It is a
-better-motivated candidate than top-k alone — a cache holding exactly one step
-can only win on rows the *next* step asks for again — but with three models
-**overlap and top-k are perfectly confounded** and this cannot separate them.
-Both are one-bit hypotheses fitted to three points. Naming which one it is
-needs a top-8 model with low overlap, or a top-4 model with high overlap.
+A 3× gap that lines up perfectly with which models win — **and it is mostly an
+artifact of not normalizing.** Under independent uniform routing the expected
+overlap fraction is just `k/E`, which differs across these models by 3× on its
+own (12.5% / 20.0% / 6.7%). Dividing it out:
+
+| model | chance `k/E` | observed | observed ÷ chance |
+|---|---|---|---|
+| OLMoE | 12.5% | 41.3% | **3.30×** |
+| Granite | 20.0% | 43.6% | **2.18×** |
+| Qwen1.5-MoE | 6.7% | 13.4% | **2.01×** |
+
+Granite's router did not expose an expert count (`n_experts` is null in its
+trace metadata), so its E is the largest id actually routed — a lower bound.
+If the true E is larger, Granite's chance rises and its normalized figure
+falls *further* toward Qwen's, which only strengthens what follows.
+
+Granite wins at one step and Qwen loses, and their chance-normalized
+stickiness is **2.18× against 2.01×** — indistinguishable. Per prompt the two
+groups **cross**: Granite's math trace is 1.99× and Qwen's prose is 2.38×, so
+the "no overlap between the groups" reading does not survive normalization
+either.
+
+So routing is about equally sticky on all three models relative to chance, and
+the raw-overlap gap is `k/E` arithmetic. That collapses the two candidate
+explanations into one rather than separating them: what Qwen has less of is
+**reusable rows per step**, and given E that is another way of saying top-k.
+
+A fourth model can discriminate, because `k` and `k/E` are only confounded in
+the models captured so far. **Mixtral-8x7B routes top-2 of 8** — the smallest
+top-k of any candidate but `k/E` = 25%, the *largest*. If the one-step
+crossover is governed by `k/E` it should win at one step; if by top-k it
+should lose. That is worth preregistering before capturing it.
 
 ### One trace is a degenerate repetition loop
 
-Qwen's **math** trace alternates with period 2 — overlap by lag:
+Qwen's **math** trace alternates with period 2 — overlap by lag
+([`reuse_overlap.py`](reuse_overlap.py)):
 
 | lag | 1 | 2 | 3 | 4 | 5 | 6 |
 |---|---|---|---|---|---|---|
