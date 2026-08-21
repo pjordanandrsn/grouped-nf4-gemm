@@ -4,9 +4,17 @@
 property that the campaign already depended on is now written down.**
 
 `ColdTier(...)` takes `qd: int | None = None`, and `None` **sizes the read
-queue from the host's CPU count**. A counter comparison run at the default is
-therefore not reproducible run-to-run on one box, and not comparable between
-boxes — the queue depth is a property of the machine, not of the experiment.
+queue from the host's CPU count** via `nvme_reader.default_qd` — floored at 4,
+capped at 16 (see `kernel/test_nvme_qd.py`, which pins that curve). That
+scaling is a deliberate and well-evidenced *performance* default. The problem
+is what it does to *counters*: the same scorer runs at qd=4 on a laptop and
+qd=16 on a 64-vCPU box, so an unpinned counter comparison is not reproducible
+run-to-run on one box and not comparable between boxes. The queue depth is a
+property of the machine, not of the experiment.
+
+This host resolves to **qd=4** (`cpu_budget()` = 10), so every "default"
+baseline below is a qd=4 run and the qd=1 comparisons are exact rather than
+approximate.
 
 `qd=1` was already chosen for the demote probe and for R6 *because* higher
 depths were not reproducible. That reason was never written down and the
@@ -123,6 +131,19 @@ rather than for tolerating a known spread.
 
 One trace, one geometry, one host. `qd=1` removes the dependence rather than
 bounding it, which is why no claim here rests on the spread staying small.
+
+## The table above is now enforced, not asserted
+
+A doc claiming the scorers are pinned is a comment; nothing stops the next
+scorer from falling back to the default. `kernel/test_nvme_qd.py` grows
+`test_offline_scorers_pin_the_queue_depth`, which scans every `ColdTier(...)`
+construction under `routing-trace/` and fails on any that omits `qd`, with
+`bench_direct.py` listed as an explicit exemption carrying its reason.
+
+Verified by breaking it: removing `qd=qd` from `score_r10.py` fails the guard
+by name, and restoring it goes green. That demonstration is itself a test
+(`test_the_guard_actually_catches_an_unpinned_scorer`) which runs the real
+scanner over a fixture directory, so the guard cannot rot into a no-op.
 
 ## Receipts
 

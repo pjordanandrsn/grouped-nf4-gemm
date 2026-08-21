@@ -137,3 +137,77 @@ def test_qd_zero_is_refused(arena):
     the seam where the number came in."""
     with pytest.raises(ValueError, match="qd must be >= 1"):
         ArenaReader(arena, qd=0)
+
+
+# --- Offline scorers must pin the queue depth ----------------------------
+#
+# The scaled default above is right for THROUGHPUT and wrong for COUNTERS: it
+# is 4 on a laptop and 16 on a 64-vCPU box, and above qd=1 the tier's counters
+# are not reproducible at all (bench/cold-engine/routing-trace/
+# RESULTS-qd-jitter.md measures the spread). A scorer that compares counters
+# between arms and does not pin qd therefore produces numbers that depend on
+# where it ran.
+#
+# RESULTS-qd-jitter.md asserts the offline scorers are pinned. This enforces
+# it, so the next scorer added cannot quietly fall back to the host default.
+
+SCORER_DIR = os.path.join(os.path.dirname(__file__), "..", "bench",
+                          "cold-engine", "routing-trace")
+
+# Constructions deliberately left on the host default, with the reason they
+# are safe. Keep this SHORT -- an entry here is an exemption, not a fix.
+_UNPINNED_OK = {
+    # Measures wall time on a real arena, where pinning would distort the
+    # quantity under test, and already asserts reads_match across its three
+    # A/B/A legs -- the invariant a reordering flip would break.
+    "bench_direct.py",
+}
+
+
+def _scorers_constructing_a_tier(dirpath=None):
+    import glob
+    import re
+    out = []
+    for path in sorted(glob.glob(os.path.join(dirpath or SCORER_DIR, "*.py"))):
+        src = open(path, encoding="utf-8").read()
+        for m in re.finditer(r"ColdTier\(", src):
+            call = src[m.start():m.start() + 400]
+            depth, end = 0, len(call)
+            for i, ch in enumerate(call):
+                if ch == "(":
+                    depth += 1
+                elif ch == ")":
+                    depth -= 1
+                    if depth == 0:
+                        end = i
+                        break
+            out.append((os.path.basename(path), call[:end]))
+    return out
+
+
+def test_offline_scorers_pin_the_queue_depth():
+    unpinned = [name for name, call in _scorers_constructing_a_tier()
+                if "qd=" not in call and name not in _UNPINNED_OK]
+    assert not unpinned, (
+        "these build a ColdTier at the host-scaled default, so their counters "
+        f"depend on the box they ran on: {sorted(set(unpinned))}. Pass qd "
+        "explicitly (qd=1 for a reproducible replay), or add the file to "
+        "_UNPINNED_OK with the reason it is safe."
+    )
+
+
+def test_the_guard_actually_catches_an_unpinned_scorer(tmp_path):
+    """A guard that has never seen a violation is a comment. Run the real
+    scanner over a directory holding one pinned and one unpinned scorer."""
+    (tmp_path / "good.py").write_text(
+        "t = ColdTier(path, hot_rows=rows, index=index, qd=1)\n")
+    (tmp_path / "bad.py").write_text(
+        "t = ColdTier(path, hot_rows=rows, pinned=False,\n"
+        "             index=index, protected_rows=prot)\n")
+    found = _scorers_constructing_a_tier(str(tmp_path))
+    unpinned = sorted(n for n, call in found if "qd=" not in call)
+    assert unpinned == ["bad.py"], found
+    # and the multi-line construction was captured whole, not truncated at the
+    # newline -- that is what makes "qd= not in call" trustworthy
+    bad = dict(found)["bad.py"]
+    assert "protected_rows=prot" in bad
