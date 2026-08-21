@@ -222,6 +222,23 @@ nothing — which is what a reader needs to know when they cannot size it.
 Guidance is unchanged (size to one step): random only beats the engine's
 positional cache in 7 of 24 sub-threshold cells, all at the boundary.
 
+**And the question left open there is now answered.** Demand-paging beats
+static placement whenever **capacity covers the scored working set** —
+`headroom = working set ÷ capacity ≤ 1` classifies 96 configurations at 91.7%
+against a 70.8% base rate, with **20 true positives and zero false
+positives**. Sufficient, not necessary: eight cells win between 1.07 and 1.93
+as well. If the fast tier holds every row the window asks for, LRU takes only
+compulsory misses and no placement can beat compulsory.
+
+That correction is worth more than the rule. The earlier test reported "not
+supported, ρ = 0.055" on **three** positives; with twenty-eight, ρ = −0.720.
+And ρ was the wrong statistic either way — a threshold hypothesis scored by
+rank correlation, across a range where 21 of 24 cells sat on one side of the
+threshold, could not have seen a step. **Score threshold claims as
+classifiers against a base rate**; a correlation coefficient does not report
+when it had no power.
+`bench/cold-engine/routing-trace/RESULTS-demand.md`.
+
 That also corrects how the two models were compared. Granite routes 256 rows
 per step from a 1280 arena; OLMoE routes 128 from 1024. **Fraction of the
 arena was the wrong normaliser** — at "12.5%" Granite held 0.62 of a step and
