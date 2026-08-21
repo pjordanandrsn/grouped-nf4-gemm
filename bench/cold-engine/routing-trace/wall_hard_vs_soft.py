@@ -112,7 +112,13 @@ def run(path, index, recs, rows, protected, pinned, qd=4, time_reads=False):
         wall = time.perf_counter_ns() - t0
         st = dict(t.stats())
         st["wall_ns"] = wall
-        st["reads"] = t.reader.traffic()["reads"]
+        tr = t.reader.traffic()
+        st["reads"] = tr["reads"]
+        # O_DIRECT or bust. The arena is ~3.4 GB and a run issues ~32k reads,
+        # so every row is fetched ~31 times: buffered, the page cache serves
+        # almost all of it and the run measures RAM, not storage. The reader
+        # falls back to buffered silently enough that this has to be recorded.
+        st["reader_mode"] = tr.get("mode")
         if time_reads:
             st["read_ns"] = read_ns
             st["non_read_ns"] = wall - read_ns
@@ -240,6 +246,7 @@ def main():
             "hard_reads": hr, "soft_reads": sr,
             "delta_reads_pct": (sr - hr) / hr * 100,
             "soft_resurrections": res,
+            "reader_mode": h.get("reader_mode"),
             "page_cache_dropped": all(dropped),
             "drop_caches_attempts": len(dropped),
             "resurrection_frac_of_routed": res / routed})
@@ -260,6 +267,15 @@ def main():
                       part["hard_non_read_median_ns"] / 1e6,
                       part["soft_non_read_median_ns"] / 1e6,
                       part["delta_non_read_pct"]))
+    modes = {p.get("reader_mode") for p in out["points"]}
+    if any(m is None or "buffered" in str(m) for m in modes):
+        print("\n*** READS WERE BUFFERED, NOT O_DIRECT ***\n"
+              f"    reader mode: {sorted(str(m) for m in modes)}\n"
+              "    The arena is ~3.4 GB and a run issues ~32k reads, so each\n"
+              "    row is fetched ~31 times. Buffered, the page cache serves\n"
+              "    nearly all of that and these numbers measure RAM. Re-run on\n"
+              "    a filesystem that supports O_DIRECT.")
+        out["INVALID"] = "reads were buffered, not O_DIRECT"
     if not all(p.get("page_cache_dropped") for p in out["points"]):
         print("\n*** PAGE CACHE WAS NOT DROPPED ***\n"
               "    /proc/sys/vm/drop_caches was not writable, so the second\n"
