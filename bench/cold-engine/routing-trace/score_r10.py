@@ -62,8 +62,20 @@ def main():
         rowsj = [json.loads(line) for line in f]
     meta, recs = rowsj[0]["meta"], rowsj[1:]
     routed = sum(len(v) for r in recs for v in r["routed"].values())
+    # Granite's capture recorded `n_experts: null` -- capture_routing.py read
+    # only `num_experts` and GraniteMoE spells it `num_local_experts`, fixed
+    # since. Older traces still carry the null and crashed build_arena with a
+    # bare TypeError. Fall back to the largest id actually routed, which is a
+    # LOWER BOUND (an expert no token ever picked is invisible) and is
+    # reported as one rather than silently standing in for the real count.
+    n_exp = meta.get("n_experts")
+    exact = n_exp is not None
+    if not exact:
+        n_exp = max(e for r in recs for ex in r["routed"].values() for e in ex) + 1
+        meta = dict(meta, n_experts=n_exp, n_experts_inferred=True)
     print(f"trace: {meta['steps']} steps x {meta['layers']} layers x "
-          f"top-{meta['top_k']} of {meta['n_experts']}; {routed} routed slots")
+          f"top-{meta['top_k']} of {n_exp}{'' if exact else ' (INFERRED lower bound)'};"
+          f" {routed} routed slots")
     print("\nBoth arms hold the SAME physical rows. Only the ownership cap "
           "differs.\n")
 
