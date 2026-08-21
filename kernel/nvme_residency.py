@@ -49,6 +49,12 @@ from concurrent.futures import as_completed
 
 from nvme_reader import ArenaReader, alloc_landing, buffer_address
 
+# How many ranked victims to keep for the rest of a plan loop. A
+# request claims ~4 slots at rows=256; 16 covers the tail without
+# making the nsmallest meaningfully more expensive than the scan
+# that already produced `ranked`.
+_VICTIM_BATCH = 16
+
 
 class ColdTier:
     """Pinned-DRAM residency over an NVMe expert arena.
@@ -137,6 +143,13 @@ class ColdTier:
         self._last_use: dict[tuple[int, int], int] = {}
         # Concurrency state (see ensure's docstring for the contract):
         self._reserved: set[int] = set()   # slots whose fill is in flight
+        # Ranked victims precomputed for the CURRENT plan loop. Within one
+        # ensure() the ranking is stable -- _freq/_last_use are written once,
+        # up front, for every requested key -- and the exclusion set only
+        # GROWS as slots are claimed or protected. So the k-th successive
+        # _victim call is the k-th entry of one ranking, skipping whatever
+        # became excluded. None means "recompute".
+        self._victim_batch: list[int] | None = None
         self._pending: dict[tuple[int, int], threading.Event] = {}
         self._demand_protected: set[int] = set()
         # Reclaimable residency: key -> the clock tick at its logical
@@ -212,23 +225,41 @@ class ColdTier:
         # slot's key is guaranteed present in _last_use -- ensure() writes
         # _freq/_last_use for every requested key before any slot is published,
         # and nothing ever deletes from it -- so the default was unreachable.
+        batch = self._victim_batch
+        if batch is not None:
+            for i, slot in enumerate(batch):
+                if slot in excluded or slot in self._reserved:
+                    continue
+                if self._key_of[slot] is None:
+                    continue
+                del batch[:i + 1]
+                return slot
+            self._victim_batch = None      # exhausted; fall through to a scan
+
         best, best_key = None, None
         freq = self._freq
         last = self._last_use
         recl = self._reclaimable
         reserved = self._reserved
+        ranked: list = []
         for slot, key in enumerate(self._key_of):
             if key is None or slot in excluded or slot in reserved:
                 continue
             k = (0 if key in recl else 1, freq[key], last[key])
             if best_key is None or k < best_key:
                 best, best_key = slot, k
+            ranked.append((k, slot))
         if best is None:
             raise RuntimeError(
                 f"hot_rows={self.hot_rows} too small: every slot is claimed by "
                 f"the current request, reserved by an in-flight fill, or "
                 f"protected by the current demand window. Size hot_rows >= max "
                 f"routed experts per layer (plus speculative headroom).")
+        # Cache the rest of this ranking for the remaining claims in this plan
+        # loop. `best` is returned now, so it is not in the cache.
+        if len(ranked) > 1:
+            nxt = heapq.nsmallest(_VICTIM_BATCH, ranked)
+            self._victim_batch = [sl for _k, sl in nxt if sl != best]
         return best
 
     # -------------------------------------------------------------- the API --
@@ -291,6 +322,7 @@ class ColdTier:
             self.requests += 1
             self._clock += 1
             now = self._clock
+            self._victim_batch = None         # ranking changes with the touch
             for key in keys:                      # frequency counts every pick
                 self._freq[key] += 1
                 self._last_use[key] = now
@@ -500,6 +532,7 @@ class ColdTier:
                     blockers[0].wait(timeout=30.0)
                 finally:
                     self._lock.acquire()
+                self._victim_batch = None     # lock was dropped; state moved
                 continue
             old = self._key_of[slot]
             if old is not None:
@@ -583,6 +616,7 @@ class ColdTier:
         victims = heapq.nsmallest(over, cands,
                                   key=lambda k: (self._freq[k],
                                                  self._last_use.get(k, 0)))
+        self._victim_batch = None             # reclaimable flags just changed
         for k in victims:
             self._reclaimable[k] = self._clock
             self.logical_evictions += 1
