@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "model": "/root/models/olmoe",
+    "steps": 512,
+    "layers": 16,
+    "top_k": 8,
+    "n_experts": 64,
+    "prompt_tokens": 64,
+    "decode": true
+  },
+  "rows": 256,
+  "protected": 248,
+  "qd": 1,
+  "real_stride_bytes": 3342336,
+  "arms": {
+    "hard": {
+      "reads": 32169,
+      "transitions": 32168,
+      "mean_rows": 31.58303282765481,
+      "median_rows": 12.0,
+      "q1_rows": 5.0,
+      "q3_rows": 23.0,
+      "adjacent_pct": 6.186272071623974,
+      "within_8_pct": 39.026361601591645,
+      "mean_bytes": 105561107.60905248,
+      "tier_misses": 32169
+    },
+    "soft": {
+      "reads": 32605,
+      "transitions": 32604,
+      "mean_rows": 31.177370874739296,
+      "median_rows": 12.0,
+      "q1_rows": 5.0,
+      "q3_rows": 22.0,
+      "adjacent_pct": 6.263035210403632,
+      "within_8_pct": 39.400073610599925,
+      "mean_bytes": 104205249.05999264,
+      "tier_misses": 32605
+    }
+  },
+  "delta": {
+    "mean_rows": {
+      "abs": -0.40566195291551566,
+      "pct": -1.2844300138278961
+    },
+    "median_rows": {
+      "abs": 0.0,
+      "pct": 0.0
+    },
+    "adjacent_pct": {
+      "abs": 0.07676313877965768,
+      "pct": 1.2408626373186071
+    },
+    "within_8_pct": {
+      "abs": 0.3737120090082797,
+      "pct": 0.9575886494964427
+    }
+  }
+}
