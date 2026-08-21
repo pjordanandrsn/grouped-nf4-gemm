@@ -24,6 +24,7 @@ import json
 import os
 import statistics
 import sys
+import threading
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -93,17 +94,35 @@ def run(path, index, recs, rows, protected, pinned, qd=4, time_reads=False):
     """
     t = ColdTier(path, hot_rows=rows, pinned=pinned, index=index,
                  protected_rows=protected, qd=qd)
-    read_ns = 0
+    read_ns = submit_ns = 0
+    lock = threading.Lock()
     real_read_row = t.reader.read_row
+    real_read = t.reader._read
     if time_reads:
-        def timed(*a, **k):
+        # `_read` is the function the pool RUNS; `read_row` only submits it and
+        # returns a Future. Timing read_row measures submission, not I/O -- the
+        # first version of this did exactly that and reported 0.85 s to move
+        # 107 GB, i.e. 126 GB/s on a 1.5 GB/s disk. read_ns sums across
+        # workers, so at qd>1 it can exceed wall; at qd=1 there is one worker
+        # and it is directly comparable.
+        def timed_io(*a, **k):
             nonlocal read_ns
+            s0 = time.perf_counter_ns()
+            try:
+                return real_read(*a, **k)
+            finally:
+                with lock:
+                    read_ns += time.perf_counter_ns() - s0
+
+        def timed_submit(*a, **k):
+            nonlocal submit_ns
             s0 = time.perf_counter_ns()
             try:
                 return real_read_row(*a, **k)
             finally:
-                read_ns += time.perf_counter_ns() - s0
-        t.reader.read_row = timed
+                submit_ns += time.perf_counter_ns() - s0
+        t.reader._read = timed_io
+        t.reader.read_row = timed_submit
     try:
         t0 = time.perf_counter_ns()
         for r in recs:
@@ -121,11 +140,13 @@ def run(path, index, recs, rows, protected, pinned, qd=4, time_reads=False):
         st["reader_mode"] = tr.get("mode")
         if time_reads:
             st["read_ns"] = read_ns
+            st["submit_ns"] = submit_ns
             st["non_read_ns"] = wall - read_ns
         return st
     finally:
         if time_reads:
             t.reader.read_row = real_read_row
+            t.reader._read = real_read
         t.close()
 
 
