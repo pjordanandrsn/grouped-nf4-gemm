@@ -210,9 +210,17 @@ a story fitted to two salient cells.
 **What separates is arithmetic: `steps_held` = capacity ÷ (layers × top-k)**,
 the rows one decode step asks for. Every configuration where the device cache
 loses has `steps_held < 1`; every one where it wins has ≥ 1 — **24 of 24**,
-ρ = −0.895. A cache smaller than one step is fully evicted before its own next
-request, so it retains nothing, and the extra host→cache write per miss
-becomes pure loss.
+ρ = −0.895.
+
+**And the reason is LRU, not capacity** — the second explanation to be scored
+and corrected here. Routing per step is a near-cyclic scan of those rows, and
+LRU below the cycle length is the textbook zero-hit case: below one step LRU
+retains *nothing* in 24 of 24 cells, FIFO likewise, while **random eviction is
+zero-hit in 0 of 24**. Above one step LRU is best again in 22 of 24. The
+failure is a **cliff, not a slope**, so adding rows below the threshold buys
+nothing — which is what a reader needs to know when they cannot size it.
+Guidance is unchanged (size to one step): random only beats the engine's
+positional cache in 7 of 24 sub-threshold cells, all at the boundary.
 
 That also corrects how the two models were compared. Granite routes 256 rows
 per step from a 1280 arena; OLMoE routes 128 from 1024. **Fraction of the
