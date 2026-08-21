@@ -34,9 +34,9 @@ from nvme_residency import ColdTier            # noqa: E402
 from score_r3 import build_arena               # noqa: E402
 
 
-def run(path, index, recs, rows, protected):
+def run(path, index, recs, rows, protected, qd=1):
     t = ColdTier(path, hot_rows=rows, pinned=False, index=index,
-                 protected_rows=protected)
+                 protected_rows=protected, qd=qd)
     try:
         for r in recs:
             for L, experts in r["routed"].items():
@@ -53,6 +53,8 @@ def main():
     ap.add_argument("--trace", required=True)
     ap.add_argument("--rows", default="128,192,256,384,512")
     ap.add_argument("--k", type=int, default=8)
+    ap.add_argument("--qd", type=int, default=1,
+                    help="reader queue depth. ColdTier defaults to None, which sizes the queue from the host CPU count -- so counters are neither reproducible run-to-run nor comparable across boxes. qd=1 forces completion order and makes this replay a pure function of the trace; see qd_jitter.py.")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
 
@@ -72,9 +74,9 @@ def main():
               f"{'Δ reads':>9} | {'hard evict':>11} {'soft evict':>11} "
               f"{'Δ churn':>9} | {'verdict':>10}")
         for rows in [int(x) for x in a.rows.split(",")]:
-            hard = run(path, index, recs, rows, rows)
+            hard = run(path, index, recs, rows, rows, a.qd)
             for prot in (max(1, rows // 2), max(1, rows - a.k)):
-                soft = run(path, index, recs, rows, prot)
+                soft = run(path, index, recs, rows, prot, a.qd)
                 hr, sr = hard["reads"], soft["reads"]
                 he, se = hard["evictions"], soft["evictions"]
                 d_r = (sr - hr) / hr * 100 if hr else 0.0

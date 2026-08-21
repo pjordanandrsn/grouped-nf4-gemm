@@ -74,10 +74,10 @@ def cold_set(recs, frac):
     return cold, acc / total if total else 0.0
 
 
-def replay(path, index, recs, cold, rows):
+def replay(path, index, recs, cold, rows, qd=1):
     """One pass. Nominal misses from the placement, refills from the tier."""
     nominal = 0
-    t = ColdTier(path, hot_rows=rows, pinned=False, index=index)
+    t = ColdTier(path, hot_rows=rows, pinned=False, index=index, qd=qd)
     try:
         for r in recs:
             for L, experts in r["routed"].items():
@@ -97,6 +97,8 @@ def main():
     ap.add_argument("--trace", required=True)
     ap.add_argument("--cold", default="0.05,0.10,0.20")
     ap.add_argument("--rows", default="128,256,384")
+    ap.add_argument("--qd", type=int, default=1,
+                    help="reader queue depth. ColdTier defaults to None, which sizes the queue from the host CPU count -- so counters are neither reproducible run-to-run nor comparable across boxes. qd=1 forces completion order and makes this replay a pure function of the trace; see qd_jitter.py.")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
 
@@ -118,7 +120,7 @@ def main():
         for frac in [float(x) for x in a.cold.split(",")]:
             cold, achieved = cold_set(recs, frac)
             for rows in [int(x) for x in a.rows.split(",")]:
-                nominal, st = replay(path, index, recs, cold, rows)
+                nominal, st = replay(path, index, recs, cold, rows, a.qd)
                 refills = st.get("misses", 0)
                 nr = nominal / routed_total
                 rr = refills / routed_total

@@ -57,8 +57,8 @@ def build_arena(tmp, layers, experts):
     return path, load_index(path)
 
 
-def replay(path, index, recs, dram_rows, vram_rows, protected):
-    tier = ColdTier(path, hot_rows=dram_rows, pinned=False, index=index)
+def replay(path, index, recs, dram_rows, vram_rows, protected, qd=1):
+    tier = ColdTier(path, hot_rows=dram_rows, pinned=False, index=index, qd=qd)
     cache = DevRowCache(vram_rows, 8, device="cpu", protected=protected)
     n = both = dram_only = vram_only = neither = 0
     try:
@@ -93,6 +93,8 @@ def main():
     ap.add_argument("--dram-rows", default="256,384")
     ap.add_argument("--vram-rows", default="64,128,256")
     ap.add_argument("--protected", default="half")
+    ap.add_argument("--qd", type=int, default=1,
+                    help="reader queue depth. ColdTier defaults to None, which sizes the queue from the host CPU count -- so counters are neither reproducible run-to-run nor comparable across boxes. qd=1 forces completion order and makes this replay a pure function of the trace; see qd_jitter.py.")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
 
@@ -110,7 +112,7 @@ def main():
         for dr in [int(x) for x in a.dram_rows.split(",")]:
             for vr in [int(x) for x in a.vram_rows.split(",")]:
                 prot = vr // 2 if a.protected == "half" else int(a.protected)
-                st = replay(path, index, recs, dr, vr, prot)
+                st = replay(path, index, recs, dr, vr, prot, a.qd)
                 st.update({"dram_rows": dr, "vram_rows": vr, "protected": prot})
                 out["points"].append(st)
                 print(f"{dr:>5} {vr:>5} {prot:>5} {st['both_valid']:>9} "
