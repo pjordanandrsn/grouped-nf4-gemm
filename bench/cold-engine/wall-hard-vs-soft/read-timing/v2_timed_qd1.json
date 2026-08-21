@@ -1,0 +1,69 @@
+{
+  "meta": {
+    "model": "/root/models/olmoe",
+    "steps": 512,
+    "layers": 16,
+    "top_k": 8,
+    "n_experts": 64,
+    "prompt_tokens": 64,
+    "decode": true
+  },
+  "arena_row_bytes": 3342336,
+  "routed_slots": 65536,
+  "pinned": true,
+  "repeats": 5,
+  "qd": 1,
+  "points": [
+    {
+      "hard_read_ns": [
+        62252008109,
+        62209078434,
+        62348693412,
+        62187142508,
+        62254534678
+      ],
+      "soft_read_ns": [
+        63191581619,
+        63613164753,
+        63711218560,
+        62822727320,
+        63675509179
+      ],
+      "hard_read_median_ns": 62252008109,
+      "soft_read_median_ns": 63613164753,
+      "delta_read_ns_pct": 2.1865264837990224,
+      "hard_non_read_median_ns": 13159418683,
+      "soft_non_read_median_ns": 16658192118,
+      "delta_non_read_pct": 26.58759873276083,
+      "hard_read_frac_of_wall": 0.8254983463010673,
+      "soft_read_frac_of_wall": 0.7924765100860257,
+      "rows": 256,
+      "protected": 248,
+      "hard_wall_ns": [
+        75411426792,
+        75263468478,
+        75504774083,
+        75253673993,
+        75512291741
+      ],
+      "soft_wall_ns": [
+        79588361021,
+        80384968799,
+        80347138820,
+        78058144154,
+        80271356871
+      ],
+      "hard_wall_median_ns": 75411426792,
+      "soft_wall_median_ns": 80271356871,
+      "delta_wall_pct": 6.444553943269993,
+      "hard_reads": 32169,
+      "soft_reads": 32605,
+      "delta_reads_pct": 1.355342099536821,
+      "soft_resurrections": 255,
+      "reader_mode": "O_DIRECT",
+      "page_cache_dropped": false,
+      "drop_caches_attempts": 10,
+      "resurrection_frac_of_routed": 0.0038909912109375
+    }
+  ]
+}
