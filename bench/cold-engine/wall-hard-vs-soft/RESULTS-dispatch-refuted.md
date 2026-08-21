@@ -28,6 +28,15 @@ that error once, in `RESULTS-ensure-profile.md`, and it was repeated here.
 
 ## The 85% is an artifact
 
+> **Corrected by [`RESULTS-bounding-the-residual.md`](RESULTS-bounding-the-residual.md).**
+> This section is wrong. Demote really is ~91% of the gap; an additive
+> accounting shows it directly. What the profile got wrong was *where inside*
+> demote — it charged the key lambda, and the selection form turns out not to
+> matter (lambda 0.202 s, generator 0.210 s, list-comp 0.212 s, indistinguishable).
+> The 6.3% below is the honest size of the *lookup* overhead, not of demote.
+> The reasoning that follows about cProfile inflating many-call entries stands;
+> the conclusion drawn from it does not.
+
 `_demote_locked` still ran the pattern removed from `_victim` in #175: the
 `nsmallest` key doing `self._freq[k]` and `self._last_use.get(k, 0)`, evaluated
 once per candidate — **1,965,572 calls** across the trace, the single largest
@@ -76,10 +85,15 @@ that basis alone.
 
 ## What is left
 
-Dispatch ~10%, demote selection ≥6.3%. Neither dominates, and the two together
-do not obviously reach the +56% non-read delta. The asymmetric work is spread
-rather than concentrated — which is itself a finding, since every candidate so
-far has been sought as a single dominant cause.
+~~Dispatch ~10%, demote selection ≥6.3%. Neither dominates... The asymmetric
+work is spread rather than concentrated.~~
+
+**Superseded.** Adding the pieces up rather than testing them one at a time
+shows the work IS concentrated: `_demote_locked` is **90.9%** of the gap, in two
+O(resident) operations per request. See
+[`RESULTS-bounding-the-residual.md`](RESULTS-bounding-the-residual.md). The
+"spread" reading came from measuring candidates individually, each of which
+looked small.
 
 ## Receipts
 
