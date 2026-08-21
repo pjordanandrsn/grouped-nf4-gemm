@@ -79,9 +79,9 @@ def drop_caches():
         return False
 
 
-def run(path, index, recs, rows, protected, pinned):
+def run(path, index, recs, rows, protected, pinned, qd=4):
     t = ColdTier(path, hot_rows=rows, pinned=pinned, index=index,
-                 protected_rows=protected)
+                 protected_rows=protected, qd=qd)
     try:
         t0 = time.perf_counter_ns()
         for r in recs:
@@ -115,6 +115,12 @@ def main():
                          "protected budget is what raises it.")
     ap.add_argument("--repeats", type=int, default=3)
     ap.add_argument("--pinned", action="store_true")
+    ap.add_argument("--qd", type=int, default=4,
+                    help="reader queue depth. The residual is a per-read cost "
+                         "(soft achieves lower effective bandwidth at the same "
+                         "row size), and CPU work between reads can only cost "
+                         "bandwidth when there is a queue to drain -- so qd=1 "
+                         "vs qd=4 separates direct CPU cost from overlap loss.")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
 
@@ -146,7 +152,8 @@ def main():
     routed = sum(len(v) for r in recs for v in r["routed"].values())
     out = {"meta": meta, "arena_row_bytes": index["row_bytes"],
            "routed_slots": routed,
-           "pinned": a.pinned, "repeats": a.repeats, "points": []}
+           "pinned": a.pinned, "repeats": a.repeats, "qd": a.qd,
+           "points": []}
     print("%6s %6s | %11s %11s %8s | %10s %10s %8s | %s" % (
         "rows", "prot", "hard ms", "soft ms", "d wall", "hard reads",
         "soft reads", "d reads", "resurrections"))
@@ -158,9 +165,9 @@ def main():
         # disagreement between the two A runs rather than as a result.
         for i in range(a.repeats):
             drop_caches()
-            h = run(a.arena, index, recs, rows, rows, a.pinned)
+            h = run(a.arena, index, recs, rows, rows, a.pinned, a.qd)
             drop_caches()
-            s = run(a.arena, index, recs, rows, prot, a.pinned)
+            s = run(a.arena, index, recs, rows, prot, a.pinned, a.qd)
             hw.append(h["wall_ns"])
             sw.append(s["wall_ns"])
             hr, sr = h["reads"], s["reads"]
