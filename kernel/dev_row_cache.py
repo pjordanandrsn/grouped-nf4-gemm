@@ -134,6 +134,16 @@ class DevRowCache:
         self.stalls = 0          # want() had to block on a previous step
         self.filled = 0          # rows written host -> cache
         self.abandoned = 0       # steps that never reached their record()
+        # Rows one decode STEP asks for, learned from what actually arrives:
+        # every layer contributes its routed set, so this is layers x k. A
+        # cache smaller than that cannot retain ANYTHING across steps -- it is
+        # evicted before its own next request -- and then the extra
+        # host->cache write per miss makes it worse than the positional cache
+        # already in the engine. Measured across two models and four prompts,
+        # `rows >= per_step` separated every configuration where this cache
+        # helped from every one where it lost, 24 of 24
+        # (bench/cold-engine/routing-trace/RESULTS-concentration.md).
+        self._layer_rows: dict = {}
         # The PREVIOUS step is a property of the CACHE, not of any one engine.
         # Tracking it per-engine meant every engine after the first started
         # with prev=None, so it neither settled nor stall-waited, and a shared
@@ -173,6 +183,7 @@ class DevRowCache:
             self.abandoned += 1
         if prev is not None:
             self.slots.settle(lambda t: t.done())
+        self._layer_rows[layer] = len(set(experts))
         keys = [(layer, e) for e in experts]
         try:
             assign, need = self.slots.want(keys, event_tag=tag)
@@ -201,8 +212,15 @@ class DevRowCache:
 
     def stats(self) -> dict:
         s = dict(self.slots.stats())
+        per_step = sum(self._layer_rows.values())
         s.update({"rows": self.rows, "row_stride": self.row_stride,
                   "stalls": self.stalls, "host_to_cache_rows": self.filled,
                   "abandoned_steps": self.abandoned,
-                  "bytes": self.rows * self.row_stride})
+                  "bytes": self.rows * self.row_stride,
+                  # None until at least one layer has been seen, so an
+                  # un-driven cache does not report a ratio against zero.
+                  "per_step_rows": per_step or None,
+                  "steps_held": (self.rows / per_step) if per_step else None,
+                  "too_small_to_retain": (per_step > self.rows) if per_step
+                                         else None})
         return s
