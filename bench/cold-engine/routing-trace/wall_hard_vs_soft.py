@@ -24,6 +24,7 @@ import json
 import os
 import statistics
 import sys
+import threading
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -79,9 +80,49 @@ def drop_caches():
         return False
 
 
-def run(path, index, recs, rows, protected, pinned, qd=4):
+def run(path, index, recs, rows, protected, pinned, qd=4, time_reads=False):
+    """One arm. With time_reads, also partitions the wall into time spent
+    INSIDE read_row and time spent everywhere else.
+
+    #153's residual is a per-read cost that survives five eliminations. The
+    one question that splits it cleanly is whether the extra time is inside
+    the read or outside it, and nothing so far has measured that. The reader
+    is wrapped rather than edited, the same non-invasive capture
+    score_locality.py uses; the wrapper costs both arms the same per read, so
+    it biases `read_ns` upward equally and cannot manufacture a difference
+    beyond the read-count difference already being accounted for.
+    """
     t = ColdTier(path, hot_rows=rows, pinned=pinned, index=index,
                  protected_rows=protected, qd=qd)
+    read_ns = submit_ns = 0
+    lock = threading.Lock()
+    real_read_row = t.reader.read_row
+    real_read = t.reader._read
+    if time_reads:
+        # `_read` is the function the pool RUNS; `read_row` only submits it and
+        # returns a Future. Timing read_row measures submission, not I/O -- the
+        # first version of this did exactly that and reported 0.85 s to move
+        # 107 GB, i.e. 126 GB/s on a 1.5 GB/s disk. read_ns sums across
+        # workers, so at qd>1 it can exceed wall; at qd=1 there is one worker
+        # and it is directly comparable.
+        def timed_io(*a, **k):
+            nonlocal read_ns
+            s0 = time.perf_counter_ns()
+            try:
+                return real_read(*a, **k)
+            finally:
+                with lock:
+                    read_ns += time.perf_counter_ns() - s0
+
+        def timed_submit(*a, **k):
+            nonlocal submit_ns
+            s0 = time.perf_counter_ns()
+            try:
+                return real_read_row(*a, **k)
+            finally:
+                submit_ns += time.perf_counter_ns() - s0
+        t.reader._read = timed_io
+        t.reader.read_row = timed_submit
     try:
         t0 = time.perf_counter_ns()
         for r in recs:
@@ -90,9 +131,22 @@ def run(path, index, recs, rows, protected, pinned, qd=4):
         wall = time.perf_counter_ns() - t0
         st = dict(t.stats())
         st["wall_ns"] = wall
-        st["reads"] = t.reader.traffic()["reads"]
+        tr = t.reader.traffic()
+        st["reads"] = tr["reads"]
+        # O_DIRECT or bust. The arena is ~3.4 GB and a run issues ~32k reads,
+        # so every row is fetched ~31 times: buffered, the page cache serves
+        # almost all of it and the run measures RAM, not storage. The reader
+        # falls back to buffered silently enough that this has to be recorded.
+        st["reader_mode"] = tr.get("mode")
+        if time_reads:
+            st["read_ns"] = read_ns
+            st["submit_ns"] = submit_ns
+            st["non_read_ns"] = wall - read_ns
         return st
     finally:
+        if time_reads:
+            t.reader.read_row = real_read_row
+            t.reader._read = real_read
         t.close()
 
 
@@ -121,6 +175,14 @@ def main():
                          "row size), and CPU work between reads can only cost "
                          "bandwidth when there is a queue to drain -- so qd=1 "
                          "vs qd=4 separates direct CPU cost from overlap loss.")
+    ap.add_argument("--time-reads", action="store_true",
+                    help="partition the wall into time inside read_row vs "
+                         "everywhere else. This is the targeted instrument "
+                         "for #153's residual: five candidates are eliminated "
+                         "and the surviving shape is a per-read cost, so the "
+                         "question is whether it lives in the read or around "
+                         "it. Run WITHOUT this flag too -- the residual must "
+                         "be unchanged by measuring it.")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
 
@@ -161,20 +223,43 @@ def main():
         prot = (max(1, int(rows * a.protected_frac)) if a.protected_frac
                 else max(1, rows - a.k))
         hw, sw, hr, sr, res = [], [], None, None, None
+        hrd, srd = [], []          # per-repeat ns spent INSIDE read_row
+        dropped = []               # did the page cache ACTUALLY get dropped?
         # A/B/A: alternate the arms so a drift in the box shows up as
         # disagreement between the two A runs rather than as a result.
         for i in range(a.repeats):
-            drop_caches()
-            h = run(a.arena, index, recs, rows, rows, a.pinned, a.qd)
-            drop_caches()
-            s = run(a.arena, index, recs, rows, prot, a.pinned, a.qd)
+            dropped.append(drop_caches())
+            h = run(a.arena, index, recs, rows, rows, a.pinned, a.qd,
+                    a.time_reads)
+            dropped.append(drop_caches())
+            s = run(a.arena, index, recs, rows, prot, a.pinned, a.qd,
+                    a.time_reads)
             hw.append(h["wall_ns"])
             sw.append(s["wall_ns"])
+            if a.time_reads:
+                hrd.append(h["read_ns"])
+                srd.append(s["read_ns"])
             hr, sr = h["reads"], s["reads"]
             res = (s.get("resurrections", 0) or 0) + \
                   (s.get("spec_resurrections", 0) or 0)
         hm, sm = statistics.median(hw), statistics.median(sw)
-        out["points"].append({
+        part = {}
+        if a.time_reads:
+            # Medians are taken per-quantity, so read and non-read medians need
+            # not sum to the wall median. Reported anyway because the COMPARISON
+            # is hard-vs-soft within each quantity, not the decomposition.
+            hrm, srm = statistics.median(hrd), statistics.median(srd)
+            hnm, snm = hm - hrm, sm - srm
+            part = {
+                "hard_read_ns": hrd, "soft_read_ns": srd,
+                "hard_read_median_ns": hrm, "soft_read_median_ns": srm,
+                "delta_read_ns_pct": (srm - hrm) / hrm * 100 if hrm else None,
+                "hard_non_read_median_ns": hnm, "soft_non_read_median_ns": snm,
+                "delta_non_read_pct": (snm - hnm) / hnm * 100 if hnm else None,
+                "hard_read_frac_of_wall": hrm / hm if hm else None,
+                "soft_read_frac_of_wall": srm / sm if sm else None,
+            }
+        out["points"].append({**part,
             "rows": rows, "protected": prot,
             "hard_wall_ns": hw, "soft_wall_ns": sw,
             "hard_wall_median_ns": hm, "soft_wall_median_ns": sm,
@@ -182,11 +267,54 @@ def main():
             "hard_reads": hr, "soft_reads": sr,
             "delta_reads_pct": (sr - hr) / hr * 100,
             "soft_resurrections": res,
+            "reader_mode": h.get("reader_mode"),
+            "page_cache_dropped": all(dropped),
+            "drop_caches_attempts": len(dropped),
             "resurrection_frac_of_routed": res / routed})
         print("%6d %6d | %11.1f %11.1f %+7.1f%% | %10d %10d %+7.1f%% | "
               "%7d (%.2f%% of routed)" % (
                   rows, prot, hm / 1e6, sm / 1e6, (sm - hm) / hm * 100,
                   hr, sr, (sr - hr) / hr * 100, res, res / routed * 100))
+        if a.time_reads:
+            print("        read_ns  %11.1f %11.1f %+7.1f%%   "
+                  "(read is %.1f%% / %.1f%% of wall)" % (
+                      part["hard_read_median_ns"] / 1e6,
+                      part["soft_read_median_ns"] / 1e6,
+                      part["delta_read_ns_pct"],
+                      part["hard_read_frac_of_wall"] * 100,
+                      part["soft_read_frac_of_wall"] * 100))
+            print("    non_read_ns  %11.1f %11.1f %+7.1f%%   <-- "
+                  "the residual lives in whichever of these tracks wall" % (
+                      part["hard_non_read_median_ns"] / 1e6,
+                      part["soft_non_read_median_ns"] / 1e6,
+                      part["delta_non_read_pct"]))
+    modes = {p.get("reader_mode") for p in out["points"]}
+    if any(m is None or "buffered" in str(m) for m in modes):
+        print("\n*** READS WERE BUFFERED, NOT O_DIRECT ***\n"
+              f"    reader mode: {sorted(str(m) for m in modes)}\n"
+              "    The arena is ~3.4 GB and a run issues ~32k reads, so each\n"
+              "    row is fetched ~31 times. Buffered, the page cache serves\n"
+              "    nearly all of that and these numbers measure RAM. Re-run on\n"
+              "    a filesystem that supports O_DIRECT.")
+        out["INVALID"] = "reads were buffered, not O_DIRECT"
+    direct = all("buffered" not in str(p.get("reader_mode")) and
+                 p.get("reader_mode") for p in out["points"])
+    if not all(p.get("page_cache_dropped") for p in out["points"]):
+        if direct:
+            # Not fatal, and measured rather than assumed: with O_DIRECT the
+            # reads never enter the page cache, so there is nothing for a
+            # drop to do. Verified on the box by reading the same 64 MB twice
+            # under O_DIRECT -- 41.3 ms then 40.8 ms, ratio 0.99. A cached
+            # second pass would have been far faster.
+            print("\n  note: /proc/sys/vm/drop_caches was not writable, which\n"
+                  "  does not matter here -- reads are O_DIRECT and bypass the\n"
+                  "  page cache. Recorded in the receipt either way.")
+        else:
+            print("\n*** BUFFERED READS AND NO CACHE DROP ***\n"
+                  "    Reads go through the page cache and it was never\n"
+                  "    dropped, so the second arm read the first arm's RAM.\n"
+                  "    These wall numbers do NOT measure storage.")
+            out["INVALID"] = "buffered reads, page cache never dropped"
     if a.out:
         json.dump(out, open(a.out, "w"), indent=2)
         print("\nreceipt ->", a.out)

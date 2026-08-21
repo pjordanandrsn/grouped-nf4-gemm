@@ -126,6 +126,12 @@ same arena, 5 repeats, only queue depth varying:
 qd=1 is 50% slower overall, so the knob works and overlap is real — the
 soft-hard gap simply does not depend on it. Receipts in `qd-probe/`.
 
+> **Closed.** The residual was partitioned in
+> [`RESULTS-read-timing.md`](RESULTS-read-timing.md): at qd=1 the soft arm's
+> reads cost what their count says (+2.2% on +1.4% more reads) while its work
+> *around* the reads costs **+26.6%**. 86.5% of the residual is outside the
+> read. Not a mechanism yet, but a named region with a size.
+>
 > **Followed up.** Read *locality* — named here as the untested shape, since
 > nothing recorded offsets — was measured and **refuted**: the two arms read
 > the arena in the same order, with identical median gaps at four capacities.
