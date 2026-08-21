@@ -39,6 +39,25 @@ def overlap(S, lag):
     return sum(v) / len(v)
 
 
+def token_period(recs, max_p=8, frac=0.9):
+    """Smallest p where token[i] == token[i-p] for >= `frac` of steps.
+
+    None when the trace predates token recording, or when no period fits --
+    which is the normal case. A small p is a degenerate generation: the model
+    is emitting a fixed cycle and every routing statistic downstream inherits
+    it.
+    """
+    tok = [r.get("token") for r in recs]
+    if any(t is None for t in tok):
+        return None
+    for p in range(1, max_p + 1):
+        n = len(tok) - p
+        if n > 0 and sum(tok[i] == tok[i - p] for i in range(p, len(tok))) \
+                >= frac * n:
+            return p
+    return 0                      # tokens recorded, no cycle found
+
+
 def n_experts(meta, recs):
     """E, from the metadata when the capture recorded it.
 
@@ -75,11 +94,18 @@ def main():
             E, exact = n_experts(meta, recs)
             k = meta["top_k"]
             lags = [overlap(S, l) for l in range(1, 7)]
+            per = token_period(recs)
             rows.append({"model": m, "prompt": p, "top_k": k, "n_experts": E,
                          "n_experts_exact": exact, "lags": lags,
+                         "token_period": per,
                          "chance": k / E, "norm": lags[0] / (k / E)})
-            print("%-8s %-9s %s"
-                  % (m, p, " ".join("%5.1f" % (100 * x) for x in lags)))
+            note = ""
+            if per:
+                note = "  <- GENERATION LOOPS with period %d" % per
+            elif per is None and max(lags[1::2]) > 2 * min(lags[0::2]):
+                note = "  <- even-lag spike; likely a loop (no tokens in trace)"
+            print("%-8s %-9s %s%s"
+                  % (m, p, " ".join("%5.1f" % (100 * x) for x in lags), note))
         print()
 
     print("lag-1 overlap against chance (k/E)\n")

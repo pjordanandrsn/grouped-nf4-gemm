@@ -203,15 +203,32 @@ def main():
             cur = r.logits[:, -1:].argmax(-1)
             if s == 0:
                 continue            # the prefill; not a decode step
+            # The token this step produced, so a degenerate generation is
+            # visible in the trace itself. Qwen's math trace was a period-2
+            # repetition loop and that was only found by inspecting routing
+            # lag-overlap afterwards; with the ids here it is one diff
+            # (bench/cold-engine/routing-trace/RESULTS-third-model.md).
             out.append({"step": s - 1,
+                        "token": int(cur.reshape(-1)[-1].item()),
                         "routed": {str(i): step_rec[i][-1]
                                    for i in range(len(gates))}})
     for h in hs:
         h.remove()
 
+    # Every architecture spells the expert count differently and reading only
+    # `num_experts` recorded null for Granite, which then had to be inferred
+    # from the largest id actually routed -- a lower bound, and one that
+    # propagates into any k/E normalization downstream. Mixtral and Granite
+    # both use `num_local_experts`.
+    n_exp = next((int(getattr(model.config, n))
+                  for n in ("num_experts", "num_local_experts",
+                            "n_routed_experts", "moe_num_experts")
+                  if getattr(model.config, n, None) is not None), None)
+    tok = [r["token"] for r in out]
     meta = {"model": a.model, "prompt": a.prompt, "steps": len(out),
             "layers": len(gates),
-            "top_k": k, "n_experts": getattr(model.config, "num_experts", None),
+            "top_k": k, "n_experts": n_exp,
+            "distinct_tokens": len(set(tok)),
             "prompt_tokens": int(ids.shape[1]), "decode": True}
     with open(a.out, "w") as f:
         f.write(json.dumps({"meta": meta}) + "\n")
