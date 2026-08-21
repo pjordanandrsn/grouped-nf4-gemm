@@ -137,11 +137,16 @@ bounding it, which is why no claim here rests on the spread staying small.
 A doc claiming the scorers are pinned is a comment; nothing stops the next
 scorer from falling back to the default. `kernel/test_nvme_qd.py` grows
 `test_offline_scorers_pin_the_queue_depth`, which scans every `ColdTier(...)`
-construction under `routing-trace/` and fails on any that omits `qd`, with
-`bench_direct.py` listed as an explicit exemption carrying its reason.
+construction under **`bench/`, recursively** — not just `routing-trace/`, so a
+harness added in another directory is covered — and fails on any that omits
+`qd`, with `bench_direct.py` as an explicit exemption carrying its reason.
+`kernel/` is deliberately not scanned: the library and its unit tests
+construct tiers at many depths on purpose.
 
-Verified by breaking it: removing `qd=qd` from `score_r10.py` fails the guard
-by name, and restoring it goes green. That demonstration is itself a test
+Verified by breaking it twice: removing `qd=qd` from `score_r10.py` fails the
+guard by name, and so does dropping an unpinned fake harness into
+`gate1-5090-zen5/` — the case the widened scope exists for. Both go green on
+cleanup. That demonstration is itself a test
 (`test_the_guard_actually_catches_an_unpinned_scorer`) which runs the real
 scanner over a fixture directory, so the guard cannot rot into a no-op.
 

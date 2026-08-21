@@ -151,8 +151,10 @@ def test_qd_zero_is_refused(arena):
 # RESULTS-qd-jitter.md asserts the offline scorers are pinned. This enforces
 # it, so the next scorer added cannot quietly fall back to the host default.
 
-SCORER_DIR = os.path.join(os.path.dirname(__file__), "..", "bench",
-                          "cold-engine", "routing-trace")
+# All of bench/, recursively -- not just routing-trace/ -- so a harness added
+# in another directory is covered too. kernel/ is deliberately NOT scanned:
+# the library and its unit tests construct tiers at many depths on purpose.
+SCORER_DIR = os.path.join(os.path.dirname(__file__), "..", "bench")
 
 # Constructions deliberately left on the host default, with the reason they
 # are safe. Keep this SHORT -- an entry here is an exemption, not a fix.
@@ -168,7 +170,9 @@ def _scorers_constructing_a_tier(dirpath=None):
     import glob
     import re
     out = []
-    for path in sorted(glob.glob(os.path.join(dirpath or SCORER_DIR, "*.py"))):
+    root = dirpath or SCORER_DIR
+    for path in sorted(glob.glob(os.path.join(root, "**", "*.py"),
+                                 recursive=True)):
         src = open(path, encoding="utf-8").read()
         for m in re.finditer(r"ColdTier\(", src):
             call = src[m.start():m.start() + 400]
