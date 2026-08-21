@@ -1,0 +1,98 @@
+{
+  "meta": {
+    "model": "/root/models/olmoe",
+    "steps": 512,
+    "layers": 16,
+    "top_k": 8,
+    "n_experts": 64,
+    "prompt_tokens": 64,
+    "decode": true
+  },
+  "working_set": 989,
+  "points": [
+    {
+      "rows": 800,
+      "protected": 720,
+      "pressure": 1.3736111111111111,
+      "hard_refills": 2644,
+      "soft_refills": 2633,
+      "gain": 11,
+      "gain_pct": 0.41603630862329805,
+      "hard_evictions": 1844,
+      "soft_evictions": 1833,
+      "soft_P_reuse_before_overwrite": 0.5171232876712328
+    },
+    {
+      "rows": 832,
+      "protected": 749,
+      "pressure": 1.3204272363150868,
+      "hard_refills": 2044,
+      "soft_refills": 2029,
+      "gain": 15,
+      "gain_pct": 0.7338551859099804,
+      "hard_evictions": 1212,
+      "soft_evictions": 1197,
+      "soft_P_reuse_before_overwrite": 0.5983221476510067
+    },
+    {
+      "rows": 864,
+      "protected": 778,
+      "pressure": 1.2712082262210798,
+      "hard_refills": 1621,
+      "soft_refills": 1614,
+      "gain": 7,
+      "gain_pct": 0.431832202344232,
+      "hard_evictions": 757,
+      "soft_evictions": 750,
+      "soft_P_reuse_before_overwrite": 0.6671105193075899
+    },
+    {
+      "rows": 896,
+      "protected": 806,
+      "pressure": 1.2270471464019852,
+      "hard_refills": 1311,
+      "soft_refills": 1307,
+      "gain": 4,
+      "gain_pct": 0.30511060259344014,
+      "hard_evictions": 415,
+      "soft_evictions": 411,
+      "soft_P_reuse_before_overwrite": 0.7469211822660099
+    },
+    {
+      "rows": 928,
+      "protected": 835,
+      "pressure": 1.1844311377245509,
+      "hard_refills": 1118,
+      "soft_refills": 1118,
+      "gain": 0,
+      "gain_pct": 0.0,
+      "hard_evictions": 190,
+      "soft_evictions": 190,
+      "soft_P_reuse_before_overwrite": 0.8210922787193974
+    },
+    {
+      "rows": 960,
+      "protected": 864,
+      "pressure": 1.1446759259259258,
+      "hard_refills": 1021,
+      "soft_refills": 1021,
+      "gain": 0,
+      "gain_pct": 0.0,
+      "hard_evictions": 61,
+      "soft_evictions": 61,
+      "soft_P_reuse_before_overwrite": 0.9077155824508321
+    },
+    {
+      "rows": 992,
+      "protected": 893,
+      "pressure": 1.1075027995520716,
+      "hard_refills": 989,
+      "soft_refills": 989,
+      "gain": 0,
+      "gain_pct": 0.0,
+      "hard_evictions": 0,
+      "soft_evictions": 0,
+      "soft_P_reuse_before_overwrite": 1.0
+    }
+  ]
+}

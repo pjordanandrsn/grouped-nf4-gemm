@@ -174,7 +174,9 @@ of the only two channels through which this mechanism could ever lose, which
 is the same defect shape as R3's unpinned budget and R2's two denominators.
 
 Full working: `bench/cold-engine/reconciliation/RESULTS-r5-reconciled.md`.
-R6 is untouched, and the uncontended half of R5 stands.
+R6 is scored in `RESULTS-r6.md` (confirmed as registered, but the band is
+worth +0.73% against −1.50% elsewhere; the earlier CONFIRMED is vacated), and
+the uncontended half of R5 stands.
 
 ## Two models, four prompts: one conclusion survives
 

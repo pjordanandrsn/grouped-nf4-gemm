@@ -18,7 +18,7 @@ the pre-Stage-3 tier exactly.
 |---|---|
 | **R1** — 5–20% of logical evictions reused before overwrite | **CONFIRMED, exceeded** — 11–60% measured |
 | **R5** — soft eviction ≤ hard eviction in cost | **CONFIRMED** — flat uncontended, *faster* contended — ⚠️ the *contended* half is scored on capacity-unmatched arms; see the reconciliation |
-| **R6** — best gains at moderate capacity pressure | **shape confirmed** — see below |
+| **R6** — best gains at moderate capacity pressure | ~~shape confirmed~~ **VACATED — see RESULTS-r6.md** |
 | ≥10% fewer physical NVMe reads (Arm A vs Arm B) | **CONFIRMED** — −14.9% and −29.6% |
 | no numerical/correctness difference | **CONFIRMED** — token-identical, every arm |
 | no increase in protected-memory usage | **CONFIRMED** by construction |
@@ -46,7 +46,13 @@ be resurrected. That is the mechanism working, not the hard case.
 ## Contended: 505 cold rows, 128-slot pool
 
 P(reuse) falls to 0.11–0.32 from 0.29–0.60 — reclaimable slots are taken
-faster when something wants them, which is R6's predicted shape.
+faster when something wants them.
+
+> **Vacated.** This paragraph read R6's shape off P, the metric
+> STAGE3-SYNTHESIS later retired, and off the ownership axis rather than the
+> working-set-pressure axis R6 names. On the correct axis and in physical
+> refills, P swings 16-fold while the refill gain stays flat and negative.
+> See `RESULTS-r6.md`.
 
 ## The registered comparison: Arm A (hard) vs Arm B (reclaimable)
 
@@ -295,7 +301,7 @@ Arm A is hard eviction (`hot_rows == protected_rows`); Arm B keeps a
 |---|---|---|
 | **R1** — 5–20% reuse before overwrite | 11–60%, "exceeded" | **CONFIRMED, exceeded at 2 of 3** — 13.5 / 24.5 / 34.2% |
 | **R5** — soft eviction ≤ hard | confirmed | **CONFIRMED** — B ≤ A on reads and wall at both feasible points |
-| **R6** — best gains at moderate pressure | shape confirmed | **CONFIRMED** — P rises monotonically as ownership tightens |
+| **R6** — best gains at moderate pressure | shape confirmed | **VACATED** — wrong axis (ownership, not pressure) and retired metric (P). Rescored in refills: `RESULTS-r6.md` |
 | ≥10% fewer physical NVMe reads | confirmed at both | **CONFIRMED at both** — −13.5% / −24.5% |
 | 5–15% lower exposed cold wall | MISS (3.4–4.4%) | **PARTIAL** — −7.9% at 64, −2.5% at 96 |
 | ghost working set | ~4× | **CONFIRMED** — 4× ownership cut, 4 reads flat |
