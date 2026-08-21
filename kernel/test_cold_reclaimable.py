@@ -390,14 +390,20 @@ def test_a_submit_failure_after_earlier_keys_launched_strands_nothing(arena):
 
 
 def test_victim_heap_stays_bounded_and_correct(tmp_path):
-    """Superseded entries leave the heap only when they reach the top, so a
-    workload that PUSHES without evicting grows it without bound. Every hit
-    re-pushes the touched key's rank, and a working set that fits evicts
-    nothing -- so nothing pops. Compaction has to cap that.
+    """Compaction must cap _vheap, and must not change what gets evicted.
 
-    The bound is fixed rather than derived from _VHEAP_SLACK: computing it
-    from the constant under test would make the assertion vacuous, since
-    raising the constant would raise the bound with it.
+    Which workload grows the heap is NOT obvious, and this test was vacuous
+    twice before it was real (Bugbot, gnf4#176). Publishing pushes once per
+    miss and every miss also pops, so the hard arm balances itself and never
+    grows -- on the routing trace it sits at 260 entries with compaction
+    disabled. Hits do not push at all under the lazy design. The one push with
+    no matching pop is DEMOTION, so growth needs a protected budget under real
+    eviction pressure: this workload reaches 407 entries against a 64 cap when
+    compaction is removed.
+
+    The cap is fixed rather than derived from _VHEAP_SLACK, because computing
+    it from the constant under test would make the assertion vacuous a third
+    way -- raising the constant would raise the cap with it.
     """
     import nvme_residency as nr
     from nvme_arena import bake, load_index
@@ -408,19 +414,72 @@ def test_victim_heap_stays_bounded_and_correct(tmp_path):
     arena = str(tmp_path / "a.arena")
     bake(str(snap), arena, align=4096, log=lambda *a: None)
     index = load_index(arena)
+    layers, experts = index["n_layers"], index["n_experts_per_layer"]
+
     rows = 8
-    t = nr.ColdTier(arena, hot_rows=rows, pinned=False, index=index, qd=1)
+    cap = 16 * rows
+    assert nr._VHEAP_SLACK * rows <= cap, "slack outgrew the fixed bound"
+    t = nr.ColdTier(arena, hot_rows=rows, pinned=False, index=index,
+                    protected_rows=6, qd=1)
     try:
-        cap = 16 * rows
-        assert nr._VHEAP_SLACK * rows <= cap, "slack outgrew the fixed bound"
-        # One layer, two experts: resident after the first call, so every
-        # later call is a pure hit -- two pushes, zero evictions, zero pops.
-        for step in range(500):
-            t.ensure(0, [0, 1])
+        for step in range(300):
+            t.ensure(step % layers, [step % experts, (step * 3 + 1) % experts])
             assert len(t._vheap) <= cap, (
                 f"heap grew to {len(t._vheap)} at step {step}, cap {cap}")
-        assert t.hits > 900, "workload was meant to be almost all hits"
+        assert t.stats()["logical_evictions"] > 50, (
+            "workload did not demote; the growth path was never exercised")
         excluded: set = set()
         assert t._victim(excluded) == t._victim_scan(excluded)
     finally:
         t.close()
+
+
+def test_victim_heap_agrees_with_the_sweep_under_eviction(tmp_path):
+    """The heap must pick exactly what the sweep would, on every call.
+
+    An error here is SILENT -- it evicts a different row, raises nothing, and
+    fails no other test, while quietly changing the policy every measurement
+    in this campaign was taken under. COLD_VICTIM_VERIFY=1 checks this against
+    the real routing trace, but that is a manual run; this puts the same
+    property in CI on a small workload that actually evicts.
+    """
+    import nvme_residency as nr
+    from nvme_arena import bake, load_index
+    from test_nvme_arena import make_snapshot
+
+    snap = tmp_path / "snap"
+    make_snapshot(str(snap))
+    arena = str(tmp_path / "a.arena")
+    bake(str(snap), arena, align=4096, log=lambda *a: None)
+    index = load_index(arena)
+    layers, experts = index["n_layers"], index["n_experts_per_layer"]
+
+    for protected in (None, 6, 4):       # hard arm, and two demoting budgets
+        t = nr.ColdTier(arena, hot_rows=8, pinned=False, index=index,
+                        protected_rows=protected, qd=1)
+        checked = 0
+        try:
+            real = t._victim
+            scan = t._victim_scan
+
+            def both(excluded, _r=real, _s=scan):
+                nonlocal checked
+                got = _r(excluded)
+                assert got == _s(excluded), (
+                    f"heap chose {got}, sweep chose {_s(excluded)}, "
+                    f"protected={protected}, excluded={sorted(excluded)}")
+                checked += 1
+                return got
+
+            t._victim = both
+            for step in range(300):      # working set > 8 slots, so it evicts
+                lay = step % layers
+                t.ensure(lay, [step % experts, (step * 3 + 1) % experts])
+            assert checked > 20, f"only {checked} selections exercised"
+            assert t.evictions > 0, "workload never evicted; nothing was tested"
+            if protected is not None:
+                assert t.stats()["logical_evictions"] > 50, (
+                    "no demotion happened, so the eager demote push -- the "
+                    "one self-healing cannot cover -- went untested")
+        finally:
+            t.close()
