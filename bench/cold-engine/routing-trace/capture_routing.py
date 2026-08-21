@@ -174,9 +174,20 @@ def main():
     if not gates:
         sys.exit("no readable router modules found. Probed %d candidates: %s"
                  % (len(cands), [n for n, _ in cands[:6]]))
+    # Every architecture spells the expert count differently and reading only
+    # `num_experts` recorded null for Granite, which then had to be inferred
+    # from the largest id actually routed -- a lower bound, and one that
+    # propagates into any k/E normalization downstream. Mixtral and Granite
+    # both use `num_local_experts`.
+    n_exp = next((int(getattr(model.config, n))
+                  for n in ("num_experts", "num_local_experts",
+                            "n_routed_experts", "moe_num_experts")
+                  if getattr(model.config, n, None) is not None), None)
     print("routers: %s ..." % ", ".join(layers[:2]))
-    print(f"{len(gates)} routers, top_k={k}, "
-          f"E={getattr(model.config,'num_experts',None)}")
+    # The geometry line an operator checks against the preregistration, so it
+    # reports the count actually found rather than one spelling of it.
+    print(f"{len(gates)} routers, top_k={k}, E={n_exp}, "
+          f"per_step={len(gates) * k}, arena={len(gates) * (n_exp or 0)}")
 
     step_rec = {}
 
@@ -215,15 +226,6 @@ def main():
     for h in hs:
         h.remove()
 
-    # Every architecture spells the expert count differently and reading only
-    # `num_experts` recorded null for Granite, which then had to be inferred
-    # from the largest id actually routed -- a lower bound, and one that
-    # propagates into any k/E normalization downstream. Mixtral and Granite
-    # both use `num_local_experts`.
-    n_exp = next((int(getattr(model.config, n))
-                  for n in ("num_experts", "num_local_experts",
-                            "n_routed_experts", "moe_num_experts")
-                  if getattr(model.config, n, None) is not None), None)
     tok = [r["token"] for r in out]
     meta = {"model": a.model, "prompt": a.prompt, "steps": len(out),
             "layers": len(gates),
