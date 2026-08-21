@@ -15,7 +15,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "..", "kernel"))
 sys.path.insert(0, HERE)
 
-from score_policies import capacity                    # noqa: E402
+from score_policies import capacity, steps_capacity    # noqa: E402
 
 FRACS = (0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0)
 ARENAS = (1024, 1280, 1440)                            # olmoe, granite, qwen
@@ -61,11 +61,49 @@ def test_it_reproduces_int_everywhere_the_float_was_not_lying():
     assert moved == [(1440, 0.7)]
 
 
-def test_steps_held_sweep_is_unchanged():
-    """P1's sweep must be untouched -- it was never affected by the bug."""
-    assert [capacity(96, s, floor=2)
-            for s in (0.5, 0.75, 0.9, 1.0, 1.25, 1.5)] == \
-        [48, 72, 86, 96, 120, 144]
+STEPS = (0.5, 0.75, 0.9, 1.0, 1.25, 1.5)
+
+# layers x top-k for every geometry captured or registered. 64 is Mixtral,
+# which is the whole reason these tests are not written against 96 alone.
+PER_STEP = {"olmoe": 128, "granite": 256, "qwen": 96, "mixtral": 64}
+
+
+@pytest.mark.parametrize("per", sorted(PER_STEP.values()))
+def test_steps_sweep_matches_the_registered_int_round(per):
+    """The grid the preregistrations were written against, on every geometry.
+
+    Checking only per=96 hid a real regression: floor and round agree there
+    (0.9 x 96 = 86.4) and part at per=64 (57.6), so routing P1 through the
+    flooring helper silently moved Mixtral's 0.9 cell to 57 while
+    PREREG-fourth-model.md registered 58 (Bugbot, gnf4#177).
+    """
+    assert [steps_capacity(per, s) for s in STEPS] == \
+        [max(2, int(round(per * s))) for s in STEPS]
+
+
+def test_steps_sweep_reproduces_the_registered_qwen_grid():
+    assert [steps_capacity(96, s) for s in STEPS] == [48, 72, 86, 96, 120, 144]
+
+
+def test_steps_sweep_reproduces_the_registered_mixtral_grid():
+    """PREREG-fourth-model.md registered {32, 48, 58, 64, 80, 96}."""
+    assert [steps_capacity(64, s) for s in STEPS] == [32, 48, 58, 64, 80, 96]
+
+
+def test_steps_rounds_where_the_arena_helper_floors():
+    """The two are different quantities and must not be collapsed again."""
+    assert steps_capacity(64, 0.9) == 58
+    assert capacity(64, 0.9, floor=2) == 57
+
+
+def test_no_registered_sweep_lands_on_an_exact_half():
+    """steps_capacity is half-up; that only differs from Python's banker's
+    rounding on an exact .5, and nothing registered hits one."""
+    from fractions import Fraction
+    for per in PER_STEP.values():
+        for s in STEPS:
+            prod = Fraction(str(s)) * per
+            assert prod.denominator != 2, (per, s, prod)
 
 
 def test_integer_fraction_and_string_agree():

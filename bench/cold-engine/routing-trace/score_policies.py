@@ -53,6 +53,33 @@ def capacity(arena, frac, floor=1):
     """
     return max(floor, (Fraction(str(frac)) * int(arena)).__floor__())
 
+
+def steps_capacity(per_step, steps_held, floor=2):
+    """`steps_held` steps' worth of rows, ROUNDED, not floored.
+
+    A separate function from capacity() on purpose. The two sweeps measure
+    different things and round differently, and collapsing them into one
+    helper silently moved the P1 grid (Bugbot, gnf4#177, second pass):
+
+      * an ARENA FRACTION is a budget -- 70% of the arena must not exceed 70%
+        of the arena, so capacity() floors;
+      * STEPS_HELD is a position on a continuum -- 0.9 steps of a 64-row step
+        is 57.6 rows, and the registered grids have always taken the nearest
+        row, `int(round(per * sh))`.
+
+    They agree for every `per_step` captured so far (96, 128, 256), which is
+    exactly why the mistake was invisible: 0.9 of each is x.4 or x.2 and
+    floors and rounds alike. They part on the NEXT one -- Mixtral's per_step
+    is 64, 0.9 of it is 57.6, and PREREG-fourth-model.md registered 58.
+
+    Half-up, which differs from Python's banker's rounding only on an exact
+    .5. No registered sweep on any captured or preregistered geometry lands
+    on one; test_capacity.py pins that.
+    """
+    return max(floor,
+               (Fraction(str(steps_held)) * int(per_step)
+                + Fraction(1, 2)).__floor__())
+
 def load(path):
     with open(path) as f:
         rows = [json.loads(line) for line in f]

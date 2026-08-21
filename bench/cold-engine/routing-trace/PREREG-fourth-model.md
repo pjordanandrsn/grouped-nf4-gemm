@@ -60,7 +60,10 @@ entire reason for capturing it.
 
 * Swept at `steps_held` ∈ {0.5, 0.75, 0.9, 1.0, 1.25, 1.5} → capacities
   {32, 48, 58, 64, 80, 96}, plus a row-by-row probe from 64 upward to locate
-  the crossover exactly.
+  the crossover exactly. Those rows are `steps_capacity(64, ·)` — the 0.9 cell
+  is **58**, `round(57.6)`, not 57. Mixtral is the first geometry where
+  rounding and flooring differ, and a test pins the grid so the harness cannot
+  drift off this file (`test_capacity.py`).
 * Scored against the **real `DevRowCache`**, not the LRU simulation in
   `score_crossover.py`. The two disagree at exactly this boundary on all 12
   traces captured so far, in both directions, and scoring the simulation would

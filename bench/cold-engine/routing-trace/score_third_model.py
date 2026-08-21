@@ -21,7 +21,7 @@ sys.path.insert(0, HERE)
 
 from replay_dev_cache import positional_transfers, replay   # noqa: E402
 from score_policies import (capacity, demand_p, load,       # noqa: E402
-                            static_p)
+                            static_p, steps_capacity)
 from score_demand import counts                             # noqa: E402
 
 PROMPTS = ("prose", "code", "math", "dialogue")
@@ -46,7 +46,7 @@ def p1(d, model, extra=(), prompts=PROMPTS):
         per = meta["layers"] * meta["top_k"]
         pos = positional_transfers(meta, recs)
         for sh in STEPS_HELD:
-            cap = capacity(per, sh, floor=2)
+            cap = steps_capacity(per, sh)
             f, _ = replay(meta, recs, cap)
             # A cache that retains nothing transfers one row per routed
             # row-slot; that is the zero-hit signature P1b names.
