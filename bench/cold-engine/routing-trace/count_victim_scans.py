@@ -1,13 +1,18 @@
-"""How many full O(hot_rows) victim scans does a replay actually do?
+"""How much work does one victim selection cost, now that it is heap-driven?
 
-`_victim` was 40% of the tier's CPU. Timing could not resolve changes to it on
-a laptop -- a wall-clock A/B reported the soft arm 64% SLOWER from a patch that
-strictly removes work, and CPU-time end-to-end still gave 6-25% spreads against
-a ~10% effect, with configurations disagreeing on the sign.
+`_victim` was 40% of the tier's CPU as an O(hot_rows) sweep. The LFU heap
+replaced that with a few pops, so the quantity that matters is now POPS PER
+SELECTION -- how many stale or excluded entries stand between the heap top and
+a usable victim.
 
-Scan count has no spread. It is deterministic, and it is the quantity the
-batching in `_victim` is about: one ranking per plan loop instead of one scan
-per claimed slot. Reported alongside `_victim` calls so the ratio is visible.
+Counts, not times: timing could not resolve changes to this function on a
+laptop (a wall A/B once reported the soft arm 64% SLOWER from a patch that
+strictly removes work, and CPU-time end-to-end gave 6-25% spreads against a
+~10% effect). Pop counts are deterministic and have no spread.
+
+`stale` are entries whose slot or rank moved on; `held` were live but excluded
+and get pushed back. Their sum is the real cost of a selection, against
+hot_rows for the sweep it replaced.
 """
 import argparse
 import json
@@ -33,20 +38,19 @@ def build(tmp, layers, experts):
 
 
 def run(path, index, recs, rows, prot):
-    """Count calls, and how many of them fell through to a full scan."""
-    counts = {"calls": 0, "scans": 0}
+    """Count selections and the heap pops they consumed."""
+    counts = {"calls": 0, "pops": 0, "heap": 0}
     ColdTier = nvme_residency.ColdTier
     original = ColdTier._victim
 
     def counting(self, excluded):
         counts["calls"] += 1
-        # A call is served from the batch iff a non-empty batch existed on
-        # entry and the returned slot came off its front. Anything else means
-        # the enumerate loop ran.
-        had = list(self._victim_batch or ())
+        before = len(self._vheap)
         got = original(self, excluded)
-        if not (had and got in had):
-            counts["scans"] += 1
+        # held entries are pushed back, so the net drop is the stale discards;
+        # add the one selected entry, which stays on the heap.
+        counts["pops"] += max(0, before - len(self._vheap))
+        counts["heap"] = len(self._vheap)
         return got
 
     ColdTier._victim = counting
@@ -70,15 +74,16 @@ def main():
         rows_j = [json.loads(line) for line in f]
     meta, recs = rows_j[0]["meta"], rows_j[1:]
     print(f"requests in trace: {sum(len(r['routed']) for r in recs)}")
-    print(f"\n{'config':<24} {'_victim calls':>14} {'full scans':>11} "
-          f"{'scans/call':>11}")
+    print(f"\n{'config':<24} {'selections':>11} {'stale pops':>11} "
+          f"{'pops/call':>10} {'heap left':>10} {'vs sweep':>9}")
     with tempfile.TemporaryDirectory() as tmp:
         path, index = build(tmp, meta["layers"], meta["n_experts"])
         for rows, prot in ((128, 120), (256, None), (256, 248), (512, 504)):
             c = run(path, index, recs, rows, prot)
-            r = c["scans"] / c["calls"] if c["calls"] else 0
-            print(f"rows={rows:<5} prot={str(prot):<10} {c['calls']:>14} "
-                  f"{c['scans']:>11} {r:>11.2f}")
+            r = c["pops"] / c["calls"] if c["calls"] else 0
+            print(f"rows={rows:<5} prot={str(prot):<10} {c['calls']:>11} "
+                  f"{c['pops']:>11} {r:>10.2f} {c['heap']:>10} "
+                  f"{rows / r if r else float('inf'):>8.1f}x")
 
 
 if __name__ == "__main__":

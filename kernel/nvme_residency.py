@@ -41,8 +41,8 @@ Usage::
 """
 from __future__ import annotations
 
-import bisect
 import heapq
+import os
 import threading
 import time
 from collections import Counter
@@ -50,16 +50,16 @@ from concurrent.futures import as_completed
 
 from nvme_reader import ArenaReader, alloc_landing, buffer_address
 
-# How many ranked victims to keep for the rest of a plan loop. Swept: 8
-# reaches the SAME scan reduction as 16 (0.25 scans/call at rows=256, 0.48 at
-# 512) while costing less per scan, because the top-k filter does fewer
-# insorts before it fills -- 16 was strictly wasted work. 4 is cheaper per
-# scan but needs more of them (0.34), which is a net loss.
-_VICTIM_BATCH = 8
 
-# Larger than any real rank: the leading term is 0 or 1, so (2, 0, 0)
-# sorts above everything and lets the top-k filter start empty.
-_RANK_INF = (2, 0, 0)
+
+# Cross-check every heap selection against the full sweep. Off by default
+# (it reinstates the O(hot_rows) cost); on for the equivalence runs.
+_VICTIM_VERIFY = bool(os.environ.get("COLD_VICTIM_VERIFY"))
+
+# Rebuild the victim heap once it holds this many entries per slot. Bounds
+# both memory and pop cost; the rebuild is O(hot_rows) and amortises over the
+# pushes needed to reach the threshold.
+_VHEAP_SLACK = 8
 
 
 class ColdTier:
@@ -149,13 +149,15 @@ class ColdTier:
         self._last_use: dict[tuple[int, int], int] = {}
         # Concurrency state (see ensure's docstring for the contract):
         self._reserved: set[int] = set()   # slots whose fill is in flight
-        # Ranked victims precomputed for the CURRENT plan loop. Within one
-        # ensure() the ranking is stable -- _freq/_last_use are written once,
-        # up front, for every requested key -- and the exclusion set only
-        # GROWS as slots are claimed or protected. So the k-th successive
-        # _victim call is the k-th entry of one ranking, skipping whatever
-        # became excluded. None means "recompute".
-        self._victim_batch: list[int] | None = None
+        # Lazy min-heap of (rank, slot, key) for every occupied slot, so
+        # victim selection is a few heap pops instead of an O(hot_rows) sweep.
+        # Entries are never removed on change -- a fresh one is pushed and the
+        # old is discarded at pop time when validation fails. The key is part
+        # of the entry because a slot can be refilled with a DIFFERENT key
+        # that happens to share (freq, last_use); slot alone would validate
+        # that stale entry. It never perturbs ordering: slot is unique among
+        # live entries, so comparison is decided before the key is reached.
+        self._vheap: list = []
         self._pending: dict[tuple[int, int], threading.Event] = {}
         self._demand_protected: set[int] = set()
         # Reclaimable residency: key -> the clock tick at its logical
@@ -214,7 +216,36 @@ class ColdTier:
                 f"the tier WITHOUT landing= and copy instead.")
         return self.reader.read_row_scatter(layer, key[1], views)
 
-    def _victim(self, excluded: set) -> int:
+    def _vpush(self, key, slot: int) -> None:
+        """Record this slot's CURRENT rank. Call after any change to the key's
+        frequency, recency, or reclaimable flag, and on publish."""
+        heap = self._vheap
+        if len(heap) > _VHEAP_SLACK * self.hot_rows:
+            self._vcompact()
+            heap = self._vheap
+        heapq.heappush(heap,
+                       ((0 if key in self._reclaimable else 1,
+                         self._freq[key], self._last_use[key]), slot, key))
+
+    def _vcompact(self) -> None:
+        """Rebuild the heap with exactly one live entry per occupied slot.
+
+        Superseded entries are only discarded when they reach the top, so a
+        long run pushes far more than it pops and the heap would grow without
+        bound -- on the 512-step trace it settles around 65k entries for a
+        few hundred slots. Rebuilding is O(hot_rows), amortised over the
+        _VHEAP_SLACK * hot_rows pushes it takes to trigger, and it also keeps
+        pop cost at log(hot_rows) rather than log(pushes-so-far).
+        """
+        recl = self._reclaimable
+        freq = self._freq
+        last = self._last_use
+        fresh = [((0 if key in recl else 1, freq[key], last[key]), slot, key)
+                 for slot, key in enumerate(self._key_of) if key is not None]
+        heapq.heapify(fresh)
+        self._vheap = fresh
+
+    def _victim_scan(self, excluded: set) -> int:
         """LFU, LRU tie-break, never a slot in ``excluded`` (this request's own
         claims, in-flight reservations, and the current demand window).
 
@@ -231,51 +262,88 @@ class ColdTier:
         # slot's key is guaranteed present in _last_use -- ensure() writes
         # _freq/_last_use for every requested key before any slot is published,
         # and nothing ever deletes from it -- so the default was unreachable.
-        batch = self._victim_batch
-        if batch is not None:
-            for i, slot in enumerate(batch):
-                if slot in excluded or slot in self._reserved:
-                    continue
-                if self._key_of[slot] is None:
-                    continue
-                del batch[:i + 1]
-                return slot
-            self._victim_batch = None      # exhausted; fall through to a scan
-
         best, best_key = None, None
         freq = self._freq
         last = self._last_use
         recl = self._reclaimable
         reserved = self._reserved
-        # Keep only the best _VICTIM_BATCH during the sweep. Collecting every
-        # candidate and calling nsmallest over the lot made each scan 2-3x
-        # dearer, which cancelled the batching entirely at rows=512 (net
-        # 0.99x). Here the common case is one tuple comparison against the
-        # current worst kept -- no allocation, no heap op.
-        top: list = []
-        worst = _RANK_INF          # rank of top[-1]; INF until top is full
         for slot, key in enumerate(self._key_of):
             if key is None or slot in excluded or slot in reserved:
                 continue
             k = (0 if key in recl else 1, freq[key], last[key])
             if best_key is None or k < best_key:
                 best, best_key = slot, k
-            if k < worst:          # one tuple compare against a local
-                bisect.insort(top, (k, slot))
-                if len(top) > _VICTIM_BATCH:
-                    top.pop()
-                    worst = top[-1][0]
         if best is None:
             raise RuntimeError(
                 f"hot_rows={self.hot_rows} too small: every slot is claimed by "
                 f"the current request, reserved by an in-flight fill, or "
                 f"protected by the current demand window. Size hot_rows >= max "
                 f"routed experts per layer (plus speculative headroom).")
-        # Cache the rest of this ranking for the remaining claims in this plan
-        # loop. `best` is returned now, so it is not in the cache.
-        if len(top) > 1:
-            self._victim_batch = [sl for _k, sl in top if sl != best]
         return best
+
+    def _victim(self, excluded: set) -> int:
+        """The same choice as :meth:`_victim_scan`, off the heap.
+
+        Pops until an entry validates and is selectable. A stale entry -- its
+        slot refilled, or the key's rank moved on -- is simply dropped: the
+        fresh entry pushed at the time of that change is further down the
+        heap. Entries that validate but are excluded are held and pushed back,
+        because they are still live candidates for the NEXT call.
+
+        Total pops across a run are bounded by total pushes, so the amortised
+        cost is O(log n) per selection against O(hot_rows) for the sweep.
+        """
+        heap = self._vheap
+        key_of = self._key_of
+        freq = self._freq
+        last = self._last_use
+        recl = self._reclaimable
+        reserved = self._reserved
+        held = []
+        chosen = None
+        while heap:
+            rank, slot, key = heap[0]
+            cur = key_of[slot]
+            if cur is None or cur != key:
+                heapq.heappop(heap)                # slot moved on
+                continue
+            live = ((0 if key in recl else 1), freq[key], last[key])
+            if rank != live:
+                # Stale, but the slot is still this key's -- re-file it at its
+                # current rank rather than pushing on every touch. Safe only
+                # because every un-pushed change makes a rank WORSE: a touch
+                # raises freq and last_use, and resurrection raises the
+                # leading term, so the entry sinks and cannot hide a better
+                # candidate. Demotion is the one change that IMPROVES a rank
+                # (1 -> 0) and it pushes eagerly.
+                heapq.heapreplace(heap, (live, slot, key))
+                if _VICTIM_VERIFY and live < rank:
+                    raise AssertionError(
+                        f"slot {slot} rank improved {rank} -> {live} without "
+                        f"an eager push; self-heal would have hidden it")
+                continue
+            if slot in excluded or slot in reserved:
+                held.append(heapq.heappop(heap))   # live, but not for us
+                continue
+            chosen = slot
+            break
+        for entry in held:
+            heapq.heappush(heap, entry)
+        if chosen is None:
+            raise RuntimeError(
+                f"hot_rows={self.hot_rows} too small: every slot is claimed by "
+                f"the current request, reserved by an in-flight fill, or "
+                f"protected by the current demand window. Size hot_rows >= max "
+                f"routed experts per layer (plus speculative headroom).")
+        if _VICTIM_VERIFY:
+            # The failure mode here is SILENT: a missed push site changes which
+            # row is evicted without raising. Run both and compare.
+            expect = self._victim_scan(excluded)
+            if expect != chosen:
+                raise AssertionError(
+                    f"_victim heap chose slot {chosen}, sweep chose {expect} "
+                    f"(excluded={sorted(excluded)})")
+        return chosen
 
     # -------------------------------------------------------------- the API --
     def ensure(self, layer: int, experts, *, speculative: bool = False):
@@ -337,7 +405,6 @@ class ColdTier:
             self.requests += 1
             self._clock += 1
             now = self._clock
-            self._victim_batch = None         # ranking changes with the touch
             for key in keys:                      # frequency counts every pick
                 self._freq[key] += 1
                 self._last_use[key] = now
@@ -464,6 +531,7 @@ class ColdTier:
                 with self._lock:
                     self._key_of[slot] = key
                     self._slot_of[key] = slot
+                    self._vpush(key, slot)        # first rank for this slot
                     self._reserved.discard(slot)
                     self._pending.pop(key).set()
             with self._lock:
@@ -547,7 +615,6 @@ class ColdTier:
                     blockers[0].wait(timeout=30.0)
                 finally:
                     self._lock.acquire()
-                self._victim_batch = None     # lock was dropped; state moved
                 continue
             old = self._key_of[slot]
             if old is not None:
@@ -631,9 +698,11 @@ class ColdTier:
         victims = heapq.nsmallest(over, cands,
                                   key=lambda k: (self._freq[k],
                                                  self._last_use.get(k, 0)))
-        self._victim_batch = None             # reclaimable flags just changed
         for k in victims:
             self._reclaimable[k] = self._clock
+            sl = self._slot_of.get(k)
+            if sl is not None:                    # leading rank term changed
+                self._vpush(k, sl)
             self.logical_evictions += 1
 
     def row(self, layer: int, expert: int) -> memoryview:
