@@ -197,13 +197,14 @@ def main():
                 else max(1, rows - a.k))
         hw, sw, hr, sr, res = [], [], None, None, None
         hrd, srd = [], []          # per-repeat ns spent INSIDE read_row
+        dropped = []               # did the page cache ACTUALLY get dropped?
         # A/B/A: alternate the arms so a drift in the box shows up as
         # disagreement between the two A runs rather than as a result.
         for i in range(a.repeats):
-            drop_caches()
+            dropped.append(drop_caches())
             h = run(a.arena, index, recs, rows, rows, a.pinned, a.qd,
                     a.time_reads)
-            drop_caches()
+            dropped.append(drop_caches())
             s = run(a.arena, index, recs, rows, prot, a.pinned, a.qd,
                     a.time_reads)
             hw.append(h["wall_ns"])
@@ -239,6 +240,8 @@ def main():
             "hard_reads": hr, "soft_reads": sr,
             "delta_reads_pct": (sr - hr) / hr * 100,
             "soft_resurrections": res,
+            "page_cache_dropped": all(dropped),
+            "drop_caches_attempts": len(dropped),
             "resurrection_frac_of_routed": res / routed})
         print("%6d %6d | %11.1f %11.1f %+7.1f%% | %10d %10d %+7.1f%% | "
               "%7d (%.2f%% of routed)" % (
@@ -257,6 +260,13 @@ def main():
                       part["hard_non_read_median_ns"] / 1e6,
                       part["soft_non_read_median_ns"] / 1e6,
                       part["delta_non_read_pct"]))
+    if not all(p.get("page_cache_dropped") for p in out["points"]):
+        print("\n*** PAGE CACHE WAS NOT DROPPED ***\n"
+              "    /proc/sys/vm/drop_caches was not writable, so the second\n"
+              "    arm read the first arm's RAM. These wall numbers do NOT\n"
+              "    measure storage and must not be compared. Re-run on a host\n"
+              "    where the container can drop caches (privileged).")
+        out["INVALID"] = "page cache not dropped"
     if a.out:
         json.dump(out, open(a.out, "w"), indent=2)
         print("\nreceipt ->", a.out)
