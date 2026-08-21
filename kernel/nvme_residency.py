@@ -695,9 +695,21 @@ class ColdTier:
         # _demote_locked's caller-facing docs below. The short-circuit is
         # still gone because matching the old order exactly is cheaper to
         # justify than arguing about when order stops mattering.)
-        victims = heapq.nsmallest(over, cands,
-                                  key=lambda k: (self._freq[k],
-                                                 self._last_use.get(k, 0)))
+        # Hoisted, and a direct index instead of .get -- the same change made
+        # to _victim, never applied here. The key runs once per candidate per
+        # demotion: 1,965,572 calls over the routing trace, the single largest
+        # soft-minus-hard entry in the profile. `cands` is drawn from
+        # _slot_of, so every candidate is resident and has a _last_use entry;
+        # the default was unreachable.
+        #
+        # The `key=` form is KEPT rather than folding the rank into tuples and
+        # dropping the lambda. nsmallest is stable for equal keys, so ties fall
+        # to insertion order of _reclaimable -- which the comment above records
+        # as load-bearing. Comparing (rank, key) tuples instead would break
+        # ties by key and silently reorder demotions.
+        freq = self._freq
+        last = self._last_use
+        victims = heapq.nsmallest(over, cands, key=lambda k: (freq[k], last[k]))
         for k in victims:
             self._reclaimable[k] = self._clock
             sl = self._slot_of.get(k)

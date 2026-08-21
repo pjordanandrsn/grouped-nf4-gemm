@@ -103,10 +103,12 @@ this campaign keeps punishing. What transfers is the *within-run* partition:
 101.9% outside the read, and the 61%-vs-16% asymmetry, both measured against
 their own arms in the same process.
 
-"Outside the read" remains a region, not a mechanism. The next suspect on
-evidence is the per-read dispatch machinery — a Future, an Event and several
-lock round-trips per read, ~28% of tier CPU after the heap — but that is a
-hypothesis this run does not test.
+"Outside the read" remains a region, not a mechanism. The suspect named here —
+per-read dispatch — was tested next and **refuted**: it is a per-read cost, so
+it can only scale with the +1.36% read delta, and it measures ~10% of the
+asymmetry. See [`RESULTS-dispatch-refuted.md`](RESULTS-dispatch-refuted.md),
+which also shows the profile that pointed at demote was inflated by per-call
+overhead: making demote's selection cheaper closes 6.3%, not 85%.
 
 ## Receipts
 
