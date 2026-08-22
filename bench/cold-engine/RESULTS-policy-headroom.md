@@ -86,6 +86,16 @@ a measurement against the target model, not adopted on the median.
 The ~1.9× gap to optimal is real and mostly still open: the best implementable
 policy tested closes a third of it, and none of it on gpt-oss.
 
+> **Why gpt-oss resists frequency was then asked directly and not answered.**
+> Popularity skew was preregistered as the explanation and **refuted**
+> (Spearman +0.253 against a required 0.8, and the ordering is backwards --
+> the most uniform model is the one frequency helps most). Working-set
+> pressure (+0.277) and reuse distance (-0.214) fail with it. See
+> [`RESULTS-frequency-signal.md`](RESULTS-frequency-signal.md). The three
+> quantities a cache person reaches for first do not predict where this policy
+> pays, which strengthens rather than weakens this document's conclusion that
+> it must be gated on a per-model measurement.
+
 ## Method
 
 `policy_headroom.py`'s LRU is cross-checked against the independent LRU
