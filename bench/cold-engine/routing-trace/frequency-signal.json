@@ -1,0 +1,439 @@
+{
+  "cells": [
+    {
+      "model": "olmoe",
+      "prompt": "prose",
+      "steps_held": 1.0,
+      "entropy": 0.9510360574871761,
+      "gini": 0.43477467844532036,
+      "distinct": 989,
+      "lfu_over_lru": 0.8812805601947804
+    },
+    {
+      "model": "olmoe",
+      "prompt": "prose",
+      "steps_held": 1.5,
+      "entropy": 0.9510360574871761,
+      "gini": 0.43477467844532036,
+      "distinct": 989,
+      "lfu_over_lru": 0.8799140407839107
+    },
+    {
+      "model": "olmoe",
+      "prompt": "prose",
+      "steps_held": 2.0,
+      "entropy": 0.9510360574871761,
+      "gini": 0.43477467844532036,
+      "distinct": 989,
+      "lfu_over_lru": 0.8619523152282753
+    },
+    {
+      "model": "olmoe",
+      "prompt": "code",
+      "steps_held": 1.0,
+      "entropy": 0.9201350313582551,
+      "gini": 0.5556942742226649,
+      "distinct": 898,
+      "lfu_over_lru": 0.7349315214836656
+    },
+    {
+      "model": "olmoe",
+      "prompt": "code",
+      "steps_held": 1.5,
+      "entropy": 0.9201350313582551,
+      "gini": 0.5556942742226649,
+      "distinct": 898,
+      "lfu_over_lru": 0.7081795576495223
+    },
+    {
+      "model": "olmoe",
+      "prompt": "code",
+      "steps_held": 2.0,
+      "entropy": 0.9201350313582551,
+      "gini": 0.5556942742226649,
+      "distinct": 898,
+      "lfu_over_lru": 0.8160565979698554
+    },
+    {
+      "model": "olmoe",
+      "prompt": "math",
+      "steps_held": 1.0,
+      "entropy": 0.8683669730413813,
+      "gini": 0.6958208386175233,
+      "distinct": 884,
+      "lfu_over_lru": 0.6263873015873016
+    },
+    {
+      "model": "olmoe",
+      "prompt": "math",
+      "steps_held": 1.5,
+      "entropy": 0.8683669730413813,
+      "gini": 0.6958208386175233,
+      "distinct": 884,
+      "lfu_over_lru": 0.6322570690120742
+    },
+    {
+      "model": "olmoe",
+      "prompt": "math",
+      "steps_held": 2.0,
+      "entropy": 0.8683669730413813,
+      "gini": 0.6958208386175233,
+      "distinct": 884,
+      "lfu_over_lru": 0.6288274388796582
+    },
+    {
+      "model": "olmoe",
+      "prompt": "dialogue",
+      "steps_held": 1.0,
+      "entropy": 0.941803100171498,
+      "gini": 0.48117568848211745,
+      "distinct": 879,
+      "lfu_over_lru": 0.8149437600428495
+    },
+    {
+      "model": "olmoe",
+      "prompt": "dialogue",
+      "steps_held": 1.5,
+      "entropy": 0.941803100171498,
+      "gini": 0.48117568848211745,
+      "distinct": 879,
+      "lfu_over_lru": 0.7682494167962675
+    },
+    {
+      "model": "olmoe",
+      "prompt": "dialogue",
+      "steps_held": 2.0,
+      "entropy": 0.941803100171498,
+      "gini": 0.48117568848211745,
+      "distinct": 879,
+      "lfu_over_lru": 0.7808185555623735
+    },
+    {
+      "model": "granite",
+      "prompt": "prose",
+      "steps_held": 1.0,
+      "entropy": 0.958770672452699,
+      "gini": 0.4166936866692519,
+      "distinct": 1239,
+      "lfu_over_lru": 0.8565660337725082
+    },
+    {
+      "model": "granite",
+      "prompt": "prose",
+      "steps_held": 1.5,
+      "entropy": 0.958770672452699,
+      "gini": 0.4166936866692519,
+      "distinct": 1239,
+      "lfu_over_lru": 0.8265818045675777
+    },
+    {
+      "model": "granite",
+      "prompt": "prose",
+      "steps_held": 2.0,
+      "entropy": 0.958770672452699,
+      "gini": 0.4166936866692519,
+      "distinct": 1239,
+      "lfu_over_lru": 0.7657504959648683
+    },
+    {
+      "model": "granite",
+      "prompt": "code",
+      "steps_held": 1.0,
+      "entropy": 0.9618195794298476,
+      "gini": 0.40116017700097895,
+      "distinct": 1253,
+      "lfu_over_lru": 0.8680258247670505
+    },
+    {
+      "model": "granite",
+      "prompt": "code",
+      "steps_held": 1.5,
+      "entropy": 0.9618195794298476,
+      "gini": 0.40116017700097895,
+      "distinct": 1253,
+      "lfu_over_lru": 0.8462892560760935
+    },
+    {
+      "model": "granite",
+      "prompt": "code",
+      "steps_held": 2.0,
+      "entropy": 0.9618195794298476,
+      "gini": 0.40116017700097895,
+      "distinct": 1253,
+      "lfu_over_lru": 0.9040788786348598
+    },
+    {
+      "model": "granite",
+      "prompt": "math",
+      "steps_held": 1.0,
+      "entropy": 0.9456933844429912,
+      "gini": 0.47609596705801027,
+      "distinct": 1178,
+      "lfu_over_lru": 0.7137365646240242
+    },
+    {
+      "model": "granite",
+      "prompt": "math",
+      "steps_held": 1.5,
+      "entropy": 0.9456933844429912,
+      "gini": 0.47609596705801027,
+      "distinct": 1178,
+      "lfu_over_lru": 0.5972036331977598
+    },
+    {
+      "model": "granite",
+      "prompt": "math",
+      "steps_held": 2.0,
+      "entropy": 0.9456933844429912,
+      "gini": 0.47609596705801027,
+      "distinct": 1178,
+      "lfu_over_lru": 0.6129460275985956
+    },
+    {
+      "model": "granite",
+      "prompt": "dialogue",
+      "steps_held": 1.0,
+      "entropy": 0.9491603383752095,
+      "gini": 0.4642125130536998,
+      "distinct": 1139,
+      "lfu_over_lru": 0.7251040034273216
+    },
+    {
+      "model": "granite",
+      "prompt": "dialogue",
+      "steps_held": 1.5,
+      "entropy": 0.9491603383752095,
+      "gini": 0.4642125130536998,
+      "distinct": 1139,
+      "lfu_over_lru": 0.6278843715662243
+    },
+    {
+      "model": "granite",
+      "prompt": "dialogue",
+      "steps_held": 2.0,
+      "entropy": 0.9491603383752095,
+      "gini": 0.4642125130536998,
+      "distinct": 1139,
+      "lfu_over_lru": 0.6109057685119814
+    },
+    {
+      "model": "qwen",
+      "prompt": "prose",
+      "steps_held": 1.0,
+      "entropy": 0.9760843732337832,
+      "gini": 0.32145648856446907,
+      "distinct": 1439,
+      "lfu_over_lru": 0.9628455754771544
+    },
+    {
+      "model": "qwen",
+      "prompt": "prose",
+      "steps_held": 1.5,
+      "entropy": 0.9760843732337832,
+      "gini": 0.32145648856446907,
+      "distinct": 1439,
+      "lfu_over_lru": 0.9414609376889039
+    },
+    {
+      "model": "qwen",
+      "prompt": "prose",
+      "steps_held": 2.0,
+      "entropy": 0.9760843732337832,
+      "gini": 0.32145648856446907,
+      "distinct": 1439,
+      "lfu_over_lru": 0.9806760684680805
+    },
+    {
+      "model": "qwen",
+      "prompt": "code",
+      "steps_held": 1.0,
+      "entropy": 0.9354261769452158,
+      "gini": 0.5206005716393669,
+      "distinct": 1366,
+      "lfu_over_lru": 0.8475781232423677
+    },
+    {
+      "model": "qwen",
+      "prompt": "code",
+      "steps_held": 1.5,
+      "entropy": 0.9354261769452158,
+      "gini": 0.5206005716393669,
+      "distinct": 1366,
+      "lfu_over_lru": 0.7961338569715213
+    },
+    {
+      "model": "qwen",
+      "prompt": "code",
+      "steps_held": 2.0,
+      "entropy": 0.9354261769452158,
+      "gini": 0.5206005716393669,
+      "distinct": 1366,
+      "lfu_over_lru": 0.7869411336074533
+    },
+    {
+      "model": "qwen",
+      "prompt": "math",
+      "steps_held": 1.0,
+      "entropy": 0.8616527195097436,
+      "gini": 0.7217786059451763,
+      "distinct": 1167,
+      "lfu_over_lru": 0.6182929241861386
+    },
+    {
+      "model": "qwen",
+      "prompt": "math",
+      "steps_held": 1.5,
+      "entropy": 0.8616527195097436,
+      "gini": 0.7217786059451763,
+      "distinct": 1167,
+      "lfu_over_lru": 0.4746721814421744
+    },
+    {
+      "model": "qwen",
+      "prompt": "math",
+      "steps_held": 2.0,
+      "entropy": 0.8616527195097436,
+      "gini": 0.7217786059451763,
+      "distinct": 1167,
+      "lfu_over_lru": 2.3123328380386328
+    },
+    {
+      "model": "qwen",
+      "prompt": "dialogue",
+      "steps_held": 1.0,
+      "entropy": 0.9663104020092248,
+      "gini": 0.3837164391290053,
+      "distinct": 1394,
+      "lfu_over_lru": 0.9221090744512334
+    },
+    {
+      "model": "qwen",
+      "prompt": "dialogue",
+      "steps_held": 1.5,
+      "entropy": 0.9663104020092248,
+      "gini": 0.3837164391290053,
+      "distinct": 1394,
+      "lfu_over_lru": 0.888225437209412
+    },
+    {
+      "model": "qwen",
+      "prompt": "dialogue",
+      "steps_held": 2.0,
+      "entropy": 0.9663104020092248,
+      "gini": 0.3837164391290053,
+      "distinct": 1394,
+      "lfu_over_lru": 0.8987597421092152
+    },
+    {
+      "model": "gptoss",
+      "prompt": "prose",
+      "steps_held": 1.0,
+      "entropy": 0.9273938912706345,
+      "gini": 0.5220366710752953,
+      "distinct": 635,
+      "lfu_over_lru": 0.9846285226302306
+    },
+    {
+      "model": "gptoss",
+      "prompt": "prose",
+      "steps_held": 1.5,
+      "entropy": 0.9273938912706345,
+      "gini": 0.5220366710752953,
+      "distinct": 635,
+      "lfu_over_lru": 0.9655510932619367
+    },
+    {
+      "model": "gptoss",
+      "prompt": "prose",
+      "steps_held": 2.0,
+      "entropy": 0.9273938912706345,
+      "gini": 0.5220366710752953,
+      "distinct": 635,
+      "lfu_over_lru": 1.0365762627519284
+    },
+    {
+      "model": "gptoss",
+      "prompt": "code",
+      "steps_held": 1.0,
+      "entropy": 0.9416925862240703,
+      "gini": 0.4760994765909219,
+      "distinct": 733,
+      "lfu_over_lru": 1.007259470597559
+    },
+    {
+      "model": "gptoss",
+      "prompt": "code",
+      "steps_held": 1.5,
+      "entropy": 0.9416925862240703,
+      "gini": 0.4760994765909219,
+      "distinct": 733,
+      "lfu_over_lru": 1.0020646937370956
+    },
+    {
+      "model": "gptoss",
+      "prompt": "code",
+      "steps_held": 2.0,
+      "entropy": 0.9416925862240703,
+      "gini": 0.4760994765909219,
+      "distinct": 733,
+      "lfu_over_lru": 1.1091989987484356
+    },
+    {
+      "model": "gptoss",
+      "prompt": "math",
+      "steps_held": 1.0,
+      "entropy": 0.9443583912136595,
+      "gini": 0.4689920872067286,
+      "distinct": 753,
+      "lfu_over_lru": 0.999750265343073
+    },
+    {
+      "model": "gptoss",
+      "prompt": "math",
+      "steps_held": 1.5,
+      "entropy": 0.9443583912136595,
+      "gini": 0.4689920872067286,
+      "distinct": 753,
+      "lfu_over_lru": 0.9665934065934066
+    },
+    {
+      "model": "gptoss",
+      "prompt": "math",
+      "steps_held": 2.0,
+      "entropy": 0.9443583912136595,
+      "gini": 0.4689920872067286,
+      "distinct": 753,
+      "lfu_over_lru": 1.0291745730550284
+    },
+    {
+      "model": "gptoss",
+      "prompt": "dialogue",
+      "steps_held": 1.0,
+      "entropy": 0.9253073895510163,
+      "gini": 0.5350464173128131,
+      "distinct": 665,
+      "lfu_over_lru": 0.880888454967049
+    },
+    {
+      "model": "gptoss",
+      "prompt": "dialogue",
+      "steps_held": 1.5,
+      "entropy": 0.9253073895510163,
+      "gini": 0.5350464173128131,
+      "distinct": 665,
+      "lfu_over_lru": 0.8014904417323685
+    },
+    {
+      "model": "gptoss",
+      "prompt": "dialogue",
+      "steps_held": 2.0,
+      "entropy": 0.9253073895510163,
+      "gini": 0.5350464173128131,
+      "distinct": 665,
+      "lfu_over_lru": 0.7984047099040926
+    }
+  ],
+  "spearman_entropy": 0.2528276989055555,
+  "spearman_gini": -0.3151374930874408,
+  "verdict": "REFUTED"
+}
