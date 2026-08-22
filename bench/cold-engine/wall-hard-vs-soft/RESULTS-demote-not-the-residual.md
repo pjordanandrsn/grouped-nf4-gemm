@@ -105,6 +105,43 @@ deliberately **incorrect** policy, purely as a cost ceiling — closes only
 real run's 23.5 s wall, the entire demote path is worth **≤0.8 of the 4.1
 residual points**, and all tier bookkeeping combined about 2.4.
 
+> ### ⚠ This bound is WRONG. Corrected 2026-08-22.
+>
+> `_demote_locked` is **~91%** of the soft−hard gap, not ≤0.8 of 4.1 points,
+> and removing it removed the wall residual outright:
+> [`RESULTS-bounding-the-residual.md`](RESULTS-bounding-the-residual.md),
+> [`RESULTS-demote-heap.md`](RESULTS-demote-heap.md),
+> [`RESULTS-residual-dissolved.md`](RESULTS-residual-dissolved.md).
+>
+> **Two defects, and the second is certain.**
+>
+> **1. The probe replaced one phase and the conclusion generalised to the
+> path.** The substitution swapped only the `victims = heapq.nsmallest(...)`
+> line. `cands` — an O(resident) list comprehension over `_slot_of`, rebuilt
+> every request — was still constructed on the line above it, and it is
+> **28.6%** of `_demote_locked`'s cost. So the ceiling covers the *selection*,
+> and cannot bound "the entire demote path" no matter how it is scaled. That
+> is visible in the code the probe edited, and needs no re-run to confirm.
+>
+> **2. The substitution changes the workload, so it is not a cost ceiling at
+> all.** Reproducing the same technique on the scan implementation this
+> section describes -- not on today's heap, which no longer has an nsmallest
+> to substitute -- soft reads go 32605 → **38432, +18%**. A wrong demotion set makes different rows
+> reclaimable, which changes what is resident, which causes more misses. The
+> probe therefore *subtracts* selection cost while *adding* read work, and the
+> measured "closes only 32%" understates the closure by an unknown amount.
+> Whether #163's own probe had this flaw cannot be checked — its code was
+> never committed, the same gap #167 fixed for `--qd` and #174 found again for
+> the `ensure()` profile.
+>
+> A cost ceiling has to hold the work constant. For this code that means an
+> optimisation that produces identical victims, not a substitution — which is
+> what the demote heap is, and it closes 76–87%.
+>
+> The eliminations in sections 2–4 below (bandwidth-as-restatement, CPU–I/O
+> overlap, and the demote *sort* specifically) are unaffected: none of them
+> relies on this probe.
+
 ### 2. "Soft achieves lower effective bandwidth" — a restatement, not a mechanism
 
 The soft arm's bytes/second deficit tracks the residual across all seven
