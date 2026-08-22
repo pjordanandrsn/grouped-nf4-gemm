@@ -16,6 +16,17 @@ import sys
 import torch
 
 
+def n_experts_of(model):
+    """E, however this architecture spells it. Used to identify the router by
+    the shape of its weight rather than by a name list."""
+    for nm in ("num_experts", "num_local_experts", "n_routed_experts",
+               "moe_num_experts"):
+        v = getattr(model.config, nm, None)
+        if v is not None:
+            return int(v)
+    return None
+
+
 def routed_ids(out, k):
     """The routed expert ids, however this transformers version spells them.
 
@@ -66,6 +77,18 @@ def main():
     ap.add_argument("--model", required=True)
     ap.add_argument("--steps", type=int, default=512)
     ap.add_argument("--prompt-tokens", type=int, default=64)
+    ap.add_argument("--top-k", type=int, default=None,
+                    help="override the config's routed-expert count. ONLY "
+                         "honoured on the derive path, where routing is "
+                         "recomputed as topk(linear(h, W_router), k) from the "
+                         "router's own weights and k is therefore a free "
+                         "parameter over a fixed logit distribution. A module "
+                         "that emits its own indices emits them at ITS k, and "
+                         "silently relabelling that would be a fabricated "
+                         "trace, so this refuses instead. At non-native k the "
+                         "MLP output and the generated tokens diverge from "
+                         "native decoding -- intended, and recorded in the "
+                         "metadata (bench/cold-engine/PREREG-topk-frequency.md)."),
     ap.add_argument("--device", default="cuda",
                     help="where to run the capture. 'cpu' is not a fallback "
                          "for a small box -- gpt-oss-20b ships mxfp4 and "
@@ -131,6 +154,7 @@ def main():
          or getattr(model.config, "top_k", None)
          or getattr(model.config, "moe_top_k", None)
          or getattr(model.config, "num_experts_per_token", None))
+    native_k = k
     if k is None:
         sys.exit("cannot determine the routed-expert count from config; "
                  "looked for num_experts_per_tok, top_k, moe_top_k, "
@@ -198,12 +222,33 @@ def main():
     # VERIFIED, not assumed: against the kernel's own `RoutingData.expt_hist`
     # over 8 tokens, the derived assignment reproduces the histogram on
     # 24 layers of 24.
+    # `--top-k` FORCES derivation even when the module emits its own indices.
+    # A module emits them at ITS k and cannot be re-topk'd, but the router is
+    # a Linear over the MLP's input in both cases, so recomputing from its
+    # weights gives the same logits and leaves k free.
+    #
+    # Correctness is checked end-to-end rather than asserted: a capture at
+    # NATIVE k must reproduce that model's already-published LFU/LRU ratio,
+    # and PREREG-topk-frequency.md makes that a gate -- if it does not
+    # reproduce, the capture is wrong and nothing else is scored. The same
+    # derivation was separately validated on gpt-oss against the mxfp4
+    # kernel's own RoutingData.expt_hist, 24 layers of 24.
+    if a.top_k is not None and gates:
+        gates, routers, layers = [], [], []
+
     if not gates:
         derived = []
         for n, mod in model.named_modules():
-            r = getattr(mod, "router", None)
-            if r is not None and hasattr(r, "weight") and n.endswith("mlp"):
-                derived.append((n, mod, r))
+            if not n.endswith("mlp"):
+                continue
+            # The router is whichever child holds an [E, hidden] weight.
+            # Named `router` on gpt-oss and `gate` on OLMoE, so match on the
+            # SHAPE rather than on a name list that needs editing per model.
+            for cn, cm in mod.named_children():
+                w = getattr(cm, "weight", None)
+                if w is not None and w.dim() == 2 and w.shape[0] == n_experts_of(model):
+                    derived.append((n, mod, cm))
+                    break
         if derived:
             derived.sort(key=lambda t: int(t[0].split(".")[2]))
             layers = [n + ".router (derived)" for n, _, _ in derived]
@@ -211,6 +256,10 @@ def main():
             routers = [r for _, _, r in derived]
             print("router modules never fired; deriving from router weights "
                   "for %d layers" % len(derived))
+            if a.top_k is not None and a.top_k != k:
+                print("top_k OVERRIDE %d -> %d (non-native; tokens will "
+                      "diverge from native decoding)" % (k, a.top_k))
+                k = a.top_k
 
     if not gates:
         sys.exit("no readable router modules found. Probed %d candidates: %s"
@@ -285,6 +334,8 @@ def main():
     meta = {"model": a.model, "prompt": a.prompt, "steps": len(out),
             "layers": len(gates),
             "top_k": k, "n_experts": n_exp,
+            "top_k_native": None if a.top_k is None else native_k,
+            "top_k_overridden": a.top_k is not None and a.top_k != native_k,
             "distinct_tokens": len(set(tok)),
             "prompt_tokens": int(ids.shape[1]), "decode": True}
     with open(a.out, "w") as f:
