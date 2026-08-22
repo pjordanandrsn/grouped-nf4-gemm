@@ -75,18 +75,37 @@ That is a real robustness property and it was not guaranteed. It also bounds
 what the drift threatens: any result that depended on a *specific* sequence
 rather than its statistics would not have survived, and none of the four does.
 
-## Granite cannot be re-captured at all
+## Granite cannot be ATTRIBUTED — which is not the same as unavailable
 
-The repository records no `ibm-granite/*` identifier anywhere. The trace
-carries `model: /root/models/granite` and geometry (32 layers, 40 experts,
-top-8), and prose in the derivation documents names "Granite-3.0-3B-A800M" —
-which does not disambiguate `-instruct` from `-base`, and those route
-differently.
+Granite is on the Hub in quantity. The problem is that the repository records
+no `ibm-granite/*` identifier anywhere: the trace carries
+`model: /root/models/granite` plus geometry, and geometry does not identify a
+model. Four published models share this trace's exact shape:
 
-Guessing was rejected: a wrong pick produces a trace that never corresponded
-to the original, and comparing it would manufacture a "moved" result. Granite
-is therefore untested here, and its published 0.745 stands on the original
-capture alone.
+| model | layers | experts | top-k |
+|---|---|---|---|
+| `granite-3.0-3b-a800m-base` | 32 | 40 | 8 |
+| `granite-3.0-3b-a800m-instruct` | 32 | 40 | 8 |
+| `granite-3.1-3b-a800m-base` | 32 | 40 | 8 |
+| `granite-3.1-3b-a800m-instruct` | 32 | 40 | 8 |
+
+(The `1b-a400m` variants are 24 × 32 × 8 and are excluded by geometry.)
+
+Prose in the derivation documents names "Granite-3.0-3B-A800M", which narrows
+four to two — `base` or `instruct`. Those have different router weights and
+route differently, and nothing in the repository chooses between them.
+
+Guessing was rejected for a specific reason: a wrong pick produces a trace
+that never corresponded to the original, so comparing it would manufacture a
+"moved" result — and picking whichever of the two happened to land nearer
+0.745 would be selecting on the outcome. Granite is therefore untested here
+and its published 0.745 stands on the original capture alone.
+
+**It is recoverable, and cheaply.** Capturing both 3.0 candidates and
+reporting each resolves it: if both fall within tolerance the ambiguity never
+mattered, and if they diverge the divergence identifies which was used.
+Registered as the follow-up rather than done here, because "capture both and
+report both" is a different experiment from the one this file preregistered.
 
 This is the sharpest instance of the problem the `env` field now fixes — but
 `env` records the *environment*, not the *identity*. A trace should also carry
