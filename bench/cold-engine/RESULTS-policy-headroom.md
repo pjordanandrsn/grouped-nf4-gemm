@@ -1,5 +1,16 @@
 # A frequency-aware victim rule closes half the gap on two models and nothing on a third
 
+> **Top-k does not explain the split.** The per-model table below separates
+> perfectly on top-k, and that was registered and tested in
+> [`RESULTS-topk-frequency.md`](RESULTS-topk-frequency.md): OLMoE and gpt-oss
+> captured at k ∈ {2, 4, 8, 16} with the model, weights and decode trajectory
+> held fixed. **Both predictions refuted.** k moves the ratio monotonically
+> within OLMoE (0.841 → 0.729) and not within gpt-oss, and at *matched* k the
+> two models still differ by 0.12–0.26 — the gap never closes. With skew,
+> pressure, reuse distance and k/E already eliminated, no single-variable
+> explanation survives.
+
+
 Receipt: [`policy-headroom.json`](routing-trace/policy-headroom.json). Harness:
 [`policy_headroom.py`](routing-trace/policy_headroom.py). 48 cells — four
 models × four prompts × three capacities. No box.

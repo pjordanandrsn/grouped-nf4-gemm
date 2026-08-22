@@ -1,0 +1,968 @@
+{
+ "rows": [
+  {
+   "model": "olmoe_k2",
+   "prompt": "prose",
+   "steps_held": 1.0,
+   "cap": 32,
+   "belady": 9911,
+   "positional": 13967,
+   "p_lru": 13499,
+   "p_lfu": 12531
+  },
+  {
+   "model": "olmoe_k2",
+   "prompt": "prose",
+   "steps_held": 1.5,
+   "cap": 48,
+   "belady": 8489,
+   "positional": 13967,
+   "p_lru": 13045,
+   "p_lfu": 11457
+  },
+  {
+   "model": "olmoe_k2",
+   "prompt": "prose",
+   "steps_held": 2.0,
+   "cap": 64,
+   "belady": 7488,
+   "positional": 13967,
+   "p_lru": 11926,
+   "p_lfu": 10562
+  },
+  {
+   "model": "olmoe_k2",
+   "prompt": "code",
+   "steps_held": 1.0,
+   "cap": 32,
+   "belady": 7129,
+   "positional": 11895,
+   "p_lru": 11398,
+   "p_lfu": 8859
+  },
+  {
+   "model": "olmoe_k2",
+   "prompt": "code",
+   "steps_held": 1.5,
+   "cap": 48,
+   "belady": 5290,
+   "positional": 11895,
+   "p_lru": 10696,
+   "p_lfu": 6895
+  },
+  {
+   "model": "olmoe_k2",
+   "prompt": "code",
+   "steps_held": 2.0,
+   "cap": 64,
+   "belady": 4180,
+   "positional": 11895,
+   "p_lru": 7597,
+   "p_lfu": 5557
+  },
+  {
+   "model": "olmoe_k2",
+   "prompt": "math",
+   "steps_held": 1.0,
+   "cap": 32,
+   "belady": 6612,
+   "positional": 10429,
+   "p_lru": 9835,
+   "p_lfu": 8217
+  },
+  {
+   "model": "olmoe_k2",
+   "prompt": "math",
+   "steps_held": 1.5,
+   "cap": 48,
+   "belady": 5199,
+   "positional": 10429,
+   "p_lru": 8952,
+   "p_lfu": 6966
+  },
+  {
+   "model": "olmoe_k2",
+   "prompt": "math",
+   "steps_held": 2.0,
+   "cap": 64,
+   "belady": 4311,
+   "positional": 10429,
+   "p_lru": 7324,
+   "p_lfu": 6120
+  },
+  {
+   "model": "olmoe_k2",
+   "prompt": "dialogue",
+   "steps_held": 1.0,
+   "cap": 32,
+   "belady": 9890,
+   "positional": 13448,
+   "p_lru": 12903,
+   "p_lfu": 12144
+  },
+  {
+   "model": "olmoe_k2",
+   "prompt": "dialogue",
+   "steps_held": 1.5,
+   "cap": 48,
+   "belady": 8752,
+   "positional": 13448,
+   "p_lru": 12492,
+   "p_lfu": 10784
+  },
+  {
+   "model": "olmoe_k2",
+   "prompt": "dialogue",
+   "steps_held": 2.0,
+   "cap": 64,
+   "belady": 7910,
+   "positional": 13448,
+   "p_lru": 11527,
+   "p_lfu": 9752
+  },
+  {
+   "model": "olmoe_k4",
+   "prompt": "prose",
+   "steps_held": 1.0,
+   "cap": 64,
+   "belady": 17793,
+   "positional": 28080,
+   "p_lru": 26057,
+   "p_lfu": 23443
+  },
+  {
+   "model": "olmoe_k4",
+   "prompt": "prose",
+   "steps_held": 1.5,
+   "cap": 96,
+   "belady": 14544,
+   "positional": 28080,
+   "p_lru": 24190,
+   "p_lfu": 20691
+  },
+  {
+   "model": "olmoe_k4",
+   "prompt": "prose",
+   "steps_held": 2.0,
+   "cap": 128,
+   "belady": 12205,
+   "positional": 28080,
+   "p_lru": 21424,
+   "p_lfu": 18464
+  },
+  {
+   "model": "olmoe_k4",
+   "prompt": "code",
+   "steps_held": 1.0,
+   "cap": 64,
+   "belady": 12839,
+   "positional": 25487,
+   "p_lru": 22654,
+   "p_lfu": 16384
+  },
+  {
+   "model": "olmoe_k4",
+   "prompt": "code",
+   "steps_held": 1.5,
+   "cap": 96,
+   "belady": 9325,
+   "positional": 25487,
+   "p_lru": 19335,
+   "p_lfu": 12782
+  },
+  {
+   "model": "olmoe_k4",
+   "prompt": "code",
+   "steps_held": 2.0,
+   "cap": 128,
+   "belady": 7256,
+   "positional": 25487,
+   "p_lru": 13480,
+   "p_lfu": 10416
+  },
+  {
+   "model": "olmoe_k4",
+   "prompt": "math",
+   "steps_held": 1.0,
+   "cap": 64,
+   "belady": 13005,
+   "positional": 23909,
+   "p_lru": 21119,
+   "p_lfu": 17029
+  },
+  {
+   "model": "olmoe_k4",
+   "prompt": "math",
+   "steps_held": 1.5,
+   "cap": 96,
+   "belady": 9852,
+   "positional": 23909,
+   "p_lru": 17723,
+   "p_lfu": 13895
+  },
+  {
+   "model": "olmoe_k4",
+   "prompt": "math",
+   "steps_held": 2.0,
+   "cap": 128,
+   "belady": 7836,
+   "positional": 23909,
+   "p_lru": 14446,
+   "p_lfu": 11741
+  },
+  {
+   "model": "olmoe_k4",
+   "prompt": "dialogue",
+   "steps_held": 1.0,
+   "cap": 64,
+   "belady": 17248,
+   "positional": 27342,
+   "p_lru": 25265,
+   "p_lfu": 22426
+  },
+  {
+   "model": "olmoe_k4",
+   "prompt": "dialogue",
+   "steps_held": 1.5,
+   "cap": 96,
+   "belady": 14650,
+   "positional": 27342,
+   "p_lru": 23091,
+   "p_lfu": 19176
+  },
+  {
+   "model": "olmoe_k4",
+   "prompt": "dialogue",
+   "steps_held": 2.0,
+   "cap": 128,
+   "belady": 12580,
+   "positional": 27342,
+   "p_lru": 20168,
+   "p_lfu": 16448
+  },
+  {
+   "model": "olmoe_k8",
+   "prompt": "prose",
+   "steps_held": 1.0,
+   "cap": 128,
+   "belady": 30024,
+   "positional": 56143,
+   "p_lru": 49356,
+   "p_lfu": 42242
+  },
+  {
+   "model": "olmoe_k8",
+   "prompt": "prose",
+   "steps_held": 1.5,
+   "cap": 192,
+   "belady": 22567,
+   "positional": 56143,
+   "p_lru": 42490,
+   "p_lfu": 35543
+  },
+  {
+   "model": "olmoe_k8",
+   "prompt": "prose",
+   "steps_held": 2.0,
+   "cap": 256,
+   "belady": 17248,
+   "positional": 56143,
+   "p_lru": 35916,
+   "p_lfu": 29725
+  },
+  {
+   "model": "olmoe_k8",
+   "prompt": "code",
+   "steps_held": 1.0,
+   "cap": 128,
+   "belady": 24577,
+   "positional": 54422,
+   "p_lru": 46756,
+   "p_lfu": 34341
+  },
+  {
+   "model": "olmoe_k8",
+   "prompt": "code",
+   "steps_held": 1.5,
+   "cap": 192,
+   "belady": 17076,
+   "positional": 54422,
+   "p_lru": 38171,
+   "p_lfu": 26986
+  },
+  {
+   "model": "olmoe_k8",
+   "prompt": "code",
+   "steps_held": 2.0,
+   "cap": 256,
+   "belady": 12560,
+   "positional": 54422,
+   "p_lru": 25952,
+   "p_lfu": 21175
+  },
+  {
+   "model": "olmoe_k8",
+   "prompt": "math",
+   "steps_held": 1.0,
+   "cap": 128,
+   "belady": 24037,
+   "positional": 51850,
+   "p_lru": 43767,
+   "p_lfu": 33491
+  },
+  {
+   "model": "olmoe_k8",
+   "prompt": "math",
+   "steps_held": 1.5,
+   "cap": 192,
+   "belady": 17184,
+   "positional": 51850,
+   "p_lru": 33866,
+   "p_lfu": 26855
+  },
+  {
+   "model": "olmoe_k8",
+   "prompt": "math",
+   "steps_held": 2.0,
+   "cap": 256,
+   "belady": 12838,
+   "positional": 51850,
+   "p_lru": 26096,
+   "p_lfu": 21677
+  },
+  {
+   "model": "olmoe_k8",
+   "prompt": "dialogue",
+   "steps_held": 1.0,
+   "cap": 128,
+   "belady": 28050,
+   "positional": 55389,
+   "p_lru": 48557,
+   "p_lfu": 39572
+  },
+  {
+   "model": "olmoe_k8",
+   "prompt": "dialogue",
+   "steps_held": 1.5,
+   "cap": 192,
+   "belady": 22034,
+   "positional": 55389,
+   "p_lru": 41142,
+   "p_lfu": 31623
+  },
+  {
+   "model": "olmoe_k8",
+   "prompt": "dialogue",
+   "steps_held": 2.0,
+   "cap": 256,
+   "belady": 17632,
+   "positional": 55389,
+   "p_lru": 32642,
+   "p_lfu": 25394
+  },
+  {
+   "model": "olmoe_k16",
+   "prompt": "prose",
+   "steps_held": 1.0,
+   "cap": 256,
+   "belady": 46183,
+   "positional": 111879,
+   "p_lru": 91822,
+   "p_lfu": 69792
+  },
+  {
+   "model": "olmoe_k16",
+   "prompt": "prose",
+   "steps_held": 1.5,
+   "cap": 384,
+   "belady": 28877,
+   "positional": 111879,
+   "p_lru": 68008,
+   "p_lfu": 51363
+  },
+  {
+   "model": "olmoe_k16",
+   "prompt": "prose",
+   "steps_held": 2.0,
+   "cap": 512,
+   "belady": 17222,
+   "positional": 111879,
+   "p_lru": 46528,
+   "p_lfu": 36025
+  },
+  {
+   "model": "olmoe_k16",
+   "prompt": "code",
+   "steps_held": 1.0,
+   "cap": 256,
+   "belady": 38939,
+   "positional": 110436,
+   "p_lru": 88300,
+   "p_lfu": 61120
+  },
+  {
+   "model": "olmoe_k16",
+   "prompt": "code",
+   "steps_held": 1.5,
+   "cap": 384,
+   "belady": 21665,
+   "positional": 110436,
+   "p_lru": 57034,
+   "p_lfu": 39480
+  },
+  {
+   "model": "olmoe_k16",
+   "prompt": "code",
+   "steps_held": 2.0,
+   "cap": 512,
+   "belady": 12014,
+   "positional": 110436,
+   "p_lru": 30683,
+   "p_lfu": 24185
+  },
+  {
+   "model": "olmoe_k16",
+   "prompt": "math",
+   "steps_held": 1.0,
+   "cap": 256,
+   "belady": 39200,
+   "positional": 108514,
+   "p_lru": 85752,
+   "p_lfu": 59661
+  },
+  {
+   "model": "olmoe_k16",
+   "prompt": "math",
+   "steps_held": 1.5,
+   "cap": 384,
+   "belady": 22828,
+   "positional": 108514,
+   "p_lru": 55268,
+   "p_lfu": 40750
+  },
+  {
+   "model": "olmoe_k16",
+   "prompt": "math",
+   "steps_held": 2.0,
+   "cap": 512,
+   "belady": 13105,
+   "positional": 108514,
+   "p_lru": 32673,
+   "p_lfu": 26404
+  },
+  {
+   "model": "olmoe_k16",
+   "prompt": "dialogue",
+   "steps_held": 1.0,
+   "cap": 256,
+   "belady": 40329,
+   "positional": 109898,
+   "p_lru": 87774,
+   "p_lfu": 61041
+  },
+  {
+   "model": "olmoe_k16",
+   "prompt": "dialogue",
+   "steps_held": 1.5,
+   "cap": 384,
+   "belady": 24981,
+   "positional": 109898,
+   "p_lru": 58159,
+   "p_lfu": 40990
+  },
+  {
+   "model": "olmoe_k16",
+   "prompt": "dialogue",
+   "steps_held": 2.0,
+   "cap": 512,
+   "belady": 15661,
+   "positional": 109898,
+   "p_lru": 35184,
+   "p_lfu": 25332
+  },
+  {
+   "model": "gptoss_k2",
+   "prompt": "prose",
+   "steps_held": 1.0,
+   "cap": 48,
+   "belady": 9895,
+   "positional": 15946,
+   "p_lru": 15104,
+   "p_lfu": 15812
+  },
+  {
+   "model": "gptoss_k2",
+   "prompt": "prose",
+   "steps_held": 1.5,
+   "cap": 72,
+   "belady": 7498,
+   "positional": 15946,
+   "p_lru": 13920,
+   "p_lfu": 13401
+  },
+  {
+   "model": "gptoss_k2",
+   "prompt": "prose",
+   "steps_held": 2.0,
+   "cap": 96,
+   "belady": 5879,
+   "positional": 15946,
+   "p_lru": 11202,
+   "p_lfu": 11441
+  },
+  {
+   "model": "gptoss_k2",
+   "prompt": "code",
+   "steps_held": 1.0,
+   "cap": 48,
+   "belady": 11366,
+   "positional": 17999,
+   "p_lru": 17210,
+   "p_lfu": 18270
+  },
+  {
+   "model": "gptoss_k2",
+   "prompt": "code",
+   "steps_held": 1.5,
+   "cap": 72,
+   "belady": 8779,
+   "positional": 17999,
+   "p_lru": 16045,
+   "p_lfu": 16179
+  },
+  {
+   "model": "gptoss_k2",
+   "prompt": "code",
+   "steps_held": 2.0,
+   "cap": 96,
+   "belady": 6965,
+   "positional": 17999,
+   "p_lru": 13089,
+   "p_lfu": 14293
+  },
+  {
+   "model": "gptoss_k2",
+   "prompt": "math",
+   "steps_held": 1.0,
+   "cap": 48,
+   "belady": 12069,
+   "positional": 18446,
+   "p_lru": 17684,
+   "p_lfu": 18289
+  },
+  {
+   "model": "gptoss_k2",
+   "prompt": "math",
+   "steps_held": 1.5,
+   "cap": 72,
+   "belady": 9505,
+   "positional": 18446,
+   "p_lru": 16700,
+   "p_lfu": 15999
+  },
+  {
+   "model": "gptoss_k2",
+   "prompt": "math",
+   "steps_held": 2.0,
+   "cap": 96,
+   "belady": 7667,
+   "positional": 18446,
+   "p_lru": 13939,
+   "p_lfu": 14156
+  },
+  {
+   "model": "gptoss_k2",
+   "prompt": "dialogue",
+   "steps_held": 1.0,
+   "cap": 48,
+   "belady": 12042,
+   "positional": 18467,
+   "p_lru": 17692,
+   "p_lfu": 16835
+  },
+  {
+   "model": "gptoss_k2",
+   "prompt": "dialogue",
+   "steps_held": 1.5,
+   "cap": 72,
+   "belady": 9405,
+   "positional": 18467,
+   "p_lru": 16787,
+   "p_lfu": 14383
+  },
+  {
+   "model": "gptoss_k2",
+   "prompt": "dialogue",
+   "steps_held": 2.0,
+   "cap": 96,
+   "belady": 7527,
+   "positional": 18467,
+   "p_lru": 14183,
+   "p_lfu": 12241
+  },
+  {
+   "model": "gptoss_k4",
+   "prompt": "prose",
+   "steps_held": 1.0,
+   "cap": 96,
+   "belady": 15762,
+   "positional": 31905,
+   "p_lru": 28104,
+   "p_lfu": 27672
+  },
+  {
+   "model": "gptoss_k4",
+   "prompt": "prose",
+   "steps_held": 1.5,
+   "cap": 144,
+   "belady": 10579,
+   "positional": 31905,
+   "p_lru": 22410,
+   "p_lfu": 21638
+  },
+  {
+   "model": "gptoss_k4",
+   "prompt": "prose",
+   "steps_held": 2.0,
+   "cap": 192,
+   "belady": 7296,
+   "positional": 31905,
+   "p_lru": 16076,
+   "p_lfu": 16664
+  },
+  {
+   "model": "gptoss_k4",
+   "prompt": "code",
+   "steps_held": 1.0,
+   "cap": 96,
+   "belady": 18269,
+   "positional": 35462,
+   "p_lru": 31545,
+   "p_lfu": 31774
+  },
+  {
+   "model": "gptoss_k4",
+   "prompt": "code",
+   "steps_held": 1.5,
+   "cap": 144,
+   "belady": 12687,
+   "positional": 35462,
+   "p_lru": 26154,
+   "p_lfu": 26208
+  },
+  {
+   "model": "gptoss_k4",
+   "prompt": "code",
+   "steps_held": 2.0,
+   "cap": 192,
+   "belady": 9004,
+   "positional": 35462,
+   "p_lru": 19176,
+   "p_lfu": 21270
+  },
+  {
+   "model": "gptoss_k4",
+   "prompt": "math",
+   "steps_held": 1.0,
+   "cap": 96,
+   "belady": 19255,
+   "positional": 35799,
+   "p_lru": 32034,
+   "p_lfu": 32026
+  },
+  {
+   "model": "gptoss_k4",
+   "prompt": "math",
+   "steps_held": 1.5,
+   "cap": 144,
+   "belady": 13678,
+   "positional": 35799,
+   "p_lru": 27300,
+   "p_lfu": 26388
+  },
+  {
+   "model": "gptoss_k4",
+   "prompt": "math",
+   "steps_held": 2.0,
+   "cap": 192,
+   "belady": 9819,
+   "positional": 35799,
+   "p_lru": 21080,
+   "p_lfu": 21695
+  },
+  {
+   "model": "gptoss_k4",
+   "prompt": "dialogue",
+   "steps_held": 1.0,
+   "cap": 96,
+   "belady": 19262,
+   "positional": 36305,
+   "p_lru": 32776,
+   "p_lfu": 28872
+  },
+  {
+   "model": "gptoss_k4",
+   "prompt": "dialogue",
+   "steps_held": 1.5,
+   "cap": 144,
+   "belady": 13301,
+   "positional": 36305,
+   "p_lru": 27777,
+   "p_lfu": 22263
+  },
+  {
+   "model": "gptoss_k4",
+   "prompt": "dialogue",
+   "steps_held": 2.0,
+   "cap": 192,
+   "belady": 9376,
+   "positional": 36305,
+   "p_lru": 21062,
+   "p_lfu": 16816
+  },
+  {
+   "model": "gptoss_k8",
+   "prompt": "prose",
+   "steps_held": 1.0,
+   "cap": 192,
+   "belady": 22672,
+   "positional": 63950,
+   "p_lru": 50806,
+   "p_lfu": 41951
+  },
+  {
+   "model": "gptoss_k8",
+   "prompt": "prose",
+   "steps_held": 1.5,
+   "cap": 288,
+   "belady": 11262,
+   "positional": 63950,
+   "p_lru": 27646,
+   "p_lfu": 25979
+  },
+  {
+   "model": "gptoss_k8",
+   "prompt": "prose",
+   "steps_held": 2.0,
+   "cap": 384,
+   "belady": 5371,
+   "positional": 63950,
+   "p_lru": 13957,
+   "p_lfu": 14446
+  },
+  {
+   "model": "gptoss_k8",
+   "prompt": "code",
+   "steps_held": 1.0,
+   "cap": 192,
+   "belady": 28917,
+   "positional": 73780,
+   "p_lru": 60301,
+   "p_lfu": 53546
+  },
+  {
+   "model": "gptoss_k8",
+   "prompt": "code",
+   "steps_held": 1.5,
+   "cap": 288,
+   "belady": 16569,
+   "positional": 73780,
+   "p_lru": 40026,
+   "p_lfu": 39124
+  },
+  {
+   "model": "gptoss_k8",
+   "prompt": "code",
+   "steps_held": 2.0,
+   "cap": 384,
+   "belady": 9193,
+   "positional": 73780,
+   "p_lru": 23530,
+   "p_lfu": 26873
+  },
+  {
+   "model": "gptoss_k8",
+   "prompt": "math",
+   "steps_held": 1.0,
+   "cap": 192,
+   "belady": 29393,
+   "positional": 73398,
+   "p_lru": 60337,
+   "p_lfu": 54259
+  },
+  {
+   "model": "gptoss_k8",
+   "prompt": "math",
+   "steps_held": 1.5,
+   "cap": 288,
+   "belady": 17278,
+   "positional": 73398,
+   "p_lru": 40269,
+   "p_lfu": 39568
+  },
+  {
+   "model": "gptoss_k8",
+   "prompt": "math",
+   "steps_held": 2.0,
+   "cap": 384,
+   "belady": 9657,
+   "positional": 73398,
+   "p_lru": 24484,
+   "p_lfu": 27186
+  },
+  {
+   "model": "gptoss_k8",
+   "prompt": "dialogue",
+   "steps_held": 1.0,
+   "cap": 192,
+   "belady": 28751,
+   "positional": 72851,
+   "p_lru": 60047,
+   "p_lfu": 46058
+  },
+  {
+   "model": "gptoss_k8",
+   "prompt": "dialogue",
+   "steps_held": 1.5,
+   "cap": 288,
+   "belady": 15775,
+   "positional": 72851,
+   "p_lru": 40238,
+   "p_lfu": 29554
+  },
+  {
+   "model": "gptoss_k8",
+   "prompt": "dialogue",
+   "steps_held": 2.0,
+   "cap": 384,
+   "belady": 8204,
+   "positional": 72851,
+   "p_lru": 22499,
+   "p_lfu": 16729
+  },
+  {
+   "model": "gptoss_k16",
+   "prompt": "prose",
+   "steps_held": 1.0,
+   "cap": 384,
+   "belady": 20970,
+   "positional": 110541,
+   "p_lru": 73412,
+   "p_lfu": 38114
+  },
+  {
+   "model": "gptoss_k16",
+   "prompt": "prose",
+   "steps_held": 1.5,
+   "cap": 576,
+   "belady": 2595,
+   "positional": 110541,
+   "p_lru": 6637,
+   "p_lfu": 6799
+  },
+  {
+   "model": "gptoss_k16",
+   "prompt": "prose",
+   "steps_held": 2.0,
+   "cap": 768,
+   "belady": 733,
+   "positional": 110541,
+   "p_lru": 733,
+   "p_lfu": 733
+  },
+  {
+   "model": "gptoss_k16",
+   "prompt": "code",
+   "steps_held": 1.0,
+   "cap": 384,
+   "belady": 31055,
+   "positional": 134457,
+   "p_lru": 94122,
+   "p_lfu": 58751
+  },
+  {
+   "model": "gptoss_k16",
+   "prompt": "code",
+   "steps_held": 1.5,
+   "cap": 576,
+   "belady": 6869,
+   "positional": 134457,
+   "p_lru": 20081,
+   "p_lfu": 21492
+  },
+  {
+   "model": "gptoss_k16",
+   "prompt": "code",
+   "steps_held": 2.0,
+   "cap": 768,
+   "belady": 768,
+   "positional": 134457,
+   "p_lru": 768,
+   "p_lfu": 768
+  },
+  {
+   "model": "gptoss_k16",
+   "prompt": "math",
+   "steps_held": 1.0,
+   "cap": 384,
+   "belady": 32858,
+   "positional": 136643,
+   "p_lru": 96995,
+   "p_lfu": 62712
+  },
+  {
+   "model": "gptoss_k16",
+   "prompt": "math",
+   "steps_held": 1.5,
+   "cap": 576,
+   "belady": 7904,
+   "positional": 136643,
+   "p_lru": 23625,
+   "p_lfu": 22888
+  },
+  {
+   "model": "gptoss_k16",
+   "prompt": "math",
+   "steps_held": 2.0,
+   "cap": 768,
+   "belady": 767,
+   "positional": 136643,
+   "p_lru": 767,
+   "p_lfu": 767
+  },
+  {
+   "model": "gptoss_k16",
+   "prompt": "dialogue",
+   "steps_held": 1.0,
+   "cap": 384,
+   "belady": 29866,
+   "positional": 133055,
+   "p_lru": 92110,
+   "p_lfu": 47636
+  },
+  {
+   "model": "gptoss_k16",
+   "prompt": "dialogue",
+   "steps_held": 1.5,
+   "cap": 576,
+   "belady": 5400,
+   "positional": 133055,
+   "p_lru": 16672,
+   "p_lfu": 10433
+  },
+  {
+   "model": "gptoss_k16",
+   "prompt": "dialogue",
+   "steps_held": 2.0,
+   "cap": 768,
+   "belady": 751,
+   "positional": 133055,
+   "p_lru": 751,
+   "p_lfu": 751
+  }
+ ],
+ "policies": [
+  "lru",
+  "lfu"
+ ]
+}
