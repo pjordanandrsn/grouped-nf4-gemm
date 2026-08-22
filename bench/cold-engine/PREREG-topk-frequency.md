@@ -50,13 +50,29 @@ Score `LFU ÷ LRU` with the existing `policy_headroom.py` at `steps_held`
 ∈ {1.0, 1.5, 2.0}, capacity recomputed from each capture's own
 `layers × k`.
 
-**Disclosed:** at non-native `k` the model computes a different MLP output, so
-the generated token stream diverges from native decoding. The routing is still
-the model's own router logits — only how many are taken changes. This is a
-study of how a cache responds to a routing pattern, not of the model's quality
-at that `k`, and the results will say so. Native-k runs (OLMoE at 8, gpt-oss at
-4) must reproduce the published per-model ratios; if they do not, the capture
-is wrong and nothing else is scored.
+**What the override does, precisely.** It changes what the recording hook
+**writes**, never what the model **computes**. The forward still routes at
+native `k`, so the hidden states and the generated token stream are *identical
+for every k*; the traces differ only in how deep the router's own ranking is
+read. Each trace is a counterfactual readout — *which k experts would this
+router have picked* — along **one fixed decode trajectory**.
+
+That is deliberate and it is stronger than re-running the model at each `k`.
+Re-running would give every `k` a different token stream, confounding the
+manipulation with a changed workload; here the workload is held exactly fixed
+and `k` is the only thing that moves.
+
+What it therefore is **not**: a measurement of the model *operating* at
+non-native `k`. At `k` = 16 on a `k` = 8 model the trace includes experts the
+model never actually used. The results will say so, and no claim about model
+quality or accuracy at any `k` is in scope.
+
+**Native-k gate, and it is exact.** Because the trajectory does not move, a
+derived capture at native `k` must reproduce the already-committed trace for
+that model **id for id**, not merely reproduce its published ratio. Any
+mismatch means the derivation is wrong and nothing else is scored. (An earlier
+version of this file claimed non-native runs diverge from native decoding.
+They do not — Bugbot caught it on #191, before any capture.)
 
 ## K1 — the ratio is monotone in k
 
@@ -86,8 +102,8 @@ not a partial confirmation. It will be reported as "K1 confirmed, K2 refuted".
 
 ## What would count as a miss
 
-* Native-k runs not reproducing the published ratios ⇒ capture is wrong,
-  nothing is scored, reported as a failed capture.
+* Native-k derived capture not matching the committed trace id-for-id ⇒ the
+  derivation is wrong, nothing is scored, reported as a failed capture.
 * K1 refuted ⇒ the top-k story is dead and the split at n=4 was chance.
 * K2 refuted with K1 confirmed ⇒ k matters within a model and something else
   separates models; the remaining candidates are then E, L, and router

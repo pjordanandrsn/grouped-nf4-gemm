@@ -85,10 +85,17 @@ def main():
                          "parameter over a fixed logit distribution. A module "
                          "that emits its own indices emits them at ITS k, and "
                          "silently relabelling that would be a fabricated "
-                         "trace, so this refuses instead. At non-native k the "
-                         "MLP output and the generated tokens diverge from "
-                         "native decoding -- intended, and recorded in the "
-                         "metadata (bench/cold-engine/PREREG-topk-frequency.md)."),
+                         "trace, so this forces derivation instead.\n"
+                         "RECORDING ONLY: this changes what the hook WRITES, "
+                         "never what the model COMPUTES. The forward still "
+                         "routes at native k, so the hidden states and the "
+                         "generated tokens are identical for every k. The "
+                         "trace is a counterfactual readout of the router's "
+                         "own ranking -- 'which k experts would this router "
+                         "have picked' -- along one fixed decode trajectory. "
+                         "That is the intended manipulation and it is what "
+                         "makes the k values comparable "
+                         "(bench/cold-engine/PREREG-topk-frequency.md)."),
     ap.add_argument("--device", default="cuda",
                     help="where to run the capture. 'cpu' is not a fallback "
                          "for a small box -- gpt-oss-20b ships mxfp4 and "
@@ -225,14 +232,20 @@ def main():
     # `--top-k` FORCES derivation even when the module emits its own indices.
     # A module emits them at ITS k and cannot be re-topk'd, but the router is
     # a Linear over the MLP's input in both cases, so recomputing from its
-    # weights gives the same logits and leaves k free.
+    # weights gives the same logits and leaves the RECORDED k free.
     #
-    # Correctness is checked end-to-end rather than asserted: a capture at
-    # NATIVE k must reproduce that model's already-published LFU/LRU ratio,
-    # and PREREG-topk-frequency.md makes that a gate -- if it does not
-    # reproduce, the capture is wrong and nothing else is scored. The same
-    # derivation was separately validated on gpt-oss against the mxfp4
-    # kernel's own RoutingData.expt_hist, 24 layers of 24.
+    # This changes what is written, not what is computed: the forward still
+    # routes at native k, so every k shares one decode trajectory and the
+    # traces differ only in how deep the router's ranking is read. That is
+    # stronger than re-running the model at each k, which would give each k a
+    # different token stream and confound the comparison.
+    #
+    # Correctness is checked, not asserted: a derived capture at NATIVE k must
+    # reproduce the committed trace for that model EXACTLY, id for id --
+    # possible precisely because the trajectory does not move
+    # (PREREG-topk-frequency.md). The same derivation was separately validated
+    # on gpt-oss against the mxfp4 kernel's own RoutingData.expt_hist, 24
+    # layers of 24.
     if a.top_k is not None and gates:
         gates, routers, layers = [], [], []
 
@@ -257,8 +270,9 @@ def main():
             print("router modules never fired; deriving from router weights "
                   "for %d layers" % len(derived))
             if a.top_k is not None and a.top_k != k:
-                print("top_k OVERRIDE %d -> %d (non-native; tokens will "
-                      "diverge from native decoding)" % (k, a.top_k))
+                print("top_k READOUT OVERRIDE %d -> %d (recording only; the "
+                      "model still routes at %d, so the decode trajectory is "
+                      "unchanged)" % (k, a.top_k, k))
                 k = a.top_k
 
     if not gates:
