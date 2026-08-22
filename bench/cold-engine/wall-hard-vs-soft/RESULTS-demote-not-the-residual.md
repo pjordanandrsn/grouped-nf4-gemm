@@ -72,11 +72,20 @@ first sweep should be quoted.
 measured directly rather than inferred from this. Their *justification*
 narrows to their own micro-benchmarks.
 
-**Still open:** what the residual actually is. It survives the removal of the
-per-request sort, so "bookkeeping that scales with rows" is either wrong or
-names something else — `_victim` still scans all slots per state class and
-was deliberately left untouched, which makes it the next candidate rather
-than a proven one.
+~~**Still open:** what the residual actually is.~~ **Answered, and this
+paragraph had the right instinct and the wrong target.** It survives the
+removal of the per-request sort, so "bookkeeping that scales with rows" is
+either wrong or names something else — and it was the second: the scaling
+bookkeeping is `_demote_locked`'s O(resident) candidate build and rank, not
+the sort. `_victim` is named here as "the next candidate"; it was optimised
+in #175/#176 and that did **not** move the residual, because `_victim` runs
+in *both* arms. `_demote_locked` runs only in the soft one.
+
+See [`RESULTS-bounding-the-residual.md`](RESULTS-bounding-the-residual.md)
+(90.9% of the gap), [`RESULTS-demote-heap.md`](RESULTS-demote-heap.md)
+(76–87% removed) and
+[`RESULTS-residual-dissolved.md`](RESULTS-residual-dissolved.md) (residual
+5.61 → +0.22/−0.24/−0.21 pts).
 
 **R5 is unchanged.** Its refutation rested on #153's wall numbers, and those
 reproduce.
