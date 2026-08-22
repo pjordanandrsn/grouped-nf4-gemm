@@ -33,7 +33,9 @@ be where it fails. Registered at Spearman |rho| ≥ 0.8; refuted below 0.5.
 
 **Spearman +0.253** (entropy), **−0.315** (gini) — far under the registered
 0.8, and the ordering is *backwards*: the most uniform model is the one
-frequency helps most. gpt-oss and qwen sit at effectively identical entropy
+frequency helps most. The registered rule has **two** clauses, and this fails
+both: gpt-oss is not the most uniform model (granite is, 0.9539 vs 0.9347),
+which is an independent REFUTED path regardless of rho. gpt-oss and qwen sit at effectively identical entropy
 (0.9347 vs 0.9349) with gains of 0.992 and 0.894.
 
 ## Two follow-ups, both exploratory, both negative
@@ -77,6 +79,19 @@ first do not tell you where policy work will pay**. A frequency-aware rule
 still has to be gated on a measurement against the target model — which is what
 `RESULTS-policy-headroom.md` already concluded, now with the obvious
 explanations ruled out rather than untried.
+
+## The harness enforces the registered rule, after not doing so
+
+The first version checked only `|rho|`, while the preregistration also requires
+gpt-oss to be the most uniform model for CONFIRMED and treats it not being so
+as its own REFUTED path. A future run with a strong rho and some other model
+most uniform would have printed CONFIRMED where the registered rule says
+REFUTED (Bugbot, gnf4#189). It also skipped missing traces silently.
+
+That second one was not hypothetical. Run without the gpt-oss directory, the
+correlation over the remaining 36 cells is **−0.629** — which the old code
+would have reported as **PARTIAL**, a different verdict, on a hypothesis that
+is *about gpt-oss*. Both now refuse rather than report.
 
 ## What this does not show
 

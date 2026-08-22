@@ -435,5 +435,8 @@
   ],
   "spearman_entropy": 0.2528276989055555,
   "spearman_gini": -0.3151374930874408,
-  "verdict": "REFUTED"
+  "verdict": "REFUTED",
+  "most_uniform": "granite",
+  "gptoss_most_uniform": false,
+  "verdict_reason": "gpt-oss is not the most uniform model (granite is, entropy 0.9539 vs 0.9347) -- an independent REFUTED clause, regardless of rho"
 }

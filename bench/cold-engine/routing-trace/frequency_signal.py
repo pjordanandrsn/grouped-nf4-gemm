@@ -101,6 +101,7 @@ def main():
 
     cache = {}
     cells = []
+    missing = set()
     for r in rows:
         m, p = r["model"], r["prompt"]
         if (m, p) not in cache:
@@ -111,6 +112,7 @@ def main():
                     path = cand
                     break
             if path is None:
+                missing.add((m, p))
                 continue
             _meta, recs = load(path)
             cache[(m, p)] = skew(keystream(recs))
@@ -147,13 +149,49 @@ def main():
     print(f"  entropy vs LFU/LRU : {r_ent:+.3f}   "
           f"(uniform routing -> LFU no better -> POSITIVE if skew is the story)")
     print(f"  gini    vs LFU/LRU : {r_gin:+.3f}   (opposite sign expected)")
+    # The registered rule has TWO clauses, and an earlier version of this
+    # harness implemented only the first: CONFIRMED needs |rho| >= 0.8 AND
+    # gpt-oss to be the most uniform model, and gpt-oss NOT being most uniform
+    # is an independent REFUTED path. A run with a strong rho and some other
+    # model most uniform would have printed CONFIRMED where the prereg says
+    # REFUTED (Bugbot, gnf4#189).
+    ent_by_model = {}
+    for c in cells:
+        ent_by_model.setdefault(c["model"], []).append(c["entropy"])
+    mean_ent = {m: statistics.fmean(v) for m, v in ent_by_model.items()}
+    most_uniform = max(mean_ent, key=mean_ent.get) if mean_ent else None
+    gptoss_most_uniform = most_uniform is not None and "gptoss" in most_uniform
+
+    if missing:
+        raise SystemExit(
+            f"traces missing for {sorted(missing)}; a verdict written without "
+            f"them would not be the registered test. Pass --dirs.")
+    if not any("gptoss" in m for m in mean_ent):
+        raise SystemExit(
+            "no gpt-oss cells: the registered hypothesis is ABOUT gpt-oss, so "
+            "there is no verdict to report without it.")
+
     best = max(abs(r_ent), abs(r_gin))
-    verdict = ("CONFIRMED" if best >= 0.8 else
-               "PARTIAL" if best >= 0.5 else "REFUTED")
-    print(f"\nregistered: |rho| >= 0.8 CONFIRMED, < 0.5 REFUTED -> {verdict}")
+    if not gptoss_most_uniform:
+        verdict = "REFUTED"
+        why = (f"gpt-oss is not the most uniform model ({most_uniform} is, "
+               f"entropy {mean_ent[most_uniform]:.4f} vs "
+               f"{mean_ent[[m for m in mean_ent if 'gptoss' in m][0]]:.4f})"
+               f" -- an independent REFUTED clause, regardless of rho")
+    elif best >= 0.8:
+        verdict, why = "CONFIRMED", f"|rho| {best:.3f} >= 0.8 and gpt-oss is most uniform"
+    elif best >= 0.5:
+        verdict, why = "PARTIAL", f"|rho| {best:.3f} in [0.5, 0.8)"
+    else:
+        verdict, why = "REFUTED", f"|rho| {best:.3f} < 0.5"
+    print(f"\nregistered rule has TWO clauses: |rho| >= 0.8 AND gpt-oss most "
+          f"uniform.\n  most uniform: {most_uniform}   -> {verdict}\n  {why}")
     if a.out:
         json.dump({"cells": cells, "spearman_entropy": r_ent,
-                   "spearman_gini": r_gin, "verdict": verdict},
+                   "spearman_gini": r_gin, "verdict": verdict,
+                   "most_uniform": most_uniform,
+                   "gptoss_most_uniform": gptoss_most_uniform,
+                   "verdict_reason": why},
                   open(a.out, "w"), indent=2)
         print("receipt ->", a.out)
 
