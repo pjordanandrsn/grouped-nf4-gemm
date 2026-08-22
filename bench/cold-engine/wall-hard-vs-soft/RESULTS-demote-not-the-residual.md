@@ -128,7 +128,12 @@ same arena, 5 repeats, only queue depth varying:
 qd=1 is 50% slower overall, so the knob works and overlap is real — the
 soft-hard gap simply does not depend on it. Receipts in `qd-probe/`.
 
-> **Still open after optimisation.** Making the tier 41-49% cheaper did NOT
+> **CLOSED.** The residual is gone: three bracketed measurements put it at
+> +0.22 / −0.24 / −0.21 points against 5.61 before, and Δnon_read_ns collapsed
+> from +56.46% to +10.24%. See
+> [`RESULTS-residual-dissolved.md`](RESULTS-residual-dissolved.md).
+>
+> **Was still open after the first optimisation.** Making the tier 41-49% cheaper did NOT
 > dissolve the residual: 61% less non-read work, 16% less soft-hard gap, and
 > the residual is now 101.9% outside the read
 > ([`RESULTS-residual-after-opt.md`](RESULTS-residual-after-opt.md)).
