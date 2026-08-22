@@ -101,11 +101,46 @@ that never corresponded to the original, so comparing it would manufacture a
 0.745 would be selecting on the outcome. Granite is therefore untested here
 and its published 0.745 stands on the original capture alone.
 
-**It is recoverable, and cheaply.** Capturing both 3.0 candidates and
-reporting each resolves it: if both fall within tolerance the ambiguity never
-mattered, and if they diverge the divergence identifies which was used.
-Registered as the follow-up rather than done here, because "capture both and
-report both" is a different experiment from the one this file preregistered.
+### Resolved by capturing all four
+
+Receipts: [`granite-attribution-2026-08-22/`](granite-attribution-2026-08-22/),
+16 traces. Median LFU ÷ LRU against the published **0.745**, tolerance 0.05:
+
+| candidate | median | delta | |
+|---|---|---|---|
+| 3.0-base | 0.723 | 0.022 | within |
+| 3.0-instruct | **0.748** | **0.003** | within |
+| 3.1-base | 0.688 | 0.057 | outside |
+| 3.1-instruct | 0.767 | 0.022 | within |
+
+**Three of four reproduce, so the test does not identify the original — and
+that is the answer, not a failure.** The ambiguity is harmless: whichever
+Granite was used, the ratio lands between 0.688 and 0.767. All four put
+Granite firmly in the group where a frequency-aware rule helps substantially,
+nowhere near gpt-oss's 0.992, and the fourth is outside the tolerance in the
+*more* favourable direction. The frequency/recency split does not depend on
+resolving this.
+
+3.0-instruct is nearest at 0.003, and that is **not** evidence of which was
+used. Picking the closest of four candidates is selecting on the outcome — the
+thing this document rejected two paragraphs ago — and the spread across
+candidates (0.078) is larger than the tolerance being applied, so nearness
+here carries no information.
+
+Granite therefore joins the reproduced set, under every candidate identity
+rather than under an assumed one. It still should have been recorded: this
+cost a box to recover something a single string in the metadata would have
+made free, which is what the `env` field now prevents for future captures —
+and a repo id, still to be added, would prevent for this one.
+
+Two capture notes, both disclosed rather than smoothed over. `3.0-instruct`
+ships no `tokenizer.json`, only `vocab.json` + `merges.txt`, and transformers
+5.15.1 cannot build a backend tokenizer from those; its `tokenizer.json` was
+reconstructed from **its own** vocab and merges, verified by round-tripping
+text and by tokenising identically to 3.1-instruct, which shares the family.
+Nothing was borrowed from another model. And these four were captured on a
+different box from the OLMoE/Qwen re-capture above, so they are compared to
+the published number, never to each other across runs.
 
 This is the sharpest instance of the problem the `env` field now fixes — but
 `env` records the *environment*, not the *identity*. A trace should also carry
