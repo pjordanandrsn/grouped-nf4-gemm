@@ -95,8 +95,9 @@ The receipts favour **residency over scheduling**, in three ways:
 
 Gate 3 (adaptive residency — promotion and demotion driven by observed
 reuse) is **now scored offline and the answer is yes** — see the verdict
-table. It remains the live thread, and R2, R3, R4 and R7–R10 remain
-untested — **R4 is now scored and REFUTED**, see the verdict table. The VRAM
+table. ~~It remains the live thread, and R2, R3, R4 and R7–R10 remain
+untested~~ — **all of R1–R10 are now scored**; the per-prediction verdicts are
+in the table below and the documents it cites. The VRAM
 side of reclaimable residency now has that real routing trace
 (`bench/cold-engine/routing-trace/olmoe_routing_seq.jsonl`, 512 autoregressive
 decode steps of OLMoE), and it was worth taking: sized far below the expert
@@ -168,7 +169,9 @@ capacity and ownership together and cannot separate them.
 
 R5 is refuted by the half its escape clause does not cover: the clause
 exempts regressions "attributable to metadata/sync", and the +0.8–8.7% wall
-residual *is* the `_demote` walk — but the +1.1–1.5% extra **reads** are
+residual *is* the `_demote` walk — **which this document called correctly, and
+which was then apparently refuted and finally confirmed**; see the note at the
+end — but the +1.1–1.5% extra **reads** are
 eviction quality, not metadata. Worth recording that the clause exempts one
 of the only two channels through which this mechanism could ever lose, which
 is the same defect shape as R3's unpinned budget and R2's two denominators.
@@ -282,3 +285,43 @@ the SSH probe raced it — recorded as such rather than claimed clean.
 One receipt was lost to operator error (scp chained with teardown) and the
 point re-run rather than cited from scrollback; both runs agreed, and only
 the re-run is cited.
+
+---
+
+## The residual: called right, apparently refuted, finally confirmed
+
+This document said the wall residual "*is* the `_demote` walk" before anything
+had measured it. That call stood, then looked wrong for several weeks, and is
+now confirmed end to end. The sequence is worth keeping because the middle step
+was a measurement error that read as a result.
+
+| | claim | status |
+|---|---|---|
+| this document | the residual **is** the `_demote` walk | **correct** |
+| `RESULTS-demote-not-the-residual.md` | the demote path is worth **≤0.8 of 4.1** points | **wrong** — corrected in place |
+| `RESULTS-bounding-the-residual.md` | `_demote_locked` is **90.9%** of the gap | correct |
+| `RESULTS-demote-heap.md` | removing its scan closes **76–87%** of the tier gap | correct |
+| `RESULTS-residual-dissolved.md` | and the **wall residual goes with it** | correct |
+
+The residual now measures **+0.22 / −0.24 / −0.21 points** across three
+bracketed runs, against **5.61** before, with `Δnon_read_ns` collapsing from
+**+56.46% to +10.24%**.
+
+**Why the middle step went wrong** is the transferable part. Its cost ceiling
+substituted an arbitrary victim pick for the real one — which (a) replaced only
+the *selection*, leaving the O(resident) `cands` build that is 28.6% of the
+function, and (b) **changed the workload**: a wrong demotion set makes different
+rows reclaimable, and reproducing the technique on the scan implementation it
+targeted moves soft reads 32605 → 38432, **+18%**. A probe that adds read work while removing CPU is not
+a ceiling on anything.
+
+**Eight candidates were eliminated individually and none dominated**, which is
+why a "the work is spread, not concentrated" reading survived as long as it
+did. What found it was not a ninth candidate but a different question: instead
+of asking *which suspect is guilty*, enumerate everything the soft arm does
+that the hard arm does not, time each, and check whether the pieces add up.
+They did — 92.8% attributed, 90.9% of it in one function.
+
+The generalisable lesson: **individual elimination and additive accounting
+answer different questions**, and a campaign that only ever asks the first can
+eliminate every candidate and still not find the cause.
