@@ -1,0 +1,130 @@
+model    prompt     held   cap |       lru       lfu |    belady best/bel
+olmoe_k2 prose      1.00    32 |     13499     12531 |      9911    1.26x
+olmoe_k2 prose      1.50    48 |     13045     11457 |      8489    1.35x
+olmoe_k2 prose      2.00    64 |     11926     10562 |      7488    1.41x
+
+olmoe_k2 code       1.00    32 |     11398      8859 |      7129    1.24x
+olmoe_k2 code       1.50    48 |     10696      6895 |      5290    1.30x
+olmoe_k2 code       2.00    64 |      7597      5557 |      4180    1.33x
+
+olmoe_k2 math       1.00    32 |      9835      8217 |      6612    1.24x
+olmoe_k2 math       1.50    48 |      8952      6966 |      5199    1.34x
+olmoe_k2 math       2.00    64 |      7324      6120 |      4311    1.42x
+
+olmoe_k2 dialogue   1.00    32 |     12903     12144 |      9890    1.23x
+olmoe_k2 dialogue   1.50    48 |     12492     10784 |      8752    1.23x
+olmoe_k2 dialogue   2.00    64 |     11527      9752 |      7910    1.23x
+
+olmoe_k4 prose      1.00    64 |     26057     23443 |     17793    1.32x
+olmoe_k4 prose      1.50    96 |     24190     20691 |     14544    1.42x
+olmoe_k4 prose      2.00   128 |     21424     18464 |     12205    1.51x
+
+olmoe_k4 code       1.00    64 |     22654     16384 |     12839    1.28x
+olmoe_k4 code       1.50    96 |     19335     12782 |      9325    1.37x
+olmoe_k4 code       2.00   128 |     13480     10416 |      7256    1.44x
+
+olmoe_k4 math       1.00    64 |     21119     17029 |     13005    1.31x
+olmoe_k4 math       1.50    96 |     17723     13895 |      9852    1.41x
+olmoe_k4 math       2.00   128 |     14446     11741 |      7836    1.50x
+
+olmoe_k4 dialogue   1.00    64 |     25265     22426 |     17248    1.30x
+olmoe_k4 dialogue   1.50    96 |     23091     19176 |     14650    1.31x
+olmoe_k4 dialogue   2.00   128 |     20168     16448 |     12580    1.31x
+
+olmoe_k8 prose      1.00   128 |     49356     42242 |     30024    1.41x
+olmoe_k8 prose      1.50   192 |     42490     35543 |     22567    1.57x
+olmoe_k8 prose      2.00   256 |     35916     29725 |     17248    1.72x
+
+olmoe_k8 code       1.00   128 |     46756     34341 |     24577    1.40x
+olmoe_k8 code       1.50   192 |     38171     26986 |     17076    1.58x
+olmoe_k8 code       2.00   256 |     25952     21175 |     12560    1.69x
+
+olmoe_k8 math       1.00   128 |     43767     33491 |     24037    1.39x
+olmoe_k8 math       1.50   192 |     33866     26855 |     17184    1.56x
+olmoe_k8 math       2.00   256 |     26096     21677 |     12838    1.69x
+
+olmoe_k8 dialogue   1.00   128 |     48557     39572 |     28050    1.41x
+olmoe_k8 dialogue   1.50   192 |     41142     31623 |     22034    1.44x
+olmoe_k8 dialogue   2.00   256 |     32642     25394 |     17632    1.44x
+
+olmoe_k16 prose      1.00   256 |     91822     69792 |     46183    1.51x
+olmoe_k16 prose      1.50   384 |     68008     51363 |     28877    1.78x
+olmoe_k16 prose      2.00   512 |     46528     36025 |     17222    2.09x
+
+olmoe_k16 code       1.00   256 |     88300     61120 |     38939    1.57x
+olmoe_k16 code       1.50   384 |     57034     39480 |     21665    1.82x
+olmoe_k16 code       2.00   512 |     30683     24185 |     12014    2.01x
+
+olmoe_k16 math       1.00   256 |     85752     59661 |     39200    1.52x
+olmoe_k16 math       1.50   384 |     55268     40750 |     22828    1.79x
+olmoe_k16 math       2.00   512 |     32673     26404 |     13105    2.01x
+
+olmoe_k16 dialogue   1.00   256 |     87774     61041 |     40329    1.51x
+olmoe_k16 dialogue   1.50   384 |     58159     40990 |     24981    1.64x
+olmoe_k16 dialogue   2.00   512 |     35184     25332 |     15661    1.62x
+
+gptoss_k2 prose      1.00    48 |     15104     15812 |      9895    1.53x
+gptoss_k2 prose      1.50    72 |     13920     13401 |      7498    1.79x
+gptoss_k2 prose      2.00    96 |     11202     11441 |      5879    1.91x
+
+gptoss_k2 code       1.00    48 |     17210     18270 |     11366    1.51x
+gptoss_k2 code       1.50    72 |     16045     16179 |      8779    1.83x
+gptoss_k2 code       2.00    96 |     13089     14293 |      6965    1.88x
+
+gptoss_k2 math       1.00    48 |     17684     18289 |     12069    1.47x
+gptoss_k2 math       1.50    72 |     16700     15999 |      9505    1.68x
+gptoss_k2 math       2.00    96 |     13939     14156 |      7667    1.82x
+
+gptoss_k2 dialogue   1.00    48 |     17692     16835 |     12042    1.40x
+gptoss_k2 dialogue   1.50    72 |     16787     14383 |      9405    1.53x
+gptoss_k2 dialogue   2.00    96 |     14183     12241 |      7527    1.63x
+
+gptoss_k4 prose      1.00    96 |     28104     27672 |     15762    1.76x
+gptoss_k4 prose      1.50   144 |     22410     21638 |     10579    2.05x
+gptoss_k4 prose      2.00   192 |     16076     16664 |      7296    2.20x
+
+gptoss_k4 code       1.00    96 |     31545     31774 |     18269    1.73x
+gptoss_k4 code       1.50   144 |     26154     26208 |     12687    2.06x
+gptoss_k4 code       2.00   192 |     19176     21270 |      9004    2.13x
+
+gptoss_k4 math       1.00    96 |     32034     32026 |     19255    1.66x
+gptoss_k4 math       1.50   144 |     27300     26388 |     13678    1.93x
+gptoss_k4 math       2.00   192 |     21080     21695 |      9819    2.15x
+
+gptoss_k4 dialogue   1.00    96 |     32776     28872 |     19262    1.50x
+gptoss_k4 dialogue   1.50   144 |     27777     22263 |     13301    1.67x
+gptoss_k4 dialogue   2.00   192 |     21062     16816 |      9376    1.79x
+
+gptoss_k8 prose      1.00   192 |     50806     41951 |     22672    1.85x
+gptoss_k8 prose      1.50   288 |     27646     25979 |     11262    2.31x
+gptoss_k8 prose      2.00   384 |     13957     14446 |      5371    2.60x
+
+gptoss_k8 code       1.00   192 |     60301     53546 |     28917    1.85x
+gptoss_k8 code       1.50   288 |     40026     39124 |     16569    2.36x
+gptoss_k8 code       2.00   384 |     23530     26873 |      9193    2.56x
+
+gptoss_k8 math       1.00   192 |     60337     54259 |     29393    1.85x
+gptoss_k8 math       1.50   288 |     40269     39568 |     17278    2.29x
+gptoss_k8 math       2.00   384 |     24484     27186 |      9657    2.54x
+
+gptoss_k8 dialogue   1.00   192 |     60047     46058 |     28751    1.60x
+gptoss_k8 dialogue   1.50   288 |     40238     29554 |     15775    1.87x
+gptoss_k8 dialogue   2.00   384 |     22499     16729 |      8204    2.04x
+
+gptoss_k16 prose      1.00   384 |     73412     38114 |     20970    1.82x
+gptoss_k16 prose      1.50   576 |      6637      6799 |      2595    2.56x
+gptoss_k16 prose      2.00   768 |       733       733 |       733    1.00x
+
+gptoss_k16 code       1.00   384 |     94122     58751 |     31055    1.89x
+gptoss_k16 code       1.50   576 |     20081     21492 |      6869    2.92x
+gptoss_k16 code       2.00   768 |       768       768 |       768    1.00x
+
+gptoss_k16 math       1.00   384 |     96995     62712 |     32858    1.91x
+gptoss_k16 math       1.50   576 |     23625     22888 |      7904    2.90x
+gptoss_k16 math       2.00   768 |       767       767 |       767    1.00x
+
+gptoss_k16 dialogue   1.00   384 |     92110     47636 |     29866    1.59x
+gptoss_k16 dialogue   1.50   576 |     16672     10433 |      5400    1.93x
+gptoss_k16 dialogue   2.00   768 |       751       751 |       751    1.00x
+
+receipt -> /root/tk/policy-topk.json
