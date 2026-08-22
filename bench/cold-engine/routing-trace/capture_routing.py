@@ -246,7 +246,8 @@ def main():
     # (PREREG-topk-frequency.md). The same derivation was separately validated
     # on gpt-oss against the mxfp4 kernel's own RoutingData.expt_hist, 24
     # layers of 24.
-    if a.top_k is not None and gates:
+    forced_derive = a.top_k is not None and bool(gates)
+    if forced_derive:
         gates, routers, layers = [], [], []
 
     if not gates:
@@ -267,8 +268,14 @@ def main():
             layers = [n + ".router (derived)" for n, _, _ in derived]
             gates = [mod for _, mod, _ in derived]
             routers = [r for _, _, r in derived]
-            print("router modules never fired; deriving from router weights "
-                  "for %d layers" % len(derived))
+            # Two different situations reach this branch and the capture log
+            # is the artifact someone reads later to reconstruct the run, so
+            # they must not print the same sentence: the modules DID fire on
+            # OLMoE and were discarded on purpose (Bugbot, gnf4#191).
+            print("%s; deriving from router weights for %d layers"
+                  % ("--top-k given, so the readable router modules were "
+                     "discarded" if forced_derive
+                     else "router modules never fired", len(derived)))
             if a.top_k is not None and a.top_k != k:
                 print("top_k READOUT OVERRIDE %d -> %d (recording only; the "
                       "model still routes at %d, so the decode trajectory is "
