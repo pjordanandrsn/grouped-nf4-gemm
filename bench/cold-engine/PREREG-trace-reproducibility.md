@@ -49,14 +49,33 @@ and < 1 at or above, 12 traces of 12.
   reproducing it is weak evidence and is registered as a **control**, not a
   result. If it breaks, the re-capture is wrong.
 
-**T3 — the per-model LFU ÷ LRU ratios.** Published: OLMoE 0.761, Granite
-0.746, Qwen 0.953. This is the number the whole frequency/recency thread rests
-on and the one most able to move.
-* **Reproduced** if each model's median is within **0.05** of its published
-  value.
+**T3 — the per-model LFU ÷ LRU ratios.** This is the number the whole
+frequency/recency thread rests on and the one most able to move.
+
+Scored as a **median** against the **published medians** in
+[`RESULTS-policy-headroom.md`](RESULTS-policy-headroom.md), the same statistic
+on both sides:
+
+| model | published median | role |
+|---|---|---|
+| OLMoE | **0.775** | re-captured |
+| Granite | **0.745** | re-captured |
+| Qwen1.5-MoE | **0.893** | re-captured |
+| gpt-oss-20b | **0.992** | control, already current |
+
+* **Reproduced** if each model's median is within **0.05** of the value above.
 * **Moved** otherwise. A move is a real result: it would mean the
   frequency/recency split, and the five explanations eliminated against it,
   were fitted to traces from an environment that no longer exists.
+
+An earlier version of this file pinned 0.761 / 0.746 / 0.953 — the per-model
+**means** — while scoring by median. Qwen's mean-to-median gap is **0.059**,
+larger than the 0.05 tolerance, so an *identical* re-capture would have scored
+as Moved on the one test this document calls consequential. Caught by Bugbot
+on #193, before any capture. The gap is that large on Qwen specifically
+because its math prompt is the period-2 repetition loop, which skews the mean
+and leaves the median alone — so the median is also the right statistic here
+on its merits, not merely for consistency.
 
 **T4 — R4's refutation.** Published: frequency wins in every scored cell.
 * **Reproduced** if frequency still wins in ≥ 80% of cells.
