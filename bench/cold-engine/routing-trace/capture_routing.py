@@ -12,8 +12,53 @@ model itself generated.
 """
 import argparse
 import json
+import os
 import sys
 import torch
+
+
+def env_fingerprint(model_path, model):
+    """What a trace needs in order to be regenerable later.
+
+    A routing trace is only reproducible if the model weights AND the library
+    that runs them are pinned. Neither was recorded, and it mattered: the
+    committed OLMoE traces agree with a fresh capture of the same model, same
+    prompt, same seed on only 18% of layer-steps under transformers 5.15.1 --
+    the MODULE path disagrees by exactly as much as the derived one, so it is
+    the environment that moved, not the harness
+    (bench/cold-engine/RESULTS-topk-frequency.md). Nothing in the repo said
+    which transformers those traces came from, so the drift was invisible
+    until something happened to compare across environments.
+
+    The weight index is hashed rather than the weights: it names every shard
+    and its tensor map, so a changed checkpoint changes it, and it is
+    kilobytes rather than gigabytes. `config.json` is hashed too because a
+    config-only revision (a changed `num_experts_per_tok`, say) leaves the
+    weights untouched and changes the routing completely.
+    """
+    import hashlib
+    import sys as _sys
+    import transformers as _tf
+
+    def sha16(*names):
+        for n in names:
+            fp = os.path.join(model_path, n)
+            if os.path.exists(fp):
+                h = hashlib.sha256()
+                with open(fp, "rb") as f:
+                    for blk in iter(lambda: f.read(1 << 20), b""):
+                        h.update(blk)
+                return "%s:%s" % (n, h.hexdigest()[:16])
+        return None
+
+    return {"transformers": _tf.__version__,
+            "torch": torch.__version__,
+            "python": _sys.version.split()[0],
+            "cuda": getattr(torch.version, "cuda", None),
+            "config": sha16("config.json"),
+            "weight_index": sha16("model.safetensors.index.json",
+                                  "model.safetensors", "pytorch_model.bin"),
+            "architectures": getattr(model.config, "architectures", None)}
 
 
 def n_experts_of(model):
@@ -358,7 +403,10 @@ def main():
             "top_k_native": None if a.top_k is None else native_k,
             "top_k_overridden": a.top_k is not None and a.top_k != native_k,
             "distinct_tokens": len(set(tok)),
-            "prompt_tokens": int(ids.shape[1]), "decode": True}
+            "prompt_tokens": int(ids.shape[1]), "decode": True,
+            # Provenance. Without this a trace cannot be regenerated and,
+            # worse, cannot be KNOWN to have drifted -- see env_fingerprint.
+            "env": env_fingerprint(a.model, model)}
     with open(a.out, "w") as f:
         f.write(json.dumps({"meta": meta}) + "\n")
         for r in out:
