@@ -17,7 +17,7 @@ import sys
 import torch
 
 
-def env_fingerprint(model_path, model):
+def env_fingerprint(model_path, model, repo_id=None):
     """What a trace needs in order to be regenerable later.
 
     A routing trace is only reproducible if the model weights AND the library
@@ -51,7 +51,23 @@ def env_fingerprint(model_path, model):
                 return "%s:%s" % (n, h.hexdigest()[:16])
         return None
 
-    return {"transformers": _tf.__version__,
+    # WHICH MODEL, not just which environment. Without this a trace records
+    # only a local path like /root/models/granite, and the model becomes
+    # unidentifiable: four Hub checkpoints share Granite's 32x40x8 geometry,
+    # and establishing that the ambiguity happened to be harmless cost a
+    # rented box and sixteen captures
+    # (bench/cold-engine/RESULTS-trace-reproducibility.md).
+    #
+    # Two sources, both checkable, and no guessing at cache layouts. `repo_id`
+    # is whatever the operator passed --repo-id; `name_or_path` is what
+    # transformers recorded, which IS the Hub id when the model was loaded by
+    # id and merely echoes the directory when it was loaded from disk. A local
+    # path is not an identity, so it is reported under its own key rather than
+    # being allowed to sit in a field that reads like one.
+    return {"repo_id": repo_id,
+            "name_or_path": getattr(model.config, "_name_or_path", None),
+            "model_path": model_path,
+            "transformers": _tf.__version__,
             "torch": torch.__version__,
             "python": _sys.version.split()[0],
             "cuda": getattr(torch.version, "cuda", None),
@@ -122,6 +138,12 @@ def main():
     ap.add_argument("--model", required=True)
     ap.add_argument("--steps", type=int, default=512)
     ap.add_argument("--prompt-tokens", type=int, default=64)
+    ap.add_argument("--repo-id", default=None,
+                    help="the Hub id the weights came from, e.g. "
+                         "ibm-granite/granite-3.1-3b-a800m-instruct. Recorded "
+                         "verbatim in the trace. Pass it: a local --model path "
+                         "does not identify a model, and four Hub checkpoints "
+                         "share Granite's geometry.")
     ap.add_argument("--top-k", type=int, default=None,
                     help="override the config's routed-expert count. ONLY "
                          "honoured on the derive path, where routing is "
@@ -406,7 +428,7 @@ def main():
             "prompt_tokens": int(ids.shape[1]), "decode": True,
             # Provenance. Without this a trace cannot be regenerated and,
             # worse, cannot be KNOWN to have drifted -- see env_fingerprint.
-            "env": env_fingerprint(a.model, model)}
+            "env": env_fingerprint(a.model, model, a.repo_id)}
     with open(a.out, "w") as f:
         f.write(json.dumps({"meta": meta}) + "\n")
         for r in out:

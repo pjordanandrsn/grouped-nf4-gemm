@@ -93,3 +93,50 @@ def test_result_is_json_serialisable():
     """It goes straight into the trace's meta line."""
     with tempfile.TemporaryDirectory() as d:
         json.dumps(env_fingerprint(d, _model()))
+
+
+# ------------------------------------------------------------- identity --
+# `env` recorded WHAT RAN the model but not WHICH model. A trace whose only
+# identifier is `/root/models/granite` cannot be attributed: four Hub
+# checkpoints share that geometry, and showing the ambiguity was harmless cost
+# a rented box (RESULTS-trace-reproducibility.md).
+
+def _model_named(name_or_path):
+    m = types.SimpleNamespace()
+    m.config = types.SimpleNamespace(architectures=["GraniteMoeForCausalLM"],
+                                     _name_or_path=name_or_path)
+    return m
+
+
+def test_repo_id_is_recorded_verbatim():
+    with tempfile.TemporaryDirectory() as d:
+        e = env_fingerprint(d, _model_named(d), "ibm-granite/granite-3.1-3b-a800m-instruct")
+    assert e["repo_id"] == "ibm-granite/granite-3.1-3b-a800m-instruct"
+
+
+def test_repo_id_is_none_when_not_supplied():
+    """Absent, not guessed. A wrong id is worse than a missing one."""
+    with tempfile.TemporaryDirectory() as d:
+        assert env_fingerprint(d, _model_named(d))["repo_id"] is None
+
+
+def test_name_or_path_carries_the_hub_id_when_loaded_by_id():
+    with tempfile.TemporaryDirectory() as d:
+        e = env_fingerprint(d, _model_named("allenai/OLMoE-1B-7B-0924"))
+    assert e["name_or_path"] == "allenai/OLMoE-1B-7B-0924"
+
+
+def test_a_local_path_is_not_reported_as_an_identity():
+    """The whole failure: a directory sitting in a field that reads like a
+    model id. It must be visibly a path, under its own key."""
+    with tempfile.TemporaryDirectory() as d:
+        e = env_fingerprint(d, _model_named(d))
+    assert e["model_path"] == d
+    assert e["repo_id"] is None
+    assert e["name_or_path"] == d          # echoed, and distinguishable
+
+
+def test_identity_survives_json_round_trip():
+    with tempfile.TemporaryDirectory() as d:
+        e = json.loads(json.dumps(env_fingerprint(d, _model_named(d), "org/name")))
+    assert e["repo_id"] == "org/name"
