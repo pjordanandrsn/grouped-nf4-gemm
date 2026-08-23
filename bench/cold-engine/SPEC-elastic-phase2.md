@@ -127,34 +127,47 @@ Actuators: `p` (promotions this step), transient grow/shrink, persistent
 resize (slow), and nothing else.
 
 Moving one invocation between tiers changes **both** walls — CPU by
-`t_cpu_row`, GPU by `t_gpu_row` — so both actuators size against the combined
-rate, target the **nearest band edge**, take the **ceiling**, and cap by what
-exists. Ceiling, not floor (revised, round 3: floor strands the attractor up
-to one row *outside* the band with both actuators sized to zero — not in
-band, not pinned, held forever). Ceiling cannot overshoot across the band
-because calibration is required to make the band at least one move-quantum
-wide (§9) (revised, round 2: the first
-demotion term divided by `t_cpu_row` alone and never checked how many
-resident invocations there were — it could overshoot the band in one step or
-demand demotions that did not exist; promote's greedy form had the mirrored
-flaw and is fixed to match, unprompted):
+`t_cpu_row`, GPU by `t_gpu_row` — so both actuators solve the one-step linear
+model for the **nearest band edge**. Revised wholesale in round 4: three
+review rounds each found a drift between the branch guards, the pin
+predicates and the calibration constraint, because the same quantity was
+written in three places. Each is now defined **once** and used everywhere —
+by the loop, by the equilibrium predicate, and by G2.
 
 ```
+avail_up()   = min(cpu_queue, slack_rows(), GROW_CAP, slots_obtainable())
+avail_down() = min(resident_invocations, DEMOTE_CAP)
+
+slots_obtainable() = transient slots free now, growable without breaching
+                     RESERVE, or reclaimable-now occupied transient slots
+                     (evict-on-insert; event-gated — a slot still under
+                     readers does not count this step)
+
 each step:
-  if pressure():                    # KV growth or external reserve breach
-      shrink_transient(deficit)     # event-gated; completes this step (I3)
-  if t_cpu > (1 + δ_hi) · t_gpu and vram_free > RESERVE:
-      p* = (t_cpu − (1 + δ_hi)·t_gpu) / (t_cpu_row + (1 + δ_hi)·t_gpu_row)
-      p  = clamp(ceil(p*), 1, min(cpu_queue, slack_rows(), GROW_CAP))
-  elif t_cpu < (1 − δ_lo) · t_gpu:
-      p  = 0                        # stop copying, and REBALANCE:
-      q* = ((1 − δ_lo)·t_gpu − t_cpu) / (t_cpu_row + (1 − δ_lo)·t_gpu_row)
-      q  = clamp(ceil(q*), 1, min(resident_invocations, DEMOTE_CAP))
-      route q resident invocations to CPU this step   # execution
-                                    # contraction: free, no bytes move (§3).
-                                    # capacity reclaim stays pressure-only.
-  else:
-      p = 0                         # in band: hold
+  if pressure():                     # KV growth or reserve breach
+      shrink_transient(deficit)      # event-gated; completes this step (I3)
+  if t_cpu > (1 + δ_hi) · t_gpu:                       # above band
+      if avail_up() == 0:  hold                        # pin_up
+      else:
+          p* = (t_cpu − (1 + δ_hi)·t_gpu) / (t_cpu_row + (1 + δ_hi)·t_gpu_row)
+          p  = min(ceil(p*), avail_up())               # ceil ≥ 1 out of band;
+                                                       # min() cannot invert
+  elif t_cpu < (1 − δ_lo) · t_gpu:                     # below band
+      if avail_down() == 0:  hold                      # pin_down
+      else:
+          q* = ((1 − δ_lo)·t_gpu − t_cpu) / (t_cpu_row + (1 − δ_lo)·t_gpu_row)
+          q  = min(ceil(q*), avail_down())             # execution contraction:
+                                                       # free, no bytes move
+  else:  hold                                          # in band
+```
+
+Round-4 corrections folded in: `clamp(·, 1, avail)` inverted its bounds at
+zero availability and the promote guard entered on VRAM alone while
+`slack_rows() = 0` — availability is now checked **before** sizing, with one
+`avail_*()` definition per direction, and a full transient pool no longer
+reads as exhaustion (evict-on-insert churn is a legal, paying promotion; only
+an empty pool with growth barred by RESERVE exhausts the direction).
+
 every PERIOD (≈256) steps:
   persistent ← LFU-promote transient rows resident ≥ 2·PERIOD   (hysteresis)
   persistent shrink iff per-row hit rate < θ for 2 consecutive periods
@@ -171,19 +184,15 @@ draft defined equilibrium at δ_lo while the controller held anywhere inside
 
 ```
 in_band      ≜  (1 − δ_lo) · t_gpu ≤ t_cpu ≤ (1 + δ_hi) · t_gpu
-pin_up       ≜  t_cpu above band  and  (vram_free ≤ RESERVE
-                                        or slack_rows() = 0)   # cannot promote
-pin_down     ≜  t_cpu below band  and  resident_invocations = 0 # cannot demote
+pin_up       ≜  t_cpu above band  and  avail_up()  = 0
+pin_down     ≜  t_cpu below band  and  avail_down() = 0
 equilibrium  ≜  in_band  or  pin_up  or  pin_down
 ```
 
-Each side is pinned only by **its own actuator being exhausted** (revised,
-round 2: the first predicate accepted `cpu_queue = 0` as a blanket pin — but
-an empty CPU queue with everything resident and default-GPU is precisely the
-over-promoted state the demotion actuator corrects, and calling it converged
-would let G2 accept a fully GPU-saturated, unbalanced step). G2 measures
-convergence **into `in_band` or a directional pin**; `δ_lo`/`δ_hi` are the
-hysteresis edges of the same band, not a second, tighter target.
+The pins reuse the loop's own `avail_*()` functions — the same expressions
+that decide whether the controller acts decide whether G2 calls the state
+converged, so the two cannot drift again (rounds 2–4 were three instances of
+exactly that drift). `δ_lo`/`δ_hi` are the band's hysteresis edges, not a second, tighter target.
 
 **The retention window is emergent, not configured.** A transient pool of
 `rows_t` at promotion rate `r` holds a row for `W ≈ rows_t / r` steps; E1's
@@ -234,11 +243,18 @@ Sizing follows from free VRAM; no timer exists to mistune.
 `(B_cpu, B_link, B_gpu, hide)` with the thread sweep embedded, and the
 derived `n*` and per-row µs table. Controller thresholds (`δ_hi`, `δ_lo`,
 `GROW_CAP`, `DEMOTE_CAP`, `RESERVE`) are computed from it, not baked in (I8) —
-including the round-3 constraint that makes the integer actuators sound: the
-hold band must be at least one move-quantum wide at the calibrated operating
-point, `(δ_lo + δ_hi) · t_gpu ≥ t_cpu_row + t_gpu_row`, which is what lets
-the ceiling-sized step land inside the band rather than across it, and what
-makes G2's ≤ 1-flip-per-32 bound meaningful rather than lucky. A box where
+including the constraint that makes the integer actuators sound (corrected in
+round 4 — the round-3 form used the raw quantum and missed that the far edge
+itself moves): a step from just outside either edge must land inside, i.e.
+
+```
+demote:  (δ_lo + δ_hi) · t_gpu ≥ t_cpu_row + (1 + δ_hi) · t_gpu_row
+promote: (δ_lo + δ_hi) · t_gpu ≥ t_cpu_row + (1 − δ_lo) · t_gpu_row
+```
+
+The demote inequality dominates and is the calibration requirement. It is
+what lets a ceiling-sized step land inside the band rather than across it,
+and what makes G2's ≤ 1-flip-per-32 bound meaningful rather than lucky. A box where
 `n*_direct` falls outside [2, 5] un-hidden fails calibration and the
 controller stays OFF — the E3 gate, kept as a runtime guard.
 
