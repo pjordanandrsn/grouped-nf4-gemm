@@ -395,6 +395,14 @@ before any wall number is read.
   microscopic denominators; (c), sweep, spoilers, parameters unchanged. Registered before any G2''-scored run;
   a refutation here closes the offline gate REFUTED — no third metric
   correction against these traces.
+  **Outcome 2026-08-23: gate closed REFUTED on (d) alone**
+  ([RESULTS-p2-g2pp.md](RESULTS-p2-g2pp.md)) — (a) 16/16, (b) 73/73,
+  (c) 16/16, spoilers 16/16; the throttle bound collapsed to 32 flat steps
+  while admission arithmetic requires `pairs/(frac·m)` (measured, tracking
+  the law at every failing arm, EWMA-settle ×1.2–1.6). The law's substance
+  is fully validated; the measured admission law is the ε/PROMO_FRAC
+  calibration input; any future throttle bound derives from it. Per the
+  hard stop, no further scoring against these traces.
 * **P2-G3 (elasticity):** mid-run VRAM ballast injection: no OOM; transient
   shrinks within 2 steps; wall degrades monotonically (no cliff); recovery
   within 64 steps of release.
