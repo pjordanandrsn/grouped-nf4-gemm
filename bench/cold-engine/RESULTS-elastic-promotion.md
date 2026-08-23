@@ -111,7 +111,20 @@ All five harness preconditions passed before scoring (known counts exact, the
 corrected qualify bar pinned, window edges leave the denominator, a no-reuse
 synthetic scores E1 = 0.000, rank-shuffle collapses the E2a lift 1.047 →
 1.002). The E3 CPU number comes from the committed phase-2 bench driven
-through its own arena builder and entry point, not a reimplementation. The
+through its own arena builder and entry point, not a reimplementation.
+
+**One provenance defect in the E3 run, disclosed rather than resealed.** The
+first parser read a `results` key the phase-2 receipt never writes, so the
+committed 134.4 was in fact recovered from the same run's *stdout* lines
+(Bugbot, #202). The value is unaffected — `best_gbs` is `max(sweep gbs)` by
+construction and stdout prints those same values — but a measurement whose
+provenance is a print-format accident is not what the preregistration named.
+The parser now reads the receipt's own schema, refuses a receipt whose
+`best_gbs` disagrees with its sweep, treats a missing key as a hard error
+instead of a fallback, and the E3 receipt embeds the thread sweep so the
+provenance travels with the number. The committed receipt from the destroyed
+box predates the fix and carries only the scalar; that asymmetry is the cost
+of the defect and is left visible. The
 preregistration's off-by-one (total invocations vs remaining recurrences) was
 caught by Bugbot on #201 and corrected **before** any scoring; the prereg
 records the original bar.

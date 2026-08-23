@@ -34,6 +34,27 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROW_BYTES = 13_219_200               # gpt-oss expert row (both projections)
 
 
+def parse_phase2_receipt(d):
+    """Best GB/s from the phase-2 receipt's own schema: `sweep` + `best_gbs`.
+
+    The first version read a `results` key that harness never writes, so the
+    structured path never hit and every run silently fell through to scraping
+    stdout for "GB/s" lines (Bugbot, gnf4#202). The number survived only
+    because best_gbs is max(sweep gbs) BY CONSTRUCTION and stdout prints the
+    same values -- but a measurement whose provenance is a print-format
+    accident is not tied to the receipt the preregistration named. The
+    fallback is now a hard error rather than a silent substitution.
+    """
+    if "best_gbs" not in d or "sweep" not in d:
+        raise SystemExit("phase2 receipt missing best_gbs/sweep -- schema "
+                         "changed? keys: %s" % sorted(d))
+    best = max(r["gbs"] for r in d["sweep"])
+    if abs(best - d["best_gbs"]) > 1e-6:
+        raise SystemExit("phase2 receipt inconsistent: best_gbs=%s but "
+                         "max(sweep)=%s" % (d["best_gbs"], best))
+    return d["best_gbs"], d
+
+
 def bench_cpu(threads):
     """Best GB/s from the committed phase-2 bench at the gpt-oss shape."""
     out = os.path.join("/tmp", "e3_phase2.json")
@@ -48,13 +69,7 @@ def bench_cpu(threads):
                        cwd=os.path.join(HERE, "..", ".."))
     if r.returncode != 0:
         sys.exit("phase2 bench failed:\n" + r.stdout[-1500:] + r.stderr[-1500:])
-    d = json.load(open(out))
-    best = max(d["results"], key=lambda x: x["gbs"]) if "results" in d else None
-    if best is None:                       # fall back to stdout parse
-        lines = [l for l in r.stdout.splitlines() if "GB/s" in l]
-        vals = [float(l.split(":")[1].split("GB/s")[0]) for l in lines]
-        return max(vals), {"stdout_tail": r.stdout[-800:]}
-    return best["gbs"], d
+    return parse_phase2_receipt(json.load(open(out)))
 
 
 def evented_ms(fn, reps, stream=None):
@@ -186,6 +201,7 @@ def main():
     hide = bench_hide()
 
     rec = {"row_bytes": ROW_BYTES,
+           "cpu_sweep": cpu_detail.get("sweep"),
            "B_cpu_gbs": b_cpu, "B_link_gbs": b_link, "B_gpu_gbs": b_gpu,
            "nstar_direct": nstar, "gate": [2, 5],
            "verdict": "PASS" if 2 <= nstar <= 5 else "FAIL",
