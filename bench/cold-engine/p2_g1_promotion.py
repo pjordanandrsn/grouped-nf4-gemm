@@ -206,6 +206,13 @@ def main():
     ap.add_argument("--repeats", type=int, default=5)
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
+    # The 1 GiB scrub reads run on torch's intra-op pool; at its default width
+    # (every core) the pool's spin-wait storms straight into the promote/launch
+    # calls that follow and inflates arm B's host dispatch ~10x (measured 215 us
+    # enqueue vs 20 us clean on the same box). One thread keeps the scrub a
+    # scrub -- cache eviction, not a CPU contention generator the model never
+    # charged for. The GEMV pool is native and unaffected.
+    torch.set_num_threads(1)
 
     assert torch.cuda.is_available()
     gnf4_native.load()
