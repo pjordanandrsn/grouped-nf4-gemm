@@ -556,3 +556,31 @@ def test_pool_spin_budget_does_not_change_bits():
     finally:
         cg.pool_spin_us(0)
         cg.pool_stop()
+
+def test_batch_rows_bit_exact_after_row_outer_blocking():
+    """P4 (e4b objective-revision): the row-chunk-outer retiling permutes
+    only the (row, column) visit order; every output element's k-descent is
+    the locked tree unchanged, so multi-row calls must stay BIT-exact vs
+    the reference on both formats. Shapes chosen to exercise several row
+    chunks (rows >> NF4_CELL_ROWS) and several column tiles (N > 32)."""
+    rows, n, k = 128, 96, 128
+    g = np.random.default_rng(20260823)
+    sizes, eids = [80, 48], [2, 0]
+    a = g.standard_normal((rows, k), dtype=np.float32)
+    packed = g.integers(0, 256, size=(3, n, k // 2), dtype=np.uint8)
+    amax = (g.random((3, n, k // 64), dtype=np.float32) * 0.02 + 1e-3)
+    ref = cg.ref_gemv_grouped(a, packed, amax, sizes, eids, fmt="nf4")
+    out = cg.gemv_nf4_grouped_cpu(
+        torch.from_numpy(a), torch.from_numpy(packed),
+        torch.from_numpy(amax), sizes, eids)
+    assert np.array_equal(out.numpy(), ref), "NF4 multi-row bit-exactness"
+    scales = g.integers(100, 140, size=(3, n, k // 32), dtype=np.uint8)
+    ref = cg.ref_gemv_grouped(a, packed, scales, sizes, eids, fmt="mxfp4")
+    out = cg.gemv_mxfp4_grouped_cpu(
+        torch.from_numpy(a), torch.from_numpy(packed),
+        torch.from_numpy(scales), sizes, eids)
+    got, want = out.numpy(), ref
+    got = np.nan_to_num(got, nan=1e30, posinf=2e30, neginf=-2e30)
+    want = np.nan_to_num(want, nan=1e30, posinf=2e30, neginf=-2e30)
+    assert np.array_equal(got, want), "MXFP4 multi-row bit-exactness"
+
