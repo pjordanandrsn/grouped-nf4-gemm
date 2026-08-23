@@ -104,11 +104,21 @@ the measured don't-care band; no new allocator states are introduced.
    GPU-long-pole direction).
 2. Controller (§5) picks `p ≥ 0` CPU-assigned invocations to promote — any
    `p` of them; there is no ranking to compute (E2).
-3. Each promoted row: pinned-staging H2D on the **side stream**; a copy event
-   is recorded; the row enters the transient pool ACTIVE under the standard
-   event gate. The GPU may execute it only after its event: the 88% hide was
-   measured with an unsynchronised compute stream, and a premature sync
-   destroys exactly the property the economics rest on.
+3. Each promoted row: pinned-staging H2D on the **side stream**; the row
+   enters the transient pool ACTIVE under the standard event gate. The GPU
+   may execute it only after the copy lands: the 88% hide was measured with
+   an unsynchronised compute stream, and a premature sync destroys exactly
+   the property the economics rest on. **Amended after G1
+   ([RESULTS-p2-g1.md](RESULTS-p2-g1.md)) — dispatch is per BURST, not per
+   row, and stream-ordered:** the step's `p` promotions are one `want()`
+   call, per-row copies on the side stream, **one** event recorded after the
+   last copy; slot ids go to the GPU **pre-staged device-side** (pinned int32
+   staging, async copy — never a python list at launch: 81.5 µs vs 20.9 µs
+   measured); and the burst's GPU execution is **enqueued, gated on the burst
+   event, before the step's CPU execution begins**, so the host never waits
+   between tiers. G1 measured the un-amended form losing its entire margin to
+   serial dispatch (~100 µs clean, ~400+ µs under the CPU pool's spin
+   window, against a 34.8 µs/row saving).
 4. This step's instance executes wherever it lands first: if the copy event
    has not fired by the time the executor reaches that invocation, it runs on
    CPU as originally assigned and the row is simply resident for next time.
@@ -135,7 +145,14 @@ written in three places. Each is now defined **once** and used everywhere —
 by the loop, by the equilibrium predicate, and by G2.
 
 ```
-avail_up()   = min(cpu_queue, slack_rows(), GROW_CAP, slots_obtainable())
+avail_up()   = min(cpu_queue, slack_rows(), GROW_CAP, slots_obtainable(),
+                   LINK_CAP())
+LINK_CAP()   = floor(cpu_queue · t_cpu_row / (t_cpu_row + t_link_row))
+               # G1 amendment: a burst's copies must fit under the CPU work
+               # that REMAINS after the burst is carved out — p rows of copies
+               # hide under (cpu_queue − p) rows of CPU, which solves to this
+               # cap. G1 measured the violation: at p = 8, 1354 µs of copies
+               # under 371 µs of CPU.
 avail_down() = min(resident_invocations, DEMOTE_CAP)
 
 slots_obtainable() = transient slots free now, growable without breaching
@@ -152,6 +169,9 @@ each step:
           p* = (t_cpu − (1 + δ_hi)·t_gpu) / (t_cpu_row + (1 + δ_hi)·t_gpu_row)
           p  = min(ceil(p*), avail_up())               # ceil ≥ 1 out of band;
                                                        # min() cannot invert
+          if p · (t_cpu_row − t_gpu_row) ≤ C_disp:     # G1 amendment: the
+              hold                                     # dispatch floor — a
+                                                       # burst below it loses
   elif t_cpu < (1 − δ_lo) · t_gpu:                     # below band
       if avail_down() == 0:  hold                      # pin_down
       else:
@@ -223,6 +243,7 @@ Sizing follows from free VRAM; no timer exists to mistune.
 | I6 | controller OFF ⇒ bit-for-bit the shipped engine | A/B-ability; the `dev_cache=None` precedent |
 | I7 | promotion changes *where* an invocation executes, never its result | token-identical A/B is the acceptance test (R10 precedent: 19/19 arms) |
 | I8 | per-box calibration before enabling (§9); no baked-in constants | the environment drift result: traces did not reproduce across transformers versions; bandwidths will not either |
+| I9 | promotions dispatch as one stream-ordered burst: single `want()`, one burst event, pre-staged device ids, GPU work enqueued before the CPU tier starts — the host never waits between tiers | G1: serial per-row dispatch (~100–500 µs/step) buried the 34.8 µs/row saving at every swept p |
 
 ## 8. Degraded modes
 
@@ -233,15 +254,23 @@ Sizing follows from free VRAM; no timer exists to mistune.
 * **Hide collapses** (CPU queue empties — nothing to hide under): the balance
   condition self-limits, since promotion only runs while `t_cpu > t_gpu`.
 * **Link saturated** (residency refills at tight capacity): `slack_rows()`
-  goes to zero and promotion pauses; residency traffic has priority.
+  goes to zero and promotion pauses; residency traffic has priority. Within
+  a step, `LINK_CAP()` (§5) separately keeps a burst's own copies inside the
+  CPU window they must hide under.
 * **VRAM exhausted:** transient → 0, `p = 0`, engine ≡ shipped engine.
 * **Controller misbehaving:** OFF switch (I6).
 
 ## 9. Calibration
 
 `elastic_e3.py` is the startup probe, run once per box class: emits
-`(B_cpu, B_link, B_gpu, hide)` with the thread sweep embedded, and the
-derived `n*` and per-row µs table. Controller thresholds (`δ_hi`, `δ_lo`,
+`(B_cpu, B_link, B_gpu, hide)` with the thread sweep embedded, the derived
+`n*` and per-row µs table, and — G1 amendment — **`C_disp`**: the measured
+serial host cost of one amended burst (enqueue + one event + pre-staged-id
+launch + sync, warm, idle GPU). `C_disp` feeds the dispatch floor (§5); the
+feasible burst window on a box is `[p_min, LINK_CAP]` with
+`p_min = min p : p·(t_cpu_row − t_gpu_row) > C_disp`, and a box whose window
+is empty at the engine's `m` fails calibration for promotion exactly as an
+out-of-range `n*` does. Controller thresholds (`δ_hi`, `δ_lo`,
 `GROW_CAP`, `DEMOTE_CAP`, `RESERVE`) are computed from it, not baked in (I8) —
 including the constraint that makes the integer actuators sound (corrected in
 round 4 — the round-3 form used the raw quantum and missed that the far edge
@@ -283,6 +312,17 @@ before any wall number is read.
   `Δ = t_cpu_row − (1−hide)·t_link_row − t_gpu_row` from that box's
   calibration. Refuted ⇒ the promotion path has overheads the model missed;
   the controller is not built until the mechanics pay.
+  **Outcome: REFUTED 2026-08-23** ([RESULTS-p2-g1.md](RESULTS-p2-g1.md)) —
+  serial dispatch and the link budget, both now in the model. Superseded by
+  G1b; the controller stays unbuilt until G1b passes.
+* **P2-G1b (mechanics, amended):** the §4 burst mechanics on the same A/B
+  design. Bar: realised step saving `wall_A − wall_B` ≥ **70%** of
+  `p·Δ − C_disp` at **every p inside the calibrated feasible window**
+  `[p_min, LINK_CAP]`; p outside the window is swept and reported (the floor
+  and cap predict those lose — a win there indicts the model, not the gate).
+  Two registered spoilers, both must fail their bar: synchronous copies
+  (hide), and the **un-amended G1 mechanics verbatim** (dispatch) — the
+  refuted configuration must stay refuted while the amended one pays.
 * **P2-G2 (convergence):** from cold start on captured routing, reach
   equilibrium (§5) within **64 steps**; after convergence, direction flips ≤
   1 per 32 steps. Refuted ⇒ the hysteresis is wrong, not tuned live.
