@@ -321,6 +321,81 @@ def run_arm(recs, view, tier, threads, prefetch):
             "nvme_bytes": nvme_bytes_s, "tier_stats": tier.stats()}
 
 
+class KeepWarm:
+    """Sustains boost clocks on lazy-ramp hosts (PREREG-p2-g4p): a tiny
+    matmul on its own stream every ~2 ms from a daemon thread — ~0.1%
+    occupancy, no privileges, defeats the down-ramp G4 measured (SM parked
+    at 180 MHz of 3,090 for the decode launch pattern)."""
+
+    def __init__(self):
+        self.stream = torch.cuda.Stream()
+        self.a = torch.randn(64, 64, device="cuda")
+        self._stop = threading.Event()
+        self.th = threading.Thread(target=self._run, daemon=True)
+        self.th.start()
+
+    def _run(self):
+        while not self._stop.is_set():
+            with torch.cuda.stream(self.stream):
+                torch.matmul(self.a, self.a)
+            time.sleep(0.002)
+
+    def stop(self):
+        self._stop.set()
+        self.th.join()
+
+
+def clock_ladder(mode):
+    """Returns the mode that actually engaged: 'lock', 'keepwarm', 'none'.
+    The keep-warm object (if any) is returned so it stays alive."""
+    import subprocess
+    if mode in ("auto", "lock"):
+        try:
+            mx = subprocess.run(
+                ["nvidia-smi", "--query-gpu=clocks.max.sm",
+                 "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=20).stdout.split()[0]
+            r1 = subprocess.run(["nvidia-smi", "-pm", "1"],
+                                capture_output=True, timeout=20)
+            r2 = subprocess.run(["nvidia-smi", "-lgc", mx],
+                                capture_output=True, timeout=20)
+            if r2.returncode == 0:
+                return "lock", None
+        except Exception:
+            pass
+        if mode == "lock":
+            sys.exit("clock lock requested but unavailable on this box")
+    if mode in ("auto", "keepwarm"):
+        return "keepwarm", KeepWarm()
+    return "none", None
+
+
+def burst_gate():
+    """The G4-collapse pattern, as a box gate: healthy hosts pass both."""
+    a = torch.randn(4096, 4096, device="cuda")
+    torch.cuda.synchronize()
+    t0 = time.perf_counter()
+    for _ in range(20):
+        a = (a @ a).clamp(-1, 1)
+    torch.cuda.synchronize()
+    mm = time.perf_counter() - t0
+    b = torch.randn(1, 64, device="cuda", dtype=torch.bfloat16)
+    w = torch.randn(64, 64, device="cuda", dtype=torch.bfloat16)
+    torch.matmul(b, w)
+    torch.cuda.synchronize()
+    ts = []
+    for _ in range(100):
+        t0 = time.perf_counter()
+        torch.matmul(b, w)
+        torch.cuda.synchronize()
+        ts.append(time.perf_counter() - t0)
+        time.sleep(0.002)
+    burst = statistics.median(ts)
+    print("burst gate: matmul20 %.0f ms  decode-pattern launch %.1f us"
+          % (mm * 1e3, burst * 1e6))
+    return mm, burst
+
+
 def solo_rates(view, tier, threads):
     blocks_stack = view.stacks[GATE_UP_BLOCKS]
     scales_stack = view.stacks[GATE_UP_SCALES]
@@ -363,6 +438,8 @@ def main():
     ap.add_argument("--threads", type=int, default=64)
     ap.add_argument("--calib", required=True)
     ap.add_argument("--workdir", default="/root/g4")
+    ap.add_argument("--clock-mode", default="auto",
+                    choices=("auto", "lock", "keepwarm", "none"))
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     assert torch.cuda.is_available()
@@ -371,6 +448,14 @@ def main():
     cal = json.load(open(a.calib))
     if not (2 <= cal["nstar_direct"] <= 5):
         sys.exit("box fails the n* gate: %.2f" % cal["nstar_direct"])
+
+    clock_mode, warm = clock_ladder(a.clock_mode)
+    print("clock mode:", clock_mode)
+    mm, burst = burst_gate()
+    if mm > 0.220 or burst > 50e-6:
+        sys.exit("box fails the burst-clock gate (matmul20 %.0f ms, "
+                 "launch %.1f us) — lazy-ramp host, reject" %
+                 (mm * 1e3, burst * 1e6))
 
     os.makedirs(a.workdir, exist_ok=True)
     arena = os.path.join(a.workdir, "g4.arena")
@@ -396,7 +481,9 @@ def main():
           % (t_cpu_row * 1e6, t_gpu_row * 1e6))
 
     out = {"b_nvme_solo": b_nvme, "t_cpu_row_solo": t_cpu_row,
-           "t_gpu_row_solo": t_gpu_row, "hot_rows": HOT_ROWS}
+           "t_gpu_row_solo": t_gpu_row, "hot_rows": HOT_ROWS,
+           "clock_mode": clock_mode, "burst_gate_matmul_s": mm,
+           "burst_gate_launch_s": burst}
     arms = {}
     for name, prefetch in (("overlap", True), ("sequential", False)):
         res = run_arm(recs, view, tier, a.threads, prefetch)
