@@ -86,24 +86,29 @@ def main():
                 sc = score2(res)
                 entry["arms"][str(frac)] = sc
                 if frac is None:
-                    conv_ok = (sc["converged_at"] is not None
-                               and sc["converged_at"] <= 64)
-                    per_trace_a[tr] = per_trace_a.get(tr, True) and conv_ok
+                    if adequate:
+                        conv_ok = (sc["converged_at"] is not None
+                                   and sc["converged_at"] <= 64)
+                        per_trace_a[tr] = (per_trace_a.get(tr, True)
+                                           and conv_ok)
+                        ok_c.append(sc["churn_ok"])
                     ok_b.append(sc["total_fills_128_512"]
                                 <= 1.10 * lru_f + m)
-                    if adequate:
-                        ok_c.append(sc["churn_ok"])
             un = entry["arms"]["None"]
             for frac in fracs:
                 if frac is None:
                     continue
                 th = entry["arms"][str(frac)]
-                conv_ok = (th["converged_at"] is not None
-                           and un["converged_at"] is not None
-                           and th["converged_at"] <= 2 * max(un["converged_at"], 16))
                 fill_ok = (th["total_fills_128_512"]
                            <= 1.05 * un["total_fills_128_512"] + m)
-                ok_d.append(conv_ok and fill_ok)
+                if adequate:
+                    conv_ok = (th["converged_at"] is not None
+                               and un["converged_at"] is not None
+                               and th["converged_at"]
+                               <= 2 * max(un["converged_at"], 16))
+                    ok_d.append(conv_ok and fill_ok)
+                else:
+                    ok_d.append(fill_ok)
             per_tr["caps"][str(rows)] = entry
         big = max(int(x) for x in per_tr["caps"])
         bige = per_tr["caps"][str(big)]

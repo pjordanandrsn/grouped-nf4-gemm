@@ -9,7 +9,13 @@ the spec's own definitions:
 * **(a) Convergence = time-to-sustained-equilibrium**: the first step t at
   which §5's predicate `EWMA(fills) ≤ (1 + η)·EWMA(novelty) + 1.0`
   (α = 1/16, EWMAs from step 0) holds **and holds at every later step of
-  the trace**. Bar: ≤ 64 at every swept capacity, on ≥ 14/16 traces.
+  the trace**. Bar: ≤ 64 at every **capacity-adequate** arm, on ≥ 14/16
+  traces. Scope matches (c) and §5 itself: under permanent capacity churn
+  the predicate honestly never obtains — the controller keeps filling on
+  misses, which is demand, not equilibrium — so gating inadequate arms
+  would refute by construction. Inadequate arms' times are reported as
+  data, not gated. (Caught in self-review before this registration froze;
+  the first draft said "every swept capacity".)
 * **(b)**: eval-window fills ≤ 1.10 × same-capacity ideal-LRU **+ m** at
   every arm (m = one step's routed set — the registered absolute guard for
   microscopic denominators; G2''s sole (b) failure was 23 vs 20 fills).

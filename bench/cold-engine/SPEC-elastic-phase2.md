@@ -388,9 +388,11 @@ before any wall number is read.
 * **P2-G2'' (residency convergence, equilibrium-metric):** identical run to
   G2' with the scoring aligned to §5's frozen definition: (a) =
   time-to-sustained-equilibrium (first step where the §5 predicate holds
-  and keeps holding), bar unchanged; (b) and (d)'s fill bars gain a
-  one-routed-set absolute guard for microscopic denominators; (c), sweep,
-  spoilers, parameters unchanged. Registered before any G2''-scored run;
+  and keeps holding), scoped — like (c), and like §5's own concept — to
+  **capacity-adequate arms** (the predicate honestly never obtains under
+  permanent capacity churn; inadequate arms are reported, not gated);
+  (b) and (d)'s fill bars gain a one-routed-set absolute guard for
+  microscopic denominators; (c), sweep, spoilers, parameters unchanged. Registered before any G2''-scored run;
   a refutation here closes the offline gate REFUTED — no third metric
   correction against these traces.
 * **P2-G3 (elasticity):** mid-run VRAM ballast injection: no OOM; transient
