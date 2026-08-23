@@ -6,7 +6,10 @@ sequential-sum baseline demonstrating the gap"), frozen here with every
 operational definition, against the real tribrid: the baked NVMe arena
 (`nvme_arena.bake`, the layout contract-tested against the engine's in
 `test_mxfp4_arena_layout`), `ColdTier(pinned=True)` as the DRAM hot set,
-`ColdCpuView` feeding the CPU kernel its slot ids, `SegmentedRowPool` (#217)
+the CPU kernel reading the tier's flat pinned landing buffer directly via
+`as_strided` stacks (the O_DIRECT scatter path needs 4096-multiple segment
+lengths, which the scales segment is not; a strided read has no such
+constraint), `SegmentedRowPool` (#217)
 as the VRAM pool, the G1b burst copy path, and the MXFP4 kernels. One box.
 
 ## Design
