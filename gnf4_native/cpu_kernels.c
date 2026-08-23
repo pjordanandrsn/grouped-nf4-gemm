@@ -655,6 +655,7 @@ typedef struct {
     const int32_t *sizes;
     const int64_t *row_off;
     int64_t N, K, tiles_n;
+    int rsplit;            /* low-G item split; 1 = Phase-8 path verbatim */
     float *out;
     int use512;
 } GemvCtx;
@@ -667,9 +668,21 @@ typedef struct {
 static void nf4_range(int64_t lo, int64_t hi, void *argp) {
     GemvCtx *c = (GemvCtx *)argp;
     for (int64_t u = lo; u < hi; u++) {
-        int g = (int)(u / c->tiles_n);
-        int64_t tn = (u % c->tiles_n) * GEMV_TILE;
+        int64_t base = u / c->rsplit;
+        int rchunk = (int)(u % c->rsplit);
+        int g = (int)(base / c->tiles_n);
+        int64_t tn = (base % c->tiles_n) * GEMV_TILE;
         int64_t tn_end = tn + GEMV_TILE > c->N ? c->N : tn + GEMV_TILE;
+        /* this item's row slice, aligned to whole cells so the register
+         * blocking and each element's k-descent are untouched */
+        int32_t size_g = c->sizes[g];
+        int32_t per = (size_g + c->rsplit - 1) / c->rsplit;
+        per = (int32_t)(((per + NF4_CELL_ROWS - 1) / NF4_CELL_ROWS)
+                        * NF4_CELL_ROWS);
+        int64_t r_lo = (int64_t)rchunk * per;
+        if (r_lo >= size_g)
+            continue;                       /* empty slice: no-op item */
+        int32_t r_hi = (int32_t)(r_lo + per > size_g ? size_g : r_lo + per);
         int64_t e = c->eids[g];
         const uint8_t *w_e = c->B + e * c->N * (c->K / 2);
         const float *am_e = c->absmax + e * c->N * (c->K / 64);
@@ -702,8 +715,8 @@ static void nf4_range(int64_t lo, int64_t hi, void *argp) {
          * weights from DRAM every time, which is exactly the amortization
          * G8 measures. */
         for (int64_t n = tn; n < tn_end; n++) {
-            int32_t rem = c->sizes[g];
-            int64_t r0 = 0;
+            int32_t rem = (int32_t)(r_hi - r_lo);
+            int64_t r0 = r_lo;
             while (rem > 0) {
                 int T = rem > NF4_CELL_ROWS ? NF4_CELL_ROWS : rem;
                 nf4_cell(a_g + r0 * c->K, T, c->K, w_e + n * (c->K / 2),
@@ -728,7 +741,21 @@ static int gemv_common(GemvCtx *c, int G, int threads, pool_fn range,
     }
     c->row_off = row_off_buf;
     c->tiles_n = (c->N + GEMV_TILE - 1) / GEMV_TILE;
-    int64_t total = (int64_t)G * c->tiles_n;
+    int64_t items = (int64_t)G * c->tiles_n;
+    /* Low-G item split (PREREG-lowg-split). The (group, tile) grid starves
+     * the pool when G x tiles < threads -- measured: a G=1 rows=128 call
+     * ran SLOWER than a G=64 call with 64x the weight bytes (the
+     * interaction-hunt receipts). Splitting a group's rows across items
+     * re-reads its weights per slice (the Phase-8 warning above), which is
+     * the right trade ONLY while threads sit idle -- so the split arms
+     * strictly when starved; every well-fed call keeps the Phase-8
+     * single-item path bit-for-bit (rsplit == 1). */
+    int thr_hint = threads > 0 ? threads
+                 : (P.n ? P.n : (int)sysconf(_SC_NPROCESSORS_ONLN));
+    int rs = 1;
+    while (items * rs < thr_hint && rs < 64) rs <<= 1;
+    c->rsplit = rs;
+    int64_t total = items * rs;
     if (P.n) {                             /* executor pool, when started */
         pool_run(range, c, total, threads);
         return 0;
@@ -1061,9 +1088,19 @@ scalar_tail:;
 static void mx_range(int64_t lo, int64_t hi, void *argp) {
     GemvCtx *c = (GemvCtx *)argp;
     for (int64_t u = lo; u < hi; u++) {
-        int g = (int)(u / c->tiles_n);
-        int64_t tn = (u % c->tiles_n) * GEMV_TILE;
+        int64_t base = u / c->rsplit;
+        int rchunk = (int)(u % c->rsplit);
+        int g = (int)(base / c->tiles_n);
+        int64_t tn = (base % c->tiles_n) * GEMV_TILE;
         int64_t tn_end = tn + GEMV_TILE > c->N ? c->N : tn + GEMV_TILE;
+        int32_t size_g = c->sizes[g];
+        int32_t per = (size_g + c->rsplit - 1) / c->rsplit;
+        per = (int32_t)(((per + NF4_CELL_ROWS - 1) / NF4_CELL_ROWS)
+                        * NF4_CELL_ROWS);
+        int64_t r_lo = (int64_t)rchunk * per;
+        if (r_lo >= size_g)
+            continue;                       /* empty slice: no-op item */
+        int32_t r_hi = (int32_t)(r_lo + per > size_g ? size_g : r_lo + per);
         int64_t e = c->eids[g];
         const uint8_t *w_e = c->B + e * c->N * (c->K / 2);
         const uint8_t *sc_e = c->scales + e * c->N * (c->K / 32);
@@ -1080,8 +1117,8 @@ static void mx_range(int64_t lo, int64_t hi, void *argp) {
         }
 #endif
         for (int64_t n = tn; n < tn_end; n++) {   /* row chunking: see nf4_range */
-            int32_t rem = c->sizes[g];
-            int64_t r0 = 0;
+            int32_t rem = (int32_t)(r_hi - r_lo);
+            int64_t r0 = r_lo;
             while (rem > 0) {
                 int T = rem > NF4_CELL_ROWS ? NF4_CELL_ROWS : rem;
                 mx_cell(a_g + r0 * c->K, T, c->K, w_e + n * (c->K / 2),
