@@ -19,6 +19,7 @@ import numpy as np
 import torch
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, "..", ".."))    # repo root: gnf4_native
 sys.path.insert(0, os.path.join(HERE, "..", "..", "kernel"))
 sys.path.insert(0, os.path.join(HERE, "routing-trace"))
 sys.path.insert(0, HERE)
