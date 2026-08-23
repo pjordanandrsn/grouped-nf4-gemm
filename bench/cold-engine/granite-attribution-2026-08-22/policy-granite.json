@@ -1,0 +1,488 @@
+{
+ "rows": [
+  {
+   "model": "gran3.0_base",
+   "prompt": "prose",
+   "steps_held": 1.0,
+   "cap": 256,
+   "belady": 45876,
+   "positional": 100986,
+   "p_lru": 84511,
+   "p_lfu": 67231
+  },
+  {
+   "model": "gran3.0_base",
+   "prompt": "prose",
+   "steps_held": 1.5,
+   "cap": 384,
+   "belady": 31157,
+   "positional": 100986,
+   "p_lru": 63614,
+   "p_lfu": 49039
+  },
+  {
+   "model": "gran3.0_base",
+   "prompt": "prose",
+   "steps_held": 2.0,
+   "cap": 512,
+   "belady": 20465,
+   "positional": 100986,
+   "p_lru": 47928,
+   "p_lfu": 34558
+  },
+  {
+   "model": "gran3.0_base",
+   "prompt": "code",
+   "steps_held": 1.0,
+   "cap": 256,
+   "belady": 46595,
+   "positional": 103168,
+   "p_lru": 88782,
+   "p_lfu": 71734
+  },
+  {
+   "model": "gran3.0_base",
+   "prompt": "code",
+   "steps_held": 1.5,
+   "cap": 384,
+   "belady": 28563,
+   "positional": 103168,
+   "p_lru": 70266,
+   "p_lfu": 52366
+  },
+  {
+   "model": "gran3.0_base",
+   "prompt": "code",
+   "steps_held": 2.0,
+   "cap": 512,
+   "belady": 17010,
+   "positional": 103168,
+   "p_lru": 44460,
+   "p_lfu": 36678
+  },
+  {
+   "model": "gran3.0_base",
+   "prompt": "math",
+   "steps_held": 1.0,
+   "cap": 256,
+   "belady": 48187,
+   "positional": 106028,
+   "p_lru": 91627,
+   "p_lfu": 65389
+  },
+  {
+   "model": "gran3.0_base",
+   "prompt": "math",
+   "steps_held": 1.5,
+   "cap": 384,
+   "belady": 30436,
+   "positional": 106028,
+   "p_lru": 74211,
+   "p_lfu": 45805
+  },
+  {
+   "model": "gran3.0_base",
+   "prompt": "math",
+   "steps_held": 2.0,
+   "cap": 512,
+   "belady": 19470,
+   "positional": 106028,
+   "p_lru": 48091,
+   "p_lfu": 29970
+  },
+  {
+   "model": "gran3.0_base",
+   "prompt": "dialogue",
+   "steps_held": 1.0,
+   "cap": 256,
+   "belady": 46499,
+   "positional": 104344,
+   "p_lru": 88774,
+   "p_lfu": 64339
+  },
+  {
+   "model": "gran3.0_base",
+   "prompt": "dialogue",
+   "steps_held": 1.5,
+   "cap": 384,
+   "belady": 30413,
+   "positional": 104344,
+   "p_lru": 71046,
+   "p_lfu": 44551
+  },
+  {
+   "model": "gran3.0_base",
+   "prompt": "dialogue",
+   "steps_held": 2.0,
+   "cap": 512,
+   "belady": 19296,
+   "positional": 104344,
+   "p_lru": 48200,
+   "p_lfu": 29414
+  },
+  {
+   "model": "gran3.0_instruct",
+   "prompt": "prose",
+   "steps_held": 1.0,
+   "cap": 256,
+   "belady": 48146,
+   "positional": 103842,
+   "p_lru": 89838,
+   "p_lfu": 68991
+  },
+  {
+   "model": "gran3.0_instruct",
+   "prompt": "prose",
+   "steps_held": 1.5,
+   "cap": 384,
+   "belady": 30319,
+   "positional": 103842,
+   "p_lru": 72117,
+   "p_lfu": 48964
+  },
+  {
+   "model": "gran3.0_instruct",
+   "prompt": "prose",
+   "steps_held": 2.0,
+   "cap": 512,
+   "belady": 19227,
+   "positional": 103842,
+   "p_lru": 49554,
+   "p_lfu": 33418
+  },
+  {
+   "model": "gran3.0_instruct",
+   "prompt": "code",
+   "steps_held": 1.0,
+   "cap": 256,
+   "belady": 45090,
+   "positional": 100626,
+   "p_lru": 84971,
+   "p_lfu": 70237
+  },
+  {
+   "model": "gran3.0_instruct",
+   "prompt": "code",
+   "steps_held": 1.5,
+   "cap": 384,
+   "belady": 27956,
+   "positional": 100626,
+   "p_lru": 64968,
+   "p_lfu": 50935
+  },
+  {
+   "model": "gran3.0_instruct",
+   "prompt": "code",
+   "steps_held": 2.0,
+   "cap": 512,
+   "belady": 16751,
+   "positional": 100626,
+   "p_lru": 44455,
+   "p_lfu": 34647
+  },
+  {
+   "model": "gran3.0_instruct",
+   "prompt": "math",
+   "steps_held": 1.0,
+   "cap": 256,
+   "belady": 46669,
+   "positional": 102349,
+   "p_lru": 87238,
+   "p_lfu": 70366
+  },
+  {
+   "model": "gran3.0_instruct",
+   "prompt": "math",
+   "steps_held": 1.5,
+   "cap": 384,
+   "belady": 29874,
+   "positional": 102349,
+   "p_lru": 67806,
+   "p_lfu": 51155
+  },
+  {
+   "model": "gran3.0_instruct",
+   "prompt": "math",
+   "steps_held": 2.0,
+   "cap": 512,
+   "belady": 19151,
+   "positional": 102349,
+   "p_lru": 49010,
+   "p_lfu": 35084
+  },
+  {
+   "model": "gran3.0_instruct",
+   "prompt": "dialogue",
+   "steps_held": 1.0,
+   "cap": 256,
+   "belady": 44775,
+   "positional": 101847,
+   "p_lru": 85438,
+   "p_lfu": 63301
+  },
+  {
+   "model": "gran3.0_instruct",
+   "prompt": "dialogue",
+   "steps_held": 1.5,
+   "cap": 384,
+   "belady": 29118,
+   "positional": 101847,
+   "p_lru": 65679,
+   "p_lfu": 43162
+  },
+  {
+   "model": "gran3.0_instruct",
+   "prompt": "dialogue",
+   "steps_held": 2.0,
+   "cap": 512,
+   "belady": 18863,
+   "positional": 101847,
+   "p_lru": 42595,
+   "p_lfu": 28499
+  },
+  {
+   "model": "gran3.1_base",
+   "prompt": "prose",
+   "steps_held": 1.0,
+   "cap": 256,
+   "belady": 46288,
+   "positional": 98056,
+   "p_lru": 82437,
+   "p_lfu": 63372
+  },
+  {
+   "model": "gran3.1_base",
+   "prompt": "prose",
+   "steps_held": 1.5,
+   "cap": 384,
+   "belady": 30127,
+   "positional": 98056,
+   "p_lru": 62980,
+   "p_lfu": 42908
+  },
+  {
+   "model": "gran3.1_base",
+   "prompt": "prose",
+   "steps_held": 2.0,
+   "cap": 512,
+   "belady": 18809,
+   "positional": 98056,
+   "p_lru": 48968,
+   "p_lfu": 27960
+  },
+  {
+   "model": "gran3.1_base",
+   "prompt": "code",
+   "steps_held": 1.0,
+   "cap": 256,
+   "belady": 45920,
+   "positional": 106055,
+   "p_lru": 91819,
+   "p_lfu": 65330
+  },
+  {
+   "model": "gran3.1_base",
+   "prompt": "code",
+   "steps_held": 1.5,
+   "cap": 384,
+   "belady": 26434,
+   "positional": 106055,
+   "p_lru": 72624,
+   "p_lfu": 44806
+  },
+  {
+   "model": "gran3.1_base",
+   "prompt": "code",
+   "steps_held": 2.0,
+   "cap": 512,
+   "belady": 15119,
+   "positional": 106055,
+   "p_lru": 39140,
+   "p_lfu": 28675
+  },
+  {
+   "model": "gran3.1_base",
+   "prompt": "math",
+   "steps_held": 1.0,
+   "cap": 256,
+   "belady": 46219,
+   "positional": 103288,
+   "p_lru": 88488,
+   "p_lfu": 66012
+  },
+  {
+   "model": "gran3.1_base",
+   "prompt": "math",
+   "steps_held": 1.5,
+   "cap": 384,
+   "belady": 28608,
+   "positional": 103288,
+   "p_lru": 67843,
+   "p_lfu": 45626
+  },
+  {
+   "model": "gran3.1_base",
+   "prompt": "math",
+   "steps_held": 2.0,
+   "cap": 512,
+   "belady": 17805,
+   "positional": 103288,
+   "p_lru": 42744,
+   "p_lfu": 29734
+  },
+  {
+   "model": "gran3.1_base",
+   "prompt": "dialogue",
+   "steps_held": 1.0,
+   "cap": 256,
+   "belady": 46159,
+   "positional": 104559,
+   "p_lru": 89256,
+   "p_lfu": 63144
+  },
+  {
+   "model": "gran3.1_base",
+   "prompt": "dialogue",
+   "steps_held": 1.5,
+   "cap": 384,
+   "belady": 29795,
+   "positional": 104559,
+   "p_lru": 71094,
+   "p_lfu": 43114
+  },
+  {
+   "model": "gran3.1_base",
+   "prompt": "dialogue",
+   "steps_held": 2.0,
+   "cap": 512,
+   "belady": 18930,
+   "positional": 104559,
+   "p_lru": 47371,
+   "p_lfu": 28427
+  },
+  {
+   "model": "gran3.1_instruct",
+   "prompt": "prose",
+   "steps_held": 1.0,
+   "cap": 256,
+   "belady": 46614,
+   "positional": 100535,
+   "p_lru": 85496,
+   "p_lfu": 72153
+  },
+  {
+   "model": "gran3.1_instruct",
+   "prompt": "prose",
+   "steps_held": 1.5,
+   "cap": 384,
+   "belady": 30014,
+   "positional": 100535,
+   "p_lru": 65710,
+   "p_lfu": 52613
+  },
+  {
+   "model": "gran3.1_instruct",
+   "prompt": "prose",
+   "steps_held": 2.0,
+   "cap": 512,
+   "belady": 19289,
+   "positional": 100535,
+   "p_lru": 47321,
+   "p_lfu": 37295
+  },
+  {
+   "model": "gran3.1_instruct",
+   "prompt": "code",
+   "steps_held": 1.0,
+   "cap": 256,
+   "belady": 40010,
+   "positional": 100722,
+   "p_lru": 84338,
+   "p_lfu": 51732
+  },
+  {
+   "model": "gran3.1_instruct",
+   "prompt": "code",
+   "steps_held": 1.5,
+   "cap": 384,
+   "belady": 20784,
+   "positional": 100722,
+   "p_lru": 63072,
+   "p_lfu": 29801
+  },
+  {
+   "model": "gran3.1_instruct",
+   "prompt": "code",
+   "steps_held": 2.0,
+   "cap": 512,
+   "belady": 9336,
+   "positional": 100722,
+   "p_lru": 24697,
+   "p_lfu": 15316
+  },
+  {
+   "model": "gran3.1_instruct",
+   "prompt": "math",
+   "steps_held": 1.0,
+   "cap": 256,
+   "belady": 47899,
+   "positional": 103461,
+   "p_lru": 88678,
+   "p_lfu": 70466
+  },
+  {
+   "model": "gran3.1_instruct",
+   "prompt": "math",
+   "steps_held": 1.5,
+   "cap": 384,
+   "belady": 30578,
+   "positional": 103461,
+   "p_lru": 70650,
+   "p_lfu": 51058
+  },
+  {
+   "model": "gran3.1_instruct",
+   "prompt": "math",
+   "steps_held": 2.0,
+   "cap": 512,
+   "belady": 19467,
+   "positional": 103461,
+   "p_lru": 50898,
+   "p_lfu": 35117
+  },
+  {
+   "model": "gran3.1_instruct",
+   "prompt": "dialogue",
+   "steps_held": 1.0,
+   "cap": 256,
+   "belady": 41827,
+   "positional": 98401,
+   "p_lru": 82774,
+   "p_lfu": 66272
+  },
+  {
+   "model": "gran3.1_instruct",
+   "prompt": "dialogue",
+   "steps_held": 1.5,
+   "cap": 384,
+   "belady": 26195,
+   "positional": 98401,
+   "p_lru": 62728,
+   "p_lfu": 46756
+  },
+  {
+   "model": "gran3.1_instruct",
+   "prompt": "dialogue",
+   "steps_held": 2.0,
+   "cap": 512,
+   "belady": 17427,
+   "positional": 98401,
+   "p_lru": 35377,
+   "p_lfu": 31013
+  }
+ ],
+ "policies": [
+  "lru",
+  "lfu"
+ ]
+}
