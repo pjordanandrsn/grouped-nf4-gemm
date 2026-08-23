@@ -23,10 +23,16 @@ decode launch pattern while every registered gate passed).
 2. **Burst-clock box gate**, after the ladder, before anything timed:
    * the 20×4096³ matmul must complete ≤ **220 ms** (the program's healthy
      5090 range is 158–177; G4's lazy-ramp host took 340);
-   * a decode-pattern probe — 100 single-row gemv launches with a sync and
-     a 2 ms host sleep between each (the pattern that collapsed G4) — must
-     show median per-launch wall ≤ **50 µs** (healthy decode is 12–16 µs
-     plus launch overhead; 162 µs was the collapse).
+   * a decode-pattern probe — 100 tiny launches with a sync and a 2 ms
+     host sleep between each (the pattern that collapsed G4) — compared
+     against the SAME probe with no gaps: **gap/no-gap ratio ≤ 3.0**.
+     *(Corrected pre-measurement, disclosed: the first registration's
+     absolute 50 µs bar measured sync-wake latency — which dominates a
+     tiny launch after an idle and varies by driver wait-mode — and
+     rejected a demonstrably healthy host at 50.5 µs with matmul20 at
+     188 ms. The ratio cancels the wake term; the G4 lazy host's ratio
+     was ~13×, a ramping host's is ~1. No G4'-scored measurement had
+     been made.)*
    A box failing both rungs of the ladder and the gate is destroyed and
    re-hunted, never waived (eleven-box precedent).
 3. The matmul health check moves to the **pre-gate** (run before e3, with
