@@ -376,8 +376,15 @@ def main():
         def hook(_m, _inp, out):
             idx = _indices(out).reshape(-1, k)
             # decode: one token; take the LAST row so a prefill call that
-            # slips through cannot silently contribute 64 tokens of routing
-            step_rec.setdefault(i, []).append(sorted(idx[-1].tolist()))
+            # slips through cannot silently contribute 64 tokens of routing.
+            #
+            # `routed` stays SORTED. positional_transfers compares routed sets
+            # BY INDEX POSITION, and replay_dev_cache documents the sorted
+            # order as a deliberate, conservative choice for that baseline --
+            # rewriting it in rank order would silently move the denominator
+            # of every ratio this program has published. Rank is additive.
+            r = idx[-1].tolist()                 # topk is score-descending
+            step_rec.setdefault(i, []).append((sorted(r), r, None))
         return hook
 
     def mk_derived(i, router):
@@ -386,8 +393,12 @@ def main():
             lg = torch.nn.functional.linear(
                 h.reshape(-1, h.shape[-1]), router.weight,
                 getattr(router, "bias", None))
-            idx = torch.topk(lg, k=k, dim=-1).indices
-            step_rec.setdefault(i, []).append(sorted(idx[-1].tolist()))
+            # 2k, so the near-miss band -- the experts that just failed to
+            # make the cut -- falls out of the same sort at no extra cost.
+            wide = torch.topk(lg, k=min(2 * k, lg.shape[-1]), dim=-1).indices
+            row = wide[-1].tolist()
+            r, near = row[:k], row[k:]
+            step_rec.setdefault(i, []).append((sorted(r), r, near))
         return hook
 
     if routers is not None:
@@ -411,10 +422,31 @@ def main():
             # repetition loop and that was only found by inspecting routing
             # lag-overlap afterwards; with the ids here it is one diff
             # (bench/cold-engine/routing-trace/RESULTS-third-model.md).
-            out.append({"step": s - 1,
-                        "token": int(cur.reshape(-1)[-1].item()),
-                        "routed": {str(i): step_rec[i][-1]
-                                   for i in range(len(gates))}})
+            rec = {"step": s - 1,
+                   "token": int(cur.reshape(-1)[-1].item()),
+                   "routed": {str(i): step_rec[i][-1][0]
+                              for i in range(len(gates))},
+                   "routed_rank": {str(i): step_rec[i][-1][1]
+                                   for i in range(len(gates))}}
+            if step_rec[0][-1][2] is not None:      # derive path only
+                rec["near_miss"] = {str(i): step_rec[i][-1][2]
+                                    for i in range(len(gates))}
+            # The preregistered capture check, asserted at write time rather
+            # than left to a test that cannot run without a model: rank order
+            # must be a PERMUTATION of the sorted ids -- same experts, different
+            # order. A capture that reorders anything else is not what it says
+            # it is (bench/cold-engine/PREREG-router-rank.md).
+            for i in range(len(gates)):
+                a, b = rec["routed"][str(i)], rec["routed_rank"][str(i)]
+                if sorted(b) != a:
+                    sys.exit("rank order is not a permutation of the routed "
+                             "set at step %d layer %d: %s vs %s"
+                             % (s - 1, i, a, b))
+                nm = rec.get("near_miss", {}).get(str(i))
+                if nm is not None and set(nm) & set(a):
+                    sys.exit("near-miss band overlaps the selected set at "
+                             "step %d layer %d" % (s - 1, i))
+            out.append(rec)
     for h in hs:
         h.remove()
 
