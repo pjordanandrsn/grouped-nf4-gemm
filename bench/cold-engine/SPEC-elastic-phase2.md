@@ -436,6 +436,20 @@ before any wall number is read.
   G3' blip-robust bars, the full warm-up inventory — and the engine-level
   fact that on lazy-ramp hosts the GPU tier's rate is a property of the
   launch pattern, not the silicon.
+* **P2-G4' (the objective, clocks verified):** G4's instrument with the
+  clock ladder (lock → keep-warm), the burst-clock box gate (screen twice
+  corrected pre-measurement, both disclosed, both conservative), and the
+  matmul health pre-gate.
+  **Outcome 2026-08-23: REFUTED, scored, spoiler-valid**
+  ([RESULTS-p2-g4p.md](RESULTS-p2-g4p.md)) — with honest clocks
+  (t_gpu_row 19.9 µs) and a 98% VRAM hit rate, the overlap arm (5.22 ms)
+  ran slower than the sequential arm (4.41 ms) and above even the serial
+  sum of the alone walls (4.83 ms): the tiers share one memory system, so
+  `max()` was never the wall — bytes-through-DRAM plus mixing is (G1c's
+  law, third measurement). **The phase-2 gate program is closed, fully
+  scored.** The objective survives revised: minimize bytes-through-DRAM
+  per step via residency; schedule landings into DRAM headroom; never
+  overlap DRAM-crossing work with DRAM-bound work for its own sake.
 
 Falsifiability preconditions apply to every gate as in gates A–E: a
 configuration must exist in which each prediction fails (e.g., G1 with the
