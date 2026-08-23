@@ -1,0 +1,4 @@
+t_cpu_row 49.0 us  t_gpu_row 8.4 us  t_link_row 156.4 us  Delta 40.7 us
+C_disp: {'1': '113.9 us', '2': '132.9 us', '3': '153.1 us', '4': '173.7 us', '8': '252.3 us'}
+feasible window: p_min=8 LINK_CAP=3 -> []
+feasible window empty on this box -- registered box-gate failure, no wall claimed
