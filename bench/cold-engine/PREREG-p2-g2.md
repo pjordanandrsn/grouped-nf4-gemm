@@ -51,9 +51,12 @@ tuned against the traces.
 
 ## Falsifiability — both spoilers must fail, before the claims are read
 
-1. **The I1 margin trap**: `protected = rows_t − 1` (margin 1 against
-   routed sets of k = 8). Must blow the (c) bound (thrash — the measured
-   6,144-fills-for-96-keys failure mode) or the (b) bound at its capacity.
+1. **The I1 margin trap**: `protected = 1` (margin = rows_t − 1 ≫ k — the
+   measured thrash mode, 6,144 fills for a 96-key static set). Must blow
+   the (c) bound or the (b) bound at its capacity. (The other I1 failure,
+   margin < k, is *unservable* — `want()` stalls by design — so it cannot
+   serve as a scored spoiler; §11's shorthand "`protected = rows`" is
+   corrected here to the runnable thrash side.)
 2. **No-retention**: every fill counted then immediately `discard()`ed —
    residency never forms. Its plateau must sit at ≥ 0.90 × all-miss
    (m fills/step), demonstrating retention is what pays.

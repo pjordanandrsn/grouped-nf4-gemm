@@ -16,7 +16,7 @@ import json
 import math
 import os
 import sys
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -39,15 +39,18 @@ def run_controller(meta, recs, rows_total, promo_frac=None, spoiler=None,
                    pers_frac=0.25):
     """One cold-start replay. Returns per-step series + totals.
 
-    spoiler: None | 'margin' (protected = rows-1, the I1 trap: margin 1
-    against routed sets of k) | 'noretain' (every fill discarded after
-    counting -- residency never forms)."""
+    spoiler: None | 'margin' (protected = 1, the I1 thrash trap: margin
+    rows_t - 1 >> k) | 'noretain' (every fill discarded after counting --
+    residency never forms)."""
     k = int(meta["top_k"])
     layers = int(meta["layers"])
     m = layers * k
     rows_p_cap = int(rows_total * pers_frac)
     rows_t = rows_total - rows_p_cap
-    protected = (rows_t - 1) if spoiler == "margin" else None
+    # I1's two failure modes: margin < k is UNSERVABLE (want() stalls), so
+    # the runnable thrash spoiler is the other side -- protected = 1, margin
+    # = rows_t - 1 >> k, the measured 6,144-fills-for-96-keys regime.
+    protected = 1 if spoiler == "margin" else None
     c = DevRowCache(rows_t, 8, device="cpu", routed=k, protected=protected)
     cap = math.inf if promo_frac is None else math.ceil(promo_frac * m)
 
@@ -95,10 +98,9 @@ def run_controller(meta, recs, rows_total, promo_frac=None, spoiler=None,
             fills += len(take)
             miss += len(need)            # cold whether budgeted or not
             for e in take:
-                key = (L, e)
-                if key in filled_at:
-                    pass                 # re-fill: eviction happened; age
-                filled_at[key] = t       # resets to this fill (spec S5)
+                # a re-fill means the key was evicted since its last fill;
+                # overwriting resets its resident-age to this fill (spec S5)
+                filled_at[(L, e)] = t
         fills_series.append(fills)
         novelty_series.append(novelty)
         miss_series.append(miss)
@@ -171,8 +173,9 @@ def main():
     traces = sorted(f for f in os.listdir(HERE)
                     if f.endswith(".jsonl") and "routing_seq" not in f)
     out = {"period": PERIOD, "age_min": AGE_MIN, "eta": ETA, "traces": {}}
-    ok_a = tot_a = 0
+    per_trace_a = {}                 # trace -> all-caps convergence pass
     ok_b, ok_c, ok_d = [], [], []
+    spoiler_margin_fail, spoiler_noretain_fail = [], []
     for tr in traces:
         meta, recs = load(os.path.join(HERE, tr))
         pairs = len({(int(L), e) for r in recs
@@ -184,7 +187,6 @@ def main():
             lru = lru_transfers(meta, recs, rows)
             lru_eval = None            # LRU fills over the eval window
             # recompute LRU over steps 128..512 for the (b) window
-            from collections import OrderedDict
             cache, f128 = OrderedDict(), 0
             for t, r in enumerate(recs):
                 for L, ex in r["routed"].items():
@@ -208,9 +210,9 @@ def main():
                 entry["arms"][str(frac)] = sc
                 tag = "unthrottled" if frac is None else f"frac={frac}"
                 if frac is None:
-                    tot_a += 1
-                    if sc["converged_at"] is not None and sc["converged_at"] <= 64:
-                        ok_a += 1
+                    conv_ok = (sc["converged_at"] is not None
+                               and sc["converged_at"] <= 64)
+                    per_trace_a[tr] = per_trace_a.get(tr, True) and conv_ok
                     ok_b.append(sc["total_fills_128_512"] <= 1.10 * lru_eval)
                     if rows == max(x for x in rows_list if x <= pairs):
                         ok_c.append(sc["churn_ok"])
@@ -235,20 +237,44 @@ def main():
             sc["all_miss_frac"] = sc["plateau_fills_step"] / routed_per_step
             sp[spoiler] = sc
         per_tr["spoilers"] = sp
+        # registered must-fail conditions (PREREG): margin blows churn or
+        # plateau-vs-LRU at its capacity; noretain plateaus at >= 0.90 all-miss
+        big = per_tr["caps"][str(rows)]
+        spoiler_margin_fail.append(
+            (not sp["margin"]["churn_ok"])
+            or sp["margin"]["total_fills_128_512"] > 1.10 * big["lru_fills_128_512"])
+        spoiler_noretain_fail.append(sp["noretain"]["all_miss_frac"] >= 0.90)
         out["traces"][tr] = per_tr
         print("%-24s pairs=%5d  conv=%s  plateau=%s" % (
             tr, pairs,
             per_tr["caps"][str(rows)]["arms"]["None"]["converged_at"],
             per_tr["caps"][str(rows)]["arms"]["None"]["plateau_fills_step"]))
 
-    verdict = {
-        "a_convergence": {"ok": ok_a, "total": tot_a, "bar": "<=64 steps on >=14/16 traces (unthrottled, per capacity)"},
-        "b_plateau_vs_lru": {"ok": sum(ok_b), "total": len(ok_b)},
-        "c_churn_at_max_cap": {"ok": sum(ok_c), "total": len(ok_c)},
-        "d_throttle_graceful": {"ok": sum(ok_d), "total": len(ok_d)},
+    a_pass = sum(1 for v in per_trace_a.values() if v)
+    spoilers_ok = all(spoiler_margin_fail) and all(spoiler_noretain_fail)
+    clauses = {
+        "a_convergence": {"traces_pass": a_pass, "traces": len(per_trace_a),
+                          "ok": a_pass >= min(14, len(per_trace_a))},
+        "b_plateau_vs_lru": {"ok_arms": sum(ok_b), "arms": len(ok_b),
+                             "ok": all(ok_b)},
+        "c_churn_at_max_cap": {"ok_traces": sum(ok_c), "traces": len(ok_c),
+                               "ok": all(ok_c)},
+        "d_throttle_graceful": {"ok_arms": sum(ok_d), "arms": len(ok_d),
+                                "ok": all(ok_d)},
+        "spoilers_must_fail": {"margin": sum(spoiler_margin_fail),
+                               "noretain": sum(spoiler_noretain_fail),
+                               "ok": spoilers_ok},
     }
-    out["verdict_detail"] = verdict
-    print(json.dumps(verdict, indent=1))
+    if not spoilers_ok:
+        verdict = "UNINFORMATIVE"
+    elif all(c["ok"] for k_, c in clauses.items() if k_ != "spoilers_must_fail"):
+        verdict = "PASS"
+    else:
+        verdict = "REFUTED"
+    out["clauses"] = clauses
+    out["verdict"] = verdict
+    print(json.dumps(clauses, indent=1))
+    print("G2:", verdict)
     with open(a.out, "w") as f:
         json.dump(out, f, indent=1)
     print("receipt ->", a.out)
