@@ -386,16 +386,21 @@ def burst_gate():
         a = (a @ a).clamp(-1, 1)
     torch.cuda.synchronize()
     mm = time.perf_counter() - t0
-    b = torch.randn(1, 64, device="cuda", dtype=torch.bfloat16)
-    w = torch.randn(64, 64, device="cuda", dtype=torch.bfloat16)
-    torch.matmul(b, w)
+    # Exec-dominated probe: an 8.8 MB device-to-device copy, the decode
+    # gemv's memory-bound profile (~12 us at boost). A tiny matmul cannot
+    # separate wake latency from clock collapse because its exec is ~2 us;
+    # this one collapses ~13x on a lazy host while wake adds a bounded
+    # +20-40 us on healthy interrupt-wait hosts (measured 34.6 us).
+    src = torch.empty(ROWBYTES_VRAM, dtype=torch.uint8, device="cuda")
+    dst = torch.empty_like(src)
+    dst.copy_(src)
     torch.cuda.synchronize()
 
     def probe(gap_s):
         ts = []
         for _ in range(100):
             t0 = time.perf_counter()
-            torch.matmul(b, w)
+            dst.copy_(src)
             torch.cuda.synchronize()
             ts.append(time.perf_counter() - t0)
             if gap_s:
@@ -404,10 +409,10 @@ def burst_gate():
 
     nogap = probe(0.0)
     gap = probe(0.002)
-    ratio = gap / nogap
+    bound = max(3.0 * nogap, nogap + 45e-6)
     print("burst gate: matmul20 %.0f ms  no-gap %.1f us  gap %.1f us  "
-          "ratio %.2f" % (mm * 1e3, nogap * 1e6, gap * 1e6, ratio))
-    return mm, ratio
+          "bound %.1f us" % (mm * 1e3, nogap * 1e6, gap * 1e6, bound * 1e6))
+    return mm, gap, bound
 
 
 def solo_rates(view, tier, threads):
@@ -465,13 +470,13 @@ def main():
 
     clock_mode, warm = clock_ladder(a.clock_mode)
     print("clock mode:", clock_mode)
-    mm, ratio = burst_gate()
-    if mm > 0.220 or ratio > 3.0:
+    mm, gap, bound = burst_gate()
+    if mm > 0.220 or gap > bound:
         if warm is not None:
             warm.stop()             # never sys.exit through a live CUDA
         sys.exit("box fails the burst-clock gate (matmul20 %.0f ms, "  # thread
-                 "gap/no-gap ratio %.2f) — lazy-ramp host, reject" %
-                 (mm * 1e3, ratio))
+                 "gap %.1f us > bound %.1f us) — lazy-ramp host, reject" %
+                 (mm * 1e3, gap * 1e6, bound * 1e6))
 
     os.makedirs(a.workdir, exist_ok=True)
     arena = os.path.join(a.workdir, "g4.arena")
@@ -499,7 +504,7 @@ def main():
     out = {"b_nvme_solo": b_nvme, "t_cpu_row_solo": t_cpu_row,
            "t_gpu_row_solo": t_gpu_row, "hot_rows": HOT_ROWS,
            "clock_mode": clock_mode, "burst_gate_matmul_s": mm,
-           "burst_gate_ratio": ratio}
+           "burst_gate_gap_s": gap, "burst_gate_bound_s": bound}
     arms = {}
     for name, prefetch in (("overlap", True), ("sequential", False)):
         res = run_arm(recs, view, tier, a.threads, prefetch)
