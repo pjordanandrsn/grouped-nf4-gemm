@@ -45,6 +45,9 @@ STEPS = 32
 M = 16                              # cold invocations per step
 P_SWEEP = (1, 2, 4, 8)
 ROWS_T = 300                        # >= max(P_SWEEP) * STEPS: no eviction
+SCRUB_FLOATS = 256 * 1024 * 1024    # 1 GiB fp32 — > any x86 L3; read before
+                                    # each timed arm so neither arm inherits
+                                    # the other's cache state (review round 1)
 
 
 def build(seed=20260823, E=640):
@@ -96,7 +99,7 @@ def cpu_exec(a_cat, pk, sc, eids, threads):
                               [1] * len(eids), list(eids), threads=threads)
 
 
-def run_arms(pk, sc, N, K, ids_stream, p, threads, spoiler=False):
+def run_arms(pk, sc, N, K, ids_stream, p, threads, scrub, spoiler=False):
     """One paired A/B pass. Returns per-step walls and counters."""
     a32 = torch.randn(M, K, dtype=torch.float32)
     a16 = a32[:max(p, 1)].to(torch.bfloat16).cuda()
@@ -108,11 +111,13 @@ def run_arms(pk, sc, N, K, ids_stream, p, threads, spoiler=False):
     for step in range(STEPS):
         ids = ids_stream[step]
         # ---- arm A: everything on CPU
+        float(scrub.sum())          # untimed: equalize cache state
         t0 = time.perf_counter()
         cpu_exec(a32, pk, sc, ids, threads)
         walls_a.append(time.perf_counter() - t0)
         # ---- arm B: promote p, CPU does the rest concurrently
         promo, rest = ids[:p], ids[p:]
+        float(scrub.sum())          # untimed: arm B must not read arm A's L3
         t0 = time.perf_counter()
         if p:
             tag = StepTag("cuda")
@@ -146,18 +151,21 @@ def run_arms(pk, sc, N, K, ids_stream, p, threads, spoiler=False):
 
 
 def correctness(pk, sc, N, K, threads, sample=4):
-    """Registered checks: CPU bit-exact vs reference; GPU within its own
-    committed bound (rel-max < 2e-2, test_mxfp4_interp); promoted bytes
-    identical to source."""
+    """Registered checks, each against its kernel's own committed contract:
+    CPU bit-exact vs the numpy executable spec (numpy in, the committed
+    tests' calling convention); GPU within its committed bound with the
+    reference built from the SAME bf16-rounded activations the kernel sees
+    (test_mxfp4_interp's procedure); promoted bytes identical."""
     rng = np.random.default_rng(1)
     eids = rng.choice(pk.shape[0], size=sample, replace=False).tolist()
     a32 = torch.randn(sample, K, dtype=torch.float32)
-    ref = torch.as_tensor(np.asarray(
-        cg.ref_gemv_grouped(a32, pk, sc, [1] * sample, eids, fmt="mxfp4")))
-    got_cpu = torch.as_tensor(np.asarray(
-        cg.gemv_mxfp4_grouped_cpu(a32, pk, sc, [1] * sample, eids,
-                                  threads=threads)))
-    cpu_exact = torch.equal(got_cpu, ref)                # committed contract
+    pk_np, sc_np = pk.numpy(), sc.numpy()
+    # CPU contract: fp32 activations; ref takes numpy, kernel takes torch.
+    ref_cpu = cg.ref_gemv_grouped(a32.numpy(), pk_np, sc_np,
+                                  [1] * sample, eids, fmt="mxfp4")
+    got_cpu = cg.gemv_mxfp4_grouped_cpu(a32, pk, sc, [1] * sample, eids,
+                                        threads=threads)
+    cpu_exact = np.array_equal(got_cpu.numpy(), ref_cpu)
     tr = Transient(N, K)
     side = torch.cuda.Stream()
     tag = StepTag("cuda")
@@ -167,12 +175,16 @@ def correctness(pk, sc, N, K, threads, sample=4):
     byte_ok = all(
         torch.equal(tr.blocks[assign[e]].cpu(), pk[e]) and
         torch.equal(tr.scales[assign[e]].cpu(), sc[e]) for e in eids)
-    a16 = a32.to(torch.bfloat16).cuda()
-    got_gpu = gemm_mxfp4_grouped(a16, tr.blocks, tr.scales, [1] * sample,
-                                 [assign[e] for e in eids])
+    # GPU contract: the committed bound is asserted against a reference fed
+    # the same bf16-rounded activations the kernel consumes.
+    a16 = a32.to(torch.bfloat16)
+    ref_gpu = cg.ref_gemv_grouped(a16.float().numpy(), pk_np, sc_np,
+                                  [1] * sample, eids, fmt="mxfp4")
+    got_gpu = gemm_mxfp4_grouped(a16.cuda(), tr.blocks, tr.scales,
+                                 [1] * sample, [assign[e] for e in eids])
     tag.record()
-    rel = ((got_gpu.float().cpu() - ref).abs().max()
-           / ref.abs().max()).item()
+    diff = np.abs(got_gpu.float().cpu().numpy() - ref_gpu)
+    rel = float(diff.max() / np.abs(ref_gpu).max())
     # retention: re-invoking produces hits and zero new H2D
     before = tr.cache.filled
     tag2 = StepTag("cuda")
@@ -202,9 +214,8 @@ def main():
         sys.exit("box fails the registered calibration gate: n*=%.2f"
                  % cal["nstar_direct"])
 
-    N, K = p2.SHAPES[SHAPE]
-    pk = sc = None
     N, K, pk, sc, keep = build()
+    scrub = torch.ones(SCRUB_FLOATS, dtype=torch.float32)
     rowbytes = N * (K // 2) + N * (K // 32)
     hide = cal["e3b"]["hidden_frac"]
     d_pred = (rowbytes / (cal["B_cpu_gbs"] * 1e9)
@@ -226,7 +237,7 @@ def main():
     rng0 = np.random.default_rng(3)
     perm = rng0.permutation(pk.shape[0])[:STEPS * M]
     stream0 = [perm[s * M:(s + 1) * M].tolist() for s in range(STEPS)]
-    wa0, wb0, c0, _, _ = run_arms(pk, sc, N, K, stream0, 0, a.threads)
+    wa0, wb0, c0, _, _ = run_arms(pk, sc, N, K, stream0, 0, a.threads, scrub)
     spread = abs(wa0 - wb0) / wa0
     print("p=0 validation: wall_A %.3f ms  wall_B %.3f ms  (%.1f%% apart), "
           "copies=%d" % (wa0 * 1e3, wb0 * 1e3, 100 * spread, c0))
@@ -246,7 +257,8 @@ def main():
                 stream = [perm[s * M:(s + 1) * M].tolist()
                           for s in range(STEPS)]
                 wa, wb, copies, tr, _ = run_arms(pk, sc, N, K, stream, p,
-                                                 a.threads, spoiler=spoiler)
+                                                 a.threads, scrub,
+                                                 spoiler=spoiler)
                 exp = p * STEPS
                 if not spoiler and copies != exp:
                     sys.exit("counter accounting: %d copies, expected %d"

@@ -89,6 +89,11 @@ spoiler passes the bar, G1 is reported as uninformative and not scored.
   no-reuse stream.
 * The A/B alternates inside the repeat loop (thermal drift lands on both
   arms), the `run_r2_wall` convention.
+* *(Amended in review, pre-data, no measurements taken)*: a 1 GiB untimed
+  read is inserted before **each** timed arm, so neither arm inherits the
+  other's L3/DRAM cache state — review found arm A's pass over the same
+  expert rows would otherwise pre-warm arm B and bias the paired difference
+  toward PASS.
 
 ## What would count as a miss
 
