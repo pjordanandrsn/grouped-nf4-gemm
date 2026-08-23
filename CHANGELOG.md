@@ -1,5 +1,95 @@
 # Changelog
 
+## 0.14.0 — 2026-08-23
+
+Minor release. 0.13.2 shipped before a large body of hybrid-tier and residency
+runtime work; this cuts all of it, plus the MXFP4 half of the 2 GiB offset fix.
+
+### Correctness
+
+**MXFP4 expert stacks past 2 GiB no longer fault — the port had dropped the cast
+([#205](https://github.com/pjordanandrsn/grouped-nf4-gemm/pull/205)).**
+0.13.2 fixed exactly this bug in the four NF4 kernels: `eid * stride_be` is
+signed-int32, so a packed stack over 2^31 bytes wraps to a negative offset and
+faults. The MXFP4 port of those kernels did not carry the `eid.to(tl.int64)`
+promotion across. Both `_gemm_mxfp4_grouped` and `_gemv_mxfp4_grouped` now
+promote `eid` to int64 before any stride product, mirroring `nf4_grouped`.
+
+Found live, not by inspection: a P2-G1 run died with
+`cudaErrorIllegalAddress` at transient-pool slot 244 (stride 8,812,800 bytes →
+2.20e9, past 2^31). The regression test lives in `kernel/test_offsets_2gib.py`
+alongside NF4's — deliberately **not** in `test_mxfp4_interp.py`, because
+`TRITON_INTERPRET=1` evaluates offsets with int64 semantics and the overflow
+cannot manifest there, so a test in that file would have validated nothing.
+
+Also corrected: the engine accepts a gpt-oss arena's own shape rather than the
+bake rewriting it (#154); ColdTier `ensure` is overlap-safe under concurrent
+callers (#102); three unread Bugbot findings (#130); and a Stage-3 verdict
+correction that #177 lost in transit (#179).
+
+### New capabilities
+
+- **Hybrid CPU tier** — `gnf4_native` now ships as a package (compile-at-
+  first-use AVX-512 kernels, C source as package data) with `cpu_grouped` as
+  its torch-facing wrapper: grouped GEMV and dgrad over packed NF4/MXFP4 bytes,
+  a persistent pinned pool, and a fused expert FFN.
+- **`RowPool`** — the weight-tier abstraction generalized to writable rows.
+- **FP8 KV cache and paged decode attention** — `fp8_kv` (quantize/pack/unpack)
+  and `fp8_paged_attn` (`fp8_paged_decode_attention`, plus a reference arm).
+- **CPU destination for cold experts** — `cold_cpu_view.ColdCpuView`, with
+  `cold_deadline.choose` supplying the time-to-contribution cost model the
+  destination rule consumes.
+- **Reclaimable VRAM residency** — `vram_slots.VramSlots`.
+- **Observed-reuse classification** — `reuse_profile.ReuseProfile`.
+- **Expert-keyed device row cache** — `dev_row_cache.DevRowCache`.
+- **`preadv` direct scatter** — cold segments land straight into the
+  kernel-shaped stacks; `attach_landing` closes the tier↔consumer loop.
+
+### Performance
+
+Measured on the paths shipped here:
+
+- ColdTier demote is a lazy heap rather than a full scan or sort — the sequence
+  #157/#158/#159/#175/#176/#182 closes **76–82% of the soft-hard gap**, after
+  `_demote_locked` was measured at 93% of it.
+- The `preadv` direct-scatter fill path measured **~43% faster** and materially
+  steadier than the staged path.
+- Native AVX-512 grouped GEMV reached **74.8% / 82.1%** of achievable bandwidth
+  at flagship shapes on bare metal (gate G2), with exactness passing everywhere.
+
+### Packaging
+
+- **`numpy` is now a declared dependency.** It was already load-bearing in
+  `nvme_reader` and became so in `cpu_grouped`; undeclared, a clean venv broke
+  at import.
+- `gnf4_native` is a real shipped package (`packages = ["gnf4_native"]`) with
+  `*.c` as package data — previously nothing outside `kernel/` shipped.
+- Nine modules added to the `py-modules` allowlist: `row_pool`, `fp8_kv`,
+  `fp8_paged_attn`, `cpu_grouped`, `cold_cpu_view`, `cold_deadline`,
+  `reuse_profile`, `vram_slots`, `dev_row_cache`.
+
+### Measurement and research artifacts (no runtime behavior change)
+
+The bulk of the diff since 0.13.2 is the Stage-3 / elastic-execution research
+record under `bench/` — preregistrations, gate receipts, and results. Most of
+its headline findings are **refutations**, and none of them change runtime
+behavior in this release:
+
+- Promotion mechanics do not pay as dispatched (P2-G1, #206); rank predicts
+  recurrence but cannot be spent (#200); which row you evict barely matters
+  (#198); ARC does not rescue this (#197); top-k does not explain when frequency
+  beats recency (#192); the deadline rule loses to its own baseline (gate 2,
+  #125).
+- The cache is LRU and LRU is ~1.9x off optimal — where the remaining wall is
+  (#185).
+- Gate 1 re-measured: storage is ~2% of cold cost; the earlier 20% used the
+  box's random ceiling, not its sequential one (#136/#137).
+- Promotion and the CPU tier share one DRAM budget (P2-G1c, #210); the
+  partitioned persistent pool — not retention — is what fails (P2-G2, #213).
+- SPEC amendment for the elastic execution controller (#203, #207, #211) and
+  the P2-G1b/G1c/G2 preregistrations (#208, #209, #212) are specification and
+  harness text, not shipped runtime.
+
 ## 0.13.2 — 2026-08-15
 
 ### Expert stacks past 2 GiB no longer fault — int64 offset arithmetic
