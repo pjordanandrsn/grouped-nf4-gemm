@@ -1,0 +1,484 @@
+{
+ "rows": [
+  {
+   "model": "olmoe",
+   "prompt": "prose",
+   "steps_held": 1.0,
+   "cap": 128,
+   "lru": 49380,
+   "lfu": 42199,
+   "rank": 51547,
+   "belady": 30048
+  },
+  {
+   "model": "olmoe",
+   "prompt": "prose",
+   "steps_held": 1.5,
+   "cap": 192,
+   "lru": 42543,
+   "lfu": 35568,
+   "rank": 46201,
+   "belady": 22577
+  },
+  {
+   "model": "olmoe",
+   "prompt": "prose",
+   "steps_held": 2.0,
+   "cap": 256,
+   "lru": 35939,
+   "lfu": 29725,
+   "rank": 41185,
+   "belady": 17258
+  },
+  {
+   "model": "olmoe",
+   "prompt": "code",
+   "steps_held": 1.0,
+   "cap": 128,
+   "lru": 46766,
+   "lfu": 34331,
+   "rank": 43059,
+   "belady": 24549
+  },
+  {
+   "model": "olmoe",
+   "prompt": "code",
+   "steps_held": 1.5,
+   "cap": 192,
+   "lru": 38140,
+   "lfu": 26986,
+   "rank": 36147,
+   "belady": 17066
+  },
+  {
+   "model": "olmoe",
+   "prompt": "code",
+   "steps_held": 2.0,
+   "cap": 256,
+   "lru": 25946,
+   "lfu": 21125,
+   "rank": 30776,
+   "belady": 12544
+  },
+  {
+   "model": "olmoe",
+   "prompt": "math",
+   "steps_held": 1.0,
+   "cap": 128,
+   "lru": 43786,
+   "lfu": 33467,
+   "rank": 46673,
+   "belady": 24058
+  },
+  {
+   "model": "olmoe",
+   "prompt": "math",
+   "steps_held": 1.5,
+   "cap": 192,
+   "lru": 33904,
+   "lfu": 26847,
+   "rank": 39524,
+   "belady": 17204
+  },
+  {
+   "model": "olmoe",
+   "prompt": "math",
+   "steps_held": 2.0,
+   "cap": 256,
+   "lru": 26148,
+   "lfu": 21644,
+   "rank": 33838,
+   "belady": 12845
+  },
+  {
+   "model": "olmoe",
+   "prompt": "dialogue",
+   "steps_held": 1.0,
+   "cap": 128,
+   "lru": 48511,
+   "lfu": 39521,
+   "rank": 51496,
+   "belady": 28037
+  },
+  {
+   "model": "olmoe",
+   "prompt": "dialogue",
+   "steps_held": 1.5,
+   "cap": 192,
+   "lru": 41126,
+   "lfu": 31593,
+   "rank": 44705,
+   "belady": 22031
+  },
+  {
+   "model": "olmoe",
+   "prompt": "dialogue",
+   "steps_held": 2.0,
+   "cap": 256,
+   "lru": 32626,
+   "lfu": 25435,
+   "rank": 39731,
+   "belady": 17634
+  },
+  {
+   "model": "granite",
+   "prompt": "prose",
+   "steps_held": 1.0,
+   "cap": 256,
+   "lru": 85471,
+   "lfu": 72126,
+   "rank": 96227,
+   "belady": 46606
+  },
+  {
+   "model": "granite",
+   "prompt": "prose",
+   "steps_held": 1.5,
+   "cap": 384,
+   "lru": 65680,
+   "lfu": 52634,
+   "rank": 79153,
+   "belady": 30001
+  },
+  {
+   "model": "granite",
+   "prompt": "prose",
+   "steps_held": 2.0,
+   "cap": 512,
+   "lru": 47288,
+   "lfu": 37249,
+   "rank": 63109,
+   "belady": 19284
+  },
+  {
+   "model": "granite",
+   "prompt": "code",
+   "steps_held": 1.0,
+   "cap": 256,
+   "lru": 84438,
+   "lfu": 51719,
+   "rank": 78488,
+   "belady": 40034
+  },
+  {
+   "model": "granite",
+   "prompt": "code",
+   "steps_held": 1.5,
+   "cap": 384,
+   "lru": 63141,
+   "lfu": 29836,
+   "rank": 57334,
+   "belady": 20810
+  },
+  {
+   "model": "granite",
+   "prompt": "code",
+   "steps_held": 2.0,
+   "cap": 512,
+   "lru": 24662,
+   "lfu": 15292,
+   "rank": 40521,
+   "belady": 9330
+  },
+  {
+   "model": "granite",
+   "prompt": "math",
+   "steps_held": 1.0,
+   "cap": 256,
+   "lru": 88700,
+   "lfu": 70478,
+   "rank": 95084,
+   "belady": 47903
+  },
+  {
+   "model": "granite",
+   "prompt": "math",
+   "steps_held": 1.5,
+   "cap": 384,
+   "lru": 70611,
+   "lfu": 51059,
+   "rank": 77060,
+   "belady": 30571
+  },
+  {
+   "model": "granite",
+   "prompt": "math",
+   "steps_held": 2.0,
+   "cap": 512,
+   "lru": 50841,
+   "lfu": 35054,
+   "rank": 60405,
+   "belady": 19456
+  },
+  {
+   "model": "granite",
+   "prompt": "dialogue",
+   "steps_held": 1.0,
+   "cap": 256,
+   "lru": 82805,
+   "lfu": 66333,
+   "rank": 86727,
+   "belady": 41838
+  },
+  {
+   "model": "granite",
+   "prompt": "dialogue",
+   "steps_held": 1.5,
+   "cap": 384,
+   "lru": 62743,
+   "lfu": 46765,
+   "rank": 70034,
+   "belady": 26206
+  },
+  {
+   "model": "granite",
+   "prompt": "dialogue",
+   "steps_held": 2.0,
+   "cap": 512,
+   "lru": 35416,
+   "lfu": 31011,
+   "rank": 54880,
+   "belady": 17427
+  },
+  {
+   "model": "qwen",
+   "prompt": "prose",
+   "steps_held": 1.0,
+   "cap": 96,
+   "lru": 43239,
+   "lfu": 41548,
+   "rank": 44534,
+   "belady": 31027
+  },
+  {
+   "model": "qwen",
+   "prompt": "prose",
+   "steps_held": 1.5,
+   "cap": 144,
+   "lru": 41369,
+   "lfu": 38915,
+   "rank": 42844,
+   "belady": 27119
+  },
+  {
+   "model": "qwen",
+   "prompt": "prose",
+   "steps_held": 2.0,
+   "cap": 192,
+   "lru": 37178,
+   "lfu": 36354,
+   "rank": 41052,
+   "belady": 24138
+  },
+  {
+   "model": "qwen",
+   "prompt": "code",
+   "steps_held": 1.0,
+   "cap": 96,
+   "lru": 44077,
+   "lfu": 42355,
+   "rank": 42888,
+   "belady": 31235
+  },
+  {
+   "model": "qwen",
+   "prompt": "code",
+   "steps_held": 1.5,
+   "cap": 144,
+   "lru": 42382,
+   "lfu": 39619,
+   "rank": 40982,
+   "belady": 26825
+  },
+  {
+   "model": "qwen",
+   "prompt": "code",
+   "steps_held": 2.0,
+   "cap": 192,
+   "lru": 39042,
+   "lfu": 37155,
+   "rank": 39135,
+   "belady": 23591
+  },
+  {
+   "model": "qwen",
+   "prompt": "math",
+   "steps_held": 1.0,
+   "cap": 96,
+   "lru": 44525,
+   "lfu": 39989,
+   "rank": 44774,
+   "belady": 31477
+  },
+  {
+   "model": "qwen",
+   "prompt": "math",
+   "steps_held": 1.5,
+   "cap": 144,
+   "lru": 42880,
+   "lfu": 36498,
+   "rank": 43027,
+   "belady": 27693
+  },
+  {
+   "model": "qwen",
+   "prompt": "math",
+   "steps_held": 2.0,
+   "cap": 192,
+   "lru": 39073,
+   "lfu": 33105,
+   "rank": 41687,
+   "belady": 24868
+  },
+  {
+   "model": "qwen",
+   "prompt": "dialogue",
+   "steps_held": 1.0,
+   "cap": 96,
+   "lru": 44149,
+   "lfu": 40792,
+   "rank": 45205,
+   "belady": 31473
+  },
+  {
+   "model": "qwen",
+   "prompt": "dialogue",
+   "steps_held": 1.5,
+   "cap": 144,
+   "lru": 42352,
+   "lfu": 37706,
+   "rank": 43006,
+   "belady": 27759
+  },
+  {
+   "model": "qwen",
+   "prompt": "dialogue",
+   "steps_held": 2.0,
+   "cap": 192,
+   "lru": 38541,
+   "lfu": 34761,
+   "rank": 41591,
+   "belady": 24917
+  },
+  {
+   "model": "gptoss",
+   "prompt": "prose",
+   "steps_held": 1.0,
+   "cap": 96,
+   "lru": 28075,
+   "lfu": 27692,
+   "rank": 36032,
+   "belady": 15753
+  },
+  {
+   "model": "gptoss",
+   "prompt": "prose",
+   "steps_held": 1.5,
+   "cap": 144,
+   "lru": 22380,
+   "lfu": 21661,
+   "rank": 27956,
+   "belady": 10573
+  },
+  {
+   "model": "gptoss",
+   "prompt": "prose",
+   "steps_held": 2.0,
+   "cap": 192,
+   "lru": 16086,
+   "lfu": 16668,
+   "rank": 24962,
+   "belady": 7291
+  },
+  {
+   "model": "gptoss",
+   "prompt": "code",
+   "steps_held": 1.0,
+   "cap": 96,
+   "lru": 31515,
+   "lfu": 31780,
+   "rank": 36381,
+   "belady": 18264
+  },
+  {
+   "model": "gptoss",
+   "prompt": "code",
+   "steps_held": 1.5,
+   "cap": 144,
+   "lru": 26150,
+   "lfu": 26208,
+   "rank": 29239,
+   "belady": 12672
+  },
+  {
+   "model": "gptoss",
+   "prompt": "code",
+   "steps_held": 2.0,
+   "cap": 192,
+   "lru": 19169,
+   "lfu": 21283,
+   "rank": 25323,
+   "belady": 8992
+  },
+  {
+   "model": "gptoss",
+   "prompt": "math",
+   "steps_held": 1.0,
+   "cap": 96,
+   "lru": 32062,
+   "lfu": 32029,
+   "rank": 37076,
+   "belady": 19269
+  },
+  {
+   "model": "gptoss",
+   "prompt": "math",
+   "steps_held": 1.5,
+   "cap": 144,
+   "lru": 27312,
+   "lfu": 26394,
+   "rank": 31310,
+   "belady": 13683
+  },
+  {
+   "model": "gptoss",
+   "prompt": "math",
+   "steps_held": 2.0,
+   "cap": 192,
+   "lru": 21089,
+   "lfu": 21691,
+   "rank": 26179,
+   "belady": 9820
+  },
+  {
+   "model": "gptoss",
+   "prompt": "dialogue",
+   "steps_held": 1.0,
+   "cap": 96,
+   "lru": 32775,
+   "lfu": 28887,
+   "rank": 37305,
+   "belady": 19267
+  },
+  {
+   "model": "gptoss",
+   "prompt": "dialogue",
+   "steps_held": 1.5,
+   "cap": 144,
+   "lru": 27783,
+   "lfu": 22266,
+   "rank": 30822,
+   "belady": 13305
+  },
+  {
+   "model": "gptoss",
+   "prompt": "dialogue",
+   "steps_held": 2.0,
+   "cap": 192,
+   "lru": 21053,
+   "lfu": 16828,
+   "rank": 26053,
+   "belady": 9385
+  }
+ ]
+}
