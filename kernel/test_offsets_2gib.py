@@ -23,6 +23,8 @@ import pytest
 import torch
 
 import nf4_grouped as NG
+import mxfp4_grouped as MX
+from mxfp4_pack_ref import dequant_mxfp4
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(),
                                 reason="offset boundary needs CUDA")
@@ -107,4 +109,96 @@ def test_experts_across_the_2gib_boundary():
         assert rel < 5e-2, f"grouped both-sides expert {e}: rel {rel:.3e}"
         del w_ref
     del B, A
+    torch.cuda.empty_cache()
+
+# ---------------------------------------------------------------------------
+# MXFP4: the port dropped NF4's int64 cast (found live by the P2-G1 box run:
+# illegal memory access at transient-pool slot 244, 244 x 8,812,800 > 2^31).
+# Same boundary, same fix, so the same test structure.
+
+MX_N, MX_K = 8192, 2048              # 8 MiB packed/expert: expert 256 = 2^31
+
+
+def _mx_stack(E, seed=13):
+    g = torch.Generator(device="cpu").manual_seed(seed)
+    B = torch.randint(0, 256, (E, MX_N, MX_K // 2), generator=g,
+                      dtype=torch.uint8).cuda()
+    S = torch.randint(100, 140, (E, MX_N, MX_K // 32), generator=g,
+                      dtype=torch.uint8).cuda()
+    return B, S
+
+
+def _mx_check(B, S, e, tag):
+    """Decode (sizes==1) + one M-tile call for expert e alone — the offset
+    under test is e * stride_be, shared by both kernels."""
+    w_ref = dequant_mxfp4(B[e].reshape(MX_N, MX_K // 32, 16), S[e]).float()
+    a1 = (torch.randn(1, MX_K, device="cuda") * 0.5).bfloat16()
+    got = MX.gemm_mxfp4_grouped(a1, B, S, [1], [e])
+    want = a1.float() @ w_ref.t()
+    rel = ((got.float() - want).abs().max() / want.abs().max()).item()
+    assert rel < 2e-2, f"{tag} decode expert {e}: rel {rel:.3e}"
+    a4 = (torch.randn(4, MX_K, device="cuda") * 0.5).bfloat16()
+    got = MX.gemm_mxfp4_grouped(a4, B, S, [4], [e])
+    want = a4.float() @ w_ref.t()
+    rel = ((got.float() - want).abs().max() / want.abs().max()).item()
+    assert rel < 2e-2, f"{tag} m-tile expert {e}: rel {rel:.3e}"
+    del w_ref
+    torch.cuda.empty_cache()
+
+
+def test_mxfp4_small_stack_control():
+    B, S = _mx_stack(E_SMALL)
+    for e in (0, E_SMALL - 1):
+        _mx_check(B, S, e, "mx-small")
+    del B, S
+    torch.cuda.empty_cache()
+
+
+def test_mxfp4_experts_across_the_2gib_boundary():
+    if not _mem_ok():
+        pytest.skip("needs ~6 GiB free device memory for the 2.3 GiB stack")
+    B, S = _mx_stack(E_BIG)
+    assert B.numel() > 2**31, "fixture must actually cross the boundary"
+    for e in SAMPLES:
+        _mx_check(B, S, e, "mx-big")
+    a = (torch.randn(2, MX_K, device="cuda") * 0.5).bfloat16()
+    got = MX.gemm_mxfp4_grouped(a, B, S, [1, 1], [0, 257])
+    for row, e in ((0, 0), (1, 257)):
+        w_ref = dequant_mxfp4(B[e].reshape(MX_N, MX_K // 32, 16), S[e]).float()
+        want = a[row:row + 1].float() @ w_ref.t()
+        rel = ((got[row:row + 1].float() - want).abs().max()
+               / want.abs().max()).item()
+        assert rel < 2e-2, f"mx grouped both-sides expert {e}: rel {rel:.3e}"
+        del w_ref
+    del B, S
+    torch.cuda.empty_cache()
+
+
+def test_mxfp4_pool_stride_past_2gib():
+    """The exact configuration that found the bug: an as_strided transient
+    pool over ONE flat buffer, row stride = packed + scales (8.8 MB), so the
+    stride exceeds the row payload and slot 250's byte offset is 2.20e9."""
+    if not _mem_ok():
+        pytest.skip("needs ~6 GiB free device memory for the 2.3 GiB pool")
+    N, K, rows = 5760, 2880, 260
+    pb = N * (K // 2)
+    stride = pb + N * (K // 32)
+    buf = torch.zeros(rows * stride, dtype=torch.uint8, device="cuda")
+    blocks = torch.as_strided(buf, (rows, N, K // 2), (stride, K // 2, 1))
+    scales = torch.as_strided(buf, (rows, N, K // 32), (stride, K // 32, 1),
+                              storage_offset=pb)
+    g = torch.Generator(device="cpu").manual_seed(3)
+    blk = torch.randint(0, 256, (N, K // 2), generator=g, dtype=torch.uint8)
+    scl = torch.randint(100, 140, (N, K // 32), generator=g, dtype=torch.uint8)
+    slot = 250
+    blocks[slot].copy_(blk)
+    scales[slot].copy_(scl)
+    a = (torch.randn(1, K, generator=g).float() * 0.5).bfloat16()
+    got = MX.gemm_mxfp4_grouped(a.cuda(), blocks, scales, [1], [slot])
+    torch.cuda.synchronize()
+    w_ref = dequant_mxfp4(blk.reshape(N, K // 32, 16).cuda(), scl.cuda()).float()
+    want = a.float().cuda() @ w_ref.t()
+    rel = ((got.float() - want).abs().max() / want.abs().max()).item()
+    assert rel < 2e-2, rel
+    del buf, w_ref
     torch.cuda.empty_cache()

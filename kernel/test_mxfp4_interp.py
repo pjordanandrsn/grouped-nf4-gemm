@@ -45,31 +45,3 @@ def test_interpreter_parity():
     got = mxfp4_grouped.gemm_mxfp4_grouped(a, B, S, sizes, eids)
     ref = _ref(a, B, S, sizes, eids)
     assert ((got.float() - ref).abs().max() / ref.abs().max()).item() < 2e-2
-
-def test_decode_expert_offset_past_2gib():
-    """Regression: eid * stride_be must be int64 -- a slot id whose byte
-    offset passes 2^31 faulted (illegal memory access) or wrapped before the
-    cast. Exercises the exact G1 transient-pool shape: an as_strided view over
-    one flat buffer, row stride 8.8 MB, slot 250 -> offset 2.20e9 > 2^31."""
-    if not torch.cuda.is_available():
-        pytest.skip("needs CUDA")
-    N, K, rows = 5760, 2880, 260
-    pb, sb = N * (K // 2), N * (K // 32)
-    stride = pb + sb
-    buf = torch.zeros(rows * stride, dtype=torch.uint8, device="cuda")
-    blocks = torch.as_strided(buf, (rows, N, K // 2), (stride, K // 2, 1))
-    scales = torch.as_strided(buf, (rows, N, K // 32), (stride, K // 32, 1),
-                              storage_offset=pb)
-    g = torch.Generator().manual_seed(3)
-    blk = torch.randint(0, 256, (N, K // 2), generator=g, dtype=torch.uint8)
-    scl = torch.randint(100, 140, (N, K // 32), generator=g, dtype=torch.uint8)
-    slot = 250                       # 250 * stride = 2.20e9 -- past int32
-    blocks[slot].copy_(blk)
-    scales[slot].copy_(scl)
-    a = torch.randn(1, K, generator=g, dtype=torch.float32).to(torch.bfloat16)
-    got = mxfp4_grouped.gemm_mxfp4_grouped(a.cuda(), blocks, scales, [1], [slot])
-    torch.cuda.synchronize()
-    W = dequant_mxfp4(blk.reshape(N, K // 32, 16).cuda(), scl.cuda())
-    ref = a.float().cuda() @ W.t()
-    rel = ((got.float() - ref).abs().max() / ref.abs().max()).item()
-    assert rel < 2e-2, rel
