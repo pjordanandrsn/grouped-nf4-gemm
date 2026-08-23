@@ -1,0 +1,46 @@
+row=8812800 B  predicted Delta=34.8 us/row  bar=24.3 us/row
+correctness: {"cpu_bit_exact": true, "bytes_identical": true, "gpu_rel_max": 0.002473144792020321, "gpu_within_committed_2e-2": true, "retention_zero_h2d": true}
+p=0 validation: wall_A 0.962 ms  wall_B 0.903 ms  (6.2% apart), copies=0
+
+   p  wall_A ms  wall_B ms  save/row us  realized/pred        arm
+   1      0.699      1.192       -492.2         -14.16 side-stream
+   2      0.702      1.271       -284.5          -8.18 side-stream
+   4      0.703      1.410       -177.0          -5.09 side-stream
+Traceback (most recent call last):
+  File "/root/gnf4/bench/cold-engine/p2_g1_promotion.py", line 295, in <module>
+    main()
+  File "/root/gnf4/bench/cold-engine/p2_g1_promotion.py", line 259, in main
+    wa, wb, copies, tr, _ = run_arms(pk, sc, N, K, stream, p,
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/gnf4/bench/cold-engine/p2_g1_promotion.py", line 145, in run_arms
+    torch.cuda.synchronize()
+  File "/opt/conda/lib/python3.11/site-packages/torch/cuda/__init__.py", line 1083, in synchronize
+    return torch._C._cuda_synchronize()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.AcceleratorError: CUDA error: an illegal memory access was encountered
+Search for `cudaErrorIllegalAddress' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+terminate called after throwing an instance of 'c10::AcceleratorError'
+  what():  CUDA error: an illegal memory access was encountered
+Search for `cudaErrorIllegalAddress' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Exception raised from c10_cuda_check_implementation at /pytorch/c10/cuda/CUDAException.cpp:44 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) + 0x80 (0x7fc15fd5fb80 in /opt/conda/lib/python3.11/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x11fb7 (0x7fc1bed16fb7 in /opt/conda/lib/python3.11/site-packages/torch/lib/libc10_cuda.so)
+frame #2: <unknown function> + 0xc77c79 (0x7fc160a5ac79 in /opt/conda/lib/python3.11/site-packages/torch/lib/libtorch_cuda.so)
+frame #3: <unknown function> + 0xc72ba3 (0x7fc160a55ba3 in /opt/conda/lib/python3.11/site-packages/torch/lib/libtorch_cuda.so)
+frame #4: <unknown function> + 0xc7a6d5 (0x7fc160a5d6d5 in /opt/conda/lib/python3.11/site-packages/torch/lib/libtorch_cuda.so)
+frame #5: <unknown function> + 0x48cbaf (0x7fc1b0ea2baf in /opt/conda/lib/python3.11/site-packages/torch/lib/libtorch_python.so)
+frame #6: c10::TensorImpl::~TensorImpl() + 0x9 (0x7fc15fd3cd69 in /opt/conda/lib/python3.11/site-packages/torch/lib/libc10.so)
+frame #7: <unknown function> + 0x7d5d58 (0x7fc1b11ebd58 in /opt/conda/lib/python3.11/site-packages/torch/lib/libtorch_python.so)
+frame #8: <unknown function> + 0x7d60dc (0x7fc1b11ec0dc in /opt/conda/lib/python3.11/site-packages/torch/lib/libtorch_python.so)
+<omitting python frames>
+frame #18: <unknown function> + 0x29d90 (0x7fc602967d90 in /usr/lib/x86_64-linux-gnu/libc.so.6)
+frame #19: __libc_start_main + 0x80 (0x7fc602967e40 in /usr/lib/x86_64-linux-gnu/libc.so.6)
+
