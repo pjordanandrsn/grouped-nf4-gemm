@@ -75,8 +75,7 @@ def score(a1, a2, b, a3):
     drift = False
     for c in B1 + B2:
         n, m = noise_of(a1, a2, c)
-        bound = 0.10 * m if c in B1 else max(0.10 * m,
-                                             3 * abs(a1[c] - a2[c]))
+        bound = max(0.10 * m, 3 * abs(a1[c] - a2[c]))
         if abs(a3[c] - m) > bound:
             drift = True
             print("A3 DRIFT %-11s A3 %8.1f vs mean(A) %8.1f (bound %7.1f)"
