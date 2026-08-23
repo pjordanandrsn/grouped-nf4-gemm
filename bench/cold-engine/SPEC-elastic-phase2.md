@@ -6,6 +6,10 @@ per-gate preregistrations before each measurement. Every number below traces
 to a merged receipt; every invariant traces to the measured trap that made it
 necessary.
 
+Revised on review (#203, both Bugbot findings): execution demotion when the
+GPU leads — placement decoupled from residency — and the equilibrium predicate
+unified with the deadband. The revisions are marked where they land.
+
 Lineage: [`PREREG-elastic-promotion.md`](PREREG-elastic-promotion.md) →
 [`RESULTS-elastic-promotion.md`](RESULTS-elastic-promotion.md) (gate E).
 Authorised by gate E passing; the controller was explicitly out of scope
@@ -61,8 +65,19 @@ NVMe:  cold tier (unchanged)
 ```
 
 **Single source of truth: DRAM.** Promotion *copies*, never migrates; the
-DRAM row remains valid. Contraction is therefore **free** — execute on CPU
-again and let the VRAM row lapse. No write-back, no invalidation protocol.
+DRAM row remains valid. Contraction therefore comes in two forms, and only
+one moves data:
+
+* **execution contraction** — route a resident expert's invocation to CPU
+  anyway. Free, immediate, per-step; no bytes move. This, not eviction, is
+  how the controller rebalances when the GPU is the long pole (§5 — revised:
+  the first draft only stopped promoting, and since retain-on-execute never
+  evicts without insert pressure, an over-promoted pool would have kept
+  feeding the GPU forever).
+* **capacity contraction** — actually freeing rows: pressure-driven,
+  event-gated, `shrink()` (§6). Idle resident rows cost capacity, never wall.
+
+No write-back, no invalidation protocol in either direction.
 
 | component | exists today | phase-2 change |
 |---|---|---|
@@ -81,7 +96,12 @@ the measured don't-care band; no new allocator states are introduced.
 
 ## 4. The promotion path
 
-1. Executor assigns the step's invocations: VRAM-resident → GPU; else CPU.
+1. Executor assigns the step's invocations: VRAM-resident → GPU **by
+   default**, else CPU — and the controller may override the default,
+   directing resident invocations to CPU when the GPU is the long pole.
+   **Placement is the actuator; residency follows it** (revised — a hard
+   residency→placement binding deadlocked the min-max loop in the
+   GPU-long-pole direction).
 2. Controller (§5) picks `p ≥ 0` CPU-assigned invocations to promote — any
    `p` of them; there is no ranking to compute (E2).
 3. Each promoted row: pinned-staging H2D on the **side stream**; a copy event
@@ -113,8 +133,11 @@ each step:
   if t_cpu > (1 + δ_hi) · t_gpu and vram_free > RESERVE:
       p = min(cpu_queue, slack_rows(), GROW_CAP)     # promote, grow if room
   elif t_cpu < (1 − δ_lo) · t_gpu:
-      p = 0                          # GPU is the long pole: stop copying.
-                                     # contraction is passive and free (§3)
+      p = 0                          # stop copying, and REBALANCE:
+      q = min(ceil((t_gpu − t_cpu) / t_cpu_row), DEMOTE_CAP)
+      route q resident invocations to CPU this step   # execution
+                                     # contraction: free, no bytes move (§3).
+                                     # capacity reclaim stays pressure-only.
   else:
       p = p_prev                     # deadband: hold
 every PERIOD (≈256) steps:
@@ -127,8 +150,17 @@ Hysteresis is two-sided (`δ_hi > δ_lo`, promote-age ≥ 2·PERIOD, shrink need
 evicting and reloading it would destroy the retention benefit that is the one
 measured win. The transient pool is the fast half by construction.
 
-Equilibrium: `|t_cpu − t_gpu| ≤ δ_lo · max(·)` **or** a resource is pinned
-(vram_free ≤ RESERVE, or cpu_queue = 0). That is the min-max target realised.
+Equilibrium — **the same predicate as the hold band** (revised: the first
+draft defined equilibrium at δ_lo while the controller held anywhere inside
+δ_hi, so it could hold forever without ever "converging" by G2's measure):
+
+```
+equilibrium  ≜  (1 − δ_lo) · t_gpu ≤ t_cpu ≤ (1 + δ_hi) · t_gpu
+                or a pinned resource (vram_free ≤ RESERVE, cpu_queue = 0)
+```
+
+G2 measures convergence **into this band**; `δ_lo`/`δ_hi` are the hysteresis
+edges of the same band, not a second, tighter target.
 
 **The retention window is emergent, not configured.** A transient pool of
 `rows_t` at promotion rate `r` holds a row for `W ≈ rows_t / r` steps; E1's
