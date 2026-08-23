@@ -557,6 +557,7 @@ def test_pool_spin_budget_does_not_change_bits():
         cg.pool_spin_us(0)
         cg.pool_stop()
 
+@needs_native
 def test_batch_rows_bit_exact_after_row_outer_blocking():
     """P4 (e4b objective-revision): the row-chunk-outer retiling permutes
     only the (row, column) visit order; every output element's k-descent is

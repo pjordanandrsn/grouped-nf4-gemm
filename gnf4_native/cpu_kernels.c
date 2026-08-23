@@ -701,26 +701,14 @@ static void nf4_range(int64_t lo, int64_t hi, void *argp) {
          * work items — possibly different threads — and re-read the
          * weights from DRAM every time, which is exactly the amortization
          * G8 measures. */
-        /* Row-chunk OUTER, columns inner (P4, e4b objective-revision):
-         * the old column-outer order re-streamed the whole activation
-         * block through L3 once PER COLUMN (N x rows x K x 4 bytes per
-         * call ~ 1.6 GB at the B=16 serving shape, vs 76 MB of weights)
-         * -- the measured rows-penalty (83.5 vs 124.3 GB/s achieved) and
-         * the 3.5-3.8x in-executor loss are that traffic. This order
-         * reads each activation chunk once per TILE (a_chunk ~64 KB,
-         * L1/L2-hot across the tile's 32 columns) while the tile's
-         * weights (~32 KB) stay L2-resident across row chunks. Only the
-         * (row, col) visit order changes; each output element's k-descent
-         * is untouched, so the locked tree and bit-exactness hold. */
-        {
+        for (int64_t n = tn; n < tn_end; n++) {
             int32_t rem = c->sizes[g];
             int64_t r0 = 0;
             while (rem > 0) {
                 int T = rem > NF4_CELL_ROWS ? NF4_CELL_ROWS : rem;
-                for (int64_t n = tn; n < tn_end; n++)
-                    nf4_cell(a_g + r0 * c->K, T, c->K, w_e + n * (c->K / 2),
-                             am_e + n * (c->K / 64), out_g + r0 * c->N + n,
-                             c->N, c->use512);
+                nf4_cell(a_g + r0 * c->K, T, c->K, w_e + n * (c->K / 2),
+                         am_e + n * (c->K / 64), out_g + r0 * c->N + n,
+                         c->N, c->use512);
                 r0 += T;
                 rem -= T;
             }
@@ -1091,15 +1079,14 @@ static void mx_range(int64_t lo, int64_t hi, void *argp) {
             continue;
         }
 #endif
-        {   /* row-chunk outer, columns inner: see nf4_range (P4) */
+        for (int64_t n = tn; n < tn_end; n++) {   /* row chunking: see nf4_range */
             int32_t rem = c->sizes[g];
             int64_t r0 = 0;
             while (rem > 0) {
                 int T = rem > NF4_CELL_ROWS ? NF4_CELL_ROWS : rem;
-                for (int64_t n = tn; n < tn_end; n++)
-                    mx_cell(a_g + r0 * c->K, T, c->K, w_e + n * (c->K / 2),
-                            sc_e + n * (c->K / 32), out_g + r0 * c->N + n,
-                            c->N, c->use512);
+                mx_cell(a_g + r0 * c->K, T, c->K, w_e + n * (c->K / 2),
+                        sc_e + n * (c->K / 32), out_g + r0 * c->N + n,
+                        c->N, c->use512);
                 r0 += T;
                 rem -= T;
             }
