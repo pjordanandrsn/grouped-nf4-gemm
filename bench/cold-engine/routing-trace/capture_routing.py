@@ -77,6 +77,37 @@ def env_fingerprint(model_path, model, repo_id=None):
             "architectures": getattr(model.config, "architectures", None)}
 
 
+def check_rank_invariants(rec, n_layers):
+    """The preregistered capture check. Returns an error string, or None.
+
+    Rank order must be a PERMUTATION of the sorted routed set -- same experts,
+    different order -- and the near-miss band must not intersect the selected
+    set. A capture that reorders anything else is not what it claims to be
+    (bench/cold-engine/PREREG-router-rank.md).
+
+    A function rather than a loop inlined in main() so it can be tested
+    without a model: main() only runs after a multi-gigabyte download, which
+    is the worst place to discover a check is wrong. The inline version also
+    bound `a` and clobbered the argparse namespace (Bugbot, gnf4#199).
+    """
+    for i in range(n_layers):
+        key = str(i)
+        sel = rec["routed"][key]
+        ranked = rec["routed_rank"][key]
+        if sorted(ranked) != sorted(sel):
+            return ("rank order is not a permutation of the routed set at "
+                    "step %s layer %d: %s vs %s"
+                    % (rec.get("step"), i, sel, ranked))
+        if len(set(ranked)) != len(ranked):
+            return ("rank order repeats an expert at step %s layer %d: %s"
+                    % (rec.get("step"), i, ranked))
+        nm = (rec.get("near_miss") or {}).get(key)
+        if nm is not None and set(nm) & set(sel):
+            return ("near-miss band overlaps the selected set at step %s "
+                    "layer %d: %s vs %s" % (rec.get("step"), i, sel, nm))
+    return None
+
+
 def n_experts_of(model):
     """E, however this architecture spells it. Used to identify the router by
     the shape of its weight rather than by a name list."""
@@ -436,16 +467,9 @@ def main():
             # must be a PERMUTATION of the sorted ids -- same experts, different
             # order. A capture that reorders anything else is not what it says
             # it is (bench/cold-engine/PREREG-router-rank.md).
-            for i in range(len(gates)):
-                a, b = rec["routed"][str(i)], rec["routed_rank"][str(i)]
-                if sorted(b) != a:
-                    sys.exit("rank order is not a permutation of the routed "
-                             "set at step %d layer %d: %s vs %s"
-                             % (s - 1, i, a, b))
-                nm = rec.get("near_miss", {}).get(str(i))
-                if nm is not None and set(nm) & set(a):
-                    sys.exit("near-miss band overlaps the selected set at "
-                             "step %d layer %d" % (s - 1, i))
+            err = check_rank_invariants(rec, len(gates))
+            if err:
+                sys.exit(err)
             out.append(rec)
     for h in hs:
         h.remove()
