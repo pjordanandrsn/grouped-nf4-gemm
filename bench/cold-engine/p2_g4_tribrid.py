@@ -2,10 +2,11 @@
 
 Registered in bench/cold-engine/PREREG-p2-g4.md. Every component is the
 shipped artifact: nvme_arena.bake (layout contract-tested against the
-engine), ColdTier(pinned=True) as the DRAM hot set — the CPU kernel reads
-the tier's one flat pinned landing buffer DIRECTLY via as_strided stacks
-(tier_stacks below), SegmentedRowPool (#217) as the VRAM pool with the G1b
-burst copy path, and the MXFP4 kernels on the same bytes end to end.
+engine), ColdTier(pinned=True) as the DRAM hot set, ColdCpuView's copy path
+materializing the kernel-shaped CONTIGUOUS stacks (the CPU kernel's
+contract; stacks re-seated pinned pre-use so VRAM fills stay async),
+SegmentedRowPool (#217) as the VRAM pool with the G1b burst copy path, and
+the MXFP4 kernels on the same bytes end to end.
 
 The prefetch thread is the ONLY ColdTier user between its spawn and the
 next step's join (single-controller, like every allocator here): per step,
@@ -37,7 +38,8 @@ from mxfp4_grouped import gemm_mxfp4_grouped                # noqa: E402
 from mxfp4_loader import (DOWN_BLOCKS, DOWN_SCALES,         # noqa: E402
                           GATE_UP_BLOCKS, GATE_UP_SCALES)
 from nvme_arena import bake, load_index                     # noqa: E402
-from nvme_residency import ColdTier, segment_geometry       # noqa: E402
+from nvme_residency import ColdTier                         # noqa: E402
+from cold_cpu_view import ColdCpuView                       # noqa: E402
 from segmented_pool import SegmentedRowPool                 # noqa: E402
 from replay_dev_cache import load                           # noqa: E402
 from test_nvme_arena import _st_bytes                       # noqa: E402
@@ -99,20 +101,20 @@ def load_ground(root):
     for k, d in raw.items()}
 
 
-def correctness_checks(stacks, tier, ground, recs, threads):
+def correctness_checks(view, tier, ground, recs, threads):
     """The prereg's three live checks, sampled."""
     checks = {}
-    bs, ss = stacks[GATE_UP_BLOCKS], stacks[GATE_UP_SCALES]
+    bs, ss = view.stacks[GATE_UP_BLOCKS], view.stacks[GATE_UP_SCALES]
     ok_bytes = True
     for (lay, e), segs in ground.items():
-        slot = tier.ensure(lay, [e])[0]
+        slot = view.ensure(lay, [e])[0]
         got_b = bytes(bs[slot].contiguous().view(torch.uint8).numpy().tobytes())
         got_s = bytes(ss[slot].contiguous().view(torch.uint8).numpy().tobytes())
         ok_bytes &= got_b == segs[GATE_UP_BLOCKS]
         ok_bytes &= got_s == segs[GATE_UP_SCALES]
     checks["tier_rows_byte_identical"] = bool(ok_bytes)
     (lay, e) = next(iter(ground))
-    slot = tier.ensure(lay, [e])[0]
+    slot = view.ensure(lay, [e])[0]
     a32 = torch.randn(2, K1, dtype=torch.float32)
     ref = cg.ref_gemv_grouped(a32.numpy(), bs.numpy(), ss.numpy(),
                               [1, 1], [slot, slot], fmt="mxfp4")
@@ -169,33 +171,35 @@ def nvme_probe(path, gib=2):
     return n / (time.perf_counter() - t0)
 
 
-def tier_stacks(tier, index):
-    """The CPU kernel's two gate/up stacks, read DIRECTLY from the tier's
-    one flat pinned landing buffer: as_strided with the arena's own row
-    stride and intra-row segment offsets (segment_geometry). No second
-    copy, no ColdCpuView — the O_DIRECT scatter path needs 4096-multiple
-    segment lengths (the scales segment is not), but a strided READ has no
-    such constraint, and alloc_landing(pinned=True) is a real pin_memory()
-    tensor, so VRAM fills from these rows are genuinely async."""
-    buf = torch.frombuffer(tier.buffer, dtype=torch.uint8)
-    out = {}
-    for suf in (GATE_UP_BLOCKS, GATE_UP_SCALES):
-        _dt, shape, off, _ln = segment_geometry(index, suf)
-        out[suf] = buf.as_strided((tier.hot_rows, *shape),
-                                  (tier.row_stride, shape[1], 1),
-                                  storage_offset=off)
-    return out
+def make_view(tier, index):
+    """The CPU kernel's contiguous, kernel-shaped stacks: ColdCpuView's copy
+    path (the strided-read shortcut violated gemv_mxfp4_grouped_cpu's
+    contiguity contract — the shipped view exists precisely to satisfy it),
+    with the stacks re-seated as PINNED tensors before any materialization:
+    segment_into writes through self.stacks[suffix] at fill time, so the
+    swap is transparent to the artifact, host memcpys land in pinned memory,
+    and VRAM fills from these rows stay genuinely async."""
+    view = ColdCpuView(tier, index, (GATE_UP_BLOCKS, GATE_UP_SCALES))
+    if torch.cuda.is_available():
+        for suf in view.segments:
+            view.stacks[suf] = view.stacks[suf].pin_memory()
+    return view
 
 
 class Prefetcher:
-    def __init__(self, tier):
-        self.tier = tier
+    """Prefetch through the VIEW, not the bare tier: a tier-resident row
+    whose materialization memcpys still run inside the step would move the
+    landing cost back into the wall. The view is single-controller like the
+    tier; join-before-next-use keeps it single-user."""
+
+    def __init__(self, view):
+        self.view = view
         self.th = None
 
     def spawn(self, routed):
         def work():
             for lay, ex in routed:
-                self.tier.ensure(lay, ex)
+                self.view.ensure(lay, ex)
         self.th = threading.Thread(target=work)
         self.th.start()
 
@@ -205,7 +209,7 @@ class Prefetcher:
             self.th = None
 
 
-def run_arm(recs, stacks, tier, threads, prefetch):
+def run_arm(recs, view, tier, threads, prefetch):
     k = 4
     m = L_LAYERS * k
     pairs = L_LAYERS * E_EXPERTS
@@ -216,8 +220,8 @@ def run_arm(recs, stacks, tier, threads, prefetch):
     a32 = torch.randn(m, K1, dtype=torch.float32)
     a16 = a32.to(torch.bfloat16).cuda()
     stage = torch.empty(SEG_ROWS, dtype=torch.int32).pin_memory()
-    blocks_stack = stacks[GATE_UP_BLOCKS]
-    scales_stack = stacks[GATE_UP_SCALES]
+    blocks_stack = view.stacks[GATE_UP_BLOCKS]
+    scales_stack = view.stacks[GATE_UP_SCALES]
 
     def routed_of(r):
         return [(int(lay), [e for e in ex])
@@ -227,7 +231,7 @@ def run_arm(recs, stacks, tier, threads, prefetch):
     dry = routed_of(recs[0])
     fills_before = tier.reader.reads if hasattr(tier, "reader") else 0
     for lay, ex in dry:
-        slots = tier.ensure(lay, ex)
+        slots = view.ensure(lay, ex)
         tag = StepTag("cuda")
         placed, need, _ = pool.want(lay, ex, tag, budget=len(ex))
         with torch.cuda.stream(side):
@@ -250,7 +254,7 @@ def run_arm(recs, stacks, tier, threads, prefetch):
         torch.cuda.synchronize()
         tag.record()
 
-    pf = Prefetcher(tier)
+    pf = Prefetcher(view)
     walls, cpu_rows_s, gpu_rows_s, nvme_bytes_s = [], [], [], []
     row_disk = tier.row_stride
     # per-step NVMe attribution blurs one step under prefetch (t's counter
@@ -264,7 +268,7 @@ def run_arm(recs, stacks, tier, threads, prefetch):
         t0 = time.perf_counter()
         slots_by_layer = {}
         for lay, ex in r:
-            slots_by_layer[lay] = tier.ensure(lay, ex)
+            slots_by_layer[lay] = view.ensure(lay, ex)
         if prefetch and nxt:
             pf.spawn(nxt)
         gpu_by_seg = {}
@@ -317,9 +321,9 @@ def run_arm(recs, stacks, tier, threads, prefetch):
             "nvme_bytes": nvme_bytes_s, "tier_stats": tier.stats()}
 
 
-def solo_rates(stacks, tier, threads):
-    blocks_stack = stacks[GATE_UP_BLOCKS]
-    scales_stack = stacks[GATE_UP_SCALES]
+def solo_rates(view, tier, threads):
+    blocks_stack = view.stacks[GATE_UP_BLOCKS]
+    scales_stack = view.stacks[GATE_UP_SCALES]
     a32 = torch.randn(64, K1, dtype=torch.float32)
     slots = list(range(64))
     ts = []
@@ -383,11 +387,11 @@ def main():
     ground = load_ground(snap)
     index = load_index(arena)
     tier = ColdTier(arena, hot_rows=HOT_ROWS, pinned=True, index=index)
-    stacks = tier_stacks(tier, index)
+    view = make_view(tier, index)
 
     meta, recs = load(os.path.join(HERE, "rank-2026-08-22",
                                    "gptoss_code.jsonl"))
-    t_cpu_row, t_gpu_row = solo_rates(stacks, tier, a.threads)
+    t_cpu_row, t_gpu_row = solo_rates(view, tier, a.threads)
     print("solo rates: t_cpu_row %.1f us  t_gpu_row %.1f us"
           % (t_cpu_row * 1e6, t_gpu_row * 1e6))
 
@@ -395,7 +399,7 @@ def main():
            "t_gpu_row_solo": t_gpu_row, "hot_rows": HOT_ROWS}
     arms = {}
     for name, prefetch in (("overlap", True), ("sequential", False)):
-        res = run_arm(recs, stacks, tier, a.threads, prefetch)
+        res = run_arm(recs, view, tier, a.threads, prefetch)
         arms[name] = res
         med = statistics.median(res["walls"][STEADY_LO:STEADY_HI])
         print("%s: steady median wall %.2f ms" % (name, med * 1e3))
@@ -417,7 +421,7 @@ def main():
     g4a = medA <= 1.15 * mx
     g4b = medA <= 0.80 * medB
     spoiler_fails = medB > 1.15 * mx
-    checks = correctness_checks(stacks, tier, ground, recs, a.threads)
+    checks = correctness_checks(view, tier, ground, recs, a.threads)
     void = not all(v for v in checks.values())
     verdict = ("UNINFORMATIVE" if not spoiler_fails else
                "VOID" if void else
