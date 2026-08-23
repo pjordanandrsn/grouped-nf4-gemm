@@ -43,7 +43,7 @@ def run_controller(meta, recs, rows, promo_frac=None, spoiler=None):
                     seen.add((L, e))
                     novelty += 1
             tag = StepTag("cpu")
-            assign, need = c.want(L, ex, tag)
+            _assign, need = c.want(L, ex, tag)
             tag.record()
             if spoiler == "noretain":
                 fills += len(need)
@@ -65,7 +65,7 @@ def run_controller(meta, recs, rows, promo_frac=None, spoiler=None):
             "miss": miss_series, "m": m}
 
 
-def lru_eval_window(recs, rows, warm_from=0, count_from=128):
+def lru_eval_window(recs, rows, count_from=128):
     cache, f = OrderedDict(), 0
     for t, r in enumerate(recs):
         for L, ex in r["routed"].items():
