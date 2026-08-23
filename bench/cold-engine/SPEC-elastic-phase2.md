@@ -81,7 +81,7 @@ No write-back, no invalidation protocol in either direction.
 
 | component | exists today | phase-2 change |
 |---|---|---|
-| persistent pool | `DevRowCache`/`VramSlots` retention + `hot_ids` placement | slow resize only (§5); LFU-style promotion from transient (the one policy lever that moves transfers: 43/44/22/2% of gap by model) |
+| persistent pool | `DevRowCache`/`VramSlots` retention + `hot_ids` placement | slow resize only (§6); keeps the shipped static `hot_ids` placement. Per-key LFU promotion from transient was G2's partition failure and is retired (G2', #213) — the offline 43/44/22/2% gap-closing lever did not survive contact with replay |
 | transient pool | — | a second `DevRowCache` instance; same states, same event gating, same `protected = rows_t − k` |
 | copy path | pinned staging + side-stream H2D (the 88% hide *is* this path) | promotion enqueue; copy-event gate before first GPU use |
 | CPU tier | phase-2 grouped GEMV kernel | executor may re-route an invocation to GPU after promotion lands |
@@ -181,10 +181,23 @@ each step:
   un-budgeted cold rows execute with no state change — the next recurrence
   re-qualifies them (retain-on-execute has no memory to corrupt)
 
-every PERIOD (≈256) steps:
-  persistent ← LFU-promote transient rows resident ≥ 2·PERIOD   (hysteresis)
-  persistent shrink iff per-row hit rate < θ for 2 consecutive periods
 ```
+
+**Persistence is the pool's protected budget, not a second pool (G2
+re-founding, #213).** G2 measured the partitioned per-key persistent pool
+failing on both of its own mechanisms — the static reservation starved the
+transient half (62× ideal-LRU where the working set nearly fit) and bulk
+PERIOD promotions destabilized convergence — while every arm where the
+partition stayed empty ran at 1.00–1.06× LRU. The shipped allocator's own
+semantics already state the fix: `protected` is *"a budget WITHIN the
+arena, not a second arena"* (`VramSlots.__init__`). So §5 keeps ONE
+physical pool with `protected = rows − k` (I1) and **retires per-key
+persistent bookkeeping entirely** — no PERIOD batches, no LFU set, no θ.
+(The RESULTS sketch named "trickle promotion" as an alternative; per-key
+pinning does not exist in the shipped allocator and inventing it would
+trade a measured artifact for a model — retired unbuilt.) Shrink-survival
+under KV pressure, the one reason a slow-moving core was wanted, is G3's
+scope and will be registered against the real `shrink()` there.
 
 Observables (per step, EWMA α ≈ 1/16): cold mass `miss_t`, novelty `new_t`
 (first-ever (layer, expert) arrivals), fills, `vram_free`, transient hit
@@ -195,18 +208,14 @@ constraint are retired** — they steered the objective G1c refuted. A GPU
 long pole is a fault condition here (`t_gpu_row ≪ t_cpu_row`), handled by
 `pressure()` and the OFF switch, not an operating point to balance around.
 
-Hysteresis on the persistent pool is unchanged, for the same measured
-reason as before: continuously evicting and reloading it would destroy the
-retention benefit that is the one measured win. The transient pool is the
-fast half by construction.
-
 **Equilibrium** — residency has converged when promotions chase only
 novelty and the split is stable:
 
 ```
 converged  ≜  EWMA(fills) ≤ (1 + η) · EWMA(new_t)   # fills track first
                                                     # arrivals only
-stable     ≜  no grow/shrink and no persistent-pool change this PERIOD
+stable     ≜  no grow/shrink this PERIOD (sizing only — G2': no
+              per-key persistent state exists to change)
 equilibrium ≜ converged and stable
 ```
 
@@ -351,10 +360,25 @@ before any wall number is read.
   post-convergence `EWMA(fills) ≤ (1 + η)·EWMA(novelty)`, η = 0.25 — §5's
   own predicate; (d) *throttle gracefulness*: PROMO_FRAC ∈ {1/16, 1/8, 1/4}
   degrades convergence ≤ 2× and plateau fills ≤ 1.05× vs unthrottled.
-  Spoilers, both must fail: `protected = rows` (the I1 margin trap) must
-  thrash past the (c) bound; a no-retention arm (evict-after-execute) must
-  plateau at all-miss. Refuted ⇒ the law's budgets/hysteresis are wrong —
-  fixed in spec, not tuned live.
+  Spoilers, both must fail: the I1 margin trap must thrash past the (c)
+  bound; a no-retention arm (evict-after-execute) must plateau at all-miss.
+  Refuted ⇒ the law's budgets/hysteresis are wrong — fixed in spec, not
+  tuned live.
+  **Outcome 2026-08-23: REFUTED** ([RESULTS-p2-g2.md](RESULTS-p2-g2.md)) —
+  the partitioned persistent pool starved the transient half (62× LRU at
+  the near-fitting capacity) and its bulk PERIOD promotions destabilized
+  convergence; the transient law itself ran 1.00–1.06× LRU wherever the
+  partition stayed empty. Clause (c) was additionally mis-scoped
+  (capacity-inadequate arms gated). Superseded by G2'.
+* **P2-G2' (residency convergence, single pool):** the same four claims on
+  the §5 law as re-founded — ONE `DevRowCache`, `protected = rows − k`
+  (I1), no per-key persistence — with two registered scope corrections:
+  clause (c) evaluates **capacity-adequate arms only** (pairs ≤ 0.9 ×
+  rows) and the capacity sweep extends to 2048 so every trace has at least
+  one adequate arm. Bars otherwise identical to G2 ((a) ≤ 64 steps on
+  ≥ 14/16 traces at every capacity; (b) ≤ 1.10× ideal-LRU at every arm;
+  (d) throttle ≤ 2× convergence, ≤ 1.05× fills). Same two spoilers, both
+  must fail.
 * **P2-G3 (elasticity):** mid-run VRAM ballast injection: no OOM; transient
   shrinks within 2 steps; wall degrades monotonically (no cliff); recovery
   within 64 steps of release.
@@ -379,7 +403,7 @@ The near-miss band (still unused, still a separate registered candidate).
 | risk | why it is believed small | falsifier |
 |---|---|---|
 | DRAM contention between CPU GEMV and H2D staging | measured jointly: 7.8% completion inflation while absorbing a full copy stream | P2-G1 realised/predicted ratio |
-| controller oscillation under bursty routing | demand-driven budget + slow persistent half | P2-G2 churn-vs-novelty bound |
+| controller oscillation under bursty routing | demand-driven budget; sizing-only persistent arena | P2-G2' churn-vs-novelty bound |
 | transient pool churn evicting rows mid-read | same event-gated states as the shipped engine | I2/I3 + existing kernel tests |
 | constants drift across boxes | calibration is mandatory and gating (I8) | E3 guard at startup |
 | Qwen-class low reuse wastes VRAM | n\* = 1 makes waste ≈ 0 wall; capacity returns via shrink | G3 under a low-reuse trace |
