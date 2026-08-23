@@ -23,16 +23,22 @@ decode launch pattern while every registered gate passed).
 2. **Burst-clock box gate**, after the ladder, before anything timed:
    * the 20×4096³ matmul must complete ≤ **220 ms** (the program's healthy
      5090 range is 158–177; G4's lazy-ramp host took 340);
-   * a decode-pattern probe — 100 tiny launches with a sync and a 2 ms
-     host sleep between each (the pattern that collapsed G4) — compared
-     against the SAME probe with no gaps: **gap/no-gap ratio ≤ 3.0**.
-     *(Corrected pre-measurement, disclosed: the first registration's
-     absolute 50 µs bar measured sync-wake latency — which dominates a
-     tiny launch after an idle and varies by driver wait-mode — and
-     rejected a demonstrably healthy host at 50.5 µs with matmul20 at
-     188 ms. The ratio cancels the wake term; the G4 lazy host's ratio
-     was ~13×, a ramping host's is ~1. No G4'-scored measurement had
-     been made.)*
+   * a decode-pattern probe — 100 launches of an **8.8 MB device-to-device
+     copy** (the decode gemv's memory-bound profile, ~12 µs at boost) with
+     a sync and a 2 ms host sleep between each, compared against the same
+     probe with no gaps: pass iff **gap ≤ max(3 × no-gap, no-gap +
+     45 µs)**. *(Twice corrected pre-measurement, both disclosed: the
+     first bar (absolute 50 µs on a tiny matmul) measured sync-wake
+     latency and rejected a healthy host at 50.5 µs; the second (pure
+     ratio ≤ 3.0) still did — wake appears only in the gap arm and does
+     NOT cancel, measured +34.6 µs on a host whose matmul20 was 168 ms
+     with the keep-warm firing every 2 ms so clocks could not have
+     dropped. The exec-dominated workload separates the signals: a lazy
+     host's copy collapses ~13× (≫ both bound terms); a healthy
+     interrupt-wait host adds bounded wake and passes. The scored gates
+     G4a/G4b are untouched by all of this — the screen has only ever
+     erred conservative, rejecting healthy hosts. No G4'-scored
+     measurement has been made.)*
    A box failing both rungs of the ladder and the gate is destroyed and
    re-hunted, never waived (eleven-box precedent).
 3. The matmul health check moves to the **pre-gate** (run before e3, with
