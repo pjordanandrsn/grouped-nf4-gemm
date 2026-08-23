@@ -323,6 +323,18 @@ before any wall number is read.
   Two registered spoilers, both must fail their bar: synchronous copies
   (hide), and the **un-amended G1 mechanics verbatim** (dispatch) — the
   refuted configuration must stay refuted while the amended one pays.
+  **Outcome 2026-08-23: window empty at m = 16**
+  ([RESULTS-p2-g1b.md](RESULTS-p2-g1b.md)) — C_disp = 94.1 + 19.8·p µs
+  against a 40.7 µs/row gain puts the dispatch floor (p ≥ 5) above
+  LINK_CAP(16) = 3. No wall claimed; the boundary map prices the exits.
+* **P2-G1c (mechanics, engine-regime m):** identical amended mechanics and
+  bar, at the step-level queue the controller actually sees — `m = 128`
+  (layers × k for a 16-layer top-8 shape), the G1b boundary map's own
+  prediction of an open window `{5 … 30}` on the measured box class. Sweep
+  spans the predicted window plus below-floor and at-cap points; same two
+  spoilers. G1b's m = 16 finding stands — G1c registers the regime change
+  from G1b's calibration BEFORE any new measurement, not after a miss inside
+  a run.
 * **P2-G2 (convergence):** from cold start on captured routing, reach
   equilibrium (§5) within **64 steps**; after convergence, direction flips ≤
   1 per 32 steps. Refuted ⇒ the hysteresis is wrong, not tuned live.

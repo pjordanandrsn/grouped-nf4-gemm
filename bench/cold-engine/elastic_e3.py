@@ -197,8 +197,11 @@ def bench_dispatch(p_sweep=(1, 2, 3, 4, 8), reps=100):
     N, K = 5760, 2880
     pb, sb = N * (K // 2), N * (K // 32)
     rowbytes = pb + sb
-    rows = 40
-    cache = DevRowCache(rows, rowbytes, device="cuda", routed=8)
+    pmax_ = max(p_sweep)
+    rows = max(40, pmax_ + 8)
+    # routed = the largest want() this probe issues -- protected = rows - routed
+    # must leave a margin >= the burst size or _claim cannot serve it (I1).
+    cache = DevRowCache(rows, rowbytes, device="cuda", routed=pmax_)
     blocks = torch.as_strided(cache.buf, (rows, N, K // 2),
                               (rowbytes, K // 2, 1))
     scales = torch.as_strided(cache.buf, (rows, N, K // 32),
@@ -247,6 +250,9 @@ def bench_dispatch(p_sweep=(1, 2, 3, 4, 8), reps=100):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--threads", default="16,32,64,96")
+    ap.add_argument("--disp-sweep", default="1,2,3,4,8",
+                    help="burst sizes for the C_disp probe (must cover the "
+                         "gate harness's sweep)")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
 
@@ -260,7 +266,7 @@ def main():
     save = 1.0 / b_cpu - 1.0 / b_gpu
     nstar = 1 + ((1.0 / b_link + 1.0 / b_gpu) - 1.0 / b_cpu) / save
     hide = bench_hide()
-    disp = bench_dispatch()
+    disp = bench_dispatch(tuple(int(x) for x in a.disp_sweep.split(",")))
 
     rec = {"row_bytes": ROW_BYTES,
            "dispatch_per_p_s": disp,

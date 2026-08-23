@@ -22,23 +22,26 @@ from p2_g1_promotion import (SHAPE, STEPS, M, ROWS_T, SCRUB_FLOATS,   # noqa: F4
 from dev_row_cache import StepTag                           # noqa: E402
 from mxfp4_grouped import gemm_mxfp4_grouped                # noqa: E402
 
-P_SWEEP = (1, 2, 3, 4, 8)
+P_SWEEP = (1, 2, 3, 4, 8)          # G1b registered default; G1c overrides
+                                   # via --sweep (PREREG-p2-g1c.md)
 
 
 def run_arms_burst(pk, sc, N, K, ids_stream, p, threads, scrub, mode="burst"):
     """One paired A/B pass. mode: 'burst' (the amended mechanics),
     'sync' (hide spoiler: blocking default-stream copies, burst kept),
     'serial' (dispatch spoiler: the un-amended G1 mechanics verbatim)."""
-    a32 = torch.randn(M, K, dtype=torch.float32)
+    m = len(ids_stream[0])
+    a32 = torch.randn(m, K, dtype=torch.float32)
     a16 = a32[:max(p, 1)].to(torch.bfloat16).cuda()
     side = torch.cuda.Stream()
-    tr = Transient(N, K)
+    tr = Transient(N, K, k=max(p, 8))   # margin >= the burst (I1) -- p > 8
+                                        # with the default k=8 cannot claim
     stage = torch.empty(max(p, 1), dtype=torch.int32).pin_memory()
     ids_dev = torch.empty(max(p, 1), dtype=torch.int32, device="cuda")
     walls_a, walls_b = [], []
     copies = 0
     tags = []
-    for step in range(STEPS):
+    for step in range(len(ids_stream)):
         ids = ids_stream[step]
         # ---- arm A: everything on CPU
         float(scrub.sum())
@@ -111,8 +114,14 @@ def main():
     ap.add_argument("--calib", required=True,
                     help="elastic_e3 receipt (must carry dispatch_per_p_s)")
     ap.add_argument("--repeats", type=int, default=5)
+    ap.add_argument("--m", type=int, default=M,
+                    help="cold invocations per step (G1b: 16; G1c: 128)")
+    ap.add_argument("--steps", type=int, default=STEPS)
+    ap.add_argument("--sweep", default=",".join(str(x) for x in P_SWEEP))
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
+    sweep = tuple(int(x) for x in a.sweep.split(","))
+    m_, steps_ = a.m, a.steps
     assert torch.cuda.is_available()
     import gnf4_native
     gnf4_native.load()
@@ -133,14 +142,14 @@ def main():
     t_gpu_row = rowbytes / (cal["B_gpu_gbs"] * 1e9)
     t_link_row = rowbytes / (cal["B_link_gbs"] * 1e9)
     delta = t_cpu_row - (1 - hide) * t_link_row - t_gpu_row
-    link_cap = int(M * t_cpu_row / (t_cpu_row + t_link_row))
+    link_cap = int(m_ * t_cpu_row / (t_cpu_row + t_link_row))
     p_min = None
-    for p in P_SWEEP:
+    for p in sweep:
         c = disp.get(str(p))
         if c is not None and p * (t_cpu_row - t_gpu_row) > c:
             p_min = p
             break
-    window = [p for p in P_SWEEP
+    window = [p for p in sweep
               if p_min is not None and p_min <= p <= link_cap]
     print("t_cpu_row %.1f us  t_gpu_row %.1f us  t_link_row %.1f us  "
           "Delta %.1f us" % (t_cpu_row * 1e6, t_gpu_row * 1e6,
@@ -158,8 +167,11 @@ def main():
         sys.exit("correctness failed -- walls void")
 
     rng = np.random.default_rng(20260823)
-    perm0 = rng.permutation(pk.shape[0])[:STEPS * M]
-    stream0 = [perm0[s_ * M:(s_ + 1) * M].tolist() for s_ in range(STEPS)]
+    if steps_ * m_ > pk.shape[0]:
+        sys.exit("no-reuse stream needs steps*m <= E (%d*%d > %d)"
+                 % (steps_, m_, pk.shape[0]))
+    perm0 = rng.permutation(pk.shape[0])[:steps_ * m_]
+    stream0 = [perm0[s_ * m_:(s_ + 1) * m_].tolist() for s_ in range(steps_)]
     wa0, wb0, c0, _, _ = run_arms_burst(pk, sc, N, K, stream0, 0,
                                         a.threads, scrub)
     gap = abs(wb0 - wa0) / wa0
@@ -172,15 +184,15 @@ def main():
     print("\n   p  wall_A ms  wall_B ms  save/step us   bar us  in-window"
           "        arm")
     for mode in ("burst", "sync", "serial"):
-        for p in P_SWEEP:
+        for p in sweep:
             per = []
             for rep in range(a.repeats):
-                perm = rng.permutation(pk.shape[0])[:STEPS * M]
-                stream = [perm[s_ * M:(s_ + 1) * M].tolist()
-                          for s_ in range(STEPS)]
+                perm = rng.permutation(pk.shape[0])[:steps_ * m_]
+                stream = [perm[s_ * m_:(s_ + 1) * m_].tolist()
+                          for s_ in range(steps_)]
                 wa, wb, copies, tr, _ = run_arms_burst(
                     pk, sc, N, K, stream, p, a.threads, scrub, mode=mode)
-                exp = p * STEPS
+                exp = p * steps_
                 if copies != exp:
                     sys.exit("counter accounting (%s p=%d): %d copies, "
                              "expected %d" % (mode, p, copies, exp))
@@ -214,8 +226,8 @@ def main():
     rec = {"verdict": verdict, "rows": rows, "window": window,
            "p_min": p_min, "link_cap": link_cap, "delta_s": delta,
            "t_cpu_row_s": t_cpu_row, "t_gpu_row_s": t_gpu_row,
-           "t_link_row_s": t_link_row, "shape": SHAPE, "m": M,
-           "steps": STEPS, "threads": a.threads, "calib": cal,
+           "t_link_row_s": t_link_row, "shape": SHAPE, "m": m_,
+           "steps": steps_, "sweep": list(sweep), "threads": a.threads, "calib": cal,
            "correctness": checks,
            "gpu": torch.cuda.get_device_name(0)}
     with open(a.out, "w") as f:
