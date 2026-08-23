@@ -1,0 +1,129 @@
+{
+ "shape": "gptossish_gateup",
+ "rowbytes": 8812800,
+ "steps": 32,
+ "m": 16,
+ "delta_pred_s": 3.4759583030855295e-05,
+ "hide_used": 1.0,
+ "calib": {
+  "row_bytes": 13219200,
+  "cpu_sweep": [
+   {
+    "threads": 16,
+    "gbs": 82.3,
+    "ms_per_token_layerset": 21.77
+   },
+   {
+    "threads": 32,
+    "gbs": 146.4,
+    "ms_per_token_layerset": 12.24
+   },
+   {
+    "threads": 64,
+    "gbs": 189.9,
+    "ms_per_token_layerset": 9.43
+   },
+   {
+    "threads": 96,
+    "gbs": 166.2,
+    "ms_per_token_layerset": 10.78
+   }
+  ],
+  "B_cpu_gbs": 189.9,
+  "B_link_gbs": 52.02442990148806,
+  "B_gpu_gbs": 756.5934125995599,
+  "nstar_direct": 4.873399634122341,
+  "gate": [
+   2,
+   5
+  ],
+  "verdict": "PASS",
+  "e3b": {
+   "wall_cpu_s": 1.617347149993293,
+   "wall_h2d_s": 1.0554509569192305,
+   "wall_joint_s": 1.3675506770377979,
+   "ncopy": 4453,
+   "calls": 3906,
+   "cpu_gbs_alone": 90.14185284872488,
+   "hidden_frac": 1.0,
+   "h2d_gbs_alone": 55.77246125373944
+  },
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "note": "B_gpu is the bf16 bandwidth proxy the 1572 GB/s constant assumed; the NF4 GPU path adds dequant work"
+ },
+ "correctness": {
+  "cpu_bit_exact": true,
+  "bytes_identical": true,
+  "gpu_rel_max": 0.0023400175850838423,
+  "gpu_within_committed_2e-2": true,
+  "retention_zero_h2d": true
+ },
+ "rows": [
+  {
+   "p": 1,
+   "spoiler": false,
+   "wall_a_s": 0.0007750969962216914,
+   "wall_b_s": 0.0013032235438004136,
+   "save_per_row_s": -0.0005281265475787222,
+   "realized_over_predicted": -15.193696285421959
+  },
+  {
+   "p": 2,
+   "spoiler": false,
+   "wall_a_s": 0.0007551269955001771,
+   "wall_b_s": 0.0013622214901261032,
+   "save_per_row_s": -0.000303547247312963,
+   "realized_over_predicted": -8.732764344253237
+  },
+  {
+   "p": 4,
+   "spoiler": false,
+   "wall_a_s": 0.0007558685028925538,
+   "wall_b_s": 0.0015224929666146636,
+   "save_per_row_s": -0.00019165611593052745,
+   "realized_over_predicted": -5.513763377437487
+  },
+  {
+   "p": 8,
+   "spoiler": false,
+   "wall_a_s": 0.0007536400225944817,
+   "wall_b_s": 0.0021683760569430888,
+   "save_per_row_s": -0.00017684200429357588,
+   "realized_over_predicted": -5.08757553669724
+  },
+  {
+   "p": 1,
+   "spoiler": true,
+   "wall_a_s": 0.0007807810325175524,
+   "wall_b_s": 0.001422116532921791,
+   "save_per_row_s": -0.0006413355004042387,
+   "realized_over_predicted": -18.45060971631736
+  },
+  {
+   "p": 2,
+   "spoiler": true,
+   "wall_a_s": 0.0007562545360997319,
+   "wall_b_s": 0.0016747330664657056,
+   "save_per_row_s": -0.00045923926518298686,
+   "realized_over_predicted": -13.211874974890538
+  },
+  {
+   "p": 4,
+   "spoiler": true,
+   "wall_a_s": 0.0007530539878644049,
+   "wall_b_s": 0.0020202224841341376,
+   "save_per_row_s": -0.0003167921240674332,
+   "realized_over_predicted": -9.113806796422844
+  },
+  {
+   "p": 8,
+   "spoiler": true,
+   "wall_a_s": 0.0008009765297174454,
+   "wall_b_s": 0.0028414949774742126,
+   "save_per_row_s": -0.0002550648059695959,
+   "realized_over_predicted": -7.337970819246613
+  }
+ ],
+ "verdict": "REFUTED",
+ "gpu": "NVIDIA GeForce RTX 5090"
+}
