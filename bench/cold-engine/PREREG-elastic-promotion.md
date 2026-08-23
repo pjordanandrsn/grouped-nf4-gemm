@@ -49,13 +49,20 @@ offline from committed data.
 ## E1 — the paying set is non-trivial (offline)
 
 > On **all four models**, at least **25%** of per-layer expert invocations
-> are by experts that recur **≥ 3 more times within the following 32 steps**
-> at that layer (n\* = 3, the measured-CPU break-even rounded up).
+> are by experts that recur **≥ 2 more times within the following 32 steps**
+> at that layer — total invocations ≥ 3 = ⌈2.80⌉, the measured-CPU
+> break-even's upper bound, **including the promoted invocation itself**.
 
 * Window swept at W ∈ {8, 32, 128}; the gate applies at **W = 32** and the
   others are reported. Sensitivity registered now: the fraction clearing
-  **≥ 4** (the post-G2-fix break-even) is reported alongside, so the
-  conclusion's dependence on the CPU fix landing is visible, not discovered.
+  **≥ 4 more** (total ≥ 5 = ⌈4.25⌉, the post-G2-fix break-even's upper
+  bound) is reported alongside, so the conclusion's dependence on the CPU
+  fix landing is visible, not discovered.
+* An earlier version of this file set the bar at "≥ 3 more", conflating
+  total invocations with remaining recurrences — one reuse stricter than the
+  economics it cites, able to refute a paying set that clears break-even.
+  Caught by Bugbot on #201 **before anything was scored**; recorded here so
+  the correction cannot read as post-hoc.
 * **Refuted** if any model falls under 25% at W = 32 — the paying set is too
   thin and elastic promotion dies here, whatever the controller design.
 
@@ -65,7 +72,8 @@ Two identifiers, both registered now, both scored, both reported — not
 whichever wins:
 
 > **E2a (rank):** invocations whose expert was selected at **rank 1** clear
-> E1's test at **≥ 1.25×** the all-invocations base rate, on all four models.
+> E1's (corrected) test at **≥ 1.25×** the all-invocations base rate, on all
+> four models.
 > **E2b (frequency):** invocations whose expert is in the top quartile by
 > trailing 32-step selection count clear it at ≥ 1.25×, on all four models.
 
