@@ -379,6 +379,20 @@ before any wall number is read.
   ≥ 14/16 traces at every capacity; (b) ≤ 1.10× ideal-LRU at every arm;
   (d) throttle ≤ 2× convergence, ≤ 1.05× fills). Same two spoilers, both
   must fail.
+  **Outcome 2026-08-23: REFUTED as scored, cure demonstrated**
+  ([RESULTS-p2-g2p.md](RESULTS-p2-g2p.md)) — (b) 72/73, (c) 16/16 with
+  `EWMA(fills) = EWMA(novelty)` exactly at every adequate arm; but (a)'s
+  plateau-relative criterion demands the *trace's novelty* decay by step
+  64 and contradicts §5's own equilibrium definition, failing 14/16 that
+  sit on the predicate throughout. Superseded by G2''.
+* **P2-G2'' (residency convergence, equilibrium-metric):** identical run to
+  G2' with the scoring aligned to §5's frozen definition: (a) =
+  time-to-sustained-equilibrium (first step where the §5 predicate holds
+  and keeps holding), bar unchanged; (b) and (d)'s fill bars gain a
+  one-routed-set absolute guard for microscopic denominators; (c), sweep,
+  spoilers, parameters unchanged. Registered before any G2''-scored run;
+  a refutation here closes the offline gate REFUTED — no third metric
+  correction against these traces.
 * **P2-G3 (elasticity):** mid-run VRAM ballast injection: no OOM; transient
   shrinks within 2 steps; wall degrades monotonically (no cliff); recovery
   within 64 steps of release.
