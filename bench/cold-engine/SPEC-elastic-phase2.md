@@ -126,20 +126,31 @@ Observables (per step, EWMA α ≈ 1/16): `t_cpu`, `t_gpu` (executor timings),
 Actuators: `p` (promotions this step), transient grow/shrink, persistent
 resize (slow), and nothing else.
 
+Moving one invocation between tiers changes **both** walls — CPU by
+`t_cpu_row`, GPU by `t_gpu_row` — so both actuators size against the combined
+rate, target the **nearest band edge**, take the floor (undershoot converges;
+overshoot ping-pongs), and cap by what exists (revised, round 2: the first
+demotion term divided by `t_cpu_row` alone and never checked how many
+resident invocations there were — it could overshoot the band in one step or
+demand demotions that did not exist; promote's greedy form had the mirrored
+flaw and is fixed to match, unprompted):
+
 ```
 each step:
   if pressure():                    # KV growth or external reserve breach
       shrink_transient(deficit)     # event-gated; completes this step (I3)
   if t_cpu > (1 + δ_hi) · t_gpu and vram_free > RESERVE:
-      p = min(cpu_queue, slack_rows(), GROW_CAP)     # promote, grow if room
+      p* = (t_cpu − (1 + δ_hi)·t_gpu) / (t_cpu_row + (1 + δ_hi)·t_gpu_row)
+      p  = clamp(floor(p*), 0, min(cpu_queue, slack_rows(), GROW_CAP))
   elif t_cpu < (1 − δ_lo) · t_gpu:
-      p = 0                          # stop copying, and REBALANCE:
-      q = min(ceil((t_gpu − t_cpu) / t_cpu_row), DEMOTE_CAP)
+      p  = 0                        # stop copying, and REBALANCE:
+      q* = ((1 − δ_lo)·t_gpu − t_cpu) / (t_cpu_row + (1 − δ_lo)·t_gpu_row)
+      q  = clamp(floor(q*), 0, min(resident_invocations, DEMOTE_CAP))
       route q resident invocations to CPU this step   # execution
-                                     # contraction: free, no bytes move (§3).
-                                     # capacity reclaim stays pressure-only.
+                                    # contraction: free, no bytes move (§3).
+                                    # capacity reclaim stays pressure-only.
   else:
-      p = p_prev                     # deadband: hold
+      p = 0                         # in band: hold
 every PERIOD (≈256) steps:
   persistent ← LFU-promote transient rows resident ≥ 2·PERIOD   (hysteresis)
   persistent shrink iff per-row hit rate < θ for 2 consecutive periods
@@ -155,12 +166,19 @@ draft defined equilibrium at δ_lo while the controller held anywhere inside
 δ_hi, so it could hold forever without ever "converging" by G2's measure):
 
 ```
-equilibrium  ≜  (1 − δ_lo) · t_gpu ≤ t_cpu ≤ (1 + δ_hi) · t_gpu
-                or a pinned resource (vram_free ≤ RESERVE, cpu_queue = 0)
+in_band      ≜  (1 − δ_lo) · t_gpu ≤ t_cpu ≤ (1 + δ_hi) · t_gpu
+pin_up       ≜  t_cpu above band  and  vram_free ≤ RESERVE      # cannot promote
+pin_down     ≜  t_cpu below band  and  resident_invocations = 0 # cannot demote
+equilibrium  ≜  in_band  or  pin_up  or  pin_down
 ```
 
-G2 measures convergence **into this band**; `δ_lo`/`δ_hi` are the hysteresis
-edges of the same band, not a second, tighter target.
+Each side is pinned only by **its own actuator being exhausted** (revised,
+round 2: the first predicate accepted `cpu_queue = 0` as a blanket pin — but
+an empty CPU queue with everything resident and default-GPU is precisely the
+over-promoted state the demotion actuator corrects, and calling it converged
+would let G2 accept a fully GPU-saturated, unbalanced step). G2 measures
+convergence **into `in_band` or a directional pin**; `δ_lo`/`δ_hi` are the
+hysteresis edges of the same band, not a second, tighter target.
 
 **The retention window is emergent, not configured.** A transient pool of
 `rows_t` at promotion rate `r` holds a row for `W ≈ rows_t / r` steps; E1's
