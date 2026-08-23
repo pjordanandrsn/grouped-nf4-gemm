@@ -350,15 +350,26 @@ def main():
 
     if not gates:
         derived = []
+        E_cfg = n_experts_of(model)
         for n, mod in model.named_modules():
-            if not n.endswith("mlp"):
+            # The MoE block is `mlp` on OLMoE and gpt-oss and
+            # `block_sparse_moe` on GraniteMoE, so match either rather than
+            # hardcoding one -- requiring "mlp" made Granite unreachable and
+            # the probe reported "no readable router modules" while pointing
+            # straight at 32 of them.
+            tail = n.rsplit(".", 1)[-1]
+            if tail != "mlp" and "moe" not in tail.lower():
                 continue
-            # The router is whichever child holds an [E, hidden] weight.
-            # Named `router` on gpt-oss and `gate` on OLMoE, so match on the
-            # SHAPE rather than on a name list that needs editing per model.
-            for cn, cm in mod.named_children():
+            # The router is whichever DESCENDANT holds an [E, hidden] weight.
+            # Named `router` on gpt-oss, `gate` on OLMoE, and `router.layer`
+            # on GraniteMoE where `router` is a wrapper -- so walk, and match
+            # on SHAPE rather than on a name list that needs editing per
+            # model.
+            for cn, cm in mod.named_modules():
+                if cm is mod:
+                    continue
                 w = getattr(cm, "weight", None)
-                if w is not None and w.dim() == 2 and w.shape[0] == n_experts_of(model):
+                if w is not None and w.dim() == 2 and w.shape[0] == E_cfg:
                     derived.append((n, mod, cm))
                     break
         if derived:
