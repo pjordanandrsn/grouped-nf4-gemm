@@ -371,7 +371,14 @@ def clock_ladder(mode):
 
 
 def burst_gate():
-    """The G4-collapse pattern, as a box gate: healthy hosts pass both."""
+    """The G4-collapse pattern as a box gate — self-calibrating: the
+    gap-pattern per-launch wall is compared against the SAME probe with no
+    gaps, so sync-wake latency (which dominates a tiny launch after a 2 ms
+    idle and varies by driver wait-mode) cancels out of the signal. A
+    ramping host's ratio is ~1; the G4 lazy host's decode rate was ~13x its
+    sustained rate. The first registration used an absolute 50 us bar and
+    rejected a demonstrably healthy host at 50.5 (matmul20 188 ms) —
+    a screen defect, corrected pre-measurement and disclosed."""
     a = torch.randn(4096, 4096, device="cuda")
     torch.cuda.synchronize()
     t0 = time.perf_counter()
@@ -383,17 +390,24 @@ def burst_gate():
     w = torch.randn(64, 64, device="cuda", dtype=torch.bfloat16)
     torch.matmul(b, w)
     torch.cuda.synchronize()
-    ts = []
-    for _ in range(100):
-        t0 = time.perf_counter()
-        torch.matmul(b, w)
-        torch.cuda.synchronize()
-        ts.append(time.perf_counter() - t0)
-        time.sleep(0.002)
-    burst = statistics.median(ts)
-    print("burst gate: matmul20 %.0f ms  decode-pattern launch %.1f us"
-          % (mm * 1e3, burst * 1e6))
-    return mm, burst
+
+    def probe(gap_s):
+        ts = []
+        for _ in range(100):
+            t0 = time.perf_counter()
+            torch.matmul(b, w)
+            torch.cuda.synchronize()
+            ts.append(time.perf_counter() - t0)
+            if gap_s:
+                time.sleep(gap_s)
+        return statistics.median(ts)
+
+    nogap = probe(0.0)
+    gap = probe(0.002)
+    ratio = gap / nogap
+    print("burst gate: matmul20 %.0f ms  no-gap %.1f us  gap %.1f us  "
+          "ratio %.2f" % (mm * 1e3, nogap * 1e6, gap * 1e6, ratio))
+    return mm, ratio
 
 
 def solo_rates(view, tier, threads):
@@ -451,11 +465,13 @@ def main():
 
     clock_mode, warm = clock_ladder(a.clock_mode)
     print("clock mode:", clock_mode)
-    mm, burst = burst_gate()
-    if mm > 0.220 or burst > 50e-6:
-        sys.exit("box fails the burst-clock gate (matmul20 %.0f ms, "
-                 "launch %.1f us) — lazy-ramp host, reject" %
-                 (mm * 1e3, burst * 1e6))
+    mm, ratio = burst_gate()
+    if mm > 0.220 or ratio > 3.0:
+        if warm is not None:
+            warm.stop()             # never sys.exit through a live CUDA
+        sys.exit("box fails the burst-clock gate (matmul20 %.0f ms, "  # thread
+                 "gap/no-gap ratio %.2f) — lazy-ramp host, reject" %
+                 (mm * 1e3, ratio))
 
     os.makedirs(a.workdir, exist_ok=True)
     arena = os.path.join(a.workdir, "g4.arena")
@@ -483,7 +499,7 @@ def main():
     out = {"b_nvme_solo": b_nvme, "t_cpu_row_solo": t_cpu_row,
            "t_gpu_row_solo": t_gpu_row, "hot_rows": HOT_ROWS,
            "clock_mode": clock_mode, "burst_gate_matmul_s": mm,
-           "burst_gate_launch_s": burst}
+           "burst_gate_ratio": ratio}
     arms = {}
     for name, prefetch in (("overlap", True), ("sequential", False)):
         res = run_arm(recs, view, tier, a.threads, prefetch)
@@ -526,6 +542,8 @@ def main():
     with open(a.out, "w") as f:
         json.dump(out, f, indent=1, default=str)
     print("receipt ->", a.out)
+    if warm is not None:
+        warm.stop()                 # end the keep-warm before CUDA teardown
 
 
 if __name__ == "__main__":
