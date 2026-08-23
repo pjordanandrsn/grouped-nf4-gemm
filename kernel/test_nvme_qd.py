@@ -163,6 +163,12 @@ _UNPINNED_OK = {
     # quantity under test, and already asserts reads_match across its three
     # A/B/A legs -- the invariant a reordering flip would break.
     "bench_direct.py",
+    # Same class: the G4/G4' tribrid harness measures overlap wall time on a
+    # real arena at the host's own depth -- that IS the quantity under test,
+    # and its merged receipts were taken at the host default. (The guard also
+    # matches the prose mention in this file's docstring; the exemption is
+    # per-file, so both hits are covered.)
+    "p2_g4_tribrid.py",
 }
 
 
