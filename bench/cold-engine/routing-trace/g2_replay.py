@@ -170,14 +170,14 @@ def main():
     rows_list = [int(x) for x in a.rows.split(",")]
     fracs = [None if x == "none" else float(x) for x in a.fracs.split(",")]
 
-    traces = sorted(f for f in os.listdir(HERE)
-                    if f.endswith(".jsonl") and "routing_seq" not in f)
+    tdir = os.path.join(HERE, "..", "rank-2026-08-22")
+    traces = sorted(f for f in os.listdir(tdir) if f.endswith(".jsonl"))
     out = {"period": PERIOD, "age_min": AGE_MIN, "eta": ETA, "traces": {}}
     per_trace_a = {}                 # trace -> all-caps convergence pass
     ok_b, ok_c, ok_d = [], [], []
     spoiler_margin_fail, spoiler_noretain_fail = [], []
     for tr in traces:
-        meta, recs = load(os.path.join(HERE, tr))
+        meta, recs = load(os.path.join(tdir, tr))
         pairs = len({(int(L), e) for r in recs
                      for L, ex in r["routed"].items() for e in ex})
         per_tr = {"pairs": pairs, "caps": {}}
