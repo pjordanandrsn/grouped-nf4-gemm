@@ -35,9 +35,11 @@ the instrument law that failure bought, with every revision disclosed:
 * **B3**: the multi-row bit-exact test on-box before any timing (voids).
 
 Protocol: A1 → A2 → gate → B → A3 (confirm; if A3 deviates from
-mean(A1,A2) by more than the gate bounds at any scored cell, the run is
-VOID — the box drifted mid-experiment). Medians of 50 per cell, staged
-harness, clean rebuilds, 32 threads.
+mean(A1,A2) by more than the per-cell allowance at any scored cell, the
+run is VOID — the box drifted mid-experiment). Medians of 50 per cell,
+staged harness, clean rebuilds, 32 threads. The gate, bars, and verdict
+are computed by the committed [lowg_cert_verdict.py](lowg_cert_verdict.py)
+— no on-box arithmetic.
 
 **Hard stop**: up to 3 hosts for the gate; ONE scored B arm total.
 REFUTED ⇒ revert again and the line closes — a third certification would
