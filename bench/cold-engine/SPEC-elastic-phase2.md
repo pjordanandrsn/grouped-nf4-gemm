@@ -335,6 +335,18 @@ before any wall number is read.
   spoilers. G1b's m = 16 finding stands — G1c registers the regime change
   from G1b's calibration BEFORE any new measurement, not after a miss inside
   a run.
+  **Outcome 2026-08-23: REFUTED at every in-window p**
+  ([RESULTS-p2-g1c.md](RESULTS-p2-g1c.md)) — not dispatch: the H2D copies
+  and the CPU tier draw one host-DRAM budget (171.8 + 52.7 > 212 GB/s), so
+  host traffic is p-invariant and no-reuse promotion cannot pay on a
+  DRAM-bound tier at any m or glue. The E3b hide instrument sampled a
+  lighter load (132.5 + 52.6 < 212) and honestly read hide = 1.0 there —
+  hide is load-dependent. **Consequence for this spec:** the transient
+  n* = 1 execution-staging leg is refuted; the promote actuator must be
+  re-founded on reuse-based residency (E1's 69–96% paying set) with a
+  DRAM-headroom budget (`B_cpu_load + B_link ≤ B_dram`, calibrated at the
+  tier's operating load), and §5's balance law re-derived on that objective
+  before G2 is registered. G2–G4 are NOT run against the refuted objective.
 * **P2-G2 (convergence):** from cold start on captured routing, reach
   equilibrium (§5) within **64 steps**; after convergence, direction flips ≤
   1 per 32 steps. Refuted ⇒ the hysteresis is wrong, not tuned live.

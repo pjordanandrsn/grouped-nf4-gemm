@@ -1,0 +1,271 @@
+{
+ "verdict": "REFUTED",
+ "rows": [
+  {
+   "p": 2,
+   "mode": "burst",
+   "wall_a_s": 0.00671804859302938,
+   "wall_b_s": 0.0071665323339402676,
+   "save_step_s": -0.0004484837409108877,
+   "bar_s": -5.2394167238543855e-05,
+   "in_window": false,
+   "meets_bar": false
+  },
+  {
+   "p": 4,
+   "mode": "burst",
+   "wall_a_s": 0.0067098746076226234,
+   "wall_b_s": 0.007449568249285221,
+   "save_step_s": -0.0007396936416625977,
+   "bar_s": -3.2188899251958587e-05,
+   "in_window": false,
+   "meets_bar": false
+  },
+  {
+   "p": 8,
+   "mode": "burst",
+   "wall_a_s": 0.006722253514453769,
+   "wall_b_s": 0.007651685969904065,
+   "save_step_s": -0.0009294324554502964,
+   "bar_s": 7.658209846633948e-06,
+   "in_window": true,
+   "meets_bar": false
+  },
+  {
+   "p": 16,
+   "mode": "burst",
+   "wall_a_s": 0.006691224640235305,
+   "wall_b_s": 0.00802818057127297,
+   "save_step_s": -0.0013369559310376644,
+   "bar_s": 9.265388866756016e-05,
+   "in_window": true,
+   "meets_bar": false
+  },
+  {
+   "p": 24,
+   "mode": "burst",
+   "wall_a_s": 0.006712649017572403,
+   "wall_b_s": 0.008439124561846256,
+   "save_step_s": -0.0017264755442738533,
+   "bar_s": 0.0002052899176514693,
+   "in_window": true,
+   "meets_bar": false
+  },
+  {
+   "p": 30,
+   "mode": "burst",
+   "wall_a_s": 0.006718008546158671,
+   "wall_b_s": 0.008778375107795,
+   "save_step_s": -0.0020603665616363287,
+   "bar_s": 0.000280640711574697,
+   "in_window": true,
+   "meets_bar": false
+  },
+  {
+   "p": 2,
+   "mode": "sync",
+   "wall_a_s": 0.0066938395611941814,
+   "wall_b_s": 0.007444893475621939,
+   "save_step_s": -0.0007510539144277573,
+   "bar_s": -5.2394167238543855e-05,
+   "in_window": false,
+   "meets_bar": false
+  },
+  {
+   "p": 4,
+   "mode": "sync",
+   "wall_a_s": 0.006402738159522414,
+   "wall_b_s": 0.0076049012131989,
+   "save_step_s": -0.001202163053676486,
+   "bar_s": -3.2188899251958587e-05,
+   "in_window": false,
+   "meets_bar": false
+  },
+  {
+   "p": 8,
+   "mode": "sync",
+   "wall_a_s": 0.006384424399584532,
+   "wall_b_s": 0.008361820597201586,
+   "save_step_s": -0.001977396197617054,
+   "bar_s": 7.658209846633948e-06,
+   "in_window": true,
+   "meets_bar": false
+  },
+  {
+   "p": 16,
+   "mode": "sync",
+   "wall_a_s": 0.0063941930420696735,
+   "wall_b_s": 0.009830689057707787,
+   "save_step_s": -0.003436496015638113,
+   "bar_s": 9.265388866756016e-05,
+   "in_window": true,
+   "meets_bar": false
+  },
+  {
+   "p": 24,
+   "mode": "sync",
+   "wall_a_s": 0.006421993486583233,
+   "wall_b_s": 0.01128792786039412,
+   "save_step_s": -0.004865934373810887,
+   "bar_s": 0.0002052899176514693,
+   "in_window": true,
+   "meets_bar": false
+  },
+  {
+   "p": 30,
+   "mode": "sync",
+   "wall_a_s": 0.006427977932617068,
+   "wall_b_s": 0.01231022784486413,
+   "save_step_s": -0.005882249912247062,
+   "bar_s": 0.000280640711574697,
+   "in_window": true,
+   "meets_bar": false
+  },
+  {
+   "p": 2,
+   "mode": "serial",
+   "wall_a_s": 0.006467527011409402,
+   "wall_b_s": 0.0070355539210140705,
+   "save_step_s": -0.0005680269096046686,
+   "bar_s": -5.2394167238543855e-05,
+   "in_window": false,
+   "meets_bar": false
+  },
+  {
+   "p": 4,
+   "mode": "serial",
+   "wall_a_s": 0.006496722111478448,
+   "wall_b_s": 0.007279350887984037,
+   "save_step_s": -0.0007826287765055895,
+   "bar_s": -3.2188899251958587e-05,
+   "in_window": false,
+   "meets_bar": false
+  },
+  {
+   "p": 8,
+   "mode": "serial",
+   "wall_a_s": 0.006523396586999297,
+   "wall_b_s": 0.00756527204066515,
+   "save_step_s": -0.0010418754536658525,
+   "bar_s": 7.658209846633948e-06,
+   "in_window": true,
+   "meets_bar": false
+  },
+  {
+   "p": 16,
+   "mode": "serial",
+   "wall_a_s": 0.006543071242049336,
+   "wall_b_s": 0.008297460619360209,
+   "save_step_s": -0.001754389377310872,
+   "bar_s": 9.265388866756016e-05,
+   "in_window": true,
+   "meets_bar": false
+  },
+  {
+   "p": 24,
+   "mode": "serial",
+   "wall_a_s": 0.0065311165526509285,
+   "wall_b_s": 0.008690060349181294,
+   "save_step_s": -0.002158943796530366,
+   "bar_s": 0.0002052899176514693,
+   "in_window": true,
+   "meets_bar": false
+  },
+  {
+   "p": 30,
+   "mode": "serial",
+   "wall_a_s": 0.006523071555420756,
+   "wall_b_s": 0.00929292687214911,
+   "save_step_s": -0.0027698553167283535,
+   "bar_s": 0.000280640711574697,
+   "in_window": true,
+   "meets_bar": false
+  }
+ ],
+ "window": [
+  8,
+  16,
+  24,
+  30
+ ],
+ "p_min": 8,
+ "link_cap": 30,
+ "delta_s": 3.5179523686163176e-05,
+ "t_cpu_row_s": 5.129685681024447e-05,
+ "t_gpu_row_s": 1.6117333124081293e-05,
+ "t_link_row_s": 0.00016707199811935426,
+ "shape": "gptossish_gateup",
+ "m": 128,
+ "steps": 5,
+ "sweep": [
+  2,
+  4,
+  8,
+  16,
+  24,
+  30
+ ],
+ "threads": 64,
+ "calib": {
+  "row_bytes": 13219200,
+  "dispatch_per_p_s": {
+   "2": 0.0001452078577131033,
+   "4": 0.00018670223653316498,
+   "8": 0.00027049588970839977,
+   "16": 0.0004305096808820963,
+   "24": 0.0005510372575372458,
+   "30": 0.0006544704083353281
+  },
+  "cpu_sweep": [
+   {
+    "threads": 16,
+    "gbs": 86.1,
+    "ms_per_token_layerset": 20.81
+   },
+   {
+    "threads": 32,
+    "gbs": 141.6,
+    "ms_per_token_layerset": 12.65
+   },
+   {
+    "threads": 64,
+    "gbs": 166.9,
+    "ms_per_token_layerset": 10.74
+   },
+   {
+    "threads": 96,
+    "gbs": 171.8,
+    "ms_per_token_layerset": 10.43
+   }
+  ],
+  "B_cpu_gbs": 171.8,
+  "B_link_gbs": 52.748516203799994,
+  "B_gpu_gbs": 546.7902122611454,
+  "nstar_direct": 4.74912621358393,
+  "gate": [
+   2,
+   5
+  ],
+  "verdict": "PASS",
+  "e3b": {
+   "wall_cpu_s": 1.6052355072461069,
+   "wall_h2d_s": 1.1108672581613064,
+   "wall_joint_s": 1.5423516440205276,
+   "ncopy": 4420,
+   "calls": 5699,
+   "cpu_gbs_alone": 132.51266511349834,
+   "hidden_frac": 1.0,
+   "h2d_gbs_alone": 52.59752105459542
+  },
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "note": "B_gpu is the bf16 bandwidth proxy the 1572 GB/s constant assumed; the NF4 GPU path adds dequant work"
+ },
+ "correctness": {
+  "cpu_bit_exact": true,
+  "bytes_identical": true,
+  "gpu_rel_max": 0.002124998951330781,
+  "gpu_within_committed_2e-2": true,
+  "retention_zero_h2d": true
+ },
+ "gpu": "NVIDIA GeForce RTX 5090"
+}
