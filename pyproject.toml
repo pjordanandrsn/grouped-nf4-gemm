@@ -84,8 +84,9 @@ py-modules = [
     # time-to-contribution cost model the destination rule consumes.
     "cold_cpu_view", "cold_deadline",
     # Gate 3: observed-reuse classification for adaptive residency, and
-    # reclaimable residency for the VRAM slot arena (R2/R3).
-    "reuse_profile", "vram_slots",
+    # reclaimable residency for the VRAM slot arena (R2/R3). Stage 3 adds
+    # the segmented CPU-side row pool the reclaim path shrinks into.
+    "reuse_profile", "vram_slots", "segmented_pool",
     "dev_row_cache",
 ]
 
