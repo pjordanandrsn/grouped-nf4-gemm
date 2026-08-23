@@ -1,0 +1,53 @@
+{
+ "row_bytes": 13219200,
+ "dispatch_per_p_s": {
+  "1": 0.00011735805310308933,
+  "2": 0.00013842293992638588,
+  "3": 0.00015989714302122593,
+  "4": 0.00018615182489156723,
+  "8": 0.00026483950205147266
+ },
+ "cpu_sweep": [
+  {
+   "threads": 16,
+   "gbs": 45.6,
+   "ms_per_token_layerset": 39.33
+  },
+  {
+   "threads": 32,
+   "gbs": 92.3,
+   "ms_per_token_layerset": 19.42
+  },
+  {
+   "threads": 64,
+   "gbs": 145.2,
+   "ms_per_token_layerset": 12.33
+  },
+  {
+   "threads": 96,
+   "gbs": 167.5,
+   "ms_per_token_layerset": 10.69
+  }
+ ],
+ "B_cpu_gbs": 167.5,
+ "B_link_gbs": 56.29599349094616,
+ "B_gpu_gbs": 1070.207254696804,
+ "nstar_direct": 3.5274290034965636,
+ "gate": [
+  2,
+  5
+ ],
+ "verdict": "PASS",
+ "e3b": {
+  "wall_cpu_s": 1.3192493510432541,
+  "wall_h2d_s": 0.8592296722345054,
+  "wall_joint_s": 1.3443395621143281,
+  "ncopy": 3632,
+  "calls": 4033,
+  "cpu_gbs_alone": 114.10346215517262,
+  "hidden_frac": 0.9707991799144639,
+  "h2d_gbs_alone": 55.87811495748285
+ },
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "note": "B_gpu is the bf16 bandwidth proxy the 1572 GB/s constant assumed; the NF4 GPU path adds dequant work"
+}
