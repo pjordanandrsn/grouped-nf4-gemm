@@ -183,6 +183,67 @@ def bench_hide(seconds=3.0):
             "h2d_gbs_alone": ncopy * ROW_BYTES / wall_h2d / 1e9}
 
 
+def bench_dispatch(p_sweep=(1, 2, 3, 4, 8), reps=100):
+    """G1 amendment (spec §9): C_disp — the serial host cost of ONE amended
+    promotion burst: want + per-row side-stream copy enqueues + pinned id
+    staging + one event + compute-stream wait + pre-staged-id launch, plus
+    one idle end-sync. Measured warm on an idle GPU per burst size; the
+    in-situ inflation G1 measured under CPU-pool contention is what the
+    gate's 0.70 slack absorbs, so the model constant is the clean cost."""
+    import statistics as _st
+    sys.path.insert(0, os.path.join(HERE, "..", "..", "kernel"))
+    from dev_row_cache import DevRowCache, StepTag
+    from mxfp4_grouped import gemm_mxfp4_grouped
+    N, K = 5760, 2880
+    pb, sb = N * (K // 2), N * (K // 32)
+    rowbytes = pb + sb
+    rows = 40
+    cache = DevRowCache(rows, rowbytes, device="cuda", routed=8)
+    blocks = torch.as_strided(cache.buf, (rows, N, K // 2),
+                              (rowbytes, K // 2, 1))
+    scales = torch.as_strided(cache.buf, (rows, N, K // 32),
+                              (rowbytes, K // 32, 1), storage_offset=pb)
+    pmax = max(p_sweep)
+    pk = [torch.zeros(N, K // 2, dtype=torch.uint8).pin_memory()
+          for _ in range(pmax)]
+    sc = [torch.zeros(N, K // 32, dtype=torch.uint8).pin_memory()
+          for _ in range(pmax)]
+    side = torch.cuda.Stream()
+    stage = torch.empty(pmax, dtype=torch.int32).pin_memory()
+    ids_dev = torch.empty(pmax, dtype=torch.int32, device="cuda")
+    a16 = torch.randn(pmax, K, dtype=torch.bfloat16, device="cuda")
+    out = {}
+    for p in p_sweep:
+        eids = list(range(100, 100 + p))          # stable ids; discard between
+        ts = []
+        for r in range(reps + 20):
+            tag = StepTag("cuda")
+            t0 = time.perf_counter()
+            assign, need = cache.want(0, eids, tag)
+            with torch.cuda.stream(side):
+                for i, e in enumerate(eids):
+                    s_ = assign[e]
+                    blocks[s_].copy_(pk[i], non_blocking=True)
+                    scales[s_].copy_(sc[i], non_blocking=True)
+                    stage[i] = s_
+                ids_dev[:p].copy_(stage[:p], non_blocking=True)
+                ev = torch.cuda.Event()
+                ev.record(side)
+            cache.note_filled(len(need))
+            torch.cuda.current_stream().wait_event(ev)
+            gemm_mxfp4_grouped(a16[:p], blocks, scales, [1] * p, ids_dev[:p])
+            dt = time.perf_counter() - t0
+            torch.cuda.synchronize()
+            tag.record()
+            if r >= 20:
+                ts.append(dt)
+            cache.discard(0, eids)                # next rep re-claims + copies
+        t0 = time.perf_counter(); torch.cuda.synchronize()
+        sync_s = time.perf_counter() - t0
+        out[str(p)] = _st.median(ts) + sync_s
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--threads", default="16,32,64,96")
@@ -199,8 +260,10 @@ def main():
     save = 1.0 / b_cpu - 1.0 / b_gpu
     nstar = 1 + ((1.0 / b_link + 1.0 / b_gpu) - 1.0 / b_cpu) / save
     hide = bench_hide()
+    disp = bench_dispatch()
 
     rec = {"row_bytes": ROW_BYTES,
+           "dispatch_per_p_s": disp,
            "cpu_sweep": cpu_detail.get("sweep"),
            "B_cpu_gbs": b_cpu, "B_link_gbs": b_link, "B_gpu_gbs": b_gpu,
            "nstar_direct": nstar, "gate": [2, 5],
