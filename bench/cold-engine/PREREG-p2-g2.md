@@ -4,8 +4,13 @@ Registered before any measurement. The bars are those frozen in
 [SPEC-elastic-phase2.md](SPEC-elastic-phase2.md) §11 (merged #211, before
 this harness ran anywhere); this document fixes the replay parameters and
 the exact aggregation. Offline on the 16 committed rank traces
-(`routing-trace/*_{code,dialogue,math,prose}.jsonl`), cold start, trace
-units — no box, so no box variance touches the gate.
+(`rank-2026-08-22/*_{code,dialogue,math,prose}.jsonl` — 4 models × 4
+prompts; *path corrected pre-scoring: the first registration wrote the
+older 12-trace `routing-trace/` glob while naming "the 16 committed rank
+traces" twice — the named set governs, matching §11 and `elastic_gate.py`'s
+default. A run against the wrong 12-trace set happened before the error was
+caught and is disclosed, void, in RESULTS*), cold start, trace units — no
+box, so no box variance touches the gate.
 
 ## The instrument
 
