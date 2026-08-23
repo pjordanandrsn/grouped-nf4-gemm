@@ -63,6 +63,11 @@ def _gemm_mxfp4_grouped(
     rows = tl.load(t_rows_ptr + pid_m)
     grp = tl.load(t_group_ptr + pid_m)
     eid = tl.load(expert_ids_ptr + grp)
+    # int64 BEFORE any stride product: eid * stride_be overflows signed int32
+    # the moment the packed stack passes 2^31 bytes -- same boundary nf4_grouped
+    # measured (256 x 8 MiB passes, 257 faults); the MXFP4 port had dropped the
+    # cast and G1's 300-row transient pool (stride 8.8 MB, slots to 255) hit it.
+    eid = eid.to(tl.int64)
 
     offs_m = tl.arange(0, BLOCK_M)
     offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
@@ -108,6 +113,11 @@ def _gemv_mxfp4_grouped(
     g = tl.program_id(0)
     pid_n = tl.program_id(1)
     eid = tl.load(expert_ids_ptr + g)
+    # int64 BEFORE any stride product: eid * stride_be overflows signed int32
+    # the moment the packed stack passes 2^31 bytes -- same boundary nf4_grouped
+    # measured (256 x 8 MiB passes, 257 faults); the MXFP4 port had dropped the
+    # cast and G1's 300-row transient pool (stride 8.8 MB, slots to 255) hit it.
+    eid = eid.to(tl.int64)
 
     offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
     n_mask = offs_n < N
