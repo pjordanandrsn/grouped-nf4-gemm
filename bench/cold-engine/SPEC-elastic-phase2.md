@@ -128,8 +128,12 @@ resize (slow), and nothing else.
 
 Moving one invocation between tiers changes **both** walls — CPU by
 `t_cpu_row`, GPU by `t_gpu_row` — so both actuators size against the combined
-rate, target the **nearest band edge**, take the floor (undershoot converges;
-overshoot ping-pongs), and cap by what exists (revised, round 2: the first
+rate, target the **nearest band edge**, take the **ceiling**, and cap by what
+exists. Ceiling, not floor (revised, round 3: floor strands the attractor up
+to one row *outside* the band with both actuators sized to zero — not in
+band, not pinned, held forever). Ceiling cannot overshoot across the band
+because calibration is required to make the band at least one move-quantum
+wide (§9) (revised, round 2: the first
 demotion term divided by `t_cpu_row` alone and never checked how many
 resident invocations there were — it could overshoot the band in one step or
 demand demotions that did not exist; promote's greedy form had the mirrored
@@ -141,11 +145,11 @@ each step:
       shrink_transient(deficit)     # event-gated; completes this step (I3)
   if t_cpu > (1 + δ_hi) · t_gpu and vram_free > RESERVE:
       p* = (t_cpu − (1 + δ_hi)·t_gpu) / (t_cpu_row + (1 + δ_hi)·t_gpu_row)
-      p  = clamp(floor(p*), 0, min(cpu_queue, slack_rows(), GROW_CAP))
+      p  = clamp(ceil(p*), 1, min(cpu_queue, slack_rows(), GROW_CAP))
   elif t_cpu < (1 − δ_lo) · t_gpu:
       p  = 0                        # stop copying, and REBALANCE:
       q* = ((1 − δ_lo)·t_gpu − t_cpu) / (t_cpu_row + (1 − δ_lo)·t_gpu_row)
-      q  = clamp(floor(q*), 0, min(resident_invocations, DEMOTE_CAP))
+      q  = clamp(ceil(q*), 1, min(resident_invocations, DEMOTE_CAP))
       route q resident invocations to CPU this step   # execution
                                     # contraction: free, no bytes move (§3).
                                     # capacity reclaim stays pressure-only.
@@ -167,7 +171,8 @@ draft defined equilibrium at δ_lo while the controller held anywhere inside
 
 ```
 in_band      ≜  (1 − δ_lo) · t_gpu ≤ t_cpu ≤ (1 + δ_hi) · t_gpu
-pin_up       ≜  t_cpu above band  and  vram_free ≤ RESERVE      # cannot promote
+pin_up       ≜  t_cpu above band  and  (vram_free ≤ RESERVE
+                                        or slack_rows() = 0)   # cannot promote
 pin_down     ≜  t_cpu below band  and  resident_invocations = 0 # cannot demote
 equilibrium  ≜  in_band  or  pin_up  or  pin_down
 ```
@@ -228,7 +233,12 @@ Sizing follows from free VRAM; no timer exists to mistune.
 `elastic_e3.py` is the startup probe, run once per box class: emits
 `(B_cpu, B_link, B_gpu, hide)` with the thread sweep embedded, and the
 derived `n*` and per-row µs table. Controller thresholds (`δ_hi`, `δ_lo`,
-`GROW_CAP`, `RESERVE`) are computed from it, not baked in (I8). A box where
+`GROW_CAP`, `DEMOTE_CAP`, `RESERVE`) are computed from it, not baked in (I8) —
+including the round-3 constraint that makes the integer actuators sound: the
+hold band must be at least one move-quantum wide at the calibrated operating
+point, `(δ_lo + δ_hi) · t_gpu ≥ t_cpu_row + t_gpu_row`, which is what lets
+the ceiling-sized step land inside the band rather than across it, and what
+makes G2's ≤ 1-flip-per-32 bound meaningful rather than lucky. A box where
 `n*_direct` falls outside [2, 5] un-hidden fails calibration and the
 controller stays OFF — the E3 gate, kept as a runtime guard.
 
