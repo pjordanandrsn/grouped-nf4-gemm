@@ -8,7 +8,9 @@ necessary.
 
 Revised on review (#203, both Bugbot findings): execution demotion when the
 GPU leads — placement decoupled from residency — and the equilibrium predicate
-unified with the deadband. The revisions are marked where they land.
+unified with the deadband. The revisions are marked where they land. Re-founded
+after G1c (#210): the controller is a residency manager on reuse economics;
+the δ-band law those reviews hardened is retired with its objective (§5).
 
 Lineage: [`PREREG-elastic-promotion.md`](PREREG-elastic-promotion.md) →
 [`RESULTS-elastic-promotion.md`](RESULTS-elastic-promotion.md) (gate E).
@@ -19,7 +21,7 @@ there and is the subject here.
 
 Treat free VRAM as a fluid execution cache. When the CPU tier is the long
 pole, execute some of its expert invocations on GPU — copy up, execute,
-retain; when the GPU is the long pole or VRAM is wanted elsewhere, contract.
+retain; when VRAM is wanted elsewhere, contract (KV wins, I3).
 The target is
 
 ```
@@ -70,10 +72,8 @@ one moves data:
 
 * **execution contraction** — route a resident expert's invocation to CPU
   anyway. Free, immediate, per-step; no bytes move. This, not eviction, is
-  how the controller rebalances when the GPU is the long pole (§5 — revised:
-  the first draft only stopped promoting, and since retain-on-execute never
-  evicts without insert pressure, an over-promoted pool would have kept
-  feeding the GPU forever).
+  how the controller behaves when the GPU stops paying (§5 — re-founded on
+  reuse after G1c: a GPU long pole is a fault guard, not a balance point)
 * **capacity contraction** — actually freeing rows: pressure-driven,
   event-gated, `shrink()` (§6). Idle resident rows cost capacity, never wall.
 
@@ -97,11 +97,10 @@ the measured don't-care band; no new allocator states are introduced.
 ## 4. The promotion path
 
 1. Executor assigns the step's invocations: VRAM-resident → GPU **by
-   default**, else CPU — and the controller may override the default,
-   directing resident invocations to CPU when the GPU is the long pole.
-   **Placement is the actuator; residency follows it** (revised — a hard
-   residency→placement binding deadlocked the min-max loop in the
-   GPU-long-pole direction).
+   default**, else CPU. (The old demote-override — routing resident
+   invocations to CPU to balance walls — is retired with the δ-band law,
+   G1c re-founding; residency itself is the actuator now, and the OFF
+   switch covers the fault directions.)
 2. Controller (§5) picks `p ≥ 0` CPU-assigned invocations to promote — any
    `p` of them; there is no ranking to compute (E2).
 3. Each promoted row: pinned-staging H2D on the **side stream**; the row
@@ -127,92 +126,93 @@ the measured don't-care band; no new allocator states are introduced.
 5. Retain-on-execute: the row stays until evicted by transient churn, a
    `shrink()` call, or promotion into the persistent pool (§5).
 
-## 5. The controller
+## 5. The controller — the balance law, re-derived on reuse (G1c re-founding)
 
-Observables (per step, EWMA α ≈ 1/16): `t_cpu`, `t_gpu` (executor timings),
-`t_storage` (ColdTier read wall), `link_used` (rows moved × row bytes),
-`vram_free` (allocator), transient hit counters (already in `stats()`).
+> Rewritten after G1c ([RESULTS-p2-g1c.md](RESULTS-p2-g1c.md)). The original
+> law balanced *this step's* walls by moving work between tiers. G1c measured
+> why that objective is unwinnable on a DRAM-bound CPU tier: host traffic is
+> p-invariant — a promoted row's bytes cross the same DRAM the tier is
+> saturating, with a mixing penalty on top. What promotion buys is never this
+> step; it is **residency** — every future invocation served from VRAM
+> removes a full row of host-DRAM traffic from a future step. The controller
+> is therefore a residency manager, not a load balancer.
 
-Actuators: `p` (promotions this step), transient grow/shrink, persistent
-resize (slow), and nothing else.
+**Objective.** Minimize the steady-state cold mass per step —
+`E[miss_t] · rb / B_eff`, the DRAM-bound wall — subject to VRAM capacity
+(KV-coupled, §6) and to never visibly inflating any single step (I4's
+spirit, extended: promotion spends only bandwidth and dispatch the step can
+absorb).
 
-Moving one invocation between tiers changes **both** walls — CPU by
-`t_cpu_row`, GPU by `t_gpu_row` — so both actuators solve the one-step linear
-model for the **nearest band edge**. Revised wholesale in round 4: three
-review rounds each found a drift between the branch guards, the pin
-predicates and the calibration constraint, because the same quantity was
-written in three places. Each is now defined **once** and used everywhere —
-by the loop, by the equilibrium predicate, and by G2.
+**The reuse ledger** (per cold-executed invocation, from calibration):
 
 ```
-avail_up()   = min(cpu_queue, slack_rows(), GROW_CAP, slots_obtainable(),
-                   LINK_CAP())
-LINK_CAP()   = floor(cpu_queue · t_cpu_row / (t_cpu_row + t_link_row))
-               # G1 amendment: a burst's copies must fit under the CPU work
-               # that REMAINS after the burst is carved out — p rows of copies
-               # hide under (cpu_queue − p) rows of CPU, which solves to this
-               # cap. G1 measured the violation: at p = 8, 1354 µs of copies
-               # under 371 µs of CPU.
-avail_down() = min(resident_invocations, DEMOTE_CAP)
+cost(promote)  = (κ − 1) · rb/B_eff + C_disp/p    # the mix penalty: the
+                 # row's bytes cross DRAM either way (CPU read vs DMA read);
+                 # promotion adds only the interleave inefficiency. G1c
+                 # measured κ ≈ 1.3 (mixed DMA+GEMV ran 128.5 GB/s vs 167.9
+                 # pure), plus burst dispatch amortized over p.
+payback(hit)   = rb/B_eff  per future resident invocation — a hit removes a
+                 # whole row of host traffic from a future step.
+break-even     : E[future reuses] > (κ − 1) + C_disp/(p · rb/B_eff) ≈ 0.3–0.5
+```
 
-slots_obtainable() = transient slots free now, growable without breaching
-                     RESERVE, or reclaimable-now occupied transient slots
-                     (evict-on-insert; event-gated — a slot still under
-                     readers does not count this step)
+E1 measured the reuse distribution: 69–96% of invocations recur ≥ 2 more
+times within 32 steps. Expected payback exceeds promotion cost several times
+over for the *population* — so, exactly as E2 found no selector is needed,
+**the law promotes every cold-executed row, retain-on-execute, throttled
+only by global budgets**. There is no per-row prediction to mistune; what
+G1c killed was promoting *for the current step*, not promoting.
+
+**The law** (each step):
+
+```
+avail()    = min(cold_t, SMOOTH_CAP, slack_rows(), slots_obtainable(),
+                 LINK_CAP())
+SMOOTH_CAP = ceil(PROMO_FRAC · m)   # bounds this step's visible inflation:
+             # p·(κ−1)·rb/B_eff + C_disp ≤ ε · t_step, ε registered at
+             # calibration (default 5%); PROMO_FRAC follows from it
+LINK_CAP() unchanged (G1 amendment)  # copies must fit the step regardless
 
 each step:
-  if pressure():                     # KV growth or reserve breach
-      shrink_transient(deficit)      # event-gated; completes this step (I3)
-  if t_cpu > (1 + δ_hi) · t_gpu:                       # above band
-      if avail_up() == 0:  hold                        # pin_up
-      else:
-          p* = (t_cpu − (1 + δ_hi)·t_gpu) / (t_cpu_row + (1 + δ_hi)·t_gpu_row)
-          p  = min(ceil(p*), avail_up())               # ceil ≥ 1 out of band;
-                                                       # min() cannot invert
-          if p · (t_cpu_row − t_gpu_row) ≤ C_disp:     # G1 amendment: the
-              hold                                     # dispatch floor — a
-                                                       # burst below it loses
-  elif t_cpu < (1 − δ_lo) · t_gpu:                     # below band
-      if avail_down() == 0:  hold                      # pin_down
-      else:
-          q* = ((1 − δ_lo)·t_gpu − t_cpu) / (t_cpu_row + (1 − δ_lo)·t_gpu_row)
-          q  = min(ceil(q*), avail_down())             # execution contraction:
-                                                       # free, no bytes move
-  else:  hold                                          # in band
-```
-
-Round-4 corrections folded in: `clamp(·, 1, avail)` inverted its bounds at
-zero availability and the promote guard entered on VRAM alone while
-`slack_rows() = 0` — availability is now checked **before** sizing, with one
-`avail_*()` definition per direction, and a full transient pool no longer
-reads as exhaustion (evict-on-insert churn is a legal, paying promotion; only
-an empty pool with growth barred by RESERVE exhausts the direction).
+  if pressure():  shrink_transient(deficit)    # event-gated, I3 — KV wins
+  cold_t = invocations executed on CPU this step (non-resident)
+  p_t    = avail()                             # 0 is legal: no burst
+  promote the p_t most recent of cold_t as ONE stream-ordered burst (I9);
+  un-budgeted cold rows execute with no state change — the next recurrence
+  re-qualifies them (retain-on-execute has no memory to corrupt)
 
 every PERIOD (≈256) steps:
   persistent ← LFU-promote transient rows resident ≥ 2·PERIOD   (hysteresis)
   persistent shrink iff per-row hit rate < θ for 2 consecutive periods
 ```
 
-Hysteresis is two-sided (`δ_hi > δ_lo`, promote-age ≥ 2·PERIOD, shrink needs
-2 periods) because the persistent pool must move slowly — continuously
-evicting and reloading it would destroy the retention benefit that is the one
-measured win. The transient pool is the fast half by construction.
+Observables (per step, EWMA α ≈ 1/16): cold mass `miss_t`, novelty `new_t`
+(first-ever (layer, expert) arrivals), fills, `vram_free`, transient hit
+counters (`stats()`), and the calibrated constants. `t_cpu`/`t_gpu` walls
+remain observed for the OFF switch and G4, but no longer drive an actuator:
+**the δ band, its demote sizing, its pins, and the band-width calibration
+constraint are retired** — they steered the objective G1c refuted. A GPU
+long pole is a fault condition here (`t_gpu_row ≪ t_cpu_row`), handled by
+`pressure()` and the OFF switch, not an operating point to balance around.
 
-Equilibrium — **the same predicate as the hold band** (revised: the first
-draft defined equilibrium at δ_lo while the controller held anywhere inside
-δ_hi, so it could hold forever without ever "converging" by G2's measure):
+Hysteresis on the persistent pool is unchanged, for the same measured
+reason as before: continuously evicting and reloading it would destroy the
+retention benefit that is the one measured win. The transient pool is the
+fast half by construction.
+
+**Equilibrium** — residency has converged when promotions chase only
+novelty and the split is stable:
 
 ```
-in_band      ≜  (1 − δ_lo) · t_gpu ≤ t_cpu ≤ (1 + δ_hi) · t_gpu
-pin_up       ≜  t_cpu above band  and  avail_up()  = 0
-pin_down     ≜  t_cpu below band  and  avail_down() = 0
-equilibrium  ≜  in_band  or  pin_up  or  pin_down
+converged  ≜  EWMA(fills) ≤ (1 + η) · EWMA(new_t)   # fills track first
+                                                    # arrivals only
+stable     ≜  no grow/shrink and no persistent-pool change this PERIOD
+equilibrium ≜ converged and stable
 ```
 
-The pins reuse the loop's own `avail_*()` functions — the same expressions
-that decide whether the controller acts decide whether G2 calls the state
-converged, so the two cannot drift again (rounds 2–4 were three instances of
-exactly that drift). `δ_lo`/`δ_hi` are the band's hysteresis edges, not a second, tighter target.
+η (default 0.25) absorbs legitimate re-fills of capacity-evicted rows; a
+fill rate far above novelty is thrash (the I1 margin failure), and that is
+a G2 spoiler, not a tuning knob.
 
 **The retention window is emergent, not configured.** A transient pool of
 `rows_t` at promotion rate `r` holds a row for `W ≈ rows_t / r` steps; E1's
@@ -251,8 +251,8 @@ Sizing follows from free VRAM; no timer exists to mistune.
   less amortisation but n\* = 1 makes single-use promotion neutral-positive
   while hidden; worst case the transient pool is pure execution staging and
   still beats CPU 2.3× visible.
-* **Hide collapses** (CPU queue empties — nothing to hide under): the balance
-  condition self-limits, since promotion only runs while `t_cpu > t_gpu`.
+* **CPU queue empties** (everything already resident): `cold_t = 0` so the
+  law promotes nothing — the budget is demand-driven and self-limits.
 * **Link saturated** (residency refills at tight capacity): `slack_rows()`
   goes to zero and promotion pauses; residency traffic has priority. Within
   a step, `LINK_CAP()` (§5) separately keeps a burst's own copies inside the
@@ -266,24 +266,17 @@ Sizing follows from free VRAM; no timer exists to mistune.
 `(B_cpu, B_link, B_gpu, hide)` with the thread sweep embedded, the derived
 `n*` and per-row µs table, and — G1 amendment — **`C_disp`**: the measured
 serial host cost of one amended burst (enqueue + one event + pre-staged-id
-launch + sync, warm, idle GPU). `C_disp` feeds the dispatch floor (§5); the
-feasible burst window on a box is `[p_min, LINK_CAP]` with
-`p_min = min p : p·(t_cpu_row − t_gpu_row) > C_disp`, and a box whose window
-is empty at the engine's `m` fails calibration for promotion exactly as an
-out-of-range `n*` does. Controller thresholds (`δ_hi`, `δ_lo`,
-`GROW_CAP`, `DEMOTE_CAP`, `RESERVE`) are computed from it, not baked in (I8) —
-including the constraint that makes the integer actuators sound (corrected in
-round 4 — the round-3 form used the raw quantum and missed that the far edge
-itself moves): a step from just outside either edge must land inside, i.e.
-
-```
-demote:  (δ_lo + δ_hi) · t_gpu ≥ t_cpu_row + (1 + δ_hi) · t_gpu_row
-promote: (δ_lo + δ_hi) · t_gpu ≥ t_cpu_row + (1 − δ_lo) · t_gpu_row
-```
-
-The demote inequality dominates and is the calibration requirement. It is
-what lets a ceiling-sized step land inside the band rather than across it,
-and what makes G2's ≤ 1-flip-per-32 bound meaningful rather than lucky. A box where
+launch + sync, warm, idle GPU). `C_disp` and — G1c additions — **`B_dram`** (the shared host ceiling, a
+parallel triad) and **`κ`** (the DMA+GEMV mixing penalty: pure-GEMV
+effective bandwidth over mixed-arm effective bandwidth; 1.3 measured) feed
+SMOOTH_CAP's inflation budget (§5). **Measured-load rule (G1c):** any
+hide/overlap constant is valid only at the CPU tier's operating thread
+count and intensity — E3b's full hide at 132.5 + 52.6 < 212 GB/s was true
+and useless for a 171.8 GB/s tier; probes must sample the operating point.
+Controller thresholds (`PROMO_FRAC`/ε, `PERIOD`, θ, η, `GROW_CAP`,
+`RESERVE`) are computed from calibration, not baked in (I8). The retired
+δ-band constraints (rounds 3–4) live in git history only — they calibrated
+the actuators of the refuted objective. A box where
 `n*_direct` falls outside [2, 5] un-hidden fails calibration and the
 controller stays OFF — the E3 gate, kept as a runtime guard.
 
@@ -347,9 +340,21 @@ before any wall number is read.
   DRAM-headroom budget (`B_cpu_load + B_link ≤ B_dram`, calibrated at the
   tier's operating load), and §5's balance law re-derived on that objective
   before G2 is registered. G2–G4 are NOT run against the refuted objective.
-* **P2-G2 (convergence):** from cold start on captured routing, reach
-  equilibrium (§5) within **64 steps**; after convergence, direction flips ≤
-  1 per 32 steps. Refuted ⇒ the hysteresis is wrong, not tuned live.
+* **P2-G2 (residency convergence, offline — re-registered on the reuse
+  law):** controller-in-replay on the 16 committed rank traces, driving the
+  **real** `DevRowCache` (the score-the-shipped-thing rule), cold start,
+  scored in fill/miss trace units so no box is needed. Registered shape:
+  (a) *convergence*: trailing-32 fill rate within 1.10× of the
+  steps-256–512 plateau within **64 steps** on ≥ 14/16 traces;
+  (b) *plateau quality* (unthrottled): total fills over steps 128–512 ≤
+  **1.10×** same-capacity ideal-LRU on every trace; (c) *equilibrium*:
+  post-convergence `EWMA(fills) ≤ (1 + η)·EWMA(novelty)`, η = 0.25 — §5's
+  own predicate; (d) *throttle gracefulness*: PROMO_FRAC ∈ {1/16, 1/8, 1/4}
+  degrades convergence ≤ 2× and plateau fills ≤ 1.05× vs unthrottled.
+  Spoilers, both must fail: `protected = rows` (the I1 margin trap) must
+  thrash past the (c) bound; a no-retention arm (evict-after-execute) must
+  plateau at all-miss. Refuted ⇒ the law's budgets/hysteresis are wrong —
+  fixed in spec, not tuned live.
 * **P2-G3 (elasticity):** mid-run VRAM ballast injection: no OOM; transient
   shrinks within 2 steps; wall degrades monotonically (no cliff); recovery
   within 64 steps of release.
@@ -374,7 +379,7 @@ The near-miss band (still unused, still a separate registered candidate).
 | risk | why it is believed small | falsifier |
 |---|---|---|
 | DRAM contention between CPU GEMV and H2D staging | measured jointly: 7.8% completion inflation while absorbing a full copy stream | P2-G1 realised/predicted ratio |
-| controller oscillation under bursty routing | deadband + rate cap + slow persistent half | P2-G2 flip count |
+| controller oscillation under bursty routing | demand-driven budget + slow persistent half | P2-G2 churn-vs-novelty bound |
 | transient pool churn evicting rows mid-read | same event-gated states as the shipped engine | I2/I3 + existing kernel tests |
 | constants drift across boxes | calibration is mandatory and gating (I8) | E3 guard at startup |
 | Qwen-class low reuse wastes VRAM | n\* = 1 makes waste ≈ 0 wall; capacity returns via shrink | G3 under a low-reuse trace |
