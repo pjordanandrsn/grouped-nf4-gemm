@@ -406,6 +406,20 @@ before any wall number is read.
 * **P2-G3 (elasticity):** mid-run VRAM ballast injection: no OOM; transient
   shrinks within 2 steps; wall degrades monotonically (no cliff); recovery
   within 64 steps of release.
+  **Outcomes 2026-08-23** ([RESULTS-p2-g3.md](RESULTS-p2-g3.md),
+  [RESULTS-p2-g3p.md](RESULTS-p2-g3p.md)): G3 REFUTED as scored (a JIT
+  warm-up instrument bug plus wall bars that contradicted the G1c budget);
+  G3' — bars re-derived, hard stop — REFUTED on the 3.0×-phase-median
+  spike bar (a residual step-1 init and ~25 ms once-per-phase host blips
+  on a shared box; no runaway). **The gate is closed.** The mechanism
+  passed every clause aimed at it, twice: real-VRAM shrink in ~8 ms, the
+  unfittable ballast fitting, throttled recovery on schedule, and the
+  shrink-disabled spoiler OOMing in all four runs. The steady-state
+  no-cache crossover replicated (gptoss 0.56×, qwen 1.44× at 0.7×
+  capacity) — the G1c hit-mass dependence, measured twice. G4's
+  registration inherits: a full engine-level warm-up inventory, and
+  blip-robust wall bars (step-quantiles or per-step repeat medians) for
+  shared cloud hosts.
 * **P2-G4 (the objective):** step wall ≤ **1.15 ×** `max(T_cpu, T_gpu,
   T_storage)` at equilibrium — overlap realised — against a
   sequential-sum baseline demonstrating the gap.
