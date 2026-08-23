@@ -1,0 +1,131 @@
+── renting offer 46525353
+instance 48493880
+[1] none ssh8.vast.ai 13880
+[2] running ssh8.vast.ai 13880
+SSH-OK
+── pre-gate
+Model name:                              AMD EPYC 9655 96-Core Processor
+avx512f-ok
+48
+── apt + env
+gcc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0
+available: 1 nodes (0)
+node 0 cpus: 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47
+triad 32t: 197.5 GB/s
+── ship repo + harness
+Note: switching to '426d93c1574934ce0710e21c8c2bc5f21780ad9b'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+426d93c Low-G split re-certification: A/A gate, noise-derived bars (registered) (#238)
+── B3 bit-exact at NEW
+native built
+B3 bit-exact: 1 passed
+── arm A1 (old 426b4f2)
+G= 1 rows=128 N= 256  med    432.9 us
+G= 1 rows=128 N= 768  med    464.5 us
+G=16 rows=128 N= 256  med    152.7 us
+G=32 rows= 64 N= 256  med     74.7 us
+G= 8 rows=128 N= 768  med    357.1 us
+G=16 rows=128 N= 768  med    362.8 us
+G=32 rows=128 N= 768  med    336.8 us
+G=64 rows=128 N= 768  med    336.1 us
+G=29 rows= 64 N= 768  med    214.9 us
+G=29 rows=128 N= 768  med    333.0 us
+receipt -> /root/certA1.json
+── arm A2 (old, same binary)
+G= 1 rows=128 N= 256  med    423.5 us
+G= 1 rows=128 N= 768  med    436.8 us
+G=16 rows=128 N= 256  med    140.8 us
+G=32 rows= 64 N= 256  med     74.2 us
+G= 8 rows=128 N= 768  med    351.0 us
+G=16 rows=128 N= 768  med    358.4 us
+G=32 rows=128 N= 768  med    296.3 us
+G=64 rows=128 N= 768  med    330.2 us
+G=29 rows= 64 N= 768  med    208.9 us
+G=29 rows=128 N= 768  med    332.1 us
+receipt -> /root/certA2.json
+── A/A GATE
+gate B1 1,128,256   mean    428.2 us  noise   2.2%  ok
+gate B1 1,128,768   mean    450.6 us  noise   6.1%  ok
+gate B2 16,128,256  mean    146.7 us  noise   8.1%
+gate B2 32,64,256   mean     74.4 us  noise   0.7%
+gate B2 8,128,768   mean    354.1 us  noise   1.7%
+gate B2 16,128,768  mean    360.6 us  noise   1.2%
+gate B2 32,128,768  mean    316.5 us  noise  12.8%
+gate B2 64,128,768  mean    333.1 us  noise   1.8%
+gate B2 29,64,768   mean    211.9 us  noise   2.8%
+gate B2 29,128,768  mean    332.6 us  noise   0.3%
+gate B2 median noise 1.8% (bar <= 5%)
+A/A GATE: ACCEPT
+── arm B (new 426d93c)
+G= 1 rows=128 N= 256  med    294.6 us
+G= 1 rows=128 N= 768  med    565.8 us
+G=16 rows=128 N= 256  med    198.9 us
+G=32 rows= 64 N= 256  med    116.7 us
+G= 8 rows=128 N= 768  med    558.5 us
+G=16 rows=128 N= 768  med    552.2 us
+G=32 rows=128 N= 768  med    551.6 us
+G=64 rows=128 N= 768  med    593.9 us
+G=29 rows= 64 N= 768  med    214.0 us
+G=29 rows=128 N= 768  med    325.7 us
+receipt -> /root/certB.json
+── arm A3 (old confirm)
+G= 1 rows=128 N= 256  med    371.9 us
+G= 1 rows=128 N= 768  med    742.9 us
+G=16 rows=128 N= 256  med    130.8 us
+G=32 rows= 64 N= 256  med     67.4 us
+G= 8 rows=128 N= 768  med    332.0 us
+G=16 rows=128 N= 768  med    321.3 us
+G=32 rows=128 N= 768  med    257.9 us
+G=64 rows=128 N= 768  med    309.0 us
+G=29 rows= 64 N= 768  med    181.3 us
+G=29 rows=128 N= 768  med    264.8 us
+receipt -> /root/certA3.json
+── SCORE
+gate B1 1,128,256   mean    428.2 us  noise   2.2%  ok
+gate B1 1,128,768   mean    450.6 us  noise   6.1%  ok
+gate B2 16,128,256  mean    146.7 us  noise   8.1%
+gate B2 32,64,256   mean     74.4 us  noise   0.7%
+gate B2 8,128,768   mean    354.1 us  noise   1.7%
+gate B2 16,128,768  mean    360.6 us  noise   1.2%
+gate B2 32,128,768  mean    316.5 us  noise  12.8%
+gate B2 64,128,768  mean    333.1 us  noise   1.8%
+gate B2 29,64,768   mean    211.9 us  noise   2.8%
+gate B2 29,128,768  mean    332.6 us  noise   0.3%
+gate B2 median noise 1.8% (bar <= 5%)
+A/A GATE: ACCEPT
+B1 1,128,256   A    428.2  B    294.6  improvement  31.2%  bar >= 30.0%  PASS
+B1 1,128,768   A    450.6  B    565.8  improvement -25.6%  bar >= 30.0%  FAIL
+B2 16,128,256  A    146.7  B    198.9  |dev|    52.1  allow    35.5  FAIL
+B2 32,64,256   A     74.4  B    116.7  |dev|    42.3  allow     7.4  FAIL
+B2 8,128,768   A    354.1  B    558.5  |dev|   204.5  allow    35.4  FAIL
+B2 16,128,768  A    360.6  B    552.2  |dev|   191.6  allow    36.1  FAIL
+B2 32,128,768  A    316.5  B    551.6  |dev|   235.1  allow   121.5  FAIL
+B2 64,128,768  A    333.1  B    593.9  |dev|   260.7  allow    33.3  FAIL
+B2 29,64,768   A    211.9  B    214.0  |dev|     2.1  allow    21.2  PASS
+B2 29,128,768  A    332.6  B    325.7  |dev|     6.9  allow    33.3  PASS
+A3 DRIFT 1,128,256   A3    371.9 vs mean(A)    428.2 (bound    42.8)
+A3 DRIFT 1,128,768   A3    742.9 vs mean(A)    450.6 (bound    83.1)
+A3 DRIFT 16,128,768  A3    321.3 vs mean(A)    360.6 (bound    36.1)
+A3 DRIFT 29,64,768   A3    181.3 vs mean(A)    211.9 (bound    21.2)
+A3 DRIFT 29,128,768  A3    264.8 vs mean(A)    332.6 (bound    33.3)
+VERDICT: VOID (box drifted mid-experiment)
+── destroy
+instances remaining: 0
+RUN-COMPLETE
+
+[exited with code 0]

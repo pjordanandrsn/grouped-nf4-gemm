@@ -1,0 +1,105 @@
+── renting offer 47185037
+instance 48494472
+[1] none ssh6.vast.ai 14472
+[2] loading ssh6.vast.ai 14472
+[3] loading ssh6.vast.ai 14472
+[4] loading ssh6.vast.ai 14472
+[5] loading ssh6.vast.ai 14472
+[6] loading ssh6.vast.ai 14472
+[7] loading ssh6.vast.ai 14472
+[8] loading ssh6.vast.ai 14472
+[9] loading ssh6.vast.ai 14472
+[10] loading ssh6.vast.ai 14472
+[11] loading ssh6.vast.ai 14472
+[12] loading ssh6.vast.ai 14472
+[13] loading ssh6.vast.ai 14472
+[14] loading ssh6.vast.ai 14472
+[15] none - -
+[16] none - -
+[17] none - -
+[18] none - -
+[19] none - -
+[20] none - -
+[21] none - -
+[22] none - -
+[23] none - -
+[24] none - -
+[25] none - -
+[26] none - -
+[27] none - -
+[28] none - -
+[29] none - -
+[30] running ssh6.vast.ai 14472
+SSH-OK
+── pre-gate
+Model name:                              AMD EPYC 9554 64-Core Processor
+avx512f-ok
+64
+── apt + env
+gcc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0
+available: 1 nodes (0)
+node 0 cpus: 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63
+triad 32t: 41.9 GB/s
+── ship repo + harness
+Note: switching to '426d93c1574934ce0710e21c8c2bc5f21780ad9b'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+426d93c Low-G split re-certification: A/A gate, noise-derived bars (registered) (#238)
+── B3 bit-exact at NEW
+native built
+B3 bit-exact: 1 passed
+── arm A1 (old 426b4f2)
+G= 1 rows=128 N= 256  med   5610.9 us
+G= 1 rows=128 N= 768  med   7771.1 us
+G=16 rows=128 N= 256  med   6252.3 us
+G=32 rows= 64 N= 256  med   3132.9 us
+G= 8 rows=128 N= 768  med   5735.6 us
+G=16 rows=128 N= 768  med   5431.6 us
+G=32 rows=128 N= 768  med   4297.7 us
+G=64 rows=128 N= 768  med   4007.9 us
+G=29 rows= 64 N= 768  med   2273.8 us
+G=29 rows=128 N= 768  med   3561.7 us
+receipt -> /root/certA1.json
+── arm A2 (old, same binary)
+G= 1 rows=128 N= 256  med   5507.9 us
+G= 1 rows=128 N= 768  med  11600.3 us
+G=16 rows=128 N= 256  med   3226.9 us
+G=32 rows= 64 N= 256  med   5565.4 us
+G= 8 rows=128 N= 768  med  14469.0 us
+G=16 rows=128 N= 768  med  13212.2 us
+G=32 rows=128 N= 768  med   9536.8 us
+G=64 rows=128 N= 768  med   8967.1 us
+G=29 rows= 64 N= 768  med   7633.4 us
+G=29 rows=128 N= 768  med  13550.5 us
+receipt -> /root/certA2.json
+── A/A GATE
+gate B1 1,128,256   mean   5559.4 us  noise   1.9%  ok
+gate B1 1,128,768   mean   9685.7 us  noise  39.5%  FAIL(>10%)
+gate B2 16,128,256  mean   4739.6 us  noise  63.8%
+gate B2 32,64,256   mean   4349.2 us  noise  55.9%
+gate B2 8,128,768   mean  10102.3 us  noise  86.5%
+gate B2 16,128,768  mean   9321.9 us  noise  83.5%
+gate B2 32,128,768  mean   6917.3 us  noise  75.7%
+gate B2 64,128,768  mean   6487.5 us  noise  76.4%
+gate B2 29,64,768   mean   4953.6 us  noise 108.2%
+gate B2 29,128,768  mean   8556.1 us  noise 116.7%
+gate B2 median noise 83.5% (bar <= 5%)
+A/A GATE: REJECT -- destroy and re-hunt
+GATE-REJECT: destroying, re-hunt
+DESTROYED 48494472
+
+[exited with code 2]
