@@ -423,6 +423,19 @@ before any wall number is read.
 * **P2-G4 (the objective):** step wall ≤ **1.15 ×** `max(T_cpu, T_gpu,
   T_storage)` at equilibrium — overlap realised — against a
   sequential-sum baseline demonstrating the gap.
+  **Outcome 2026-08-23: UNINFORMATIVE, gate program closed**
+  ([RESULTS-p2-g4.md](RESULTS-p2-g4.md)) — the tribrid executed end to end
+  with correctness 3/3 (arena → ColdTier at 5.7 GB/s O_DIRECT → pinned
+  view stacks → VRAM pool → all three kernels on the same bytes), but the
+  box's GPU never left idle clocks for the decode launch pattern (SM
+  180 MHz of 3,090; t_gpu_row 162 µs vs the program's 12–16), inflating
+  the alones until the sequential spoiler could not fail. Registered box
+  gates screened CPU regime, triad, and NVMe — never burst-pattern GPU
+  clocks. Any future wall registration inherits: a **burst-clock box
+  probe** (launch-sync at decode granularity vs the sustained rate), the
+  G3' blip-robust bars, the full warm-up inventory — and the engine-level
+  fact that on lazy-ramp hosts the GPU tier's rate is a property of the
+  launch pattern, not the silicon.
 
 Falsifiability preconditions apply to every gate as in gates A–E: a
 configuration must exist in which each prediction fails (e.g., G1 with the
