@@ -1,0 +1,18 @@
+BENCH-START 23:40:05
+BENCH-OK K2BENCH legacy=72.8us vec=80.0us ratio=1.099 bitwise=PASS
+ARM-START g1 23:40:08
+ARM-OK g1 23:40:46
+ARM-START g2 23:40:46
+ARM-OK g2 23:41:12
+ARM-START gl1 23:41:12
+ARM-OK gl1 23:41:39
+ARM-START gl2 23:41:39
+ARM-OK gl2 23:42:06
+ARM-START b16 23:42:06
+ARM-OK b16 23:43:09
+K2-PROPS-START
+K2-PROPS-FAIL
+=========================== short test summary info ============================
+FAILED test_gemv_vec_loads.py::test_vec_loads_bitwise_vs_legacy[1] - ValueErr...
+FAILED test_gemv_vec_loads.py::test_vec_loads_bitwise_vs_legacy[4] - ValueErr...
+2 failed, 49 passed, 14 warnings in 57.22s

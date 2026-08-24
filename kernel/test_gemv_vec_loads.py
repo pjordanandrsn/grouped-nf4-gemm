@@ -12,7 +12,13 @@ import pytest
 import torch
 
 pytest.importorskip("triton", reason="interp-mode kernels need triton")
-os.environ.setdefault("TRITON_INTERPRET", "1")
+if os.environ.get("TRITON_INTERPRET") != "1":
+    # setting the env here is too late on a CUDA box whose session
+    # already imported triton in compiled mode (ValueError at launch,
+    # hit on the K2 box) -- this test is the CI interp tripwire only;
+    # the on-box gate is the bench's CUDA bitwise assert
+    pytest.skip("interp-mode only (CI conftest sets TRITON_INTERPRET=1)",
+                allow_module_level=True)
 
 import nf4_grouped  # noqa: E402
 
@@ -28,10 +34,9 @@ def test_vec_loads_bitwise_vs_legacy(sk, monkeypatch):
     a = torch.randn(T, K, dtype=torch.bfloat16)
     eids = torch.arange(E, dtype=torch.int32)[:T]
     sizes = [1] * T
-    monkeypatch.setenv("GNF4_GEMV_SCALAR_LOADS", "1")
     legacy = nf4_grouped.gemm_4bit_grouped(
         a, packed, absmax, sizes, eids, decode_config=(64, 2), split_k=sk)
-    monkeypatch.delenv("GNF4_GEMV_SCALAR_LOADS")
+    monkeypatch.setenv("GNF4_GEMV_VEC_LOADS", "1")
     vec = nf4_grouped.gemm_4bit_grouped(
         a, packed, absmax, sizes, eids, decode_config=(64, 2), split_k=sk)
     assert torch.equal(legacy, vec)
