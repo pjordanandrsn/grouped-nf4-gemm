@@ -619,6 +619,20 @@ def _decode_plan(N: int, K: int, T: int, sm_count: int):
     cells never split) AND only when each split owns >= SPLITK_MIN_BLOCKS
     absmax blocks (v3: splitting tiny-K cells hurt). fp32 partials are
     host-reduced; power-of-2, capped at 8."""
+    # PREREG-m1-decode-config (K1) ablation override: dead unless
+    # exported. Shape-keyed so an A/B arm can select PER-SHAPE winners
+    # (gate_up and down want different configs) without code edits:
+    #   GNF4_DECODE_PLAN="1536,2048=64,4,8;2048,768=128,2,4"
+    # maps (N, K) -> (bn, warps, split_k); shapes not listed fall
+    # through to the plan below. Unset => byte-identical behavior.
+    plan_env = os.environ.get("GNF4_DECODE_PLAN")
+    if plan_env:
+        for entry in plan_env.split(";"):
+            shape, _, cfg = entry.partition("=")
+            n_s, _, k_s = shape.partition(",")
+            if int(n_s) == N and int(k_s) == K:
+                bn_s, w_s, sk_s = cfg.split(",")
+                return int(bn_s), int(w_s), int(sk_s)
     bn, warps = 64, 2
     programs = T * -(-N // bn)
     split_k = 1
