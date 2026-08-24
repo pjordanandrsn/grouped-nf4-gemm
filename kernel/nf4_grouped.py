@@ -43,6 +43,22 @@ from _triton_shim import tl, triton  # noqa: F401  (re-exported names)
 #: None here keeps the walker happy; the pruned branch never calls it.
 _TL_GATHER = getattr(tl, "gather", None)
 HAS_TL_GATHER = _TL_GATHER is not None
+#: Same bind-once treatment for ``tl.interleave`` (triton >= 3.0): the JIT's
+#: AST walker getattrs every attribute it sees even in pruned constexpr
+#: branches, so the kernels must reference this module-level name, never
+#: ``tl.interleave`` directly (PREREG-k2-vectorized-nibbles).
+_TL_INTERLEAVE = getattr(tl, "interleave", None)
+HAS_TL_INTERLEAVE = _TL_INTERLEAVE is not None
+
+
+def _vec_loads() -> bool:
+    """K2 default: the vectorized dual-nibble mainloop when the triton
+    carries ``tl.interleave``; ``GNF4_GEMV_SCALAR_LOADS=1`` forces the
+    legacy per-element path (the A/B arm and the fallback in one knob)."""
+    return (HAS_TL_INTERLEAVE
+            and os.environ.get("GNF4_GEMV_SCALAR_LOADS") != "1")
+
+
 #: Escape hatch for debugging the v5 loop; never for real results.
 _ALLOW_UNVERIFIED_V5 = os.environ.get("GNF4_ALLOW_UNVERIFIED_V5") == "1"
 
@@ -478,10 +494,18 @@ def _gemv_nf4_grouped(
     stride_an,
     BLOCK_N: tl.constexpr,
     BLOCK_K: tl.constexpr,
+    VEC_LOADS: tl.constexpr,
 ):
     """Decode-specialized path: one token per group (M==1 everywhere), so a
     tensor-core M-tile would waste 15/16 of its lanes. Straight reduction:
-    program (g, n-tile) accumulates out[g, n] = sum_k a[g,k] * w[n,k]."""
+    program (g, n-tile) accumulates out[g, n] = sum_k a[g,k] * w[n,k].
+
+    ``VEC_LOADS`` (K2): load the packed row half-width and contiguous,
+    expand both nibbles via interleave -- the legacy path makes lane
+    PAIRS hit the same byte address (kk // 2), wasting half of every
+    transaction. bnb packs element 2j in the HIGH nibble, 2j+1 LOW, so
+    ``interleave(hi, lo)`` reproduces the element order exactly:
+    bitwise-equal outputs at any fixed config (the K2 hard gate)."""
     g = tl.program_id(0)
     pid_n = tl.program_id(1)
     eid = tl.load(expert_ids_ptr + g)
@@ -495,13 +519,19 @@ def _gemv_nf4_grouped(
     b_base = b_ptr + eid * stride_be + offs_n[:, None] * stride_bn
     a_base = a_ptr + g * K
 
+    offs_kb = tl.arange(0, BLOCK_K // 2)
     acc = tl.zeros((BLOCK_N,), dtype=tl.float32)
     for k0 in range(0, K, BLOCK_K):
         kk = k0 + offs_k
-        bytes_ = tl.load(b_base + (kk[None, :] // 2), mask=n_mask[:, None], other=0).to(
-            tl.int32
-        )
-        nib = tl.where((kk[None, :] % 2) == 0, (bytes_ >> 4) & 0xF, bytes_ & 0xF)
+        if VEC_LOADS:
+            by = tl.load(b_base + (k0 // 2) + offs_kb[None, :],
+                         mask=n_mask[:, None], other=0).to(tl.int32)
+            nib = _TL_INTERLEAVE((by >> 4) & 0xF, by & 0xF)
+        else:
+            bytes_ = tl.load(b_base + (kk[None, :] // 2),
+                             mask=n_mask[:, None], other=0).to(tl.int32)
+            nib = tl.where((kk[None, :] % 2) == 0,
+                           (bytes_ >> 4) & 0xF, bytes_ & 0xF)
         w = tl.load(lut_ptr + nib)
         am = tl.load(
             amax_ptr + eid * stride_ae + offs_n * stride_an + (k0 // BLOCK_K),
@@ -532,6 +562,7 @@ def _gemv_nf4_grouped_splitk(
     stride_an,
     BLOCK_N: tl.constexpr,
     BLOCK_K: tl.constexpr,
+    VEC_LOADS: tl.constexpr,
 ):
     """Split-K variant of the decode reduction for occupancy-starved grids
     (few groups x few n-tiles, e.g. top_k=1): program (g, n-tile, k-split)
@@ -555,13 +586,19 @@ def _gemv_nf4_grouped_splitk(
 
     k_lo = pid_k * KBLOCKS_PER_SPLIT * BLOCK_K
     k_hi = tl.minimum(k_lo + KBLOCKS_PER_SPLIT * BLOCK_K, K)
+    offs_kb = tl.arange(0, BLOCK_K // 2)
     acc = tl.zeros((BLOCK_N,), dtype=tl.float32)
     for k0 in range(k_lo, k_hi, BLOCK_K):
         kk = k0 + offs_k
-        bytes_ = tl.load(b_base + (kk[None, :] // 2), mask=n_mask[:, None], other=0).to(
-            tl.int32
-        )
-        nib = tl.where((kk[None, :] % 2) == 0, (bytes_ >> 4) & 0xF, bytes_ & 0xF)
+        if VEC_LOADS:
+            by = tl.load(b_base + (k0 // 2) + offs_kb[None, :],
+                         mask=n_mask[:, None], other=0).to(tl.int32)
+            nib = _TL_INTERLEAVE((by >> 4) & 0xF, by & 0xF)
+        else:
+            bytes_ = tl.load(b_base + (kk[None, :] // 2),
+                             mask=n_mask[:, None], other=0).to(tl.int32)
+            nib = tl.where((kk[None, :] % 2) == 0,
+                           (bytes_ >> 4) & 0xF, bytes_ & 0xF)
         w = tl.load(lut_ptr + nib)
         am = tl.load(
             amax_ptr + eid * stride_ae + offs_n * stride_an + (k0 // BLOCK_K),
@@ -633,6 +670,18 @@ def _decode_plan(N: int, K: int, T: int, sm_count: int):
             if int(n_s) == N and int(k_s) == K:
                 bn_s, w_s, sk_s = cfg.split(",")
                 return int(bn_s), int(w_s), int(sk_s)
+    # PREREG-m1-decode-config K1 winners, baked under the prereg's
+    # PARTIAL consequence (H-K ratio 0.794 in the (2/3, 0.826] band,
+    # H-E 13.46 ms <= 13.8 bar, token agreement 127/127, property
+    # suite 48/48 under the winners) -- full disclosure in
+    # RESULTS-m1-decode-config.md, receipts in receipts-m1-config/.
+    # Guarded to sm_120-class parts at the collapsed M=1 census shapes;
+    # everything else keeps the universal constant below.
+    if sm_count >= 160:
+        if (N, K, T) == (1536, 2048, 8):
+            return 64, 2, 16
+        if (N, K, T) == (2048, 768, 8):
+            return 32, 2, 1
     bn, warps = 64, 2
     programs = T * -(-N // bn)
     split_k = 1
@@ -789,6 +838,7 @@ def gemm_4bit_grouped(
                 absmax.stride(1),
                 BLOCK_N=bn,
                 BLOCK_K=BLOCKSIZE,
+                VEC_LOADS=_vec_loads(),
                 num_warps=warps,
                 num_stages=3,
             )
@@ -814,6 +864,7 @@ def gemm_4bit_grouped(
             absmax.stride(1),
             BLOCK_N=bn,
             BLOCK_K=BLOCKSIZE,
+            VEC_LOADS=_vec_loads(),
             num_warps=warps,
             num_stages=3,
         )

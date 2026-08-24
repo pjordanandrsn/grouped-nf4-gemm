@@ -213,6 +213,13 @@ class TestSplitK:
         for sm in (26, 64):
             bn, w, _ = _decode_plan(2048, 768, 8, sm)
             assert (bn, w) == (64, 2)
+        # K1 winners fire ONLY on sm_120-class parts at the exact M=1
+        # census shapes (receipts-m1-config/); everything else at 170 SMs
+        # still gets the universal plan
+        assert _decode_plan(1536, 2048, 8, 170) == (64, 2, 16)
+        assert _decode_plan(2048, 768, 8, 170) == (32, 2, 1)
+        bn, w, _ = _decode_plan(4096, 1024, 8, 170)
+        assert (bn, w) == (64, 2)
         # Scout-down-like starved cell splits (128 blocks / sk4 = 32 >= floor)
         bn, w, sk = _decode_plan(5120, 8192, 1, 64)
         assert (bn, w) == (64, 2) and sk == 4
