@@ -1,42 +1,53 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
-"""K2 (PREREG-k2-vectorized-nibbles): the vectorized dual-nibble
-mainloop must be BITWISE-equal to the legacy per-element path at any
-fixed config -- same nibbles, same lanes, same LUT gather. Interp-mode
-tripwire (the on-box CUDA bitwise arm is the real gate; interp mode is
-known to mask int-width bugs, so this test guards the ALGEBRA, not the
-codegen)."""
+"""K2 tripwire: the vectorized dual-nibble mainloop must be BITWISE-
+equal to the legacy path at any fixed config. Runs the comparison in a
+SUBPROCESS with TRITON_INTERPRET=1 in a fresh interpreter, so it
+always executes regardless of the surrounding session's triton mode
+(setting the env in-process is too late once triton imported compiled
+-- hit live on the K2 box; and gating on a preset env made the test
+never run anywhere -- Bugbot gnf4#243). Interp mode guards the
+ALGEBRA; the on-box CUDA bitwise assert in bench/k2_vecnib_bench.py
+is the codegen gate."""
 
 import os
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
-import torch
 
 pytest.importorskip("triton", reason="interp-mode kernels need triton")
-if os.environ.get("TRITON_INTERPRET") != "1":
-    # setting the env here is too late on a CUDA box whose session
-    # already imported triton in compiled mode (ValueError at launch,
-    # hit on the K2 box) -- this test is the CI interp tripwire only;
-    # the on-box gate is the bench's CUDA bitwise assert
-    pytest.skip("interp-mode only (CI conftest sets TRITON_INTERPRET=1)",
-                allow_module_level=True)
 
-import nf4_grouped  # noqa: E402
+_INNER = """
+import os
+import torch
+import nf4_grouped
 
-
-@pytest.mark.skipif(not nf4_grouped.HAS_TL_INTERLEAVE,
-                    reason="tl.interleave absent on this triton")
-@pytest.mark.parametrize("sk", [1, 4])
-def test_vec_loads_bitwise_vs_legacy(sk, monkeypatch):
-    torch.manual_seed(9)
-    E, N, K, T = 4, 128, 256, 4
-    packed = torch.randint(0, 256, (E, N, K // 2), dtype=torch.uint8)
-    absmax = torch.rand(E, N, K // 64) + 0.5
-    a = torch.randn(T, K, dtype=torch.bfloat16)
-    eids = torch.arange(E, dtype=torch.int32)[:T]
-    sizes = [1] * T
+torch.manual_seed(9)
+E, N, K, T = 4, 128, 256, 4
+packed = torch.randint(0, 256, (E, N, K // 2), dtype=torch.uint8)
+absmax = torch.rand(E, N, K // 64) + 0.5
+a = torch.randn(T, K, dtype=torch.bfloat16)
+eids = torch.arange(E, dtype=torch.int32)[:T]
+sizes = [1] * T
+for sk in (1, 4):
+    os.environ.pop("GNF4_GEMV_VEC_LOADS", None)
     legacy = nf4_grouped.gemm_4bit_grouped(
         a, packed, absmax, sizes, eids, decode_config=(64, 2), split_k=sk)
-    monkeypatch.setenv("GNF4_GEMV_VEC_LOADS", "1")
+    os.environ["GNF4_GEMV_VEC_LOADS"] = "1"
     vec = nf4_grouped.gemm_4bit_grouped(
         a, packed, absmax, sizes, eids, decode_config=(64, 2), split_k=sk)
-    assert torch.equal(legacy, vec)
+    assert torch.equal(legacy, vec), f"mismatch at sk={sk}"
+print("BITWISE-OK")
+"""
+
+
+def test_vec_loads_bitwise_vs_legacy_interp_subprocess():
+    env = dict(os.environ)
+    env["TRITON_INTERPRET"] = "1"
+    env.pop("GNF4_GEMV_VEC_LOADS", None)
+    r = subprocess.run(
+        [sys.executable, "-c", _INNER], env=env, capture_output=True,
+        text=True, cwd=str(Path(__file__).resolve().parent), timeout=600)
+    assert r.returncode == 0 and "BITWISE-OK" in r.stdout, (
+        r.stdout[-800:] + r.stderr[-800:])
