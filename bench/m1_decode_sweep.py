@@ -40,18 +40,28 @@ def _mk(N, K, T, E=8, device="cuda"):
     return a, packed, absmax, [1] * T, eids
 
 
-def _time(fn, iters, warmup):
+def _time(fn, iters, warmup, chunks=20):
+    """MEDIAN of per-chunk means (iters split into `chunks` event-timed
+    spans). The registered winner rule is a median; a single whole-loop
+    span divided by iters is a MEAN and a few noisy launches can rank a
+    different winner than the rule (Bugbot, gnf4#241). Chunked medians
+    keep event overhead off the kernel while honoring the registration."""
     for _ in range(warmup):
         fn()
     torch.cuda.synchronize()
-    e0 = torch.cuda.Event(enable_timing=True)
-    e1 = torch.cuda.Event(enable_timing=True)
-    e0.record()
-    for _ in range(iters):
-        fn()
-    e1.record()
-    e1.synchronize()
-    return e0.elapsed_time(e1) / iters
+    per = max(1, iters // chunks)
+    spans = []
+    for _ in range(chunks):
+        e0 = torch.cuda.Event(enable_timing=True)
+        e1 = torch.cuda.Event(enable_timing=True)
+        e0.record()
+        for _ in range(per):
+            fn()
+        e1.record()
+        e1.synchronize()
+        spans.append(e0.elapsed_time(e1) / per)
+    spans.sort()
+    return spans[len(spans) // 2]
 
 
 def main():
