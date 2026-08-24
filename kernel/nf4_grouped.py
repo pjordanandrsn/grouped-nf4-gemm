@@ -52,11 +52,15 @@ HAS_TL_INTERLEAVE = _TL_INTERLEAVE is not None
 
 
 def _vec_loads() -> bool:
-    """K2 default: the vectorized dual-nibble mainloop when the triton
-    carries ``tl.interleave``; ``GNF4_GEMV_SCALAR_LOADS=1`` forces the
-    legacy per-element path (the A/B arm and the fallback in one knob)."""
+    """REFUTED-FOR-VARIANT (RESULTS-k2): the vectorized dual-nibble
+    mainloop measured 10% SLOWER than the legacy path on sm_120 (80.0
+    vs 72.8 us at the K1 winner configs; 14.20 vs 13.89 ms e2e) with
+    bitwise-identical outputs -- L2 absorbs the duplicate byte reads
+    and the interleave shuffles cost more than the loads save. Legacy
+    is the default per the registered consequence;
+    ``GNF4_GEMV_VEC_LOADS=1`` opts in for A/Bs on other parts."""
     return (HAS_TL_INTERLEAVE
-            and os.environ.get("GNF4_GEMV_SCALAR_LOADS") != "1")
+            and os.environ.get("GNF4_GEMV_VEC_LOADS") == "1")
 
 
 #: Escape hatch for debugging the v5 loop; never for real results.

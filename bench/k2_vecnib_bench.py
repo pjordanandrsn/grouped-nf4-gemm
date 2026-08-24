@@ -65,12 +65,17 @@ def main():
             return nf4_grouped.gemm_4bit_grouped(
                 a, p, ax, sizes, eids, decode_config=cfg, split_k=sk)
 
-        os.environ["GNF4_GEMV_SCALAR_LOADS"] = "1"
+        # legacy is the DEFAULT since RESULTS-k2; the vectorized arm
+        # opts in (the knob flipped polarity with the refutation --
+        # Bugbot gnf4#243 caught the bench still toggling the old name,
+        # which made both arms legacy and the A/B silent)
+        os.environ.pop("GNF4_GEMV_VEC_LOADS", None)
         ref = call()
         t_legacy = _time(call)
-        del os.environ["GNF4_GEMV_SCALAR_LOADS"]
+        os.environ["GNF4_GEMV_VEC_LOADS"] = "1"
         vec = call()
         t_vec = _time(call)
+        os.environ.pop("GNF4_GEMV_VEC_LOADS", None)
         bitwise = bool(torch.equal(ref, vec))
         bitwise_all &= bitwise
         rep["cells"][name] = {"config": list(cfg) + [sk],

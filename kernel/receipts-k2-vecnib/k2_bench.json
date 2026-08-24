@@ -1,0 +1,31 @@
+{
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "cells": {
+  "gate_up": {
+   "config": [
+    64,
+    2,
+    16
+   ],
+   "legacy_ms": 0.04473280012607574,
+   "vec_ms": 0.04884800016880035,
+   "bitwise": true
+  },
+  "down": {
+   "config": [
+    32,
+    2,
+    1
+   ],
+   "legacy_ms": 0.02807359993457794,
+   "vec_ms": 0.03118079900741577,
+   "bitwise": true
+  }
+ },
+ "summary": {
+  "legacy_sum_ms": 0.07280640006065368,
+  "vec_sum_ms": 0.08002879917621612,
+  "ratio_vec_over_legacy": 1.0992000580930466,
+  "bitwise_all": true
+ }
+}

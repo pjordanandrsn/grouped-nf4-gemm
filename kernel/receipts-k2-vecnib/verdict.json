@@ -1,0 +1,45 @@
+{
+  "g_b": {
+    "bitwise_all": true,
+    "cells": {
+      "gate_up": true,
+      "down": true
+    }
+  },
+  "gs_b16": {
+    "pass": true,
+    "step_ms": 125.706155
+  },
+  "arms": {
+    "vec": {
+      "step_ms": 14.200911157480315,
+      "aa_spread_pct": 0.06416212451560162,
+      "aa_pass": true
+    },
+    "legacy": {
+      "step_ms": 13.886453511811023,
+      "aa_spread_pct": 0.02058268313056785,
+      "aa_pass": true
+    }
+  },
+  "identity_e2e": {
+    "bitwise": true,
+    "n": 127
+  },
+  "h_k": {
+    "legacy_pair_us": 72.80640006065369,
+    "vec_pair_us": 80.02879917621613,
+    "pass": false,
+    "partial": false
+  },
+  "h_e": {
+    "vec_step_ms": 14.200911157480315,
+    "legacy_step_ms": 13.886453511811023,
+    "pass": false
+  },
+  "reported": {
+    "tok_s_single_stream": 70.41801676741362,
+    "kernel_speedup": 0.9097524992264425
+  },
+  "verdict": "REFUTED-FOR-VARIANT (legacy stays default; the lane escalates to the packing-layout question with a fresh registration)"
+}
