@@ -633,6 +633,18 @@ def _decode_plan(N: int, K: int, T: int, sm_count: int):
             if int(n_s) == N and int(k_s) == K:
                 bn_s, w_s, sk_s = cfg.split(",")
                 return int(bn_s), int(w_s), int(sk_s)
+    # PREREG-m1-decode-config K1 winners, baked under the prereg's
+    # PARTIAL consequence (H-K ratio 0.794 in the (2/3, 0.826] band,
+    # H-E 13.46 ms <= 13.8 bar, token agreement 127/127, property
+    # suite 48/48 under the winners) -- full disclosure in
+    # RESULTS-m1-decode-config.md, receipts in receipts-m1-config/.
+    # Guarded to sm_120-class parts at the collapsed M=1 census shapes;
+    # everything else keeps the universal constant below.
+    if sm_count >= 160:
+        if (N, K, T) == (1536, 2048, 8):
+            return 64, 2, 16
+        if (N, K, T) == (2048, 768, 8):
+            return 32, 2, 1
     bn, warps = 64, 2
     programs = T * -(-N // bn)
     split_k = 1

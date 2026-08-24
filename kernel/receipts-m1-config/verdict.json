@@ -1,0 +1,57 @@
+{
+  "h_k": {
+    "plan_sum_ms": 0.09129599630832672,
+    "winner_sum_ms": 0.0724480003118515,
+    "ratio": 0.7935506839443279,
+    "winners": {
+      "gate_up": {
+        "bn": 64,
+        "warps": 2,
+        "sk": 16,
+        "ms": 0.044512000679969785,
+        "programs": 3072
+      },
+      "down": {
+        "bn": 32,
+        "warps": 2,
+        "sk": 1,
+        "ms": 0.027935999631881713,
+        "programs": 512
+      }
+    },
+    "pass": false,
+    "partial": true
+  },
+  "gs_b16": {
+    "pass": true,
+    "step_ms": 130.382367
+  },
+  "arms": {
+    "g0": {
+      "step_ms": 14.951549212598424,
+      "aa_spread_pct": 0.08117953700054861,
+      "aa_pass": true
+    },
+    "gk": {
+      "step_ms": 13.462066692913385,
+      "aa_spread_pct": 0.013556610895122754,
+      "aa_pass": true
+    }
+  },
+  "fidelity": {
+    "token_agreement": 127,
+    "window": 127,
+    "bitwise_expected": false,
+    "investigate": false
+  },
+  "h_e": {
+    "gk_step_ms": 13.462066692913385,
+    "g0_step_ms": 14.951549212598424,
+    "pass": true
+  },
+  "reported": {
+    "tok_s_single_stream": 74.28279942532254,
+    "e2e_gain_ms": 1.4894825196850388
+  },
+  "verdict": "PARTIAL (H-K in the partial band with the e2e bar met: bake only with full disclosure)"
+}
