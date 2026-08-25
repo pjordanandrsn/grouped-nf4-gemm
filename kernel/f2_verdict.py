@@ -108,7 +108,10 @@ def verdict(rep):
     proj = rep.get("t2_proj")
     if not proj:
         return ("REFUSE", "missing t2_proj projection receipt")
-    for name, cell in sorted(proj.items()):
+    for name in ("q", "k", "v"):
+        cell = proj.get(name)
+        if not cell:
+            return ("REFUSE", f"t2_proj missing projection {name!r}")
         bar = cell["max_abs_ref"] * T2_REL_BAR
         if cell["max_abs_delta"] > bar:
             return ("REFUSE", f"t2_proj[{name}]: max|delta| "
@@ -209,6 +212,10 @@ def _self_test():
     out = v(r)
     assert out[0] == "REFUSE" and "degenerate" in out[1], out
     # missing pieces refuse
+    r = _mk()
+    del r["t2_proj"]["k"]
+    out = v(r)
+    assert out[0] == "REFUSE" and "'k'" in out[1], out
     r = _mk()
     del r["t2_proj"]
     assert v(r)[0] == "REFUSE"
