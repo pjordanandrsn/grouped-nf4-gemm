@@ -29,6 +29,30 @@ RTX 5090 = sm_120, box 48617509, EPYC 9654, driver 575.64):
    Per the burst-clocks law the box is disqualified for timing;
    its compile facts (clock-independent) stand.
 
+## ERRATUM (2026-08-25, added after F1 Stage A)
+
+Item 1 above says "the campaign image's 3.3.0 is **below the product's
+declared floor**". That is right for the KERNEL-ONLY cycles (K3, K4,
+K5), which installed gnf4 alone and pinned torch 2.7. It is WRONG as a
+statement about the campaign as a whole: the e4b end-to-end cycles
+(b1, b1c, b1d — including the certified 74.3 tok/s ladder) provisioned
+with `pip install -e gnf4 && pip install -e e4b` and **no**
+`--no-deps`, so pip upgraded torch to satisfy gnf4's own
+`torch>=2.8` / `triton>=3.4`. Those runs were ALWAYS on the floor
+stack. The kernel-only cycles never exercised the M-tile prefill path,
+which is why triton 3.3's missing Blackwell lowering stayed invisible
+until K5 asked for `tl.dot` directly.
+
+Discovered when an F1 Stage A run on a deliberately 2.7-pinned box
+died in the PREFILL path with the same gather-layout assert, on code
+that had run fine throughout b1d. Nothing in K5's conclusions moves:
+the ratio 1.303 refutation and the 0.4% cross-stack GEMV agreement
+were both measured on the floor stack, and "the floor is exactly
+right" is if anything better supported. What changes is the scope of
+the claim above, and the operational rule: **provision e4b cycles
+WITHOUT `--no-deps` so the declared floor resolves, and assert
+`triton >= 3.4` rather than pinning torch 2.7.**
+
 ## Amended Stage A (decision map UNCHANGED)
 
 The probe moves to the lowest **floor-compliant** stack and becomes a
