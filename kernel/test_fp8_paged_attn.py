@@ -345,14 +345,13 @@ def test_f32_split_fused_combine_bitwise():
 
 
 def test_f32_fuse_default_is_env_gated(monkeypatch):
-    """Pre-verdict discipline: merging T1 must not flip production
-    behavior. With fuse_combine=None (what e4b's passthrough sends),
-    the f32 split path resolves OFF unless GNF4_F32_FUSE_COMBINE=1;
-    explicit True/False from a caller always wins (the bitwise gate
-    test above passes both explicitly)."""
+    """Default ON since RESULTS-f2-tail (PARTIAL ships both
+    treatments); GNF4_F32_FUSE_COMBINE=0 is the rollback. Explicit
+    True/False from a caller always wins (the bitwise gate test above
+    passes both explicitly)."""
     from fp8_paged_attn import _f32_fuse_default
     monkeypatch.delenv("GNF4_F32_FUSE_COMBINE", raising=False)
-    assert _f32_fuse_default() is False
+    assert _f32_fuse_default() is True
     monkeypatch.setenv("GNF4_F32_FUSE_COMBINE", "1")
     assert _f32_fuse_default() is True
     monkeypatch.setenv("GNF4_F32_FUSE_COMBINE", "0")

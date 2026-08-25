@@ -1,0 +1,28 @@
+...                                                                      [100%]
+3 passed, 31 deselected in 10.48s
+.....                                                                    [100%]
+5 passed in 4.13s
+ARM-START off_a 19:04:59
+B1D_TIMED_GRAPH steps=127 step=7.55ms compile=default recompiles=0 out=/root/out/f2_off_a.json
+ARM-OK off_a 19:05:54
+ARM-START off_b 19:05:54
+B1D_TIMED_GRAPH steps=127 step=7.55ms compile=default recompiles=0 out=/root/out/f2_off_b.json
+ARM-OK off_b 19:06:40
+ARM-START t1 19:06:40
+B1D_TIMED_GRAPH steps=127 step=7.51ms compile=default recompiles=0 out=/root/out/f2_t1.json
+ARM-OK t1 19:07:26
+ARM-START t2 19:07:26
+fused q/k/v projections on 48 attention modules (PREREG-f2-tail T2)
+B1D_TIMED_GRAPH steps=127 step=7.43ms compile=default recompiles=0 out=/root/out/f2_t2.json
+ARM-OK t2 19:08:15
+ARM-START both 19:08:15
+fused q/k/v projections on 48 attention modules (PREREG-f2-tail T2)
+B1D_TIMED_GRAPH steps=127 step=7.35ms compile=default recompiles=0 out=/root/out/f2_both.json
+ARM-OK both 19:09:02
+T2-PROJ-START 19:09:02
+T2-PROJ {'q': '0.00e+00@L47', 'k': '1.27e-04@L16', 'v': '3.40e-03@L23'} layers=48
+F2 COMPOSED {'off_a': 7.549, 'off_b': 7.548, 't1': 7.507, 't2': 7.428, 'both': 7.351}
+f2_verdict self-test: OK
+F2 VERDICT: PARTIAL
+combined cut 0.197 ms (ratio 0.974; 7.351 vs 7.548); T1 alone +0.041, T2 alone +0.120, A/A spread 0.001; identity t1:identical, t2:identical, both:identical -- single treatment(s) beating the A/A spread: T1 + T2
+F2-DONE 19:09:04
