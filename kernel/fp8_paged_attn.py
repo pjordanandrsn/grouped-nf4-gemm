@@ -779,11 +779,13 @@ _FUSE_COUNTERS: dict = {}
 
 def _f32_fuse_default() -> bool:
     """Effective fuse_combine default for the F32 SPLIT path when the
-    caller passes None: env-gated OPT-IN (GNF4_F32_FUSE_COMBINE=1)
-    until the PREREG-f2-tail verdict; flip the fallback here on PASS.
-    The packed and fp8-compute paths certified their fused combine in
-    their own cycle and keep an unconditional True default."""
-    return os.environ.get("GNF4_F32_FUSE_COMBINE", "0") == "1"
+    caller passes None: ON since RESULTS-f2-tail (PARTIAL, ships --
+    +0.041 ms under a 0.001 ms A/A, token-identical over 127 graph
+    steps; receipts in kernel/receipts-f2/). GNF4_F32_FUSE_COMBINE=0
+    is the rollback. The packed and fp8-compute paths certified their
+    fused combine in their own cycle and keep an unconditional True
+    default."""
+    return os.environ.get("GNF4_F32_FUSE_COMBINE", "1") == "1"
 
 def _fuse_counters(n: int, device) -> torch.Tensor:
     """Zeroed-once arrival counters for the fused combine; slots are

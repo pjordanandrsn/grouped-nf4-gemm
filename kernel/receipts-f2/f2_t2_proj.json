@@ -1,0 +1,24 @@
+{
+ "q": {
+  "max_abs_delta": 0.0,
+  "max_abs_ref": 8.125,
+  "worst_layer": 47,
+  "worst_ratio": 0.0
+ },
+ "k": {
+  "max_abs_delta": 0.00048828125,
+  "max_abs_ref": 3.84375,
+  "worst_layer": 16,
+  "worst_ratio": 0.00012703252032520327
+ },
+ "v": {
+  "max_abs_delta": 0.015625,
+  "max_abs_ref": 4.59375,
+  "worst_layer": 23,
+  "worst_ratio": 0.003401360544217687
+ },
+ "meta": {
+  "n_layers": 48,
+  "dtype": "torch.bfloat16"
+ }
+}
