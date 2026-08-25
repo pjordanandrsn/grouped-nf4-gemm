@@ -120,14 +120,18 @@ def main():
     }
     Path(args.out).write_text(json.dumps(rep, indent=1))
     s = rep["summary"]
-    print(f"K5PROBE gemv={gemv_sum:.1f}us mtile={s['mtile_sum_us']:.1f}us "
-          f"ratio={s['ratio_mtile_over_gemv']:.3f} "
+    mt = s["mtile_sum_us"]
+    r = s["ratio_mtile_over_gemv"]
+    print(f"K5PROBE gemv={gemv_sum:.1f}us "
+          f"mtile={f'{mt:.1f}us' if mt is not None else 'n/a'} "
+          f"ratio={f'{r:.3f}' if r is not None else 'n/a'} "
           f"noise={'PASS' if s['noise_gate_pass'] else 'FAIL'}")
     for n, c in rep["cells"].items():
         b = c["mtile_best"]
-        print(f"  {n}: gemv={c['gemv_us']:.1f} mtile_best={b['us']:.1f} "
-              f"(bn={b['bn']} w={b['warps']} s={b['stages']} "
-              f"g={b['groups']})")
+        best = (f"mtile_best={b['us']:.1f} (bn={b['bn']} w={b['warps']} "
+                f"s={b['stages']} g={b['groups']})") if b else \
+            "mtile_best=NONE (all configs failed)"
+        print(f"  {n}: gemv={c['gemv_us']:.1f} {best}")
 
 
 if __name__ == "__main__":

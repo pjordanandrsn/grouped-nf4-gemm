@@ -78,9 +78,10 @@ def main():
     rep = json.loads(open(args.report).read())
     v, why = verdict(rep)
     s = rep["summary"]
+    mt = s.get("mtile_sum_us")
+    mt_s = f"{mt:.1f}us" if mt is not None else "n/a"
     print(f"K5 VERDICT: {v}\n  {why}\n"
-          f"  gemv_sum={s['gemv_sum_us']:.1f}us "
-          f"mtile_sum={s['mtile_sum_us']:.1f}us")
+          f"  gemv_sum={s['gemv_sum_us']:.1f}us mtile_sum={mt_s}")
     if v == "REFUSE":
         sys.exit(2)
 
