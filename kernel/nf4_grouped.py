@@ -63,6 +63,17 @@ def _vec_loads() -> bool:
             and os.environ.get("GNF4_GEMV_VEC_LOADS") == "1")
 
 
+def _wide_loads() -> bool:
+    """K4 (PREREG-k4-wide-loads): uint32 word loads -- 8x fewer load
+    instructions, 8 nibbles unpacked per word. Aimed by K3's account
+    (the loads-only floor is ~85% of the kernel at 5-7x roofline: the
+    wall is load-instruction ISSUE RATE, which width addresses and
+    K2's count-halving could not). Opt-in until its cert:
+    ``GNF4_GEMV_WIDE_LOADS=1``. Takes precedence over the (refuted,
+    kept-for-A/B) vec path when both are set."""
+    return os.environ.get("GNF4_GEMV_WIDE_LOADS") == "1"
+
+
 #: Escape hatch for debugging the v5 loop; never for real results.
 _ALLOW_UNVERIFIED_V5 = os.environ.get("GNF4_ALLOW_UNVERIFIED_V5") == "1"
 
@@ -499,10 +510,18 @@ def _gemv_nf4_grouped(
     BLOCK_N: tl.constexpr,
     BLOCK_K: tl.constexpr,
     VEC_LOADS: tl.constexpr,
+    WIDE_LOADS: tl.constexpr,
 ):
     """Decode-specialized path: one token per group (M==1 everywhere), so a
     tensor-core M-tile would waste 15/16 of its lanes. Straight reduction:
     program (g, n-tile) accumulates out[g, n] = sum_k a[g,k] * w[n,k].
+
+    ``WIDE_LOADS`` (K4): the wrapper passes B VIEWED AS int32 (strides in
+    words) and the mainloop loads ``[BN, BK/8]`` words -- 8x fewer load
+    instructions, the axis K3's account licensed. Element ``8m + e`` sits
+    at shift ``(e//2)*8 + (4 if e%2==0 else 0)`` of word ``m``
+    (little-endian; arithmetic >> is safe under the &0xF). Same nibbles,
+    same lanes => bitwise-equal outputs at any fixed config.
 
     ``VEC_LOADS`` (K2): load the packed row half-width and contiguous,
     expand both nibbles via interleave -- the legacy path makes lane
@@ -524,10 +543,18 @@ def _gemv_nf4_grouped(
     a_base = a_ptr + g * K
 
     offs_kb = tl.arange(0, BLOCK_K // 2)
+    offs_kw = tl.arange(0, BLOCK_K // 8)
+    sh = tl.arange(0, 8)
+    shift = (sh // 2) * 8 + tl.where(sh % 2 == 0, 4, 0)
     acc = tl.zeros((BLOCK_N,), dtype=tl.float32)
     for k0 in range(0, K, BLOCK_K):
         kk = k0 + offs_k
-        if VEC_LOADS:
+        if WIDE_LOADS:
+            words = tl.load(b_base + (k0 // 8) + offs_kw[None, :],
+                            mask=n_mask[:, None], other=0)
+            nib = (words[:, :, None] >> shift[None, None, :]) & 0xF
+            nib = tl.reshape(nib, (BLOCK_N, BLOCK_K))
+        elif VEC_LOADS:
             by = tl.load(b_base + (k0 // 2) + offs_kb[None, :],
                          mask=n_mask[:, None], other=0).to(tl.int32)
             nib = _TL_INTERLEAVE((by >> 4) & 0xF, by & 0xF)
@@ -567,6 +594,7 @@ def _gemv_nf4_grouped_splitk(
     BLOCK_N: tl.constexpr,
     BLOCK_K: tl.constexpr,
     VEC_LOADS: tl.constexpr,
+    WIDE_LOADS: tl.constexpr,
 ):
     """Split-K variant of the decode reduction for occupancy-starved grids
     (few groups x few n-tiles, e.g. top_k=1): program (g, n-tile, k-split)
@@ -591,10 +619,18 @@ def _gemv_nf4_grouped_splitk(
     k_lo = pid_k * KBLOCKS_PER_SPLIT * BLOCK_K
     k_hi = tl.minimum(k_lo + KBLOCKS_PER_SPLIT * BLOCK_K, K)
     offs_kb = tl.arange(0, BLOCK_K // 2)
+    offs_kw = tl.arange(0, BLOCK_K // 8)
+    sh = tl.arange(0, 8)
+    shift = (sh // 2) * 8 + tl.where(sh % 2 == 0, 4, 0)
     acc = tl.zeros((BLOCK_N,), dtype=tl.float32)
     for k0 in range(k_lo, k_hi, BLOCK_K):
         kk = k0 + offs_k
-        if VEC_LOADS:
+        if WIDE_LOADS:
+            words = tl.load(b_base + (k0 // 8) + offs_kw[None, :],
+                            mask=n_mask[:, None], other=0)
+            nib = (words[:, :, None] >> shift[None, None, :]) & 0xF
+            nib = tl.reshape(nib, (BLOCK_N, BLOCK_K))
+        elif VEC_LOADS:
             by = tl.load(b_base + (k0 // 2) + offs_kb[None, :],
                          mask=n_mask[:, None], other=0).to(tl.int32)
             nib = _TL_INTERLEAVE((by >> 4) & 0xF, by & 0xF)
@@ -825,24 +861,31 @@ def gemm_4bit_grouped(
             bn, warps = decode_config
         if split_k is not None:
             sk = split_k
+        # K4: under wide loads the kernels address B in uint32 WORDS, so
+        # the wrapper hands them the int32 view and word strides (legal:
+        # K/2 % 4 == 0 whenever K % 8 == 0, which BLOCKSIZE enforces)
+        wide = _wide_loads()
+        b_pass = B.view(torch.int32) if wide else B
+        vec = _vec_loads() and not wide
         if sk <= 1:
             grid = (T, triton.cdiv(N, bn))
             _gemv_nf4_grouped[grid](
                 a_cat,
-                B,
+                b_pass,
                 absmax,
                 out,
                 _lut(dev),
                 eids,
                 K,
                 N,
-                B.stride(0),
-                B.stride(1),
+                b_pass.stride(0),
+                b_pass.stride(1),
                 absmax.stride(0),
                 absmax.stride(1),
                 BLOCK_N=bn,
                 BLOCK_K=BLOCKSIZE,
-                VEC_LOADS=_vec_loads(),
+                VEC_LOADS=vec,
+                WIDE_LOADS=wide,
                 num_warps=warps,
                 num_stages=3,
             )
@@ -853,7 +896,7 @@ def gemm_4bit_grouped(
         grid = (T, triton.cdiv(N, bn), sk)
         _gemv_nf4_grouped_splitk[grid](
             a_cat,
-            B,
+            b_pass,
             absmax,
             ws,
             _lut(dev),
@@ -862,13 +905,14 @@ def gemm_4bit_grouped(
             N,
             T,
             span,
-            B.stride(0),
-            B.stride(1),
+            b_pass.stride(0),
+            b_pass.stride(1),
             absmax.stride(0),
             absmax.stride(1),
             BLOCK_N=bn,
             BLOCK_K=BLOCKSIZE,
-            VEC_LOADS=_vec_loads(),
+            VEC_LOADS=vec,
+            WIDE_LOADS=wide,
             num_warps=warps,
             num_stages=3,
         )
