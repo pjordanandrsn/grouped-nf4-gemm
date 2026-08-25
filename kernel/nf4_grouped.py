@@ -446,6 +446,48 @@ def build_group_tiles_device(expert_ids, n_experts: int, block_m: int,
             grp.to(torch.int32), order, counts)
 
 
+def gemm_4bit_grouped_captured(a_sorted, B, absmax, t_row0, t_rows,
+                               t_group, block_m: int,
+                               prefill_variant: int | None = None,
+                               prefill_config=None):
+    """The M-tile GEMM against PREBUILT device tiles (e4b
+    PREREG-s3-grouped-verify): every launch parameter is static and
+    every input is a device tensor, so the call is legal inside CUDA
+    graph capture. Pair with :func:`build_group_tiles_device` -- the
+    caller gathers rows into expert-major order by that function's
+    ``order`` and hands the sorted activations here.
+
+    ``t_group`` values are LOCAL expert indices into ``B``/``absmax``
+    (expert-major == stack order), so the kernel's expert_ids indirection
+    is the identity -- an ``arange`` is passed rather than adding an
+    id-less kernel variant. Padding tiles (``rows == 0``) no-op through
+    the kernel's own ``m_mask``; they still cost a program launch, which
+    is the price of a static grid (documented in the device builder).
+
+    No allocations beyond ``out`` and the arange (both legal in capture:
+    they ride the graph's private pool -- the b1d-certified pattern)."""
+    dev = a_sorted.device
+    R, K = a_sorted.shape
+    E, N, _kb = B.shape
+    if prefill_variant is None:
+        prefill_variant = 1 if HAS_TL_GATHER else 0
+    if prefill_config is not None:
+        block_n, warps, stages = prefill_config
+    elif prefill_variant == 1:
+        block_n, warps, stages = 128, 4, 3        # the v6 rule
+    else:
+        block_n, warps, stages = 128, 4, 2
+    out = torch.empty(R, N, dtype=torch.bfloat16, device=dev)
+    eids = torch.arange(E, dtype=torch.int32, device=dev)
+    _gemm_nf4_grouped[(t_row0.numel(), triton.cdiv(N, block_n))](
+        a_sorted, B, absmax, out, _lut(dev), t_row0, t_rows, t_group,
+        eids, K, N, B.stride(0), B.stride(1), absmax.stride(0),
+        absmax.stride(1), BLOCK_M=block_m, BLOCK_N=block_n,
+        BLOCK_K=BLOCKSIZE, GROUPS=1, VARIANT=prefill_variant,
+        num_warps=warps, num_stages=stages)
+    return out
+
+
 @triton.jit
 def _gemm_nf4_grouped(
     a_ptr,

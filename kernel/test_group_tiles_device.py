@@ -112,3 +112,18 @@ def test_no_host_sync_ops_in_the_builder():
     for banned in (".item()", ".tolist()", "unique_consecutive",
                    "int(", "if counts", "for e in"):
         assert banned not in body, f"{banned} would break capture"
+
+
+def test_captured_wrapper_static_and_syncfree():
+    """The captured wrapper's reason to exist is capture-legality:
+    static launch shape, no host reads. Source guard, same rationale as
+    the builder's."""
+    import inspect
+
+    from nf4_grouped import gemm_4bit_grouped_captured
+
+    src = inspect.getsource(gemm_4bit_grouped_captured)
+    body = src.split('"""')[-1]
+    for banned in (".item()", ".tolist()", "unique_consecutive",
+                   "max(sizes)", ".cpu()"):
+        assert banned not in body, f"{banned} would break capture"
