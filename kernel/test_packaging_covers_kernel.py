@@ -32,6 +32,7 @@ _DELIBERATELY_UNPACKAGED: dict[str, str] = {
     "k3_verdict": "K3 attribution campaign instrument, not library API",
     "k4_verdict": "K4 wide-loads campaign instrument, not library API",
     "k5_verdict": "K5 M-tile probe instrument, not library API",
+    "k6_verdict": "K6 bespoke-GEMV instrument, not library API",
 }
 
 # Test files CI does not invoke, each with WHY. This started at 17 silent
