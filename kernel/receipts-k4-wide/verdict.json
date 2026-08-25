@@ -1,0 +1,56 @@
+{
+  "g_b": {
+    "bitwise_all": true
+  },
+  "h_m": {
+    "cells": {
+      "gate_up": {
+        "scalar_us": 54.14720177650452,
+        "wide_us": 9.984000027179718,
+        "ratio": 0.1843862600396086
+      },
+      "down": {
+        "scalar_us": 21.545599400997162,
+        "wide_us": 10.038399696350098,
+        "ratio": 0.4659141530258613
+      }
+    },
+    "pass": true
+  },
+  "gs_b16": {
+    "pass": true,
+    "step_ms": 129.160724
+  },
+  "arms": {
+    "wide": {
+      "step_ms": 13.340834614173229,
+      "aa_spread_pct": 0.039821907375307775,
+      "aa_pass": true
+    },
+    "legacy": {
+      "step_ms": 13.46222977952756,
+      "aa_spread_pct": 0.006646299848792292,
+      "aa_pass": true
+    }
+  },
+  "identity_e2e": {
+    "bitwise": true,
+    "n": 127
+  },
+  "h_k": {
+    "legacy_pair_us": 72.85439968109131,
+    "wide_pair_us": 69.34719979763031,
+    "pass": false,
+    "partial": false
+  },
+  "h_e": {
+    "wide_step_ms": 13.340834614173229,
+    "legacy_step_ms": 13.46222977952756,
+    "pass": false
+  },
+  "reported": {
+    "tok_s_single_stream": 74.95782902050263,
+    "kernel_speedup": 1.0505744989515906
+  },
+  "verdict": "REFUTED-FOR-WIDTH (legacy stays default; k-strip-major repacking is the lane)"
+}
