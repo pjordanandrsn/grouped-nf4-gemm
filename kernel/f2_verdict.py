@@ -94,11 +94,22 @@ def verdict(rep):
     idmsg = []
     for k, bitwise in (("t1", True), ("t2", False), ("both", False)):
         toks = rep[k]["tokens"]
+        # every arm runs the same --gen-tokens; a length mismatch is a
+        # truncated or over-long receipt (broken run), never numerics
+        # -- and a prefix-only check would let it clear the T1 bitwise
+        # gate (Bugbot, #260)
+        if len(toks) != len(t_off):
+            return ("REFUSE", f"{k}: {len(toks)} tokens vs OFF's "
+                    f"{len(t_off)} -- truncated/over-long receipt")
+        if bitwise:
+            if toks != t_off:
+                return ("REFUSE", f"T1 divergence at step "
+                        f"{_prefix(t_off, toks)} -- bitwise treatment "
+                        "has no numerics excuse")
+            idmsg.append("t1:identical")
+            continue
         p = _prefix(t_off, toks)
-        full = p == min(len(t_off), len(toks))
-        if bitwise and not full:
-            return ("REFUSE", f"T1 divergence at step {p} -- bitwise "
-                    "treatment has no numerics excuse")
+        full = p == len(t_off)
         if not full and p < MIN_DIVERGE_STEP:
             return ("REFUSE", f"{k} diverges at step {p} < "
                     f"{MIN_DIVERGE_STEP} -- mechanism bug, not "
@@ -201,6 +212,18 @@ def _self_test():
     assert v(_mk(div=32, div_arm="t2"))[0] == "PASS"
     # both-arm early divergence refuses
     assert v(_mk(div=10, div_arm="both"))[0] == "REFUSE"
+    # truncated receipts refuse even when the prefix matches (Bugbot,
+    # #260: prefix-only "full" let a short T1 stream clear the bitwise
+    # gate); over-long refuses too, on every arm class
+    for arm_k in ("t1", "t2", "both"):
+        r = _mk()
+        r[arm_k]["tokens"] = r[arm_k]["tokens"][:10]
+        out = v(r)
+        assert out[0] == "REFUSE" and "truncated" in out[1], (arm_k, out)
+        r = _mk()
+        r[arm_k]["tokens"] = r[arm_k]["tokens"] + [777]
+        out = v(r)
+        assert out[0] == "REFUSE" and "truncated" in out[1], (arm_k, out)
     # projection frame: bar = 10 * 2^-7 = 0.078125
     out = v(_mk(proj_delta=0.09, proj_ref=10.0))
     assert out[0] == "REFUSE" and "t2_proj" in out[1], out
