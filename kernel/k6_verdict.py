@@ -5,6 +5,13 @@ import argparse
 import json
 import sys
 
+# AMENDMENT-k6-frame: the decision bars are the RATIOS the prereg's
+# own parentheticals registered ("(>= 2x over baseline)" and
+# "(20-50% gain)"); the absolute forms repeated the B2 frame defect
+# and are retired. Receipts carrying baseline_pair_us adjudicate on
+# the ratio; the absolute constants remain only for legacy receipts.
+PASS_RATIO = 0.50
+PARTIAL_RATIO = 0.80
 PASS_US = 36.0
 PARTIAL_US = 58.0
 # AMENDMENT (RESULTS-k6-stageA): the correctness gate for bf16-input
@@ -50,6 +57,17 @@ def verdict(rep):
     p = s.get("dot_pad_pair_us")
     if not p:
         return ("REFUSE", "no gated dot-pad pair time")
+    if base:
+        r = p / base
+        if r <= PASS_RATIO:
+            return ("PASS", f"pair ratio {r:.3f} <= {PASS_RATIO} "
+                    f"({p:.1f} vs {base:.1f} us) -- register K6-B")
+        if r <= PARTIAL_RATIO:
+            return ("PARTIAL", f"pair ratio {r:.3f} in ({PASS_RATIO}, "
+                    f"{PARTIAL_RATIO}] ({p:.1f} vs {base:.1f} us) -- "
+                    "K6-B under the A/A condition")
+        return ("REFUTED", f"pair ratio {r:.3f} > {PARTIAL_RATIO}: the "
+                "compute wall stands; the kernel lane closes")
     if p <= PASS_US:
         return ("PASS", f"pair {p:.1f} us <= {PASS_US} (baseline "
                 f"{base:.1f}) -- register K6-B productization")
@@ -81,11 +99,17 @@ def _fab(pair, base=72.4, noise=True, gate=True, missing_cell=False):
 
 def self_test():
     cases = [
+        # ratio frame (baseline present): 30/72.4=0.414 PASS;
+        # 36.2/72.4=0.5 boundary PASS; 45/72.4=0.62 PARTIAL;
+        # 57.9/72.4=0.7997 boundary PARTIAL; 65/72.4=0.898 REFUTED
         (_fab(30.0), "PASS"),
-        (_fab(36.0), "PASS"),          # boundary
+        (_fab(36.2), "PASS"),          # ratio boundary 0.50
         (_fab(45.0), "PARTIAL"),
-        (_fab(58.0), "PARTIAL"),       # boundary
+        (_fab(57.9), "PARTIAL"),       # ratio boundary 0.80
         (_fab(65.0), "REFUTED"),
+        # the re-gate receipts themselves, both boxes
+        (_fab(71.2, base=120.9), "PARTIAL"),
+        (_fab(46.4, base=69.5), "PARTIAL"),
         (_fab(30.0, noise=False), "REFUSE"),
         (_fab(30.0, gate=False), "REFUSE"),
         # one cell with NO passing config: the pair is incomplete and

@@ -1,0 +1,3 @@
+1613cb8 K6 Stage A RESULTS: REFUSE as adjudicated; correctness bar amended (#256)
+2.13.0+cu130 3.7.1
+NVIDIA GeForce RTX 5090, 580.95.05
