@@ -315,3 +315,60 @@ def test_f8dot_heads_layout_matches_reference(shape):
     got, want = _run_both(B, hq, hkv, d, lens, k_groups=kg,
                           layout="heads", mode_kw={"compute": "fp8"})
     _close(got, want, "f8dot")
+
+
+@needs_gpu
+def test_f32_split_fused_combine_bitwise():
+    """PREREG-f2-tail T1: the in-kernel combine on the DEFAULT f32
+    split path must be bitwise-equal to the two-kernel path -- same
+    fixed 0..n_split reduction order, only the launch disappears.
+    Real pack path, permuted tables, several splits, odd lengths."""
+    for trial, (b, hq, hkv, lens) in enumerate([
+            (1, 16, 4, [513]),
+            (2, 16, 4, [96, 511]),
+            (3, 8, 2, [17, 250, 384])]):
+        q, kp, vp, tab, sl = _build(b, hq, hkv, 64, lens,
+                                    seed=100 + trial)
+        dev = lambda t: t.cuda()                     # noqa: E731
+        for n_split in (1, 2, 5):
+            a = fp8_paged_decode_attention(
+                dev(q), dev(kp), dev(vp), dev(tab), dev(sl),
+                n_kv_heads=hkv, head_dim=64, n_split=n_split,
+                fuse_combine=False)
+            f = fp8_paged_decode_attention(
+                dev(q), dev(kp), dev(vp), dev(tab), dev(sl),
+                n_kv_heads=hkv, head_dim=64, n_split=n_split,
+                fuse_combine=True)
+            assert torch.equal(a, f), (
+                f"fused combine diverges (trial={trial} "
+                f"n_split={n_split})")
+
+
+def test_f32_fuse_default_is_env_gated(monkeypatch):
+    """Pre-verdict discipline: merging T1 must not flip production
+    behavior. With fuse_combine=None (what e4b's passthrough sends),
+    the f32 split path resolves OFF unless GNF4_F32_FUSE_COMBINE=1;
+    explicit True/False from a caller always wins (the bitwise gate
+    test above passes both explicitly)."""
+    from fp8_paged_attn import _f32_fuse_default
+    monkeypatch.delenv("GNF4_F32_FUSE_COMBINE", raising=False)
+    assert _f32_fuse_default() is False
+    monkeypatch.setenv("GNF4_F32_FUSE_COMBINE", "1")
+    assert _f32_fuse_default() is True
+    monkeypatch.setenv("GNF4_F32_FUSE_COMBINE", "0")
+    assert _f32_fuse_default() is False
+
+
+def test_wrapper_resolves_none_per_path():
+    """Source guard: the signature default must stay None and the body
+    must resolve it through _f32_fuse_default() for f32 -- a future
+    edit restoring `= True` would silently ship T1 ahead of its
+    verdict through e4b's kwargs passthrough."""
+    import inspect
+
+    import fp8_paged_attn as m
+    sig = inspect.signature(m.fp8_paged_decode_attention)
+    assert sig.parameters["fuse_combine"].default is None
+    src = inspect.getsource(m.fp8_paged_decode_attention)
+    assert "_f32_fuse_default()" in src
+    assert 'compute == "fp8" else _f32_fuse_default()' in src
