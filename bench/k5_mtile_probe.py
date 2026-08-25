@@ -26,7 +26,7 @@ BNS = (64, 128, 256)
 WARPS = (4, 8)
 STAGES = (2, 3)
 GROUPS = (1, 2)  # BLOCK_K = 64 * groups; both product-supported
-BLOCK_M = 16
+BMS = (16, 32)   # AMENDMENT-k5-stack: explicit BLOCK_M axis
 
 
 def _mk(N, K, T, E=8, device="cuda"):
@@ -62,9 +62,16 @@ def _time(fn, iters=200, warmup=50, chunks=20):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="k5_probe.json")
+    ap.add_argument("--stack-tag", default="",
+                    help="label for the torch/triton stack, recorded in "
+                         "the report (AMENDMENT-k5-stack)")
     args = ap.parse_args()
     dev = "cuda"
-    rep = {"gpu": torch.cuda.get_device_name(0), "cells": {}}
+    import triton as _tr
+    rep = {"gpu": torch.cuda.get_device_name(0),
+           "stack_tag": args.stack_tag,
+           "torch": torch.__version__, "triton": _tr.__version__,
+           "cells": {}}
     gemv_sum = 0.0
     mtile_sum = 0.0
     for name, (N, K, T, cfg, sk) in CELLS.items():
@@ -75,29 +82,30 @@ def main():
                 a, p, ax, [1] * T, eids, decode_config=cfg, split_k=sk)
 
         g_start = _time(gemv) * 1000.0
-        t_row0, t_rows, t_group = build_group_tiles([1] * T, BLOCK_M, dev)
         out = torch.empty(T, N, dtype=torch.bfloat16, device=dev)
         lut = _lut(torch.device(dev))
         rows = []
-        for bn, w, st, gr in itertools.product(BNS, WARPS, STAGES, GROUPS):
+        for bm, bn, w, st, gr in itertools.product(BMS, BNS, WARPS,
+                                                   STAGES, GROUPS):
             if K % (BLOCKSIZE * gr):
                 continue
+            t_row0, t_rows, t_group = build_group_tiles([1] * T, bm, dev)
             grid = (t_row0.numel(), triton.cdiv(N, bn))
 
             def mtile():
                 _gemm_nf4_grouped[grid](
                     a, p, ax, out, lut, t_row0, t_rows, t_group, eids,
                     K, N, p.stride(0), p.stride(1), ax.stride(0),
-                    ax.stride(1), BLOCK_M=BLOCK_M, BLOCK_N=bn,
+                    ax.stride(1), BLOCK_M=bm, BLOCK_N=bn,
                     BLOCK_K=BLOCKSIZE * gr, GROUPS=gr, VARIANT=1,
                     num_warps=w, num_stages=st)
             try:
                 ms = _time(mtile) * 1000.0
             except Exception as e:                    # noqa: BLE001
-                rows.append({"bn": bn, "warps": w, "stages": st,
+                rows.append({"bm": bm, "bn": bn, "warps": w, "stages": st,
                              "groups": gr, "error": str(e)[:80]})
                 continue
-            rows.append({"bn": bn, "warps": w, "stages": st,
+            rows.append({"bm": bm, "bn": bn, "warps": w, "stages": st,
                          "groups": gr, "us": ms})
         g_end = _time(gemv) * 1000.0
         drift = abs(g_end - g_start) / min(g_start, g_end) * 100
@@ -118,19 +126,28 @@ def main():
         "noise_gate_pass": all(c["noise_gate_pass"]
                                for c in rep["cells"].values()),
     }
+    try:
+        import subprocess
+        rep["gpu_state_post"] = subprocess.run(
+            ["nvidia-smi", "--query-gpu=driver_version,clocks.sm",
+             "--format=csv,noheader"], capture_output=True, text=True,
+            timeout=10).stdout.strip()
+    except Exception:                                  # noqa: BLE001
+        rep["gpu_state_post"] = "unavailable"
     Path(args.out).write_text(json.dumps(rep, indent=1))
     s = rep["summary"]
     mt = s["mtile_sum_us"]
     r = s["ratio_mtile_over_gemv"]
-    print(f"K5PROBE gemv={gemv_sum:.1f}us "
+    print(f"K5PROBE[{args.stack_tag or 'untagged'}] "
+          f"gemv={gemv_sum:.1f}us "
           f"mtile={f'{mt:.1f}us' if mt is not None else 'n/a'} "
           f"ratio={f'{r:.3f}' if r is not None else 'n/a'} "
           f"noise={'PASS' if s['noise_gate_pass'] else 'FAIL'}")
     for n, c in rep["cells"].items():
         b = c["mtile_best"]
-        best = (f"mtile_best={b['us']:.1f} (bn={b['bn']} w={b['warps']} "
-                f"s={b['stages']} g={b['groups']})") if b else \
-            "mtile_best=NONE (all configs failed)"
+        best = (f"mtile_best={b['us']:.1f} (bm={b['bm']} bn={b['bn']} "
+                f"w={b['warps']} s={b['stages']} g={b['groups']})") if b \
+            else "mtile_best=NONE (all configs failed)"
         print(f"  {n}: gemv={c['gemv_us']:.1f} {best}")
 
 
