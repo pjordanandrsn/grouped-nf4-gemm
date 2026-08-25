@@ -1,0 +1,2 @@
+5c5dacf K5 prereg: M-tile tensor-core probe at M=1 decode shapes (instruments only) (#248)
+NVIDIA GeForce RTX 5090, 575.64.03, 22 MHz
