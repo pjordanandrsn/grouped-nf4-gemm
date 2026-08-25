@@ -74,6 +74,21 @@ def _wide_loads() -> bool:
     return os.environ.get("GNF4_GEMV_WIDE_LOADS") == "1"
 
 
+def _dotpad():
+    """PREREG-k6b opt-in: route the decode GEMV through the dot-pad
+    kernel. Default OFF until the P-fid stage certifies (the kernel is
+    numerics-changing -- see its docstring)."""
+    return os.environ.get("GNF4_GEMV_DOTPAD") == "1"
+
+
+#: K6 re-gate winners (receipts-k6-bespoke/regate), gated like K1's
+#: baked configs: exact census shapes on >= 160-SM parts only.
+_DOTPAD_CONFIGS = {
+    (1536, 2048): (16, 2, 2),      # gate_up: bn, warps, stages
+    (2048, 768): (16, 4, 2),       # down
+}
+
+
 #: Escape hatch for debugging the v5 loop; never for real results.
 _ALLOW_UNVERIFIED_V5 = os.environ.get("GNF4_ALLOW_UNVERIFIED_V5") == "1"
 
@@ -498,6 +513,51 @@ def gemm_4bit_grouped_captured(a_sorted, B, absmax, t_row0, t_rows,
         BLOCK_K=BLOCKSIZE, GROUPS=1, VARIANT=prefill_variant,
         num_warps=warps, num_stages=stages)
     return out
+
+
+
+@triton.jit
+def _gemv_nf4_dotpad(a_ptr, b_ptr, amax_ptr, out_ptr, lut_ptr, eids_ptr,
+                     K, N, stride_be, stride_bn, stride_ae, stride_an,
+                     BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr):
+    """K6-B: the dot-pad decode GEMV (PREREG-k6-bespoke-gemv, certified
+    Stage A under AMENDMENT-k6-frame). Wide uint32 loads and dequant
+    IDENTICAL to the wide-scalar path; the mul-reduce runs as tl.dot
+    with x in M-row 0 and 15 zero rows -- a GEMV has no free M
+    dimension, so the M slot is deliberate waste and the win is MMA
+    throughput vs scalar FMA (pair ratios 0.589/0.668 on two boxes).
+    NUMERICS DIFFER from the scalar chain: both operands round to bf16
+    before the MMA (~2^-8 relative per call) and absmax folds before
+    the dot. Ship-gated by PREREG-k6b's P-fid stage, never by bitwise
+    claims. b_ptr is the int32 VIEW of the packed weights."""
+    g = tl.program_id(0)
+    pid_n = tl.program_id(1)
+    eid = tl.load(eids_ptr + g).to(tl.int64)
+    offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
+    n_mask = offs_n < N
+    offs_k = tl.arange(0, BLOCK_K)
+    b_base = b_ptr + eid * stride_be + offs_n[:, None] * stride_bn
+    a_base = a_ptr + g * K
+    offs_kw = tl.arange(0, BLOCK_K // 8)
+    sh = tl.arange(0, 8)
+    shift = (sh // 2) * 8 + tl.where(sh % 2 == 0, 4, 0)
+    offs_m = tl.arange(0, 16)
+    acc = tl.zeros((16, BLOCK_N), dtype=tl.float32)
+    for k0 in range(0, K, BLOCK_K):
+        kk = k0 + offs_k
+        words = tl.load(b_base + (k0 // 8) + offs_kw[None, :],
+                        mask=n_mask[:, None], other=0)
+        nib = (words[:, :, None] >> shift[None, None, :]) & 0xF
+        nib = tl.reshape(nib, (BLOCK_N, BLOCK_K))
+        w = tl.load(lut_ptr + nib)
+        am = tl.load(amax_ptr + eid * stride_ae + offs_n * stride_an
+                     + (k0 // BLOCK_K), mask=n_mask, other=0.0)
+        wt = tl.trans((w * am[:, None]).to(tl.bfloat16))
+        a = tl.load(a_base + kk).to(tl.float32)
+        av = tl.where(offs_m[:, None] == 0, a[None, :], 0.0)
+        acc = tl.dot(av.to(tl.bfloat16), wt, acc)
+    y = tl.sum(tl.where(offs_m[:, None] == 0, acc, 0.0), axis=0)
+    tl.store(out_ptr + g * N + offs_n, y.to(tl.bfloat16), mask=n_mask)
 
 
 @triton.jit
@@ -971,6 +1031,23 @@ def gemm_4bit_grouped(
         # K4: under wide loads the kernels address B in uint32 WORDS, so
         # the wrapper hands them the int32 view and word strides (legal:
         # K/2 % 4 == 0 whenever K % 8 == 0, which BLOCKSIZE enforces)
+        # PREREG-k6b opt-in: dot-pad at the re-gate winners' exact
+        # census shapes on >= 160-SM parts; every other cell (and the
+        # knob OFF) keeps the certified scalar path. eids must ride as
+        # a device tensor here (it may be a host list on this path).
+        if _dotpad() and (N, K) in _DOTPAD_CONFIGS \
+                and _sm_count(dev) >= 160:
+            dbn, dw, dst = _DOTPAD_CONFIGS[(N, K)]
+            eids_t = (eids if torch.is_tensor(eids)
+                      else torch.as_tensor(eids, dtype=torch.int32,
+                                           device=dev))
+            bw = B.view(torch.int32)
+            _gemv_nf4_dotpad[(T, triton.cdiv(N, dbn))](
+                a_cat, bw, absmax, out, _lut(dev), eids_t, K, N,
+                bw.stride(0), bw.stride(1), absmax.stride(0),
+                absmax.stride(1), BLOCK_N=dbn, BLOCK_K=BLOCKSIZE,
+                num_warps=dw, num_stages=dst)
+            return out
         wide = _wide_loads()
         b_pass = B.view(torch.int32) if wide else B
         vec = _vec_loads() and not wide
