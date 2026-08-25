@@ -71,9 +71,14 @@ def _k6_dot_pad(a_ptr, b_ptr, amax_ptr, out_ptr, lut_ptr, eids_ptr,
 def dot_pad(a, packed, absmax, eids, N, K, bn, warps, stages):
     T = a.shape[0]
     out = torch.empty(T, N, dtype=torch.bfloat16, device=a.device)
+    # the wide kernel is WORD-addressed: the int32 VIEW and its word
+    # strides, exactly as the production wrapper passes for WIDE_LOADS
+    # (Bugbot, gnf4#254 -- byte strides here index the wrong elements
+    # and the shift table reads mostly zeros)
+    bw = packed.view(torch.int32)
     _k6_dot_pad[(T, triton.cdiv(N, bn))](
-        a, packed, absmax, out, _lut(a.device), eids, K, N,
-        packed.stride(0), packed.stride(1), absmax.stride(0),
+        a, bw, absmax, out, _lut(a.device), eids, K, N,
+        bw.stride(0), bw.stride(1), absmax.stride(0),
         absmax.stride(1), BLOCK_N=bn, BLOCK_K=BLOCKSIZE,
         num_warps=warps, num_stages=stages)
     return out
@@ -161,23 +166,31 @@ def main():
         b_end = _time(baseline) * 1000.0
         drift = abs(b_end - b_start) / min(b_start, b_end) * 100
         ok = sorted((r for r in rows if "us" in r), key=lambda r: r["us"])
-        best = ok[0] if ok else None
-        g = None
-        if best:
-            g = gate(N, K, cfg, sk, best["bn"], best["warps"],
-                     best["stages"], rows=args.gate_rows)
+        # gate configs FASTEST-FIRST until one passes: a gate-failing
+        # config is excluded from the RESULT, not the cycle -- a fast
+        # tile that misses the numeric gate must not discard a slower
+        # config that would have passed (Bugbot, gnf4#254; prereg)
+        best, g, rejected = None, None, []
+        for cand in ok:
+            gg = gate(N, K, cfg, sk, cand["bn"], cand["warps"],
+                      cand["stages"], rows=args.gate_rows)
+            if gg["pass"]:
+                best, g = cand, gg
+                break
+            rejected.append({"config": cand, "gate": gg})
         rep["cells"][name] = {
             "baseline_us": min(b_start, b_end),
             "wide_scalar_us": v0,
             "noise_drift_pct": drift, "noise_gate_pass": drift <= 5.0,
-            "dot_pad_best": best, "gate": g, "table": rows,
+            "dot_pad_best": best, "gate": g,
+            "gate_rejected": rejected, "table": rows,
         }
         base_sum += min(b_start, b_end)
         v0_sum += v0
-        if best and g and g["pass"]:
+        if best is None:
+            best_sum = float("inf")       # pair INCOMPLETE, not smaller
+        elif best_sum != float("inf"):
             best_sum += best["us"]
-        elif best:
-            best_sum += float("inf")
     rep["summary"] = {
         "baseline_pair_us": base_sum, "wide_scalar_pair_us": v0_sum,
         "dot_pad_pair_us": (best_sum if best_sum != float("inf")
