@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.15.1 — 2026-08-25
+
+Patch release, one fix.
+
+### `fp8_kv_append_t1` refuses cleanly on non-CUDA tensors
+
+The availability guard checked triton importability only — but triton
+installs on CPU-only Linux hosts, where a launch dies inside triton's
+driver with `0 active drivers`: an error naming neither the function
+nor the fix. Surfaced within the hour of 0.15.0 reaching PyPI, by
+experts4bit-qlora's CI (its presence-keyed fused-append resolution
+began selecting the fused path on CPU-device KVs; e4b 0.21.0 fixes
+its resolution to key on device — this is the kernel keeping its own
+promise). The guard now requires CUDA-resident tensors, with a
+CPU-runnable refusal test.
+
 ## 0.15.0 — 2026-08-25
 
 Minor release: the M=1 decode-kernel campaign (K1–K6-B), the graph-step
