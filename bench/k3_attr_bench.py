@@ -23,11 +23,12 @@ from _triton_shim import tl, triton  # noqa: E402
 
 CELLS = {"gate_up": (1536, 2048, 8, (64, 2)),
          "down": (2048, 768, 8, (32, 2))}
-PEELS = ("full", "no_lut", "no_absmax", "no_act", "loads_only")
+PEELS = ("full", "no_lut", "no_absmax", "no_act", "loads_only",
+         "loads_only_wide")
 
 
 @triton.jit
-def _peel_gemv(a_ptr, b_ptr, amax_ptr, out_ptr, lut_ptr, eids_ptr, K, N,
+def _peel_gemv(a_ptr, b_ptr, bw_ptr, amax_ptr, out_ptr, lut_ptr, eids_ptr, K, N,
                stride_be, stride_bn, stride_ae, stride_an,
                BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
                PEEL: tl.constexpr):
@@ -38,6 +39,7 @@ def _peel_gemv(a_ptr, b_ptr, amax_ptr, out_ptr, lut_ptr, eids_ptr, K, N,
     n_mask = offs_n < N
     offs_k = tl.arange(0, BLOCK_K)
     b_base = b_ptr + eid * stride_be + offs_n[:, None] * stride_bn
+    bw_ptr_base = bw_ptr + eid * (stride_be // 4) + offs_n[:, None] * (stride_bn // 4)
     a_base = a_ptr + g * K
     acc = tl.zeros((BLOCK_N,), dtype=tl.float32)
     for k0 in range(0, K, BLOCK_K):
@@ -46,6 +48,11 @@ def _peel_gemv(a_ptr, b_ptr, amax_ptr, out_ptr, lut_ptr, eids_ptr, K, N,
                          mask=n_mask[:, None], other=0).to(tl.int32)
         if PEEL == 4:                       # loads-only streaming floor
             acc += tl.sum(bytes_.to(tl.float32), axis=1)
+        elif PEEL == 5:                     # K4: WIDE loads-only floor
+            offs_kw = tl.arange(0, BLOCK_K // 8)
+            words = tl.load(bw_ptr_base + (k0 // 8) + offs_kw[None, :],
+                            mask=n_mask[:, None], other=0)
+            acc += tl.sum(words.to(tl.float32), axis=1)
         else:
             nib = tl.where((kk[None, :] % 2) == 0,
                            (bytes_ >> 4) & 0xF, bytes_ & 0xF)
@@ -91,7 +98,8 @@ def _peel_call(name, peel, device="cuda"):
     grid = (T, -(-N // bn))
 
     def call():
-        _peel_gemv[grid](a, p, ax, out, lut, eids, K, N,
+        _peel_gemv[grid](a, p, p.view(torch.int32), ax, out, lut, eids,
+                         K, N,
                          p.stride(0), p.stride(1), ax.stride(0),
                          ax.stride(1), BLOCK_N=bn, BLOCK_K=64,
                          PEEL=peel, num_warps=warps, num_stages=3)

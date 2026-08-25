@@ -31,13 +31,19 @@ a = torch.randn(T, K, dtype=torch.bfloat16)
 eids = torch.arange(E, dtype=torch.int32)[:T]
 sizes = [1] * T
 for sk in (1, 4):
-    os.environ.pop("GNF4_GEMV_VEC_LOADS", None)
-    legacy = nf4_grouped.gemm_4bit_grouped(
-        a, packed, absmax, sizes, eids, decode_config=(64, 2), split_k=sk)
-    os.environ["GNF4_GEMV_VEC_LOADS"] = "1"
-    vec = nf4_grouped.gemm_4bit_grouped(
-        a, packed, absmax, sizes, eids, decode_config=(64, 2), split_k=sk)
-    assert torch.equal(legacy, vec), f"mismatch at sk={sk}"
+    for env in (None, "GNF4_GEMV_VEC_LOADS", "GNF4_GEMV_WIDE_LOADS"):
+        os.environ.pop("GNF4_GEMV_VEC_LOADS", None)
+        os.environ.pop("GNF4_GEMV_WIDE_LOADS", None)
+        if env is None:
+            legacy = nf4_grouped.gemm_4bit_grouped(
+                a, packed, absmax, sizes, eids, decode_config=(64, 2),
+                split_k=sk)
+        else:
+            os.environ[env] = "1"
+            other = nf4_grouped.gemm_4bit_grouped(
+                a, packed, absmax, sizes, eids, decode_config=(64, 2),
+                split_k=sk)
+            assert torch.equal(legacy, other), f"mismatch {env} sk={sk}"
 print("BITWISE-OK")
 """
 
