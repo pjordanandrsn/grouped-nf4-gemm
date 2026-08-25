@@ -195,3 +195,104 @@ def unpack_kv_block_grouped(row: torch.Tensor, block_tokens: int,
         s = row.narrow(0, n, block_tokens * n_kv_heads * groups * 4).view(
             torch.float32).view(block_tokens, n_kv_heads, groups)
     return q, (s.squeeze(-1) if groups == 1 else s)
+
+
+# --------------------------------------------------------------------------
+# Fused T=1 append (e4b F1 Stage B, arm B2)
+# --------------------------------------------------------------------------
+# The eager decode append is ~25 launches per layer (two 5-kernel
+# quantizes, ~10 address-math ops, 4 scatters), every one at the GPU's
+# ~1.2 us launch quantum -- launch-bound, not arithmetic-bound (the F1
+# Stage A census). This kernel does one SIDE's address-math + quantize +
+# store in a single launch. The math is quantize_kv_fp8's exactly: fp32
+# amax per group, scale = amax/E4M3_MAX with the all-zero group pinned to
+# 1.0, x/scale cast to e4m3 (saturating RNE on both paths); fp32 max and
+# same-operand divides carry no reduction-order rounding, so the fused
+# path is BITWISE against the reference -- asserted by
+# test_fp8_kv_append.py on randomized states, and re-asserted on-box
+# before any timed arm.
+
+try:  # triton is Linux-only (see pyproject); the torch surface above
+    import triton  # must stay importable without it
+    import triton.language as tl
+    HAS_TRITON = True
+except Exception:  # pragma: no cover - non-Linux
+    triton = None
+    HAS_TRITON = False
+
+if HAS_TRITON:
+    @triton.jit
+    def _fp8_append_t1_side(
+        x_ptr,            # [H, D] input (bf16/fp16/fp32), contiguous
+        pool_u8,          # flat uint8 view of this layer's pool arena
+        pool_i32,         # SAME memory viewed int32 (scale stores)
+        tbl_ptr,          # [blocks_per_seq] int32 block table row
+        lens_ptr,         # int32 scalar: tokens already in this sequence
+        row_bytes,        # bytes per pool row
+        pay_bytes,        # payload region size (scales start here)
+        bt,               # tokens per block
+        H: tl.constexpr,
+        D: tl.constexpr,
+        GROUPS: tl.constexpr,   # scale groups per (token, head) row
+        GS: tl.constexpr,       # D // GROUPS
+        E4M3_MAX: tl.constexpr,
+    ):
+        h = tl.program_id(0)
+        pos = tl.load(lens_ptr).to(tl.int64)
+        blk = pos // bt
+        fill = pos - blk * bt
+        # int64 BEFORE any byte product: row * row_bytes overflows int32
+        # on multi-GiB arenas (the nf4_grouped lesson).
+        row = tl.load(tbl_ptr + blk).to(tl.int64)
+        pay = row * row_bytes + fill * (H * D) + h * D
+        sc = (row * row_bytes + pay_bytes
+              + (fill * (H * GROUPS) + h * GROUPS) * 4)
+        for g in tl.static_range(GROUPS):
+            offs = tl.arange(0, GS)
+            x = tl.load(x_ptr + h * D + g * GS + offs).to(tl.float32)
+            amax = tl.max(tl.abs(x), axis=0)
+            scale = tl.where(amax > 0, amax / E4M3_MAX, 1.0)
+            q = (x / scale).to(tl.float8e4nv).to(tl.uint8, bitcast=True)
+            tl.store(pool_u8 + pay + g * GS + offs, q)
+            tl.store(pool_i32 + sc // 4 + g,
+                     scale.to(tl.float32).to(tl.int32, bitcast=True))
+
+
+def fp8_kv_append_t1(x, pool_flat_u8, tbl_row_i32, lens_scalar_i32,
+                     row_bytes: int, pay_bytes: int, block_tokens: int,
+                     groups: int):
+    """One-launch T=1 append of one side into a paged pool row.
+
+    ``x``: [H, D] (or [1, H, D]) float tensor for the new token.
+    ``pool_flat_u8``: flat uint8 view of the layer's pool arena.
+    ``tbl_row_i32``: this sequence's int32 block-table row.
+    ``lens_scalar_i32``: 1-element int32 view of tokens-seen; READ by the
+    kernel, never written -- the caller publishes the increment after,
+    preserving the exact in-stream ordering append_graph_t1 has today.
+
+    Capture-safe by construction: every address comes from device state.
+    """
+    if x.dim() == 3:
+        x = x.squeeze(0)
+    H, D = x.shape
+    if D % groups:
+        raise ValueError(f"groups {groups} must divide head_dim {D}")
+    if pool_flat_u8.dtype != torch.uint8 or not pool_flat_u8.is_contiguous():
+        raise ValueError("pool view must be contiguous uint8")
+    if int(pay_bytes) % 4 or int(row_bytes) % 4:
+        # scale stores go through an int32 view of the same bytes; a
+        # misaligned scale region would corrupt neighbours silently
+        raise ValueError("row/payload sizes must be 4-byte aligned")
+    if not HAS_TRITON:
+        # after argument validation: bad args fail as bad args on every
+        # platform; only a VALID call hits the availability boundary
+        raise RuntimeError(
+            "fp8_kv_append_t1 needs triton (Linux; see pyproject) -- the "
+            "torch surface of this module stays importable without it, "
+            "but the fused append cannot run")
+    pool_i32 = pool_flat_u8.view(torch.int32)
+    _fp8_append_t1_side[(H,)](
+        x.contiguous(), pool_flat_u8, pool_i32, tbl_row_i32,
+        lens_scalar_i32, int(row_bytes), int(pay_bytes),
+        int(block_tokens), H=H, D=D, GROUPS=groups, GS=D // groups,
+        E4M3_MAX=E4M3_MAX, num_warps=1)
