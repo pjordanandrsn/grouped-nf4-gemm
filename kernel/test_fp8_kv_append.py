@@ -137,3 +137,18 @@ def test_no_triton_is_a_clear_refusal(monkeypatch):
                          torch.zeros(2, dtype=torch.int32),
                          torch.zeros(1, dtype=torch.int32),
                          1024, 512, 8, 1)
+
+
+def test_cpu_tensors_refuse_cleanly():
+    """triton installs on CPU-only hosts, where a launch dies inside
+    triton's driver ("0 active drivers") -- an error that names
+    neither this function nor the fix. Valid-shaped CPU tensors must
+    get the clean availability refusal instead (e4b#251). Runs
+    everywhere: on GPU boxes the cpu tensors still make the call
+    illegal for the same reason."""
+    x = torch.zeros(2, 64)
+    pool = torch.zeros(4096, dtype=torch.uint8)
+    row = torch.zeros(4, dtype=torch.int32)
+    lens = torch.zeros(1, dtype=torch.int32)
+    with pytest.raises(RuntimeError, match="CUDA-resident"):
+        fp8_kv_append_t1(x, pool, row, lens, 2048, 1024, 16, 4)
