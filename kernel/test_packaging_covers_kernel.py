@@ -20,7 +20,18 @@ import pathlib
 import re
 
 # Modules intentionally kept out of the wheel. Empty today; entries need a reason.
-_DELIBERATELY_UNPACKAGED: dict[str, str] = {}
+_DELIBERATELY_UNPACKAGED: dict[str, str] = {
+    # Campaign verdict calculators: preregistration instruments that
+    # compute a cycle's verdict from committed receipts. They live in
+    # kernel/ beside their PREREG/RESULTS documents for provenance, but
+    # they are not library API and are meaningless outside the repo
+    # (their bars are hardcoded to their campaigns). Ship the receipts,
+    # not the calculator.
+    "k1_verdict": "K1 decode-config campaign instrument, not library API",
+    "k2_verdict": "K2 vectorized-nibbles campaign instrument, not library API",
+    "k3_verdict": "K3 attribution campaign instrument, not library API",
+    "k4_verdict": "K4 wide-loads campaign instrument, not library API",
+}
 
 # Test files CI does not invoke, each with WHY. This started at 17 silent
 # omissions -- including the tests for the very module 0.3.0 failed to ship.
