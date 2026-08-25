@@ -342,3 +342,33 @@ def test_f32_split_fused_combine_bitwise():
             assert torch.equal(a, f), (
                 f"fused combine diverges (trial={trial} "
                 f"n_split={n_split})")
+
+
+def test_f32_fuse_default_is_env_gated(monkeypatch):
+    """Pre-verdict discipline: merging T1 must not flip production
+    behavior. With fuse_combine=None (what e4b's passthrough sends),
+    the f32 split path resolves OFF unless GNF4_F32_FUSE_COMBINE=1;
+    explicit True/False from a caller always wins (the bitwise gate
+    test above passes both explicitly)."""
+    from fp8_paged_attn import _f32_fuse_default
+    monkeypatch.delenv("GNF4_F32_FUSE_COMBINE", raising=False)
+    assert _f32_fuse_default() is False
+    monkeypatch.setenv("GNF4_F32_FUSE_COMBINE", "1")
+    assert _f32_fuse_default() is True
+    monkeypatch.setenv("GNF4_F32_FUSE_COMBINE", "0")
+    assert _f32_fuse_default() is False
+
+
+def test_wrapper_resolves_none_per_path():
+    """Source guard: the signature default must stay None and the body
+    must resolve it through _f32_fuse_default() for f32 -- a future
+    edit restoring `= True` would silently ship T1 ahead of its
+    verdict through e4b's kwargs passthrough."""
+    import inspect
+
+    import fp8_paged_attn as m
+    sig = inspect.signature(m.fp8_paged_decode_attention)
+    assert sig.parameters["fuse_combine"].default is None
+    src = inspect.getsource(m.fp8_paged_decode_attention)
+    assert "_f32_fuse_default()" in src
+    assert 'compute == "fp8" else _f32_fuse_default()' in src

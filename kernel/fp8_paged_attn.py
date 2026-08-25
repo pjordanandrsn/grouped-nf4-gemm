@@ -53,6 +53,8 @@ serving-tolerance side of the D0 determinism split.
 """
 from __future__ import annotations
 
+import os
+
 import torch
 
 try:  # torch ships triton on CUDA installs; keep import-safe elsewhere
@@ -774,6 +776,15 @@ if _TRITON:
 _FUSE_COUNTERS: dict = {}
 
 
+
+def _f32_fuse_default() -> bool:
+    """Effective fuse_combine default for the F32 SPLIT path when the
+    caller passes None: env-gated OPT-IN (GNF4_F32_FUSE_COMBINE=1)
+    until the PREREG-f2-tail verdict; flip the fallback here on PASS.
+    The packed and fp8-compute paths certified their fused combine in
+    their own cycle and keep an unconditional True default."""
+    return os.environ.get("GNF4_F32_FUSE_COMBINE", "0") == "1"
+
 def _fuse_counters(n: int, device) -> torch.Tensor:
     """Zeroed-once arrival counters for the fused combine; slots are
     reset by the combining CTA itself, so reuse needs no memset (a
@@ -813,7 +824,7 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
                                num_stages: int = 3,
                                pack_heads: bool = False,
                                compute: str = "f32",
-                               fuse_combine: bool = True,
+                               fuse_combine: bool | None = None,
                                layout: str = "tokens"):
     """Decode attention over packed FP8 KV pool rows.
 
@@ -842,6 +853,12 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
     Returns [B, H_q, D] in q's dtype.
     """
     assert paged_attn_available(), "needs CUDA + triton"
+    if fuse_combine is None:
+        # per-path default: packed/fp8-compute fused combine is
+        # certified; the f32 split port is under PREREG-f2-tail T1 and
+        # stays opt-in until that verdict (explicit True/False from the
+        # caller always wins)
+        fuse_combine = True if compute == "fp8" else _f32_fuse_default()
     B, Hq, D = q.shape
     assert D == head_dim and Hq % n_kv_heads == 0
     G = Hq // n_kv_heads
