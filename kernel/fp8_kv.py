@@ -283,13 +283,18 @@ def fp8_kv_append_t1(x, pool_flat_u8, tbl_row_i32, lens_scalar_i32,
         # scale stores go through an int32 view of the same bytes; a
         # misaligned scale region would corrupt neighbours silently
         raise ValueError("row/payload sizes must be 4-byte aligned")
-    if not HAS_TRITON:
+    if not HAS_TRITON or not x.is_cuda:
         # after argument validation: bad args fail as bad args on every
-        # platform; only a VALID call hits the availability boundary
+        # platform; only a VALID call hits the availability boundary.
+        # The cuda check is load-bearing, not belt-and-braces: triton
+        # INSTALLS on CPU-only Linux hosts (CI), and launching there
+        # dies inside triton's driver with "0 active drivers" instead
+        # of anything actionable (e4b#251, the hour 0.15.0 hit PyPI)
         raise RuntimeError(
-            "fp8_kv_append_t1 needs triton (Linux; see pyproject) -- the "
-            "torch surface of this module stays importable without it, "
-            "but the fused append cannot run")
+            "fp8_kv_append_t1 needs triton and CUDA-resident tensors "
+            "(Linux; see pyproject) -- the torch surface of this module "
+            "stays importable without them, but the fused append "
+            "cannot run")
     pool_i32 = pool_flat_u8.view(torch.int32)
     _fp8_append_t1_side[(H,)](
         x.contiguous(), pool_flat_u8, pool_i32, tbl_row_i32,
