@@ -393,6 +393,113 @@ def build_group_tiles(sizes, block_m: int, device):
     return a, b, c
 
 
+def build_group_tiles_device(expert_ids, n_experts: int, block_m: int,
+                            tiles_budget: int | None = None):
+    """CAPTURE-SAFE tile construction (e4b PREREG-s3-grouped-verify).
+
+    ``build_group_tiles`` walks a python list and does one H2D copy --
+    both illegal inside CUDA-graph capture, and the host-size dependency
+    (``unique_consecutive().tolist()``) is why captured T>1 MoE has had
+    to fall back to one M=1 group per route assignment, which disables
+    expert-weight reuse entirely.
+
+    This builds the same three tensors entirely on device from a flat
+    ``expert_ids[R]``, with NO ``.item()``, no host round-trip, and a
+    STATIC output shape. Returns
+    ``(t_row0, t_rows, t_group, order, counts)`` where ``order`` sorts
+    rows into expert-major order (the caller gathers by it and scatters
+    back by its inverse) and ``counts[E]`` is the per-expert row count.
+
+    Shape budget: an expert with ``c`` rows needs ``ceil(c/BM)`` tiles,
+    and ``sum ceil(c_e/BM) <= R/BM + E``, so ``ceil(R/BM) + E`` tiles
+    always suffice. Slots past the true tile count carry ``rows = 0``,
+    which the kernel's own ``m_mask`` turns into a no-op -- that is what
+    keeps the launch shape static without knowing the active count.
+
+    The tile->expert map is a ``searchsorted`` over the exclusive prefix
+    of per-expert tile counts: device-side, in-stream, capture-legal.
+    """
+    dev = expert_ids.device
+    r = expert_ids.numel()
+    if tiles_budget is None:
+        tiles_budget = -(-r // block_m) + n_experts
+    ids = expert_ids.to(torch.int64)
+    order = torch.argsort(ids, stable=True)
+    counts = torch.zeros(n_experts, dtype=torch.int64, device=dev)
+    counts.scatter_add_(0, ids, torch.ones_like(ids))
+    row_off = torch.cumsum(counts, 0) - counts          # exclusive
+    tpe = (counts + block_m - 1) // block_m             # tiles per expert
+    tile_off = torch.cumsum(tpe, 0) - tpe               # exclusive
+    j = torch.arange(tiles_budget, dtype=torch.int64, device=dev)
+    # which expert owns slot j: last e with tile_off[e] <= j, clamped so
+    # over-budget slots land on the final expert and are zeroed below
+    e = torch.searchsorted(tile_off, j, right=True) - 1
+    e = e.clamp_(0, n_experts - 1)
+    i = j - tile_off.index_select(0, e)                 # tile within expert
+    rows = (counts.index_select(0, e) - i * block_m).clamp_(0, block_m)
+    live = (j < tile_off[-1] + tpe[-1]) & (i < tpe.index_select(0, e))
+    rows = torch.where(live, rows, torch.zeros_like(rows))
+    row0 = row_off.index_select(0, e) + i * block_m
+    row0 = torch.where(live, row0, torch.zeros_like(row0))
+    grp = torch.where(live, e, torch.zeros_like(e))
+    return (row0.to(torch.int32), rows.to(torch.int32),
+            grp.to(torch.int32), order, counts)
+
+
+def gemm_4bit_grouped_captured(a_sorted, B, absmax, t_row0, t_rows,
+                               t_group, block_m: int,
+                               prefill_variant: int | None = None,
+                               prefill_config=None):
+    """The M-tile GEMM against PREBUILT device tiles (e4b
+    PREREG-s3-grouped-verify): every launch parameter is static and
+    every input is a device tensor, so the call is legal inside CUDA
+    graph capture. Pair with :func:`build_group_tiles_device` -- the
+    caller gathers rows into expert-major order by that function's
+    ``order`` and hands the sorted activations here.
+
+    ``t_group`` values are LOCAL expert indices into ``B``/``absmax``
+    (expert-major == stack order), so the kernel's expert_ids indirection
+    is the identity -- an ``arange`` is passed rather than adding an
+    id-less kernel variant. Padding tiles (``rows == 0``) no-op through
+    the kernel's own ``m_mask``; they still cost a program launch, which
+    is the price of a static grid (documented in the device builder).
+
+    No allocations beyond ``out`` and the arange (both legal in capture:
+    they ride the graph's private pool -- the b1d-certified pattern)."""
+    dev = a_sorted.device
+    R, K = a_sorted.shape
+    E, N, _kb = B.shape
+    if prefill_variant is None:
+        prefill_variant = 1 if HAS_TL_GATHER else 0
+    # the same refusals the product wrapper enforces -- host-side
+    # raises, capture-legal, and dropping them here would reopen the
+    # known-wrong v5-without-gather path the wrapper already closed
+    # (Bugbot, gnf4#255)
+    if prefill_variant == 1 and not HAS_TL_GATHER:
+        raise RuntimeError("prefill_variant=1 needs triton with tl.gather")
+    if prefill_variant == 0 and not HAS_TL_GATHER \
+            and not _ALLOW_UNVERIFIED_V5:
+        raise RuntimeError(
+            "the v5 loop without tl.gather is numerically unverified on "
+            "this triton; set GNF4_ALLOW_UNVERIFIED_V5=1 only for "
+            "development")
+    if prefill_config is not None:
+        block_n, warps, stages = prefill_config
+    elif prefill_variant == 1:
+        block_n, warps, stages = 128, 4, 3        # the v6 rule
+    else:
+        block_n, warps, stages = 128, 4, 2
+    out = torch.empty(R, N, dtype=torch.bfloat16, device=dev)
+    eids = torch.arange(E, dtype=torch.int32, device=dev)
+    _gemm_nf4_grouped[(t_row0.numel(), triton.cdiv(N, block_n))](
+        a_sorted, B, absmax, out, _lut(dev), t_row0, t_rows, t_group,
+        eids, K, N, B.stride(0), B.stride(1), absmax.stride(0),
+        absmax.stride(1), BLOCK_M=block_m, BLOCK_N=block_n,
+        BLOCK_K=BLOCKSIZE, GROUPS=1, VARIANT=prefill_variant,
+        num_warps=warps, num_stages=stages)
+    return out
+
+
 @triton.jit
 def _gemm_nf4_grouped(
     a_ptr,

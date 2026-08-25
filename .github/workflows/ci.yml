@@ -82,7 +82,7 @@ jobs:
       - name: interpreter-mode contract + fuzz
         env:
           TRITON_INTERPRET: "1"
-        run: cd kernel && python -m pytest test_interp_contract.py test_gemv_vec_loads.py -q
+        run: cd kernel && python -m pytest test_interp_contract.py test_gemv_vec_loads.py test_group_tiles_device.py -q
 
       - name: README CPU quickstart (executed) + CPU refusal guard
         run: cd kernel && python -m pytest test_readme_cpu_block.py test_cpu_refusal.py -q
