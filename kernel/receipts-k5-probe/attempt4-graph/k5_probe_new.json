@@ -1,0 +1,818 @@
+{
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "stack_tag": "t28-floor",
+ "torch": "2.8.0+cu128",
+ "triton": "3.4.0",
+ "cells": {
+  "gate_up": {
+   "gemv_us": 36.05299815535545,
+   "gemv_us_eager": 48.921599984169006,
+   "noise_drift_pct": 0.23992800919786034,
+   "noise_gate_pass": true,
+   "graph_le_eager": true,
+   "mtile_best": {
+    "bm": 16,
+    "bn": 128,
+    "warps": 4,
+    "stages": 2,
+    "groups": 2,
+    "us": 72.02950119972229
+   },
+   "table": [
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "us": 114.49725180864334
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "us": 111.62524670362473
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "us": 114.58274722099304
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "us": 112.27849870920181
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "us": 117.50700324773788
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "us": 114.65674638748169
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "us": 117.89075285196304
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "us": 116.13824963569641
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "us": 76.0907530784607
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "us": 72.02950119972229
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "us": 76.67750120162964
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "us": 72.54575192928314
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "us": 121.81100249290466
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "us": 117.30974912643433
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "us": 120.34150213003159
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "us": 117.7932471036911
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "us": 237.1777445077896
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "error": "out of resource: shared memory, Required: 137216, Hardware limit: 101376. Reduci"
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "us": 236.83799803256989
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "error": "out of resource: shared memory, Required: 143360, Hardware limit: 101376. Reduci"
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "us": 167.56300628185272
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "error": "out of resource: shared memory, Required: 137216, Hardware limit: 101376. Reduci"
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "us": 148.67550134658813
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "error": "out of resource: shared memory, Required: 143360, Hardware limit: 101376. Reduci"
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "us": 115.84725230932236
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "us": 117.94474720954895
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "us": 119.8040023446083
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "us": 116.61475151777267
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "us": 125.05275011062622
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "us": 123.72949719429016
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "us": 125.47850608825684
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "us": 123.98000061511993
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "us": 87.32199668884277
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "us": 84.07899737358093
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "us": 86.22299879789352
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "us": 83.78224819898605
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "us": 129.91724908351898
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "us": 130.76800107955933
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "us": 130.792498588562
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "us": 129.67999279499054
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "us": 261.9425058364868
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "error": "out of resource: shared memory, Required: 141312, Hardware limit: 101376. Reduci"
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "us": 258.6997449398041
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "error": "out of resource: shared memory, Required: 151552, Hardware limit: 101376. Reduci"
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "us": 171.5559959411621
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "error": "out of resource: shared memory, Required: 141312, Hardware limit: 101376. Reduci"
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "us": 176.67250335216522
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "error": "out of resource: shared memory, Required: 151552, Hardware limit: 101376. Reduci"
+    }
+   ]
+  },
+  "down": {
+   "gemv_us": 40.5922494828701,
+   "gemv_us_eager": 63.23519945144654,
+   "noise_drift_pct": 0.37322421838627606,
+   "noise_gate_pass": true,
+   "graph_le_eager": true,
+   "mtile_best": {
+    "bm": 16,
+    "bn": 128,
+    "warps": 4,
+    "stages": 2,
+    "groups": 2,
+    "us": 27.834750711917877
+   },
+   "table": [
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "us": 43.958500027656555
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "us": 43.43250021338463
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "us": 44.48024928569794
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "us": 43.59325021505356
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "us": 45.462749898433685
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "us": 44.10500079393387
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "us": 45.61325162649155
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "us": 44.68024894595146
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "us": 28.9512500166893
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "us": 27.834750711917877
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "us": 29.215749353170395
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "us": 27.84924954175949
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "us": 46.685248613357544
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "us": 45.143499970436096
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "us": 46.19025066494942
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "us": 45.375000685453415
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "us": 89.93525058031082
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "error": "out of resource: shared memory, Required: 137216, Hardware limit: 101376. Reduci"
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "us": 90.22650122642517
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "error": "out of resource: shared memory, Required: 143360, Hardware limit: 101376. Reduci"
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "us": 86.59224957227707
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "error": "out of resource: shared memory, Required: 137216, Hardware limit: 101376. Reduci"
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "us": 71.93099707365036
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "error": "out of resource: shared memory, Required: 143360, Hardware limit: 101376. Reduci"
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "us": 45.556750148534775
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "us": 46.42949998378754
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "us": 46.59999907016754
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "us": 45.86024954915047
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "us": 48.43999817967415
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "us": 47.59575054049492
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "us": 48.26274886727333
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "us": 47.96674847602844
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "us": 33.511750400066376
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "us": 32.204750925302505
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "us": 33.261001110076904
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "us": 32.18675032258034
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "us": 50.258249044418335
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "us": 50.00599846243858
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "us": 50.24600028991699
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "us": 50.17499998211861
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "us": 100.88074952363968
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "error": "out of resource: shared memory, Required: 141312, Hardware limit: 101376. Reduci"
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "us": 97.86149859428406
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "error": "out of resource: shared memory, Required: 151552, Hardware limit: 101376. Reduci"
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "us": 80.65275102853775
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "error": "out of resource: shared memory, Required: 141312, Hardware limit: 101376. Reduci"
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "us": 83.76225084066391
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "error": "out of resource: shared memory, Required: 151552, Hardware limit: 101376. Reduci"
+    }
+   ]
+  }
+ },
+ "summary": {
+  "gemv_sum_us": 76.64524763822556,
+  "mtile_sum_us": 99.86425191164017,
+  "ratio_mtile_over_gemv": 1.302941212780876,
+  "noise_gate_pass": true,
+  "gemv_sum_us_eager": 112.15679943561554
+ },
+ "gpu_state_post": "595.71.05, 2962 MHz"
+}
