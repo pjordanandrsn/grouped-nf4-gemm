@@ -1,0 +1,804 @@
+{
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "stack_tag": "t27-t33",
+ "torch": "2.7.0+cu128",
+ "triton": "3.3.0",
+ "cells": {
+  "gate_up": {
+   "gemv_us": 36.20649874210358,
+   "gemv_us_eager": 51.420801877975464,
+   "noise_drift_pct": 0.00760357843538728,
+   "noise_gate_pass": true,
+   "graph_le_eager": true,
+   "mtile_best": null,
+   "table": [
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    }
+   ]
+  },
+  "down": {
+   "gemv_us": 40.69875180721283,
+   "gemv_us_eager": 44.28800046443939,
+   "noise_drift_pct": 0.20332287779171931,
+   "noise_gate_pass": true,
+   "graph_le_eager": true,
+   "mtile_best": null,
+   "table": [
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 64,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 128,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 16,
+     "bn": 256,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 64,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 128,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 4,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 4,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 4,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 4,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 8,
+     "stages": 2,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 8,
+     "stages": 2,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 8,
+     "stages": 3,
+     "groups": 1,
+     "error": "PassManager::run failed"
+    },
+    {
+     "bm": 32,
+     "bn": 256,
+     "warps": 8,
+     "stages": 3,
+     "groups": 2,
+     "error": "PassManager::run failed"
+    }
+   ]
+  }
+ },
+ "summary": {
+  "gemv_sum_us": 76.9052505493164,
+  "mtile_sum_us": null,
+  "ratio_mtile_over_gemv": null,
+  "noise_gate_pass": true,
+  "gemv_sum_us_eager": 95.70880234241486
+ },
+ "gpu_state_post": "595.71.05, 2550 MHz"
+}

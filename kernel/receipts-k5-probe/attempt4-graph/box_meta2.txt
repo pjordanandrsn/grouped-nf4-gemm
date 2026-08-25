@@ -1,0 +1,6 @@
+41e160f K5 amendment 2: CUDA-graph replay is the timing basis (eager harness is host-CPU-sensitive) (#250)
+NVIDIA GeForce RTX 5090, 595.71.05
+diag var=1 bm=16: OK
+diag var=1 bm=128: OK
+diag var=0 bm=16: OK
+diag var=0 bm=128: OK
