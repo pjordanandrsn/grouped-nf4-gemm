@@ -85,13 +85,16 @@ if _TRITON:
         q_ptr, kpool_u8, vpool_u8, kpool_f32, vpool_f32,
         table_ptr, seqlen_ptr,
         m_ptr, l_ptr, acc_ptr,
+        o_ptr, counter_ptr,
         stride_qb, stride_qh, stride_tb,
+        stride_ob, stride_oh,
         k_row_bytes, v_row_bytes,
         sm_scale, n_split,
         H_KV: tl.constexpr, G: tl.constexpr, D: tl.constexpr,
         BT: tl.constexpr, KTILE: tl.constexpr,
         NG_K: tl.constexpr, NG_V: tl.constexpr,
         BLOCK_G: tl.constexpr,
+        FUSE_COMBINE: tl.constexpr,
     ):
         pid = tl.program_id(0)
         s_id = pid % n_split
@@ -179,6 +182,39 @@ if _TRITON:
         tl.store(l_ptr + part + offs_g, l_i)
         tl.store(acc_ptr + part * D + offs_g[:, None] * D + offs_d[None, :],
                  acc)
+
+        if FUSE_COMBINE:
+            # PREREG-f2-tail T1: the same stream-k fixup the packed and
+            # f8dot kernels already carry -- the LAST split CTA for this
+            # (b, h) combines the partials in place, with the identical
+            # fixed 0..n_split reduction order as `_fp8_combine`, so the
+            # result is bitwise-equal and only the launch disappears.
+            arrived = tl.atomic_add(counter_ptr + bh, 1, sem="acq_rel")
+            if arrived == n_split - 1:
+                m_glob = tl.full([BLOCK_G], float("-inf"), tl.float32)
+                for s_i in range(0, n_split):
+                    m_s = tl.load(m_ptr + (bh * n_split + s_i) * BLOCK_G
+                                  + offs_g)
+                    m_glob = tl.maximum(m_glob, m_s)
+                m_glob = tl.where(m_glob == float("-inf"), 0.0, m_glob)
+                l_tot = tl.zeros([BLOCK_G], tl.float32)
+                out = tl.zeros([BLOCK_G, D], tl.float32)
+                for s_i in range(0, n_split):
+                    base = (bh * n_split + s_i) * BLOCK_G
+                    m_s = tl.load(m_ptr + base + offs_g)
+                    l_s = tl.load(l_ptr + base + offs_g)
+                    a_s = tl.load(acc_ptr + base * D + offs_g[:, None] * D
+                                  + offs_d[None, :])
+                    w = tl.exp2((m_s - m_glob) * 1.4426950408889634)
+                    l_tot += l_s * w
+                    out += a_s * w[:, None]
+                out = out / l_tot[:, None]
+                o_ptrs = (o_ptr + b * stride_ob
+                          + (h * G + offs_g)[:, None] * stride_oh
+                          + offs_d[None, :])
+                tl.store(o_ptrs, out.to(o_ptr.dtype.element_ty),
+                         mask=g_mask[:, None])
+                tl.store(counter_ptr + bh, 0)
 
     @triton.jit
     def _fp8_paged_decode_packed(
@@ -962,17 +998,24 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
         assert layout == "tokens", \
             "the decode path keeps tokens-major (heads-major exists for " \
             "the fp8 compute path, where the memory system is the wall)"
+        counters = _fuse_counters(B * n_kv_heads, q.device) \
+            if fuse_combine else m_buf  # inert placeholder when off
         _fp8_paged_decode_split[(B * n_kv_heads * n_split,)](
             q, k_pool, v_pool,
             k_pool.view(torch.float32), v_pool.view(torch.float32),
             block_table, seq_lens.to(torch.int32),
             m_buf, l_buf, acc_buf,
+            o, counters,
             q.stride(0), q.stride(1), block_table.stride(0),
+            o.stride(0), o.stride(1),
             k_row, v_row, sm_scale, n_split,
             H_KV=n_kv_heads, G=G, D=D, BT=block_tokens, KTILE=ktile,
             NG_K=k_groups, NG_V=v_groups, BLOCK_G=block_g,
+            FUSE_COMBINE=fuse_combine,
             num_warps=num_warps, num_stages=num_stages,
         )
+        if fuse_combine:
+            return o
     _fp8_combine[(B * n_kv_heads,)](
         m_buf, l_buf, acc_buf, o,
         o.stride(0), o.stride(1), n_split,
