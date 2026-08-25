@@ -1,0 +1,32 @@
+{
+  "cells": {
+    "gate_up": {
+      "full_us": 65.11679887771606,
+      "shares_pct": {
+        "lut_gather": 3.6,
+        "absmax": 0.0,
+        "activation": 0.0,
+        "loads_floor": 86.8,
+        "residual": 9.5
+      },
+      "loads_floor_x_roofline": 6.73,
+      "splitk_delta_pct": -43.1
+    },
+    "down": {
+      "full_us": 28.2368004322052,
+      "shares_pct": {
+        "lut_gather": 8.7,
+        "absmax": 8.7,
+        "activation": 1.4,
+        "loads_floor": 83.3,
+        "residual": 0.0
+      },
+      "loads_floor_x_roofline": 5.34
+    }
+  },
+  "triggers": [
+    "gate_up:access_pattern",
+    "down:access_pattern"
+  ],
+  "verdict": "BRANCH: register the packing-layout question (the streaming floor itself is the wall)"
+}

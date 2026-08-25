@@ -1,0 +1,44 @@
+{
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "cells": {
+  "gate_up": {
+   "peel_us": {
+    "full": 65.11679887771606,
+    "no_lut": 62.75200247764587,
+    "no_absmax": 66.90239906311035,
+    "no_act": 67.35360026359558,
+    "loads_only": 56.540799140930176
+   },
+   "noise_drift_pct": 0.06883728631091303,
+   "product_sk1_us": 66.07360243797302,
+   "replica_vs_product_pct": 1.4480874735945612,
+   "product_sk16_us": 46.18239998817444,
+   "components_us": {
+    "lut_gather": 2.3647964000701975,
+    "absmax": -1.785600185394287,
+    "activation": -2.2368013858795166,
+    "loads_floor": 56.540799140930176
+   },
+   "residual_us": 6.211203336715691
+  },
+  "down": {
+   "peel_us": {
+    "full": 28.2368004322052,
+    "no_lut": 25.775998830795288,
+    "no_absmax": 25.782400369644165,
+    "no_act": 27.846398949623108,
+    "loads_only": 23.51360023021698
+   },
+   "noise_drift_pct": 0.9394961532260329,
+   "product_sk1_us": 29.158401489257812,
+   "replica_vs_product_pct": 3.160670715752842,
+   "components_us": {
+    "lut_gather": 2.460801601409912,
+    "absmax": 2.454400062561035,
+    "activation": 0.3904014825820923,
+    "loads_floor": 23.51360023021698
+   },
+   "residual_us": -0.5824029445648193
+  }
+ }
+}

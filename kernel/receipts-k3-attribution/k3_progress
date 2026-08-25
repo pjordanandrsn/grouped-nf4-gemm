@@ -1,0 +1,8 @@
+NCU-TRY 00:11:46
+NCU-FAIL (other)
+ONE-SHOT gate_up done
+PEEL-START 00:11:53
+PEEL-OK
+gate_up: full=65.1us {'lut_gather': 2.4, 'absmax': -1.8, 'activation': -2.2, 'loads_floor': 56.5} residual=6.2us replica_vs_product=1.4%
+down: full=28.2us {'lut_gather': 2.5, 'absmax': 2.5, 'activation': 0.4, 'loads_floor': 23.5} residual=-0.6us replica_vs_product=3.2%
+K3-DONE 00:11:59
