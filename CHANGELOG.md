@@ -1,5 +1,63 @@
 # Changelog
 
+## 0.15.0 — 2026-08-25
+
+Minor release: the M=1 decode-kernel campaign (K1–K6-B), the graph-step
+tail work (F1/F2), and the capture-safe grouping API. Single-stream
+decode on the reference class (Qwen3-30B-A3B, RTX 5090) moves from
+~66 tok/s at 0.14.0 defaults to **~139–140 tok/s** at 0.15.0 defaults
+with the e4b 0.21.0 harness, ~152 with the opt-in dot-pad knob. Every
+default flip below cites an adjudicated verdict with committed
+receipts.
+
+### Performance (defaults changed)
+
+- **M=1 decode launch configs re-tuned for sm_120** (K1, #241/#242):
+  the baked winners are worth ~13% single-stream on the class box
+  (65.8 → 74.3 tok/s at the K1 rung).
+- **Fused one-launch T=1 paged KV append** (`fp8_kv`, #253) — the
+  gnf4 half of e4b's F1-B2 default (94.2 → 133.4 tok/s rung there):
+  one launch replaces the per-layer append stack, CUDA-graph-capturable.
+- **f32 paged-decode attention now fuses its combine in-kernel by
+  default** (RESULTS-f2-tail, #260/#261): the last-arriving CTA per
+  (seq, kv-head) reduces the split partials in the same fixed order as
+  the standalone kernel — bitwise-identical, token-identical over the
+  127-step receipt. Cut 0.041 ms/step alone, 0.197 ms combined with
+  e4b's fused QKV. Rollback: `GNF4_F32_FUSE_COMBINE=0`.
+
+### Performance (opt-in)
+
+- **Dot-pad GEMV** behind `GNF4_GEMV_DOTPAD=1` (K6-B, #258/#259):
+  tensor-core dot with the x-vector in M-row 0 for the two flagship
+  M=1 shapes; ~152 tok/s on the class box. PARTIAL verdict (two
+  boxes), so **default OFF** — the 15/16 M-row waste is registered
+  honestly and the knob ships disclosed.
+
+### New API
+
+- **Capture-safe grouped execution** (#255):
+  `build_group_tiles_device` (argsort/scatter/cumsum tile construction
+  with a static ceil(R/BM)+E budget, zero-row padding no-ops) and
+  `gemm_4bit_grouped_captured` — T>1 expert grouping with no `.item()`,
+  no host-size dependency, legal inside CUDA graph capture. 23 CPU
+  tests plus source guards against host-sync ops.
+
+### Measurement and research artifacts (no runtime behavior change)
+
+The K-series record under `kernel/`: K2 vectorized nibbles
+REFUTED-FOR-VARIANT (#243), K3/K4 streaming-floor and wide-loads
+refutations (#244–#247), K5 M-tile probe STRUCTURE-REFUTED with the
+graph-replay timing basis amendment (#248–#252), K6 bespoke-GEMV
+frame amendments (#254/#256/#257), the low-G split revert (#236–#240),
+and the F2 prereg's in-flight bar re-derivation (fused-QKV bitwise
+claim falsified by its own CPU gate before registration). Receipts for
+every verdict live beside their RESULTS files.
+
+### Packaging
+
+- `f2_verdict` classified as a campaign instrument (not shipped);
+  the packaging meta-guard enforces the classification.
+
 ## 0.14.0 — 2026-08-23
 
 Minor release. 0.13.2 shipped before a large body of hybrid-tier and residency
