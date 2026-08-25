@@ -124,3 +124,16 @@ def test_fp8_dtype_is_e4m3fn():
     reference side so a future dtype change cannot silently diverge."""
     assert FP8_DTYPE == torch.float8_e4m3fn
     assert E4M3_MAX == 448.0
+
+
+def test_no_triton_is_a_clear_refusal(monkeypatch):
+    """Without triton the wrapper must refuse loudly, not NameError --
+    the module's own contract is that its torch surface stays importable
+    (and callable-with-clear-errors) on platforms with no triton."""
+    monkeypatch.setattr(fp8_kv, "HAS_TRITON", False)
+    with pytest.raises(RuntimeError, match="needs triton"):
+        fp8_kv_append_t1(torch.zeros(4, 128),
+                         torch.zeros(1024, dtype=torch.uint8),
+                         torch.zeros(2, dtype=torch.int32),
+                         torch.zeros(1, dtype=torch.int32),
+                         1024, 512, 8, 1)
