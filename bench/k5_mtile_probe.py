@@ -1,11 +1,12 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
-"""PREREG-k5-mtile-probe: time the PRODUCT M-tile kernel at exactly the
-M=1 decode shapes (sizes=[1]*8, one 1-row tile per group via the
-kernel's own m_mask) against the production GEMV at the K1 winners.
-The launch section is replicated here; the kernel is the product's own
--- nothing to drift. Timing-only: outputs are discarded and no
-correctness claim is made (a K5-B routing cycle would carry the
-fidelity gates)."""
+"""PREREG-k5-mtile-probe (+ AMENDMENT-k5-stack, AMENDMENT-k5-graph-timing):
+time the PRODUCT M-tile kernel at the M=1 decode shapes (sizes=[1]*8,
+one 1-row tile per group via the kernel's own m_mask) against the
+production GEMV at the K1 winners. The registered basis is CUDA-graph
+replay (host-insensitive, product-faithful); eager wrapper time is
+recorded once per cell for K1 continuity and disclosed as
+kernel+host-gap. Timing-only: outputs are discarded and no correctness
+claim is made (a K5-B routing cycle would carry the fidelity gates)."""
 
 import argparse
 import itertools
@@ -59,6 +60,35 @@ def _time(fn, iters=200, warmup=50, chunks=20):
     return spans[len(spans) // 2]
 
 
+def _time_graph(fn, warmup=50, inner=32, replays=4, chunks=10):
+    """AMENDMENT-k5-graph-timing: the registered basis. Capture `inner`
+    back-to-back calls in one CUDA graph (allocations inside capture ride
+    the graph's private pool -- the b1d-certified pattern) and time
+    replays; per-call = median chunk / (replays * inner). Excludes host
+    enqueue cost, as production's captured decode loop does."""
+    for _ in range(warmup):
+        fn()
+    torch.cuda.synchronize()
+    g = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(g):
+        for _ in range(inner):
+            fn()
+    g.replay()
+    torch.cuda.synchronize()
+    spans = []
+    for _ in range(chunks):
+        e0 = torch.cuda.Event(enable_timing=True)
+        e1 = torch.cuda.Event(enable_timing=True)
+        e0.record()
+        for _ in range(replays):
+            g.replay()
+        e1.record()
+        e1.synchronize()
+        spans.append(e0.elapsed_time(e1) / (replays * inner))
+    spans.sort()
+    return spans[len(spans) // 2]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="k5_probe.json")
@@ -81,7 +111,8 @@ def main():
             return nf4_grouped.gemm_4bit_grouped(
                 a, p, ax, [1] * T, eids, decode_config=cfg, split_k=sk)
 
-        g_start = _time(gemv) * 1000.0
+        g_eager = _time(gemv) * 1000.0
+        g_start = _time_graph(gemv) * 1000.0
         out = torch.empty(T, N, dtype=torch.bfloat16, device=dev)
         lut = _lut(torch.device(dev))
         rows = []
@@ -100,22 +131,25 @@ def main():
                     BLOCK_K=BLOCKSIZE * gr, GROUPS=gr, VARIANT=1,
                     num_warps=w, num_stages=st)
             try:
-                ms = _time(mtile) * 1000.0
+                ms = _time_graph(mtile) * 1000.0
             except Exception as e:                    # noqa: BLE001
                 rows.append({"bm": bm, "bn": bn, "warps": w, "stages": st,
                              "groups": gr, "error": str(e)[:80]})
                 continue
             rows.append({"bm": bm, "bn": bn, "warps": w, "stages": st,
                          "groups": gr, "us": ms})
-        g_end = _time(gemv) * 1000.0
+        g_end = _time_graph(gemv) * 1000.0
         drift = abs(g_end - g_start) / min(g_start, g_end) * 100
+        g_graph = min(g_start, g_end)
         ok = sorted((r for r in rows if "us" in r), key=lambda r: r["us"])
         rep["cells"][name] = {
-            "gemv_us": min(g_start, g_end), "noise_drift_pct": drift,
+            "gemv_us": g_graph, "gemv_us_eager": g_eager,
+            "noise_drift_pct": drift,
             "noise_gate_pass": drift <= 5.0,
+            "graph_le_eager": g_graph <= g_eager * 1.02,
             "mtile_best": ok[0] if ok else None, "table": rows,
         }
-        gemv_sum += min(g_start, g_end)
+        gemv_sum += g_graph
         if ok:
             mtile_sum += ok[0]["us"]
     rep["summary"] = {
@@ -134,12 +168,14 @@ def main():
             timeout=10).stdout.strip()
     except Exception:                                  # noqa: BLE001
         rep["gpu_state_post"] = "unavailable"
+    eager_sum = sum(c["gemv_us_eager"] for c in rep["cells"].values())
+    rep["summary"]["gemv_sum_us_eager"] = eager_sum
     Path(args.out).write_text(json.dumps(rep, indent=1))
     s = rep["summary"]
     mt = s["mtile_sum_us"]
     r = s["ratio_mtile_over_gemv"]
     print(f"K5PROBE[{args.stack_tag or 'untagged'}] "
-          f"gemv={gemv_sum:.1f}us "
+          f"gemv={gemv_sum:.1f}us(graph)/{eager_sum:.1f}us(eager) "
           f"mtile={f'{mt:.1f}us' if mt is not None else 'n/a'} "
           f"ratio={f'{r:.3f}' if r is not None else 'n/a'} "
           f"noise={'PASS' if s['noise_gate_pass'] else 'FAIL'}")

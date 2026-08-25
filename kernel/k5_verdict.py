@@ -16,6 +16,10 @@ def verdict(rep):
         if not cell.get("noise_gate_pass"):
             return ("REFUSE", f"noise gate failed at {name}: "
                     f"{cell.get('noise_drift_pct'):.2f}% > {NOISE_PCT}%")
+        if "graph_le_eager" in cell and not cell["graph_le_eager"]:
+            return ("REFUSE", f"graph time exceeds eager at {name}: "
+                    "structural sanity violated "
+                    "(AMENDMENT-k5-graph-timing)")
         if cell.get("mtile_best") is None:
             return ("REFUSE", f"no successful M-tile config at {name}")
         if cell.get("gemv_us", 0) <= 0:
@@ -38,10 +42,12 @@ def verdict(rep):
             "pauses; elementwise-fusion lane takes priority")
 
 
-def _fab(ratio, noise=1.0, best=True):
+def _fab(ratio, noise=1.0, best=True, sane=True):
     g = 70.0
-    cell = lambda gu: {"gemv_us": gu, "noise_drift_pct": noise,  # noqa: E731
+    cell = lambda gu: {"gemv_us": gu, "gemv_us_eager": gu * 1.3,  # noqa: E731
+                       "noise_drift_pct": noise,
                        "noise_gate_pass": noise <= NOISE_PCT,
+                       "graph_le_eager": sane,
                        "mtile_best": {"us": gu * ratio} if best else None}
     return {"cells": {"gate_up": cell(g * 0.6), "down": cell(g * 0.4)},
             "summary": {"gemv_sum_us": g, "mtile_sum_us": g * ratio,
@@ -58,6 +64,7 @@ def self_test():
         (_fab(1.30), "STRUCTURE-REFUTED"),
         (_fab(0.45, noise=7.2), "REFUSE"),
         (_fab(0.45, best=False), "REFUSE"),
+        (_fab(0.45, sane=False), "REFUSE"),  # graph > eager
     ]
     for rep, want in cases:
         got, why = verdict(rep)
