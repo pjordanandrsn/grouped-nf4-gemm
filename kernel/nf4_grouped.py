@@ -471,6 +471,18 @@ def gemm_4bit_grouped_captured(a_sorted, B, absmax, t_row0, t_rows,
     E, N, _kb = B.shape
     if prefill_variant is None:
         prefill_variant = 1 if HAS_TL_GATHER else 0
+    # the same refusals the product wrapper enforces -- host-side
+    # raises, capture-legal, and dropping them here would reopen the
+    # known-wrong v5-without-gather path the wrapper already closed
+    # (Bugbot, gnf4#255)
+    if prefill_variant == 1 and not HAS_TL_GATHER:
+        raise RuntimeError("prefill_variant=1 needs triton with tl.gather")
+    if prefill_variant == 0 and not HAS_TL_GATHER \
+            and not _ALLOW_UNVERIFIED_V5:
+        raise RuntimeError(
+            "the v5 loop without tl.gather is numerically unverified on "
+            "this triton; set GNF4_ALLOW_UNVERIFIED_V5=1 only for "
+            "development")
     if prefill_config is not None:
         block_n, warps, stages = prefill_config
     elif prefill_variant == 1:
