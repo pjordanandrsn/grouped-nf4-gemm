@@ -1,0 +1,3 @@
+K6BENCH baseline=69.5us wide_scalar=72.5us dot_pad=GATE-FAILED noise=PASS
+  gate_up: base=42.0 wide=45.4 dot=none | gate n/a
+  down: base=27.5 wide=27.1 dot=none | gate n/a

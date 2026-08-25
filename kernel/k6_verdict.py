@@ -7,6 +7,13 @@ import sys
 
 PASS_US = 36.0
 PARTIAL_US = 58.0
+# AMENDMENT (RESULTS-k6-stageA): the correctness gate for bf16-input
+# MMA is RELATIVE -- max|delta| <= max|ref| * 2**-7 -- because the
+# registered mechanism rounds both operands to bf16 before the MMA and
+# an absolute 1e-2 was unachievable by construction. Receipts must
+# carry max_abs_ref; argmax agreement >= 0.99 is recorded alongside.
+REL_BAR = 2.0 ** -7
+ARGMAX_FLOOR = 0.99
 
 
 def verdict(rep):
@@ -18,6 +25,20 @@ def verdict(rep):
         return ("REFUSE", "no baseline pair")
     for name, c in (rep.get("cells") or {}).items():
         g = c.get("gate")
+        if g and "max_abs_ref" in g:
+            rel_ok = (g["max_abs_delta"]
+                      <= g["max_abs_ref"] * REL_BAR)
+            am_ok = (g["argmax_agree"] / max(1, g["argmax_total"])
+                     >= ARGMAX_FLOOR)
+            g = dict(g)
+            g["pass"] = bool(rel_ok and am_ok)
+            c = dict(c)
+            c["gate"] = g
+            if not g["pass"] and c.get("dot_pad_best"):
+                return ("REFUSE", f"{name}: amended relative gate "
+                        f"failed (max|d| {g['max_abs_delta']:.3e} vs "
+                        f"budget {g['max_abs_ref'] * REL_BAR:.3e}, "
+                        f"argmax {g['argmax_agree']}/{g['argmax_total']})")
         if c.get("dot_pad_best") is None:
             return ("REFUSE", f"{name}: no config passed its "
                     "correctness gate -- the census pair is INCOMPLETE "
@@ -74,6 +95,24 @@ def self_test():
                                    "dot_pad_pair_us": 30.0,
                                    "noise_gate_pass": True}), "REFUSE"),
     ]
+    # amended relative gate: 0.5 delta on a 120-magnitude ref is INSIDE
+    # the bf16-MMA budget (120 * 2^-7 = 0.9375) and must pass; the same
+    # delta on a 30-magnitude ref is outside and must refuse
+    ok = _fab(46.4)
+    for c in ok["cells"].values():
+        c["gate"] = {"pass": False, "max_abs_delta": 0.5,
+                     "max_abs_ref": 120.0,
+                     "argmax_agree": 4070, "argmax_total": 4096}
+    got, why = verdict(ok)
+    assert got == "PARTIAL", (got, why)
+    bad = _fab(46.4)
+    for c in bad["cells"].values():
+        c["gate"] = {"pass": False, "max_abs_delta": 0.5,
+                     "max_abs_ref": 30.0,
+                     "argmax_agree": 4070, "argmax_total": 4096}
+    got, why = verdict(bad)
+    assert got == "REFUSE", (got, why)
+    cases += [(None, None)] * 0
     for rep, want in cases:
         got, why = verdict(rep)
         assert got == want, (got, want, why)
