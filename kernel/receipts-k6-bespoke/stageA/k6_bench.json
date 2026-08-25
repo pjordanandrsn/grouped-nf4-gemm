@@ -1,0 +1,1548 @@
+{
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "torch": "2.13.0+cu130",
+ "cells": {
+  "gate_up": {
+   "baseline_us": 41.97759926319122,
+   "wide_scalar_us": 45.4367995262146,
+   "noise_drift_pct": 2.1420987558345215,
+   "noise_gate_pass": true,
+   "dot_pad_best": null,
+   "gate": null,
+   "gate_rejected": [
+    {
+     "config": {
+      "bn": 16,
+      "warps": 2,
+      "stages": 2,
+      "us": 27.369600534439087
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 16,
+      "warps": 2,
+      "stages": 4,
+      "us": 29.107201099395752
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 16,
+      "warps": 2,
+      "stages": 3,
+      "us": 29.135999083518982
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 32,
+      "warps": 2,
+      "stages": 3,
+      "us": 30.553600192070007
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 32,
+      "warps": 2,
+      "stages": 4,
+      "us": 30.563199520111084
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 32,
+      "warps": 4,
+      "stages": 2,
+      "us": 31.590399146080014
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 16,
+      "warps": 4,
+      "stages": 2,
+      "us": 32.40000009536743
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 32,
+      "warps": 4,
+      "stages": 3,
+      "us": 32.71360099315643
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 32,
+      "warps": 2,
+      "stages": 2,
+      "us": 32.761600613594055
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 32,
+      "warps": 4,
+      "stages": 4,
+      "us": 32.972800731658936
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 64,
+      "warps": 4,
+      "stages": 4,
+      "us": 35.760000348091125
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 64,
+      "warps": 4,
+      "stages": 3,
+      "us": 35.868799686431885
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 16,
+      "warps": 4,
+      "stages": 4,
+      "us": 36.23360097408295
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 16,
+      "warps": 4,
+      "stages": 3,
+      "us": 36.30079925060272
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 64,
+      "warps": 2,
+      "stages": 4,
+      "us": 38.2176011800766
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 64,
+      "warps": 2,
+      "stages": 3,
+      "us": 38.24639916419983
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 128,
+      "warps": 4,
+      "stages": 3,
+      "us": 38.38399946689606
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 64,
+      "warps": 4,
+      "stages": 2,
+      "us": 38.48319947719574
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 128,
+      "warps": 4,
+      "stages": 4,
+      "us": 38.48640024662018
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 128,
+      "warps": 8,
+      "stages": 3,
+      "us": 38.655999302864075
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 128,
+      "warps": 8,
+      "stages": 4,
+      "us": 38.710400462150574
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 32,
+      "warps": 8,
+      "stages": 2,
+      "us": 40.508800745010376
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 64,
+      "warps": 8,
+      "stages": 2,
+      "us": 40.515199303627014
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 32,
+      "warps": 8,
+      "stages": 3,
+      "us": 41.69600009918213
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 32,
+      "warps": 8,
+      "stages": 4,
+      "us": 41.71519875526428
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 64,
+      "warps": 8,
+      "stages": 4,
+      "us": 41.75040125846863
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 64,
+      "warps": 8,
+      "stages": 3,
+      "us": 41.76320135593414
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 128,
+      "warps": 4,
+      "stages": 2,
+      "us": 41.87520146369934
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 128,
+      "warps": 8,
+      "stages": 2,
+      "us": 42.604801058769226
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 64,
+      "warps": 2,
+      "stages": 2,
+      "us": 42.816001176834106
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 128,
+      "warps": 2,
+      "stages": 3,
+      "us": 44.01920139789581
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 128,
+      "warps": 2,
+      "stages": 4,
+      "us": 44.15999948978424
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 16,
+      "warps": 8,
+      "stages": 2,
+      "us": 44.69119906425476
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 16,
+      "warps": 8,
+      "stages": 4,
+      "us": 49.5712012052536
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 16,
+      "warps": 8,
+      "stages": 3,
+      "us": 49.63200092315674
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 128,
+      "warps": 2,
+      "stages": 2,
+      "us": 53.25440168380737
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4070,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    }
+   ],
+   "table": [
+    {
+     "bn": 16,
+     "warps": 2,
+     "stages": 2,
+     "us": 27.369600534439087
+    },
+    {
+     "bn": 16,
+     "warps": 2,
+     "stages": 3,
+     "us": 29.135999083518982
+    },
+    {
+     "bn": 16,
+     "warps": 2,
+     "stages": 4,
+     "us": 29.107201099395752
+    },
+    {
+     "bn": 16,
+     "warps": 4,
+     "stages": 2,
+     "us": 32.40000009536743
+    },
+    {
+     "bn": 16,
+     "warps": 4,
+     "stages": 3,
+     "us": 36.30079925060272
+    },
+    {
+     "bn": 16,
+     "warps": 4,
+     "stages": 4,
+     "us": 36.23360097408295
+    },
+    {
+     "bn": 16,
+     "warps": 8,
+     "stages": 2,
+     "us": 44.69119906425476
+    },
+    {
+     "bn": 16,
+     "warps": 8,
+     "stages": 3,
+     "us": 49.63200092315674
+    },
+    {
+     "bn": 16,
+     "warps": 8,
+     "stages": 4,
+     "us": 49.5712012052536
+    },
+    {
+     "bn": 32,
+     "warps": 2,
+     "stages": 2,
+     "us": 32.761600613594055
+    },
+    {
+     "bn": 32,
+     "warps": 2,
+     "stages": 3,
+     "us": 30.553600192070007
+    },
+    {
+     "bn": 32,
+     "warps": 2,
+     "stages": 4,
+     "us": 30.563199520111084
+    },
+    {
+     "bn": 32,
+     "warps": 4,
+     "stages": 2,
+     "us": 31.590399146080014
+    },
+    {
+     "bn": 32,
+     "warps": 4,
+     "stages": 3,
+     "us": 32.71360099315643
+    },
+    {
+     "bn": 32,
+     "warps": 4,
+     "stages": 4,
+     "us": 32.972800731658936
+    },
+    {
+     "bn": 32,
+     "warps": 8,
+     "stages": 2,
+     "us": 40.508800745010376
+    },
+    {
+     "bn": 32,
+     "warps": 8,
+     "stages": 3,
+     "us": 41.69600009918213
+    },
+    {
+     "bn": 32,
+     "warps": 8,
+     "stages": 4,
+     "us": 41.71519875526428
+    },
+    {
+     "bn": 64,
+     "warps": 2,
+     "stages": 2,
+     "us": 42.816001176834106
+    },
+    {
+     "bn": 64,
+     "warps": 2,
+     "stages": 3,
+     "us": 38.24639916419983
+    },
+    {
+     "bn": 64,
+     "warps": 2,
+     "stages": 4,
+     "us": 38.2176011800766
+    },
+    {
+     "bn": 64,
+     "warps": 4,
+     "stages": 2,
+     "us": 38.48319947719574
+    },
+    {
+     "bn": 64,
+     "warps": 4,
+     "stages": 3,
+     "us": 35.868799686431885
+    },
+    {
+     "bn": 64,
+     "warps": 4,
+     "stages": 4,
+     "us": 35.760000348091125
+    },
+    {
+     "bn": 64,
+     "warps": 8,
+     "stages": 2,
+     "us": 40.515199303627014
+    },
+    {
+     "bn": 64,
+     "warps": 8,
+     "stages": 3,
+     "us": 41.76320135593414
+    },
+    {
+     "bn": 64,
+     "warps": 8,
+     "stages": 4,
+     "us": 41.75040125846863
+    },
+    {
+     "bn": 128,
+     "warps": 2,
+     "stages": 2,
+     "us": 53.25440168380737
+    },
+    {
+     "bn": 128,
+     "warps": 2,
+     "stages": 3,
+     "us": 44.01920139789581
+    },
+    {
+     "bn": 128,
+     "warps": 2,
+     "stages": 4,
+     "us": 44.15999948978424
+    },
+    {
+     "bn": 128,
+     "warps": 4,
+     "stages": 2,
+     "us": 41.87520146369934
+    },
+    {
+     "bn": 128,
+     "warps": 4,
+     "stages": 3,
+     "us": 38.38399946689606
+    },
+    {
+     "bn": 128,
+     "warps": 4,
+     "stages": 4,
+     "us": 38.48640024662018
+    },
+    {
+     "bn": 128,
+     "warps": 8,
+     "stages": 2,
+     "us": 42.604801058769226
+    },
+    {
+     "bn": 128,
+     "warps": 8,
+     "stages": 3,
+     "us": 38.655999302864075
+    },
+    {
+     "bn": 128,
+     "warps": 8,
+     "stages": 4,
+     "us": 38.710400462150574
+    }
+   ]
+  },
+  "down": {
+   "baseline_us": 27.487999200820923,
+   "wide_scalar_us": 27.103999257087708,
+   "noise_drift_pct": 0.0349218870785982,
+   "noise_gate_pass": true,
+   "dot_pad_best": null,
+   "gate": null,
+   "gate_rejected": [
+    {
+     "config": {
+      "bn": 32,
+      "warps": 2,
+      "stages": 3,
+      "us": 19.046400487422943
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 16,
+      "warps": 2,
+      "stages": 2,
+      "us": 19.228799641132355
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 32,
+      "warps": 2,
+      "stages": 4,
+      "us": 19.276799261569977
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 32,
+      "warps": 4,
+      "stages": 2,
+      "us": 19.29280012845993
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 64,
+      "warps": 4,
+      "stages": 4,
+      "us": 19.34719979763031
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 32,
+      "warps": 4,
+      "stages": 3,
+      "us": 19.36960071325302
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 64,
+      "warps": 8,
+      "stages": 3,
+      "us": 19.379200041294098
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 128,
+      "warps": 4,
+      "stages": 2,
+      "us": 19.388799369335175
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 32,
+      "warps": 2,
+      "stages": 2,
+      "us": 19.417600333690643
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 64,
+      "warps": 8,
+      "stages": 2,
+      "us": 19.42719966173172
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 64,
+      "warps": 4,
+      "stages": 2,
+      "us": 19.484800100326538
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 64,
+      "warps": 4,
+      "stages": 3,
+      "us": 19.487999379634857
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 64,
+      "warps": 2,
+      "stages": 3,
+      "us": 19.52960044145584
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 64,
+      "warps": 8,
+      "stages": 4,
+      "us": 19.58400011062622
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 128,
+      "warps": 8,
+      "stages": 3,
+      "us": 19.59040015935898
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 16,
+      "warps": 2,
+      "stages": 4,
+      "us": 19.69600021839142
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 128,
+      "warps": 8,
+      "stages": 4,
+      "us": 19.699199497699738
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 32,
+      "warps": 4,
+      "stages": 4,
+      "us": 19.753600656986237
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 64,
+      "warps": 2,
+      "stages": 2,
+      "us": 19.791999459266663
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 128,
+      "warps": 2,
+      "stages": 4,
+      "us": 19.791999459266663
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 128,
+      "warps": 4,
+      "stages": 3,
+      "us": 19.80160027742386
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 64,
+      "warps": 2,
+      "stages": 4,
+      "us": 19.82399970293045
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 128,
+      "warps": 8,
+      "stages": 2,
+      "us": 19.82399970293045
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 128,
+      "warps": 2,
+      "stages": 3,
+      "us": 19.9072003364563
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 16,
+      "warps": 2,
+      "stages": 3,
+      "us": 19.916799664497375
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 128,
+      "warps": 4,
+      "stages": 4,
+      "us": 19.95840072631836
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 16,
+      "warps": 4,
+      "stages": 2,
+      "us": 19.974400103092194
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 16,
+      "warps": 4,
+      "stages": 3,
+      "us": 20.11519968509674
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 16,
+      "warps": 4,
+      "stages": 4,
+      "us": 20.236800611019135
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 32,
+      "warps": 8,
+      "stages": 2,
+      "us": 21.001599729061127
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 32,
+      "warps": 8,
+      "stages": 3,
+      "us": 21.99680060148239
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 32,
+      "warps": 8,
+      "stages": 4,
+      "us": 22.05120027065277
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 128,
+      "warps": 2,
+      "stages": 2,
+      "us": 22.147199511528015
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 16,
+      "warps": 8,
+      "stages": 2,
+      "us": 24.697600305080414
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 16,
+      "warps": 8,
+      "stages": 4,
+      "us": 27.78880000114441
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    },
+    {
+     "config": {
+      "bn": 16,
+      "warps": 8,
+      "stages": 3,
+      "us": 27.830401062965393
+     },
+     "gate": {
+      "rows": 4096,
+      "max_abs_delta": 0.5,
+      "argmax_agree": 4078,
+      "argmax_total": 4096,
+      "pass": false
+     }
+    }
+   ],
+   "table": [
+    {
+     "bn": 16,
+     "warps": 2,
+     "stages": 2,
+     "us": 19.228799641132355
+    },
+    {
+     "bn": 16,
+     "warps": 2,
+     "stages": 3,
+     "us": 19.916799664497375
+    },
+    {
+     "bn": 16,
+     "warps": 2,
+     "stages": 4,
+     "us": 19.69600021839142
+    },
+    {
+     "bn": 16,
+     "warps": 4,
+     "stages": 2,
+     "us": 19.974400103092194
+    },
+    {
+     "bn": 16,
+     "warps": 4,
+     "stages": 3,
+     "us": 20.11519968509674
+    },
+    {
+     "bn": 16,
+     "warps": 4,
+     "stages": 4,
+     "us": 20.236800611019135
+    },
+    {
+     "bn": 16,
+     "warps": 8,
+     "stages": 2,
+     "us": 24.697600305080414
+    },
+    {
+     "bn": 16,
+     "warps": 8,
+     "stages": 3,
+     "us": 27.830401062965393
+    },
+    {
+     "bn": 16,
+     "warps": 8,
+     "stages": 4,
+     "us": 27.78880000114441
+    },
+    {
+     "bn": 32,
+     "warps": 2,
+     "stages": 2,
+     "us": 19.417600333690643
+    },
+    {
+     "bn": 32,
+     "warps": 2,
+     "stages": 3,
+     "us": 19.046400487422943
+    },
+    {
+     "bn": 32,
+     "warps": 2,
+     "stages": 4,
+     "us": 19.276799261569977
+    },
+    {
+     "bn": 32,
+     "warps": 4,
+     "stages": 2,
+     "us": 19.29280012845993
+    },
+    {
+     "bn": 32,
+     "warps": 4,
+     "stages": 3,
+     "us": 19.36960071325302
+    },
+    {
+     "bn": 32,
+     "warps": 4,
+     "stages": 4,
+     "us": 19.753600656986237
+    },
+    {
+     "bn": 32,
+     "warps": 8,
+     "stages": 2,
+     "us": 21.001599729061127
+    },
+    {
+     "bn": 32,
+     "warps": 8,
+     "stages": 3,
+     "us": 21.99680060148239
+    },
+    {
+     "bn": 32,
+     "warps": 8,
+     "stages": 4,
+     "us": 22.05120027065277
+    },
+    {
+     "bn": 64,
+     "warps": 2,
+     "stages": 2,
+     "us": 19.791999459266663
+    },
+    {
+     "bn": 64,
+     "warps": 2,
+     "stages": 3,
+     "us": 19.52960044145584
+    },
+    {
+     "bn": 64,
+     "warps": 2,
+     "stages": 4,
+     "us": 19.82399970293045
+    },
+    {
+     "bn": 64,
+     "warps": 4,
+     "stages": 2,
+     "us": 19.484800100326538
+    },
+    {
+     "bn": 64,
+     "warps": 4,
+     "stages": 3,
+     "us": 19.487999379634857
+    },
+    {
+     "bn": 64,
+     "warps": 4,
+     "stages": 4,
+     "us": 19.34719979763031
+    },
+    {
+     "bn": 64,
+     "warps": 8,
+     "stages": 2,
+     "us": 19.42719966173172
+    },
+    {
+     "bn": 64,
+     "warps": 8,
+     "stages": 3,
+     "us": 19.379200041294098
+    },
+    {
+     "bn": 64,
+     "warps": 8,
+     "stages": 4,
+     "us": 19.58400011062622
+    },
+    {
+     "bn": 128,
+     "warps": 2,
+     "stages": 2,
+     "us": 22.147199511528015
+    },
+    {
+     "bn": 128,
+     "warps": 2,
+     "stages": 3,
+     "us": 19.9072003364563
+    },
+    {
+     "bn": 128,
+     "warps": 2,
+     "stages": 4,
+     "us": 19.791999459266663
+    },
+    {
+     "bn": 128,
+     "warps": 4,
+     "stages": 2,
+     "us": 19.388799369335175
+    },
+    {
+     "bn": 128,
+     "warps": 4,
+     "stages": 3,
+     "us": 19.80160027742386
+    },
+    {
+     "bn": 128,
+     "warps": 4,
+     "stages": 4,
+     "us": 19.95840072631836
+    },
+    {
+     "bn": 128,
+     "warps": 8,
+     "stages": 2,
+     "us": 19.82399970293045
+    },
+    {
+     "bn": 128,
+     "warps": 8,
+     "stages": 3,
+     "us": 19.59040015935898
+    },
+    {
+     "bn": 128,
+     "warps": 8,
+     "stages": 4,
+     "us": 19.699199497699738
+    }
+   ]
+  }
+ },
+ "summary": {
+  "baseline_pair_us": 69.46559846401215,
+  "wide_scalar_pair_us": 72.54079878330231,
+  "dot_pad_pair_us": null,
+  "noise_gate_pass": true
+ }
+}
