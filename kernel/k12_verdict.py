@@ -216,6 +216,14 @@ def self_test():
     assert mv["::elementwise_kernel"]["before"] == 96, mv
     assert mv["vectorized_elementwise_kernel"]["before"] == 72, mv
 
+    # The fixture's row names must stay REAL. They were simplified
+    # once, and a simplified fixture cannot exercise the substring
+    # overlap the matchers exist to avoid -- the same class as an
+    # invented schema passing a test it could never fail.
+    for name in _mk()["census"]["before"]:
+        assert name.startswith("void at::native::"), name
+        assert "<" in name or "namespace" in name, name
+
     nocen = _mk(); del nocen["census"]
     assert "no replay census" in verdict(nocen)["verdict"][1]
     for line in render(verdict(_mk())).splitlines():
