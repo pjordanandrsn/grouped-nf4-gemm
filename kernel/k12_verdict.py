@@ -89,11 +89,8 @@ def verdict(rep):
         a2 = sum(v for k, v in after.items() if row in k)
         moved[row] = {"before": b, "after": a2}
     out["gates"]["census"] = moved
-    if not any(m["after"] < m["before"] for m in moved.values()):
-        return _refuse(out, "attribution: no tracked raw-ATen row fell "
-                            "in count, so any step delta came from "
-                            "somewhere other than the mechanism this "
-                            "cycle registered")
+    rows_fell = any(m["after"] < m["before"] for m in moved.values())
+    out["gates"]["tracked_rows_fell"] = rows_fell
 
     gate = rep.get("cert_gate")
     if not (isinstance(gate, (list, tuple)) and len(gate) == 2
@@ -134,6 +131,24 @@ def verdict(rep):
     cut = b - m
     out["gates"].update({"baseline_ms": b, "compiled_ms": m,
                          "cut_ms": cut})
+
+    # ATTRIBUTION, scoped to a SPEEDUP -- which is what the prereg
+    # registered: "if arm 2 gets FASTER while those rows are
+    # unchanged, the speed came from somewhere else". This check ran
+    # unconditionally, so an arm that came back SLOWER with unmoved
+    # rows returned REFUSE where REFUTED is the honest answer: a
+    # treatment that did not pay is a result, not an unattributable
+    # one. Nothing is unattributed about a slowdown.
+    #
+    # Corrected while arm 2's TIMING was known and its census did not
+    # yet exist, so it cannot be tuning toward an outcome -- and the
+    # change can only turn a REFUSE into a REFUTED. It cannot produce
+    # a PASS or a PARTIAL, so it can never favour the treatment.
+    if cut > 0 and not rows_fell:
+        return _refuse(out, "attribution: the arm got faster but no "
+                            "tracked raw-ATen row fell in count, so "
+                            "the speed came from somewhere other than "
+                            "the mechanism this cycle registered")
 
     bc = arms.get("both_compiled")
     if bc is not None:
@@ -230,9 +245,22 @@ def self_test():
     assert verdict(_mk(cut=0.16))["verdict"][0] == "PARTIAL"
     assert verdict(_mk(cut=0.10))["verdict"][0] == "REFUTED"
     assert verdict(_mk(cut=-0.20))["verdict"][0] == "REFUTED"
-    # a speedup with NO census movement is unattributed -> REFUSE
+    # a SPEEDUP with no census movement is unattributed -> REFUSE
     r = verdict(_mk(cut=0.50, census_moves=False))
     assert r["verdict"][0] == "REFUSE" and "attribution" in r["verdict"][1], r
+    # ...but a SLOWDOWN with no movement is a clean REFUTED, not an
+    # unattributable one. Nothing is unattributed about a treatment
+    # that did not pay, and the prereg scoped this gate to "if arm 2
+    # gets FASTER". Running it unconditionally discarded exactly the
+    # negative result the cycle exists to be able to report.
+    r = verdict(_mk(cut=-0.67, census_moves=False))
+    assert r["verdict"][0] == "REFUTED", r
+    # and a slowdown WITH movement is equally REFUTED
+    assert verdict(_mk(cut=-0.67, census_moves=True))["verdict"][0] \
+        == "REFUTED"
+    # a flat result with no movement is still REFUTED, not REFUSE
+    assert verdict(_mk(cut=0.0, census_moves=False))["verdict"][0] \
+        == "REFUTED"
     # compiling must not change the model's output
     r = verdict(_mk(tok_differ=True))
     assert r["verdict"][0] == "REFUSE" and "token stream" in r["verdict"][1], r
@@ -271,7 +299,8 @@ def self_test():
     for line in render(verdict(_mk())).splitlines():
         print(f"[SELF-TEST FIXTURE, NOT A RESULT] {line}")
     print("k12_verdict self-test OK (both band boundaries, the "
-          "attribution gate that refuses an unexplained speedup, the "
+          "attribution gate that refuses an unexplained SPEEDUP while "
+          "letting a slowdown refute, the "
           "output-invariance gate, DISJOINT row matchers, and six "
           "refusal directions)")
 
