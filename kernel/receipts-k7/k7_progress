@@ -1,0 +1,16 @@
+K7-START 08:24:17
+a54445d K7 instrument: split-K dot-pad kernel + bench harness (A2000 pre-flighted) (#266)
+K7 VERDICT: PASS  (ratio 0.350 = 35.0 / 100.0 us; PASS <= 0.39, PARTIAL <= 0.6)
+  gate_up: 60.0 -> 21.0 us
+  down: 60.0 -> 21.0 us
+k7_verdict self-test OK (bands, both boundaries, and seven refusal directions)
+ARM-START selftest 08:24:18
+k7_bench self-test OK (report validates; this box's non-census ratio 1.516 is NOT a verdict) aa=[4.2, 4.1] us
+ARM-START census 08:24:21
+K7_BENCH pair dotpad 46.1 us -> candidate 41.6 us (ratio 0.903) noise ['0.0000', '0.0000'] out=/root/out/k7_report.json
+ARM-OK census 08:24:34
+K7 VERDICT: REFUTED  (ratio 0.903 = 41.6 / 46.1 us; PASS <= 0.39, PARTIAL <= 0.6)
+  gate_up: 27.2 -> 26.9 us
+  down: 18.8 -> 14.8 us
+  occupancy was not the binding constraint; 250-by-composition loses its dominant slice (PREREG-k7)
+K7-DONE 08:24:34

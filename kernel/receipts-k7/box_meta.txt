@@ -1,0 +1,8 @@
+vast instance (RTX 5090 class, ~$0.47/hr), rented 2026-08-26 ~08:05
+UTC, destroyed ~08:45 UTC (verified: by-id null AND list 0).
+Anchor probe (b1 graph, knob OFF, gen 64): 7.28 ms -- 1.5% off the
+7.39 class, compliant. Stack: gnf4 a54445d (#266) on main.
+Arms 08:24:17-08:24:34 UTC. Harness A/A noise: 0.0000 / 0.0000.
+Both cells' correctness gates passed inside the K6-B mechanism band
+(gate_up max|d| 0.644 vs budget 1.386; down 0.350 vs 0.963), argmax
+8/8 both, bitwise_repeat True both.

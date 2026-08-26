@@ -1,0 +1,72 @@
+{
+ "summary": {
+  "noise_gate_pass": true,
+  "noise_spreads": [
+   0.0,
+   0.0
+  ],
+  "dotpad_pair_us": 46.07999883592129,
+  "candidate_pair_us": 41.627999395132065
+ },
+ "cells": {
+  "gate_up": {
+   "gate": {
+    "max_abs_delta": 0.6440887451171875,
+    "max_abs_ref": 177.47113037109375,
+    "argmax_agree": 8,
+    "argmax_total": 8,
+    "rel_ok": true,
+    "bitwise_repeat": true
+   },
+   "dotpad_us": 27.243999764323235,
+   "dotpad_aa": [
+    27.243999764323235,
+    27.243999764323235
+   ],
+   "best_us": 26.863999664783478,
+   "best_config": [
+    32,
+    2,
+    2,
+    8
+   ],
+   "baseline_gate": {
+    "max_abs_delta": 0.6440887451171875,
+    "max_abs_ref": 177.47113037109375,
+    "argmax_agree": 8,
+    "argmax_total": 8,
+    "rel_ok": true
+   }
+  },
+  "down": {
+   "gate": {
+    "max_abs_delta": 0.3495025634765625,
+    "max_abs_ref": 123.31727600097656,
+    "argmax_agree": 8,
+    "argmax_total": 8,
+    "rel_ok": true,
+    "bitwise_repeat": true
+   },
+   "dotpad_us": 18.835999071598053,
+   "dotpad_aa": [
+    18.835999071598053,
+    18.835999071598053
+   ],
+   "best_us": 14.763999730348587,
+   "best_config": [
+    32,
+    2,
+    3,
+    1
+   ],
+   "baseline_gate": {
+    "max_abs_delta": 0.3495025634765625,
+    "max_abs_ref": 123.31727600097656,
+    "argmax_agree": 8,
+    "argmax_total": 8,
+    "rel_ok": true
+   }
+  }
+ },
+ "basis": "graph-replayed chunked-median (10 chunks x 8 replays), same-box dot-pad denominator, PREREG-k7"
+}
