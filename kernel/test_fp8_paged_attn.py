@@ -371,3 +371,22 @@ def test_wrapper_resolves_none_per_path():
     src = inspect.getsource(m.fp8_paged_decode_attention)
     assert "_f32_fuse_default()" in src
     assert 'compute == "fp8" else _f32_fuse_default()' in src
+
+
+def test_attn_compute_env_selector(monkeypatch):
+    """PREREG-k8 selector, checked WITHOUT a GPU: unset env resolves to
+    the certified f32 path, 'fp8' selects the opt-in path, an explicit
+    argument always beats the env, and a typo REFUSES rather than
+    silently running f32 (which would be recorded as the fp8 arm)."""
+    from fp8_paged_attn import _compute_default
+
+    monkeypatch.delenv("GNF4_ATTN_COMPUTE", raising=False)
+    assert _compute_default() == "f32"
+    monkeypatch.setenv("GNF4_ATTN_COMPUTE", "f32")
+    assert _compute_default() == "f32"
+    monkeypatch.setenv("GNF4_ATTN_COMPUTE", "fp8")
+    assert _compute_default() == "fp8"
+    for bad in ("FP8", "fp16", "1", "true", ""):
+        monkeypatch.setenv("GNF4_ATTN_COMPUTE", bad)
+        with pytest.raises(ValueError, match="not a compute mode"):
+            _compute_default()
