@@ -20,6 +20,34 @@ def test_anchor_matches_its_results_document():
     assert abs(A.ANCHOR_MS - float(m.group(1))) < 1e-9
 
 
+def test_gate_bounds_match_the_document():
+    """The module docstring CLAIMS this file and the RESULTS cannot
+    disagree. That claim was false: the sync test locked ANCHOR_MS
+    only, leaving the gate bounds -- the constants that actually
+    decide rentals -- free to drift (Bugbot, gnf4#278). A comment
+    asserting a property is not an enforcement of it."""
+    text = _RESULTS.read_text()
+    m = re.search(r"GATE\s*=\s*\[\s*([\d.]+)\s*,\s*([\d.]+)\s*\]\s*ms",
+                  text)
+    assert m, "RESULTS-m2 has no machine-readable GATE line"
+    lo, hi = float(m.group(1)), float(m.group(2))
+    assert abs(A.GATE_LO_MS - lo) < 1e-9, (A.GATE_LO_MS, lo)
+    assert abs(A.GATE_HI_MS - hi) < 1e-9, (A.GATE_HI_MS, hi)
+    assert A.window() == (lo, hi)
+
+
+def test_document_records_the_population_the_gate_covers():
+    """The bounds are only defensible as 'population + margin', so the
+    population must be in the document too, not just in this file."""
+    text = _RESULTS.read_text()
+    m = re.search(r"population\s*\[\s*([\d.]+)\s*,\s*([\d.]+)\s*\]",
+                  text)
+    assert m, "RESULTS-m2 does not record the population the gate covers"
+    lo, hi = float(m.group(1)), float(m.group(2))
+    assert A.GATE_LO_MS < lo and A.GATE_HI_MS > hi, \
+        "the gate must strictly contain the population it was built from"
+
+
 def test_gate_contains_every_box_it_was_built_from():
     """The whole point. The registered median-centred window excluded
     box 1 at 7.751 -- publishing it would have destroyed a normal box
