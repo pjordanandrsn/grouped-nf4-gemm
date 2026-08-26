@@ -1,0 +1,15 @@
+vast instance 48780380 (RTX 5090 class), 2026-08-26 ~14:30-14:50 UTC,
+destroyed (verified: by-id null AND list 0). Anchor probe 7.25 ms.
+Stack: gnf4 8ea880f, e4b 013f487. All arms knob-ON
+(GNF4_GEMV_DOTPAD=1), the SV2/K8 frame denominator.
+
+ANCHOR NOTE: this was the THIRD box. Attempts 1 and 2 both probed
+7.12 ms and were destroyed by the +/-3% gate on 7.39 -- for being
+FASTER than the reference. Across this session the probes were
+7.23 / 7.28 / 7.26 / 7.12 / 7.12 / 7.25, mean 7.21, so 7.39 sits
+~2.5% above the population it gates: the window [7.17, 7.61] accepts
+boxes 5.7% slower than the mean while refusing ones 0.5% faster.
+The constant was NOT adjusted for this cycle -- moving a gate to make
+a run pass is the thing the gate exists to prevent -- but it needs
+re-certifying, and the published "certified default ~136 tok/s"
+ladder entry rests on the same constant.
