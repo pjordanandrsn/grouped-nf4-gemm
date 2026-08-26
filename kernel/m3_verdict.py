@@ -21,6 +21,21 @@ import sys
 PPL_EPS = 0.05
 AA_TOL = 0.02
 ARMS = ("off", "dotpad", "fp8", "both")
+#: Which mechanism each arm MUST have exercised. An env var is a
+#: request: GNF4_GEMV_DOTPAD=1 engages dot-pad only if the shape is
+#: registered AND the part carries >= 160 SMs, so a "dotpad" arm can
+#: silently run the certified scalar path. It would then match OFF in
+#: step time and -- K6-B measured dot-pad token-IDENTICAL at 127 --
+#: in perplexity too, and this cycle would read that as a free knob.
+#:
+#: AMENDMENT, added after registration and before the box: this gate
+#: can only ever REFUSE. It cannot turn a REFUTED into a PASS or move
+#: a bar, so adding it post-registration strengthens the cycle
+#: without loosening anything it already committed to.
+EXPECT = {"off":    {"dotpad": False, "fp8": False},
+          "dotpad": {"dotpad": True,  "fp8": False},
+          "fp8":    {"dotpad": False, "fp8": True},
+          "both":   {"dotpad": True,  "fp8": True}}
 
 
 def _pos_finite(v):
@@ -66,6 +81,41 @@ def verdict(rep):
                             "prereg registered 8192 because every "
                             "prior receipt was short and that is the "
                             "question this cycle exists to answer")
+
+    # mechanism receipts: what DISPATCHED, not what was requested
+    for name in ARMS:
+        a = arms[name]
+        d, c = a.get("dispatch"), a.get("compute")
+        if not isinstance(d, dict) or not isinstance(c, dict):
+            return _refuse(out, f"{name}: no mechanism receipt -- the "
+                                "arm cannot show which kernel ran, "
+                                "only which env var was set")
+        dot = d.get("dotpad", 0) + d.get("dotpad_splitk", 0)
+        scal = d.get("scalar", 0) + d.get("scalar_splitk", 0)
+        fp8 = c.get("fp8", 0)
+        f32 = c.get("f32", 0)
+        out["gates"][f"{name}_mech"] = {"dotpad": dot, "scalar": scal,
+                                        "fp8": fp8, "f32": f32}
+        if dot + scal == 0:
+            return _refuse(out, f"{name}: GEMV tally is all zero -- "
+                                "the decode path never dispatched, so "
+                                "the arm proves nothing about it")
+        if fp8 + f32 == 0:
+            return _refuse(out, f"{name}: attention tally is all zero")
+        want = EXPECT[name]
+        if want["dotpad"] and dot == 0:
+            return _refuse(out, f"{name}: names dot-pad but dispatched "
+                                f"it {dot} times ({scal} scalar) -- the "
+                                "knob was requested and ignored")
+        if not want["dotpad"] and dot != 0:
+            return _refuse(out, f"{name}: dispatched dot-pad {dot} "
+                                "times but does not name it")
+        if want["fp8"] and fp8 == 0:
+            return _refuse(out, f"{name}: names fp8 compute but "
+                                f"dispatched it {fp8} times")
+        if not want["fp8"] and fp8 != 0:
+            return _refuse(out, f"{name}: dispatched fp8 compute "
+                                f"{fp8} times but does not name it")
 
     gate = rep.get("cert_gate")
     if not (isinstance(gate, (list, tuple)) and len(gate) == 2
@@ -143,7 +193,8 @@ def render(out):
 
 def _mk(off_ppl=8.0, d_dot=0.01, d_fp8=0.01, d_both=0.02, aa=0.001,
         budget=8192, sha="abc", both_ms=6.28, drop=None,
-        gate=(7.004, 7.906), dotpad_ms=6.48, fp8_ms=7.14):
+        gate=(7.004, 7.906), dotpad_ms=6.48, fp8_ms=7.14,
+        mech=None):
     t = list(range(30))
     ms = {"off": 7.35, "dotpad": dotpad_ms, "fp8": fp8_ms,
           "both": both_ms}
@@ -151,15 +202,69 @@ def _mk(off_ppl=8.0, d_dot=0.01, d_fp8=0.01, d_both=0.02, aa=0.001,
            "fp8": off_ppl + d_fp8, "both": off_ppl + d_both}
     arms = {n: {"a": ms[n], "b": ms[n] * (1 + aa), "tokens_a": t,
                 "tokens_b": t, "ppl": ppl[n], "ppl_tokens": budget,
-                "text_sha": sha, "first_divergence": None}
+                "text_sha": sha, "first_divergence": None,
+                "dispatch": {"dotpad": 96 if EXPECT[n]["dotpad"] else 0,
+                             "dotpad_splitk": 0,
+                             "scalar": 0 if EXPECT[n]["dotpad"] else 96,
+                             "scalar_splitk": 0},
+                "compute": {"fp8": 48 if EXPECT[n]["fp8"] else 0,
+                            "f32": 0 if EXPECT[n]["fp8"] else 48}}
             for n in ARMS}
+    if mech:
+        arms[mech[0]].update(mech[1])
     if drop:
         del arms[drop]
     return {"arms": arms, "cert_gate": list(gate)}
 
 
+def _mech_refusal(arm, patch):
+    r = verdict(_mk(mech=(arm, patch)))
+    assert r["verdict"][0] == "REFUSE", (arm, patch, r["verdict"])
+    return r["verdict"][1]
+
+
 def self_test():
     assert verdict(_mk())["verdict"][0] == "PASS"
+
+    # ---- mechanism receipts -------------------------------------
+    # The fixture above supplies CORRECT receipts for every arm, so
+    # it exercises the gate in exactly the direction that cannot
+    # catch anything. These drive it the other way. (This is the SV2
+    # lesson: a fixture that repeats the instrument's own assumption
+    # is not a test of the instrument.)
+    ZERO = {"dotpad": 0, "dotpad_splitk": 0, "scalar": 0,
+            "scalar_splitk": 0}
+
+    # the case the whole receipt exists for: a "dotpad" arm that
+    # silently ran the certified scalar path. Its step time and its
+    # perplexity BOTH match OFF, so every other gate in this file
+    # reads it as a knob that costs nothing.
+    silent = _mk(d_dot=0.0, dotpad_ms=7.35,
+                 mech=("dotpad", {"dispatch": dict(ZERO, scalar=96)}))
+    r = verdict(silent)
+    assert r["verdict"][0] == "REFUSE" and "ignored" in r["verdict"][1], r
+    # ...and prove the REFUSAL came from the receipt, not from the
+    # numbers: identical step times and identical perplexity, but
+    # with a receipt showing dot-pad really dispatched, is not
+    # refused. Without this the test could be passing for the wrong
+    # reason ([[check-the-result-could-have-failed]]).
+    honest = _mk(d_dot=0.0, dotpad_ms=7.35)
+    assert verdict(honest)["verdict"][0] != "REFUSE", verdict(honest)
+
+    assert "no mechanism receipt" in _mech_refusal(
+        "off", {"dispatch": None})
+    assert "all zero" in _mech_refusal("off", {"dispatch": dict(ZERO)})
+    assert "does not name it" in _mech_refusal(
+        "off", {"dispatch": dict(ZERO, scalar=90, dotpad=6)})
+    assert "does not name it" in _mech_refusal(
+        "dotpad", {"compute": {"fp8": 3, "f32": 45}})
+    assert "names fp8" in _mech_refusal(
+        "fp8", {"compute": {"fp8": 0, "f32": 48}})
+    assert "ignored" in _mech_refusal(
+        "both", {"dispatch": dict(ZERO, scalar=96)})
+    # split-K dot-pad counts as dot-pad
+    assert verdict(_mk(mech=("dotpad", {"dispatch": dict(
+        ZERO, dotpad_splitk=96)})))["verdict"][0] == "PASS"
     assert verdict(_mk(d_dot=0.06, d_fp8=0.06, d_both=0.06))["verdict"][0] \
         == "REFUTED"
 
@@ -218,7 +323,9 @@ def self_test():
     print("m3_verdict self-test OK (PASS/PARTIAL/REFUTED bands, the "
           "one-knob PARTIAL rule, the registered tie-break, the "
           "8192-token horizon, shared-text and "
-          "shared-budget gates, and six refusal directions)")
+          "shared-budget gates, the mechanism receipts -- including "
+          "the silently-scalar arm every OTHER gate passes -- and "
+          "eleven refusal directions)")
 
 
 def main():

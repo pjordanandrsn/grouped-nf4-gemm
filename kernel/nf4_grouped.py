@@ -74,6 +74,36 @@ def _wide_loads() -> bool:
     return os.environ.get("GNF4_GEMV_WIDE_LOADS") == "1"
 
 
+#: PREREG-m3 mechanism receipt. An env var is a REQUEST, not a fact:
+#: the dot-pad path also requires the shape to be in _DOTPAD_CONFIGS
+#: and the part to carry >= 160 SMs, so ``GNF4_GEMV_DOTPAD=1`` on a
+#: smaller part quietly selects the scalar path -- and a benchmark
+#: comparing "dot-pad ON" against "OFF" would then be comparing the
+#: certified path against itself and calling the null result a pass.
+#: Recording os.environ is no defence: it records what was ASKED for.
+#: These counters record which kernel actually dispatched
+#: ([[attribute-from-the-profile]] -- source shows what CAN run, not
+#: what ran).
+#:
+#: Under CUDA-graph capture the increment happens once, at capture
+#: time; replays never re-enter Python. That is the correct
+#: semantics rather than a limitation -- what was captured is
+#: exactly what every replay goes on to execute.
+_DISPATCH_COUNTS = {"dotpad": 0, "dotpad_splitk": 0,
+                    "scalar": 0, "scalar_splitk": 0}
+
+
+def dispatch_counts() -> dict:
+    """Copy of the decode GEMV dispatch tally (PREREG-m3 receipt)."""
+    return dict(_DISPATCH_COUNTS)
+
+
+def reset_dispatch_counts() -> None:
+    """Zero the tally, so a caller can scope it to one window."""
+    for _k in _DISPATCH_COUNTS:
+        _DISPATCH_COUNTS[_k] = 0
+
+
 def _dotpad():
     """PREREG-k6b opt-in: route the decode GEMV through the dot-pad
     kernel. Default OFF until the P-fid stage certifies (the kernel is
@@ -1126,6 +1156,7 @@ def gemm_4bit_grouped(
                 span = -(-kblocks // sk7)
                 ws = torch.empty(sk7, T, N, dtype=torch.float32,
                                  device=dev)
+                _DISPATCH_COUNTS["dotpad_splitk"] += 1
                 _gemv_nf4_dotpad_splitk[
                         (T, triton.cdiv(N, dbn), sk7)](
                     a_cat, bw, absmax, ws, _lut(dev), eids_t, K, N, T,
@@ -1134,6 +1165,7 @@ def gemm_4bit_grouped(
                     BLOCK_K=BLOCKSIZE, num_warps=dw, num_stages=dst)
                 out.copy_(ws.sum(dim=0))
                 return out
+            _DISPATCH_COUNTS["dotpad"] += 1
             _gemv_nf4_dotpad[(T, triton.cdiv(N, dbn))](
                 a_cat, bw, absmax, out, _lut(dev), eids_t, K, N,
                 bw.stride(0), bw.stride(1), absmax.stride(0),
@@ -1145,6 +1177,7 @@ def gemm_4bit_grouped(
         vec = _vec_loads() and not wide
         if sk <= 1:
             grid = (T, triton.cdiv(N, bn))
+            _DISPATCH_COUNTS["scalar"] += 1
             _gemv_nf4_grouped[grid](
                 a_cat,
                 b_pass,
@@ -1170,6 +1203,7 @@ def gemm_4bit_grouped(
         span = -(-kblocks // sk)
         ws = torch.empty(sk, T, N, dtype=torch.float32, device=dev)
         grid = (T, triton.cdiv(N, bn), sk)
+        _DISPATCH_COUNTS["scalar_splitk"] += 1
         _gemv_nf4_grouped_splitk[grid](
             a_cat,
             b_pass,
