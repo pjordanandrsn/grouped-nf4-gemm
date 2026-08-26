@@ -196,9 +196,22 @@ def test_a_complete_table_passes_coverage():
 def test_no_footer_means_no_coverage_claim():
     """Absence of a footer must not be read as full coverage OR as
     failure -- it is simply unknown, and the caller is told nothing
-    either way rather than being given a false assurance."""
-    d = k12_census.parse(REAL)
-    assert d
+    either way rather than being given a false assurance.
+
+    This parsed REAL directly until review pointed out that REAL
+    gained a footer when the fixture was replaced with verbatim rows,
+    so the test stopped touching the no-footer path its own name
+    describes (gnf4#289). Swapping a fixture silently re-points every
+    test that depended on what the old one LACKED.
+    """
+    no_footer = "\n".join(l for l in REAL.splitlines()
+                          if "Self CUDA time total" not in l)
+    assert "Self CUDA time total" not in no_footer
+    d = k12_census.parse(no_footer)
+    assert d, "a table with no footer must still parse"
+    # and it must parse to the SAME counts -- the footer governs the
+    # coverage claim, never the counts
+    assert d == k12_census.parse(REAL)
 
 
 def test_coverage_uses_self_cuda_not_cuda_total():
