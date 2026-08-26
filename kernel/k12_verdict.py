@@ -22,9 +22,16 @@ import sys
 PASS_MS = 0.40
 PARTIAL_MS = 0.15
 AA_TOL = 0.02
-# the raw-ATen rows the census attributes to the excluded region
-TRACKED = ("unrolled_elementwise", "indexSelect", "elementwise_kernel",
-           "reduce_kernel")
+#: The raw-ATen rows the census attributes to the excluded region.
+#: These must be DISJOINT matchers. "elementwise_kernel" as a bare
+#: substring also catches `unrolled_elementwise_kernel` and
+#: `vectorized_elementwise_kernel`, which move independently -- so the
+#: gate could pass or refuse on the wrong family, and the reported
+#: counts were the sum of three rows (review, gnf4#285). The plain
+#: kernel is matched via its `::` prefix, which the two decorated
+#: names do not carry.
+TRACKED = ("unrolled_elementwise_kernel", "vectorized_elementwise_kernel",
+           "::elementwise_kernel", "indexSelect", "reduce_kernel")
 
 
 def _pos_finite(v):
@@ -159,15 +166,19 @@ def _mk(cut=0.5, aa=0.001, tok_differ=False, rec=0, err=None,
         arms["moe_compiled"]["tokens_b"] = [9] + t[1:]
     if drop:
         del arms[drop]
-    after = {"unrolled_elementwise_kernel": 40 if census_moves else 218,
-             "indexSelectS": 145, "elementwise_kernel<128,4>": 96,
-             "reduce_kernel": 48}
+    # REAL census row names -- a simplified fixture would not exercise
+    # the overlap the matchers exist to avoid
+    U = "void at::native::unrolled_elementwise_kernel<at::nat"
+    V = "void at::native::vectorized_elementwise_kernel<4, at"
+    E = "void at::native::elementwise_kernel<128, 4, at::nati"
+    I = "void at::native::(anonymous namespace)::indexSelectS"
+    R = "void at::native::reduce_kernel<128, 4, at::native::R"
+    before = {U: 218, V: 72, E: 96, I: 145, R: 48}
+    after = dict(before)
+    if census_moves:
+        after[U] = 40
     return {"arms": arms, "cert_gate": list(gate),
-            "census": {"before": {"unrolled_elementwise_kernel": 218,
-                                  "indexSelectS": 145,
-                                  "elementwise_kernel<128,4>": 96,
-                                  "reduce_kernel": 48},
-                       "after": after}}
+            "census": {"before": before, "after": after}}
 
 
 def self_test():
@@ -192,13 +203,27 @@ def self_test():
         assert rr["verdict"][0] == "REFUSE", why
         if why:
             assert why in rr["verdict"][1], (why, rr["verdict"][1])
+    # the matchers must be DISJOINT on real census names: a bare
+    # "elementwise_kernel" substring counted three families as one
+    # (review, gnf4#285)
+    cen = _mk()["census"]["before"]
+    for name in cen:
+        hits = [t for t in TRACKED if t in name]
+        assert len(hits) == 1, (name, hits)
+    r = verdict(_mk())
+    mv = r["gates"]["census"]
+    assert mv["unrolled_elementwise_kernel"]["before"] == 218, mv
+    assert mv["::elementwise_kernel"]["before"] == 96, mv
+    assert mv["vectorized_elementwise_kernel"]["before"] == 72, mv
+
     nocen = _mk(); del nocen["census"]
     assert "no replay census" in verdict(nocen)["verdict"][1]
     for line in render(verdict(_mk())).splitlines():
         print(f"[SELF-TEST FIXTURE, NOT A RESULT] {line}")
     print("k12_verdict self-test OK (both band boundaries, the "
           "attribution gate that refuses an unexplained speedup, the "
-          "output-invariance gate, and six refusal directions)")
+          "output-invariance gate, DISJOINT row matchers, and six "
+          "refusal directions)")
 
 
 def main():
