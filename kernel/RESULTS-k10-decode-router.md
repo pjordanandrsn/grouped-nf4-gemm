@@ -105,5 +105,12 @@ refusing ones 0.5% faster. Two provisioning cycles were spent on it.
 
 The constant was deliberately **not** adjusted mid-cycle — moving a
 gate to make a run pass is the failure the gate exists to prevent.
-It needs re-certifying as its own cycle, and the published
-"certified default ≈136 tok/s" ladder entry rests on the same number.
+
+**Correction (added with PREREG-m2):** 7.39 is not the campaign's
+certified constant at all. The certified class is **7.35 ms**
+(`RESULTS-k6b`, `PREREG-f2-tail`); 7.39 lived only in the scratchpad
+hunt harness and appears in no RESULTS document. So the two rejected
+boxes were screened against an uncertified number. Against 7.35 the
+picture is the same in direction and slightly smaller in size (window
+[7.13, 7.57], centre +1.9% above the sample mean, 7.12 still just
+outside). Both defects are the subject of M2.
