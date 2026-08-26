@@ -86,23 +86,39 @@ def verdict(rep):
     out["speed"] = ms
     noise = max(out["gates"][f"{n}_aa"] for n in ARMS)
 
-    # S: BOTH must not be slower than either part, outside noise
+    # S constrains shipping BOTH as the default -- it does NOT gate
+    # whether a solo knob may flip, so its failure demotes to the
+    # PARTIAL path rather than refuting the cycle (review, gnf4#284).
+    q = out["quality"]
     slower_than_part = any(
         (ms["both"] - ms[n]) / ms[n] > noise for n in ("dotpad", "fp8"))
-    if slower_than_part:
-        out["verdict"] = ("REFUTED", "composition: BOTH is slower than "
-                                     "a single knob outside A/A noise")
+    composed_licensed = q["both"]["pass"] and not slower_than_part
+    out["gates"]["composed_licensed"] = composed_licensed
+    out["gates"]["both_slower_than_part"] = slower_than_part
+
+    if composed_licensed and q["dotpad"]["pass"] and q["fp8"]["pass"]:
+        out["verdict"] = ("PASS", "flip both")
         return out
 
-    q = out["quality"]
-    if q["both"]["pass"] and q["dotpad"]["pass"] and q["fp8"]["pass"]:
-        out["verdict"] = ("PASS", "flip both")
-    elif q["dotpad"]["pass"] or q["fp8"]["pass"]:
-        keep = [n for n in ("dotpad", "fp8") if q[n]["pass"]]
-        out["verdict"] = ("PARTIAL", keep)
-    else:
+    # The composition is NOT licensed, so AT MOST ONE default may move
+    # -- flipping both IS the composed configuration that Q2/S just
+    # refused, and returning both names here would ship exactly what
+    # the bar forbade (review, gnf4#284, High).
+    cands = [n for n in ("dotpad", "fp8") if q[n]["pass"]]
+    if not cands:
         out["verdict"] = ("REFUTED", "quality: no knob holds at the "
                                      "registered horizon")
+    elif len(cands) == 1:
+        out["verdict"] = ("PARTIAL", cands)
+    else:
+        # registered tie-break: quality already holds for both, so the
+        # larger measured step cut decides
+        pick = min(cands, key=lambda n: ms[n])
+        out["gates"]["tiebreak"] = {"reason": "composition unlicensed; "
+                                              "larger step cut wins",
+                                    "cuts": {n: ms["off"] - ms[n]
+                                             for n in cands}}
+        out["verdict"] = ("PARTIAL", [pick])
     return out
 
 
@@ -126,9 +142,11 @@ def render(out):
 
 
 def _mk(off_ppl=8.0, d_dot=0.01, d_fp8=0.01, d_both=0.02, aa=0.001,
-        budget=8192, sha="abc", both_ms=6.28, drop=None, gate=(7.004, 7.906)):
+        budget=8192, sha="abc", both_ms=6.28, drop=None,
+        gate=(7.004, 7.906), dotpad_ms=6.48, fp8_ms=7.14):
     t = list(range(30))
-    ms = {"off": 7.35, "dotpad": 6.48, "fp8": 7.14, "both": both_ms}
+    ms = {"off": 7.35, "dotpad": dotpad_ms, "fp8": fp8_ms,
+          "both": both_ms}
     ppl = {"off": off_ppl, "dotpad": off_ppl + d_dot,
            "fp8": off_ppl + d_fp8, "both": off_ppl + d_both}
     arms = {n: {"a": ms[n], "b": ms[n] * (1 + aa), "tokens_a": t,
@@ -142,14 +160,30 @@ def _mk(off_ppl=8.0, d_dot=0.01, d_fp8=0.01, d_both=0.02, aa=0.001,
 
 def self_test():
     assert verdict(_mk())["verdict"][0] == "PASS"
-    assert verdict(_mk(d_both=0.051))["verdict"][0] == "PARTIAL"
     assert verdict(_mk(d_dot=0.06, d_fp8=0.06, d_both=0.06))["verdict"][0] \
         == "REFUTED"
-    # composition: BOTH slower than a part refutes even with good ppl
+
+    # Q2 fails while BOTH solo knobs pass. PARTIAL must name exactly
+    # ONE knob: returning both would flip both defaults, which IS the
+    # composed configuration Q2 just refused (review, gnf4#284).
+    r = verdict(_mk(d_both=0.051))
+    assert r["verdict"][0] == "PARTIAL", r
+    assert len(r["verdict"][1]) == 1, \
+        "a Q2 failure must not ship the composed configuration"
+    assert r["verdict"][1] == ["dotpad"], r      # larger cut wins
+
+    # S failure demotes to PARTIAL, it does not refute the cycle: S
+    # constrains shipping BOTH, not whether a solo knob may flip.
     r = verdict(_mk(both_ms=6.60))
-    assert r["verdict"] == ("REFUTED", "composition: BOTH is slower than "
-                                       "a single knob outside A/A noise"), r
-    # PARTIAL names only the knob that held
+    assert r["verdict"][0] == "PARTIAL", r
+    assert r["verdict"][1] == ["dotpad"], r
+    assert r["gates"]["both_slower_than_part"] is True
+
+    # the registered tie-break is by measured cut, not by name order
+    r = verdict(_mk(d_both=0.051, dotpad_ms=7.30, fp8_ms=6.40))
+    assert r["verdict"] == ("PARTIAL", ["fp8"]), r
+
+    # PARTIAL names only the knob that held when the other fails Q
     r = verdict(_mk(d_fp8=0.06, d_both=0.06))
     assert r["verdict"] == ("PARTIAL", ["dotpad"]), r
     for bad, why in ((_mk(drop="fp8"), "arm fp8 missing"),
@@ -165,7 +199,8 @@ def self_test():
     for line in render(verdict(_mk())).splitlines():
         print(f"[SELF-TEST FIXTURE, NOT A RESULT] {line}")
     print("m3_verdict self-test OK (PASS/PARTIAL/REFUTED bands, the "
-          "composition bar, the 8192-token horizon, shared-text and "
+          "one-knob PARTIAL rule, the registered tie-break, the "
+          "8192-token horizon, shared-text and "
           "shared-budget gates, and six refusal directions)")
 
 

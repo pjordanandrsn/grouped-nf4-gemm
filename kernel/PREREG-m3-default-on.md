@@ -58,9 +58,23 @@ long-horizon quality window per arm:
 - **S (BAR)**: `BOTH` must be at least as fast as either knob alone,
   outside A/A noise. A default that is slower than its parts is not a
   default.
-- **PASS** flips both. **PARTIAL** flips only the knob(s) whose own Q
-  passes when the other is off. **REFUTED** flips nothing and says
-  which bar failed.
+- **PASS** flips both — and requires Q, Q2 and S all to hold.
+- **PARTIAL** flips **at most ONE** knob. This is the important
+  wording: "the knobs whose own Q passed" would let a Q2 or S failure
+  still ship the composed configuration those bars just refused
+  (review, gnf4#284). If the composition is not licensed, only one
+  default may move.
+- **Tie-break, registered here so it is not chosen after seeing the
+  numbers**: when the composition is unlicensed and BOTH knobs pass
+  their own Q, flip the one with the **larger measured step cut**.
+  Quality has already been established for both at that point, so
+  speed is the remaining discriminator.
+- **REFUTED** flips nothing and names the bar that failed.
+
+Note what S does and does not gate: it constrains shipping **both**
+as the default, not whether a solo knob may flip. An S failure
+therefore demotes to the PARTIAL path rather than refuting the cycle
+(review, gnf4#284).
 
 ## REFUSE gates
 
