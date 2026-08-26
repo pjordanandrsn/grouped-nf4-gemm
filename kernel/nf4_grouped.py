@@ -81,6 +81,29 @@ def _dotpad():
     return os.environ.get("GNF4_GEMV_DOTPAD") == "1"
 
 
+def _splitk_plan_sk(N: int, K: int):
+    """PREREG-k7 opt-in: split-K factor for the dot-pad decode GEMV.
+
+    ``GNF4_GEMV_SPLITK`` holds an explicit shape plan
+    (``"1536,2048=4;2048,768=4"``); a shape not listed -- and the bare
+    ``"1"`` form -- returns None and keeps the plain dot-pad launch.
+    No baked default until the K7 receipts land
+    (harness-defaults-are-values); the RESULTS bakes the winners."""
+    plan = os.environ.get("GNF4_GEMV_SPLITK")
+    if not plan or "=" not in plan:
+        return None
+    for entry in plan.split(";"):
+        shape, _, sk_s = entry.partition("=")
+        n_s, _, k_s = shape.partition(",")
+        try:
+            if int(n_s) == N and int(k_s) == K:
+                sk = int(sk_s)
+                return sk if sk > 1 else None
+        except ValueError:
+            return None
+    return None
+
+
 #: K6 re-gate winners (receipts-k6-bespoke/regate), gated like K1's
 #: baked configs: exact census shapes on >= 160-SM parts only.
 _DOTPAD_CONFIGS = {
@@ -561,6 +584,53 @@ def _gemv_nf4_dotpad(a_ptr, b_ptr, amax_ptr, out_ptr, lut_ptr, eids_ptr,
 
 
 @triton.jit
+def _gemv_nf4_dotpad_splitk(a_ptr, b_ptr, amax_ptr, ws_ptr, lut_ptr,
+                            eids_ptr, K, N, T, KBLOCKS_PER_SPLIT,
+                            stride_be, stride_bn, stride_ae, stride_an,
+                            BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr):
+    """PREREG-k7: the dot-pad mainloop under the split-K grid. Dequant
+    and MMA are byte-for-byte the `_gemv_nf4_dotpad` chain (K6-B
+    certified mechanism, 2^-7 band); program (g, n-tile, k-split) owns
+    KBLOCKS_PER_SPLIT whole absmax blocks and stores its fp32 PARTIAL
+    to ``ws[k_split, g, n]``. The host reduces ``ws.sum(0)``
+    (deterministic two-pass, no atomics -- PREREG-k7 G2 bans
+    order-nondeterministic reduction) and downcasts to bf16 ONCE, the
+    same contract as `_gemv_nf4_grouped_splitk`. A split whose span
+    starts past K stores zeros."""
+    g = tl.program_id(0)
+    pid_n = tl.program_id(1)
+    pid_k = tl.program_id(2)
+    eid = tl.load(eids_ptr + g).to(tl.int64)
+    offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
+    n_mask = offs_n < N
+    offs_k = tl.arange(0, BLOCK_K)
+    b_base = b_ptr + eid * stride_be + offs_n[:, None] * stride_bn
+    a_base = a_ptr + g * K
+    offs_kw = tl.arange(0, BLOCK_K // 8)
+    sh = tl.arange(0, 8)
+    shift = (sh // 2) * 8 + tl.where(sh % 2 == 0, 4, 0)
+    offs_m = tl.arange(0, 16)
+    k_lo = pid_k * KBLOCKS_PER_SPLIT * BLOCK_K
+    k_hi = tl.minimum(k_lo + KBLOCKS_PER_SPLIT * BLOCK_K, K)
+    acc = tl.zeros((16, BLOCK_N), dtype=tl.float32)
+    for k0 in range(k_lo, k_hi, BLOCK_K):
+        kk = k0 + offs_k
+        words = tl.load(b_base + (k0 // 8) + offs_kw[None, :],
+                        mask=n_mask[:, None], other=0)
+        nib = (words[:, :, None] >> shift[None, None, :]) & 0xF
+        nib = tl.reshape(nib, (BLOCK_N, BLOCK_K))
+        w = tl.load(lut_ptr + nib)
+        am = tl.load(amax_ptr + eid * stride_ae + offs_n * stride_an
+                     + (k0 // BLOCK_K), mask=n_mask, other=0.0)
+        wt = tl.trans((w * am[:, None]).to(tl.bfloat16))
+        a = tl.load(a_base + kk).to(tl.float32)
+        av = tl.where(offs_m[:, None] == 0, a[None, :], 0.0)
+        acc = tl.dot(av.to(tl.bfloat16), wt, acc)
+    y = tl.sum(tl.where(offs_m[:, None] == 0, acc, 0.0), axis=0)
+    tl.store(ws_ptr + (pid_k * T + g) * N + offs_n, y, mask=n_mask)
+
+
+@triton.jit
 def _gemm_nf4_grouped(
     a_ptr,
     b_ptr,
@@ -1038,10 +1108,32 @@ def gemm_4bit_grouped(
         if _dotpad() and (N, K) in _DOTPAD_CONFIGS \
                 and _sm_count(dev) >= 160:
             dbn, dw, dst = _DOTPAD_CONFIGS[(N, K)]
+            if decode_config is not None:
+                dbn, dw = decode_config
             eids_t = (eids if torch.is_tensor(eids)
                       else torch.as_tensor(eids, dtype=torch.int32,
                                            device=dev))
             bw = B.view(torch.int32)
+            # PREREG-k7: split-K grid under the same dot-pad math.
+            # Engages on the explicit kwarg (harness sweeps) or the
+            # GNF4_GEMV_SPLITK shape plan; fp32 partials host-reduced
+            # by ws.sum(0) -- deterministic two-pass, no atomics (G2),
+            # downcast once, the _gemv_nf4_grouped_splitk contract.
+            sk7 = split_k if split_k is not None \
+                else _splitk_plan_sk(N, K)
+            if sk7 is not None and sk7 > 1:
+                kblocks = -(-K // BLOCKSIZE)
+                span = -(-kblocks // sk7)
+                ws = torch.empty(sk7, T, N, dtype=torch.float32,
+                                 device=dev)
+                _gemv_nf4_dotpad_splitk[
+                        (T, triton.cdiv(N, dbn), sk7)](
+                    a_cat, bw, absmax, ws, _lut(dev), eids_t, K, N, T,
+                    span, bw.stride(0), bw.stride(1),
+                    absmax.stride(0), absmax.stride(1), BLOCK_N=dbn,
+                    BLOCK_K=BLOCKSIZE, num_warps=dw, num_stages=dst)
+                out.copy_(ws.sum(dim=0))
+                return out
             _gemv_nf4_dotpad[(T, triton.cdiv(N, dbn))](
                 a_cat, bw, absmax, out, _lut(dev), eids_t, K, N,
                 bw.stride(0), bw.stride(1), absmax.stride(0),
