@@ -1,0 +1,14 @@
+Three RTX 5090 boxes, 2026-08-26, rented with NO anchor gate (M2
+measures the constant a gate would screen on). Each: knob-OFF b1
+graph, --gen-tokens 128 (n_steps 127) -- the SAME window the certified
+7.35 came from (receipts-k6b/k6b_report.json: off_a n_steps 127,
+7.3514 ms). All destroyed, verified zero after each.
+
+  box1  7.757 / 7.745  pair 7.751  A/A 0.16%  driver 580.105.08
+  box2  7.151 / 7.143  pair 7.147  A/A 0.11%  driver 610.43.02
+  box3  7.374 / 7.365  pair 7.369  A/A 0.12%  driver 610.43.02
+
+ADDENDUM (disclosed, added after box 1; not a bar change): boxes 2-3
+also ran the hunt's own --gen-tokens 64 probe, to MEASURE the window
+difference rather than argue it. Result: -0.3% on both. The
+window-mismatch hypothesis is refuted; it is not why probes read low.

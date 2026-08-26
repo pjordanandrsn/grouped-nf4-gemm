@@ -1,0 +1,13 @@
+M2-START 15:53:19
+603077a M2 registered: re-certify the decode anchor; correct K10's reference (#277)
+efda816 correct the record: 250 is NOT refuted (#282's squash title is wrong) (#283)
+torch 2.13.0+cu130 | gpu NVIDIA GeForce RTX 5090
+driver 580.105.08
+ARM-START a 15:53:23
+B1D_TIMED_GRAPH steps=127 step=7.76ms compile=default recompiles=0 out=/root/out/m2_a.json
+ARM-OK a 15:54:40
+ARM-START b 15:54:40
+B1D_TIMED_GRAPH steps=127 step=7.74ms compile=default recompiles=0 out=/root/out/m2_b.json
+ARM-OK b 15:55:30
+M2 BOX 7.757 / 7.745 ms  spread 0.164%  tokens_identical=True  recompiles=0
+M2-DONE 15:55:32

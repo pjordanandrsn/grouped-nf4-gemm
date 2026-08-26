@@ -44,6 +44,10 @@ _DELIBERATELY_UNPACKAGED: dict[str, str] = {
     # they measure one prereg's census cells on one box class and are
     # committed for reproducibility, not for import by downstreams.
     "k7_bench": "K7 census bench harness, not library API",
+    # The certified anchor: a campaign constant that harnesses read so
+    # an uncertified literal cannot gate rentals again. Downstream
+    # users of the kernels have no use for it.
+    "decode_anchor": "certified box-rental anchor, campaign instrument",
 }
 
 # Test files CI does not invoke, each with WHY. This started at 17 silent

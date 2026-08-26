@@ -1,0 +1,38 @@
+{
+ "boxes": [
+  {
+   "id": "48786712",
+   "a": 7.75746642519685,
+   "b": 7.744777598425197,
+   "tokens_identical": true,
+   "recompiles": 0,
+   "driver": "580.105.08",
+   "torch": "2.13.0+cu130",
+   "gpu": "NVIDIA GeForce RTX 5090"
+  },
+  {
+   "id": "48790755",
+   "a": 7.150872779527559,
+   "b": 7.142752275590551,
+   "probe64_ms": 7.128736349206349,
+   "tokens_identical": true,
+   "recompiles": 0,
+   "driver": "610.43.02",
+   "torch": "2.13.0+cu130",
+   "gpu": "NVIDIA GeForce RTX 5090"
+  },
+  {
+   "id": "48793203",
+   "a": 7.37386257480315,
+   "b": 7.36490151968504,
+   "probe64_ms": 7.344421555555555,
+   "tokens_identical": true,
+   "recompiles": 0,
+   "driver": "610.43.02",
+   "torch": "2.13.0+cu130",
+   "gpu": "NVIDIA GeForce RTX 5090"
+  }
+ ],
+ "prior_anchor": 7.35,
+ "harness_constant": 7.39
+}
