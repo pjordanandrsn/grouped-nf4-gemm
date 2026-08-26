@@ -33,6 +33,15 @@ def _finite(v):
     return isinstance(v, (int, float)) and math.isfinite(v)
 
 
+def _pos_finite(v):
+    """Durations used as DENOMINATORS must be finite AND positive.
+    `_finite` alone accepts 0 (raises on divide) and negatives (which
+    invert the gain's sign and can mis-fire REOPENED). Carried over
+    from k9/k10/m2, where it was added for this exact reason
+    (Bugbot, gnf4#282)."""
+    return _finite(v) and v > 0
+
+
 def qualifies(c):
     """The registered criterion, applied to one candidate."""
     if not c.get("available"):
@@ -71,8 +80,22 @@ def verdict(rep):
                                 f"{band:.3e}) -- a wrong kernel "
                                 "measures nothing")
         b, s = ks.get("step_base_ms"), ks.get("step_scatter_ms")
-        if _finite(b) and _finite(s):
-            noise = ks.get("aa_noise") or 0.0
+        if b is not None or s is not None:
+            # Everything below decides whether to REOPEN the lane --
+            # i.e. whether to declare this prereg's own argument
+            # falsified. A defect here is the most expensive kind, so
+            # each input REFUSES rather than defaulting.
+            if not (_pos_finite(b) and _pos_finite(s)):
+                return _refuse(out, f"kscatter: step times must be "
+                                    f"finite and positive "
+                                    f"(base={b!r}, scatter={s!r})")
+            if not _finite(ks.get("aa_noise")) or ks["aa_noise"] < 0:
+                return _refuse(out, "kscatter: aa_noise missing or "
+                                    "negative -- the prereg requires "
+                                    "beating a MEASURED noise floor, "
+                                    "and defaulting it to zero would "
+                                    "REOPEN the lane on any tiny gain")
+            noise = ks["aa_noise"]
             gain = (b - s) / b
             out["kscatter_gain"] = gain
             out["kscatter_noise"] = noise
@@ -149,6 +172,19 @@ def self_test():
     # a wrong kernel measures nothing
     ks3 = dict(ks, max_abs_delta=1.0)
     assert verdict(_mk(ks=ks3))["verdict"][0] == "REFUSE"
+    # every input to the REOPEN decision refuses rather than defaults:
+    # this branch declares the prereg's own argument falsified, so a
+    # defect here is the most expensive kind
+    no_noise = {k: v for k, v in ks.items() if k != "aa_noise"}
+    r = verdict(_mk(ks=no_noise))
+    assert r["verdict"][0] == "REFUSE" and "aa_noise" in r["verdict"][1], r
+    for bad_b in (0.0, -6.48, float("nan")):
+        r = verdict(_mk(ks=dict(ks, step_base_ms=bad_b)))
+        assert r["verdict"][0] == "REFUSE" and "positive" in r["verdict"][1], bad_b
+    r = verdict(_mk(ks=dict(ks, step_scatter_ms=0.0)))
+    assert r["verdict"][0] == "REFUSE", "zero scatter time"
+    r = verdict(_mk(ks=dict(ks, aa_noise=-0.01)))
+    assert r["verdict"][0] == "REFUSE", "negative noise floor"
     # refusals
     for bad, why in ((_mk(n=0), "no candidates"),
                      (_mk(probed=False), "toolchain not probed")):
@@ -158,7 +194,7 @@ def self_test():
         print(f"[SELF-TEST FIXTURE, NOT A RESULT] {line}")
     print("k11_verdict self-test OK (the criterion's BOTH halves, the "
           "weight-traffic boundary, the REOPEN path that falsifies the "
-          "prereg, the noise floor, and three refusal directions)")
+          "prereg, the noise floor, and nine refusal directions)")
 
 
 def main():
