@@ -35,10 +35,36 @@ through the user-kernel path and dies on a loop-carried `m_i` typed
 fp32 then fp64. **The MoE half's necessity is not separately
 established** — it was disabled alongside attention.
 
-## The question
+## The disable site states its own reason, and it may not apply
 
-Can the MoE tier be compiled while the paged-attention fn stays
-disabled? If yes, inductor fuses those chains for free.
+The two exclusions are applied together, with distinct reasons given:
+
+> *"clean graph breaks: the paged-attention shim (**host-bound KV
+> paging**) and the hybrid MoE forward (**CPU tier dispatch**) must
+> never be traced -- compile owns only the dense layer body"*
+
+The MoE reason is **CPU tier dispatch** — the hybrid engine's
+DRAM/NVMe tier work, which dynamo cannot trace. But every certified
+serving measurement in this campaign runs
+`--placement-override all-vram`: SV1, SV2, K7's anchor, K8, K10, M2.
+**At the all-vram point there is no CPU tier to dispatch to.**
+
+That does not prove the exclusion is unnecessary — the forward may
+carry other untraceable work, and `all-vram` is a placement override
+rather than a different code path. It makes the hypothesis specific
+and checkable, which is the bar this cycle owes after K9:
+
+> Can the MoE tier be compiled while the paged-attention fn stays
+> disabled, **at the all-vram placement the certified ladder
+> measures**? If yes, inductor fuses those chains for free.
+
+## Instrument required (small, and named here so it is not smuggled in)
+
+One flag on `step_decomp`: keep
+`ALL_ATTENTION_FUNCTIONS[IMPL_NAME] = dynamo.disable(...)` while
+skipping the `for m in mods: m.forward = dynamo.disable(m.forward)`
+loop. Nothing else changes. Committed and reviewed BEFORE the box,
+like every instrument in this campaign.
 
 ## Stage A — necessity probe (one box, cheap)
 
