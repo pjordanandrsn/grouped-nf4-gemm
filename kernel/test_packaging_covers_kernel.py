@@ -41,6 +41,7 @@ _DELIBERATELY_UNPACKAGED: dict[str, str] = {
     "m2_verdict": "M2 anchor re-certification instrument, not library API",
     "k11_verdict": "K11 M-row feasibility instrument, not library API",
     "k12_verdict": "K12 MoE-tier fusion instrument, not library API",
+    "k12_census": "K12 replay-census parser, campaign instrument",
     "m3_verdict": "M3 default-flip instrument, not library API",
     "f2_verdict": "F2 graph-step-tail instrument, not library API",
     # Campaign BENCH harnesses: same reasoning as the calculators --
