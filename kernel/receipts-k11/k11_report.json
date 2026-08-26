@@ -1,0 +1,68 @@
+{
+ "candidates": [
+  {
+   "name": "more tokens in M (batch)",
+   "mac_ratio_before": 6.25,
+   "mac_ratio_after": 6.25,
+   "weight_bytes_ratio": 1.0,
+   "available": false,
+   "note": "B>1 serving, a different lane (BV3, certified 419 agg)"
+  },
+  {
+   "name": "the 8 routed experts in M",
+   "mac_ratio_before": 6.25,
+   "mac_ratio_after": 6.25,
+   "weight_bytes_ratio": 8.0,
+   "available": false,
+   "note": "tl.dot shares one B across M; distinct experts need distinct weights"
+  },
+  {
+   "name": "gate/up projections in M",
+   "mac_ratio_before": 6.25,
+   "mac_ratio_after": 6.25,
+   "weight_bytes_ratio": 1.0,
+   "available": false,
+   "note": "already concatenated along N"
+  },
+  {
+   "name": "speculative draft rows in M",
+   "mac_ratio_before": 6.25,
+   "mac_ratio_after": 6.25,
+   "weight_bytes_ratio": 1.0,
+   "available": false,
+   "note": "speculation refuted twice (S3, SV2)"
+  },
+  {
+   "name": "K-chunks scattered across M",
+   "mac_ratio_before": 6.25,
+   "mac_ratio_after": 6.25,
+   "weight_bytes_ratio": 1.0,
+   "available": true,
+   "note": "TESTED: correct to 1.2e-6 but redistributes the same BLOCK_K nonzeros; MMA volume stays M*K*N"
+  },
+  {
+   "name": "structured (2:4) sparse MMA",
+   "mac_ratio_before": 6.25,
+   "mac_ratio_after": 12.5,
+   "weight_bytes_ratio": 1.0,
+   "available": false,
+   "note": "PROBED sm_86 + sm_120, triton 3.4 and 3.7.1: no sparse symbol in tl, none in the nvidia backend"
+  },
+  {
+   "name": "sub-16 M tile (M=8)",
+   "mac_ratio_before": 6.25,
+   "mac_ratio_after": 6.25,
+   "weight_bytes_ratio": 1.0,
+   "available": true,
+   "note": "PROBED: compiles on triton 3.7.1 (refused on 3.4) but PTX is IDENTICAL -- 8x mma.sync.aligned.m16n8k16 either way. Triton pads M back to the hardware tile, so the ratio does NOT improve"
+  }
+ ],
+ "toolchain": {
+  "sparse_mma": false,
+  "sub16_m": false,
+  "triton": "3.7.1",
+  "probed": true,
+  "note": "probed on sm_86 (A2000, triton 3.4 + 3.7.1) and on sm_120 (RTX 5090, triton 3.7.1) -- the census hardware"
+ },
+ "kscatter": null
+}
