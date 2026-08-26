@@ -40,6 +40,7 @@ _DELIBERATELY_UNPACKAGED: dict[str, str] = {
     "k10_verdict": "K10 decode-router instrument, not library API",
     "m2_verdict": "M2 anchor re-certification instrument, not library API",
     "k11_verdict": "K11 M-row feasibility instrument, not library API",
+    "k12_verdict": "K12 MoE-tier fusion instrument, not library API",
     "m3_verdict": "M3 default-flip instrument, not library API",
     "f2_verdict": "F2 graph-step-tail instrument, not library API",
     # Campaign BENCH harnesses: same reasoning as the calculators --
