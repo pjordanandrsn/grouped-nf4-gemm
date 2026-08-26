@@ -6,9 +6,22 @@ name: publish
 # workflow publish.yml, environment pypi) and the `pypi` environment in repo
 # settings. Does not touch ci.yml.
 
+# workflow_dispatch is the RECOVERY path, added 2026-08-26 after the
+# v0.16.0 release event never dispatched a run: the release was
+# published (draft=false), the workflow was active and unchanged on
+# main, the PAT was the same one that fired v0.14.0/v0.15.0/v0.15.1 --
+# and create, draft-toggle, and delete-and-recreate all produced
+# nothing. A release process with no manual path leaves a merged,
+# tagged version uninstallable with no way to finish it.
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and publish (e.g. v0.16.0)"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -20,7 +33,23 @@ jobs:
     permissions:
       id-token: write
     steps:
+      # On a release event the default checkout is the tag. On manual
+      # dispatch it is the branch tip, which is NOT what was tagged --
+      # publishing that would ship something no release points at.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - name: refuse if the checkout is not the tagged version
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.tag || github.ref_name }}"
+          WANT="${TAG#v}"
+          GOT=$(python -c "import re,pathlib; print(re.search(r'^version = \"([^\"]+)\"', pathlib.Path('pyproject.toml').read_text(), re.M).group(1))")
+          echo "tag=$TAG wants $WANT, pyproject has $GOT"
+          test "$WANT" = "$GOT" || {
+            echo "::error::tag $TAG and pyproject version $GOT disagree -- refusing to publish a version no tag names"
+            exit 1
+          }
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
