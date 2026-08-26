@@ -1,0 +1,13 @@
+{
+ "k8": "ppl",
+ "steps": 1024,
+ "mean_nll": 1.597867492902903,
+ "ppl": 4.942481301768394,
+ "prompt_len": 512,
+ "prompt_offset": 0,
+ "tokens_scored": 1024,
+ "text_sha": "456e4ede9b4bdd9e582ed35bf8c9d23d51217a1ded8bc57293144d6bb050b30e",
+ "attn_compute": "f32",
+ "warm_tokens_discarded": 3,
+ "basis": "teacher-forced through the paged decode path after rewinding the scheduler's warm tokens; identical context in both arms by construction (PREREG-k8)"
+}

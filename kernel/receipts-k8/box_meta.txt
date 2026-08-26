@@ -1,0 +1,17 @@
+vast instance 48752382 (RTX 5090 class), rented 2026-08-26 ~09:05
+UTC, destroyed ~10:35 UTC (verified: by-id null AND list 0).
+Anchor probe (b1 graph, knob OFF, gen 64): 7.26 ms -- 1.8% off the
+7.39 class, compliant. Stack: gnf4 5a465a0, e4b 8c0b872 (the ppl
+guard; the timed arms predate it and are unaffected -- they do not
+use --ppl-steps).
+
+ALL ARMS knob-ON (GNF4_GEMV_DOTPAD=1): RESULTS-sv2 censused the
+knob-ON 6.46 ms step and every slice in the 250 composition frame is
+denominated in it, so a knob-OFF cut would not compose. It also
+cancels dot-pad's numerics out of the ppl comparison, since both
+arms then carry them.
+
+Timed arms 09:22-09:26 UTC; quality arms RE-RUN 10:26-10:30 after the
+first attempt silently scored nothing (see RESULTS). Error bound
+measured ON THIS BOX: mean 0.00445, p99 0.01953, max 0.10547 (bars
+5e-3 / 5e-2 / 2e-1) -- passed. Guard check recorded in k8_guard.log.

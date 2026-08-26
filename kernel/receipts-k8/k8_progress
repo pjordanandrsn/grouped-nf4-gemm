@@ -1,0 +1,54 @@
+K8-START 09:22:49
+5a465a0 K8 instrument (gnf4): GNF4_ATTN_COMPUTE selector + decode-path amendment (#269)
+a962a3e K8 instrument (e4b): decode-path teacher-forced perplexity (#278)
+K8 VERDICT: PASS  (speed+quality)
+  step: f32 6.460 -> fp8 6.280 ms = +0.180 ms (PASS >= 0.15, PARTIAL >= 0.05)
+  quality: ppl 8.0000 -> 8.0100 = +0.0100 vs eps 0.05 -> OK
+k8_verdict self-test OK (both sides of both speed bars, the quality epsilon, quality-dominates-speed, and thirteen refusal directions)
+ARM-START f32_a (f32) 09:22:50
+B1D_TIMED_GRAPH steps=127 step=6.49ms compile=default recompiles=0 out=/root/out/k8_f32_a.json
+ARM-OK f32_a 09:23:40
+ARM-START f32_b (f32) 09:23:40
+B1D_TIMED_GRAPH steps=127 step=6.50ms compile=default recompiles=0 out=/root/out/k8_f32_b.json
+ARM-OK f32_b 09:24:26
+ARM-START fp8_a (fp8) 09:24:26
+B1D_TIMED_GRAPH steps=127 step=6.28ms compile=default recompiles=0 out=/root/out/k8_fp8_a.json
+ARM-OK fp8_a 09:25:16
+ARM-START fp8_b (fp8) 09:25:16
+B1D_TIMED_GRAPH steps=127 step=6.28ms compile=default recompiles=0 out=/root/out/k8_fp8_b.json
+ARM-OK fp8_b 09:26:02
+ARM-START ppl_f32 (f32) 09:26:02
+ARM-OK ppl_f32 09:26:49
+ARM-START ppl_fp8 (fp8) 09:26:49
+ARM-OK ppl_fp8 09:27:33
+ARM-START errbound 09:27:33
+ERRBOUND-OK
+f8dot mean 0.00445 p99 0.01953 max 0.10547
+Traceback (most recent call last):
+  File "<stdin>", line 6, in <module>
+KeyError: 'attn_compute'
+K8-COMPOSE-FAIL
+Traceback (most recent call last):
+  File "/root/gnf4/kernel/k8_verdict.py", line 225, in <module>
+    main()
+  File "/root/gnf4/kernel/k8_verdict.py", line 218, in main
+    out = verdict(json.load(open(a.report)))
+                            ^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/root/out/k8_report.json'
+K8-DONE 09:27:38
+K8-RERUN-START 10:26:17
+df02f48 K8 ppl: refuse --ppl-steps without --b1d-loop instead of scoring nothing
+GUARD-CHECK 10:26:18
+GUARD-REFUSED (good):
+--ppl-steps scores through the B=1 paged decode loop and needs --b1d-loop (eager|graph) to
+ARM-START ppl_f32 (f32) 10:26:57
+K8_PPL steps=1024 nll=1.59787 ppl=4.94248 compute=f32 sha=456e4ede9b4b out=/root/out/k8_ppl_f32.json
+ARM-OK ppl_f32 10:28:34
+ARM-START ppl_fp8 (fp8) 10:28:34
+K8_PPL steps=1024 nll=1.59973 ppl=4.95170 compute=fp8 sha=456e4ede9b4b out=/root/out/k8_ppl_fp8.json
+ARM-OK ppl_fp8 10:30:10
+K8 COMPOSED f32 [6.493, 6.503] fp8 [6.282, 6.28] ppl 4.9425 -> 4.9517 eb True
+K8 VERDICT: PASS  (speed+quality)
+  step: f32 6.498 -> fp8 6.281 ms = +0.217 ms (PASS >= 0.15, PARTIAL >= 0.05)
+  quality: ppl 4.9425 -> 4.9517 = +0.0092 vs eps 0.05 -> OK
+K8-RERUN-DONE 10:30:10
