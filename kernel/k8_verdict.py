@@ -199,7 +199,14 @@ def self_test():
     del missing["f32_b"]
     assert verdict(missing)["verdict"][1].startswith("G1")
     r = _mk()
-    print(render(verdict(r)))
+    # Mark the fixture render UNMISTAKABLY. Unmarked, it prints a line
+    # byte-identical in shape to a real verdict -- and on the K8 box it
+    # landed in the same progress log a few lines above the real arms,
+    # whose numbers were close enough (6.49/6.28 vs the fixture's
+    # 6.46/6.28) to read as the result. An instrument must not emit
+    # something indistinguishable from its own output.
+    for line in render(verdict(r)).splitlines():
+        print(f"[SELF-TEST FIXTURE, NOT A RESULT] {line}")
     print("k8_verdict self-test OK (both sides of both speed bars, "
           "the quality epsilon, quality-dominates-speed, and "
           "thirteen refusal directions)")
