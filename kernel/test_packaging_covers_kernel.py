@@ -38,6 +38,7 @@ _DELIBERATELY_UNPACKAGED: dict[str, str] = {
     "k8_verdict": "K8 fp8-compute-attn instrument, not library API",
     "k9_verdict": "K9 fused-grouping instrument, not library API",
     "k10_verdict": "K10 decode-router instrument, not library API",
+    "m2_verdict": "M2 anchor re-certification instrument, not library API",
     "f2_verdict": "F2 graph-step-tail instrument, not library API",
     # Campaign BENCH harnesses: same reasoning as the calculators --
     # they measure one prereg's census cells on one box class and are
