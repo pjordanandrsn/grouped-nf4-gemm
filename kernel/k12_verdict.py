@@ -19,6 +19,12 @@ import json
 import math
 import sys
 
+#: The knob ratio's two ends, MEASURED ON THE SAME BOX (K6-B / SV1):
+#: knob-ON 6.476 ms and its own knob-OFF partner 7.25 ms. Kept as a
+#: pair, at module scope, so the self-test can assert the pairing and
+#: a future edit cannot quietly substitute the three-box anchor
+#: median for the denominator the way the first version did.
+KNOB_PAIR = (6.476, 7.25)
 PASS_MS = 0.40
 PARTIAL_MS = 0.15
 AA_TOL = 0.02
@@ -101,8 +107,23 @@ def verdict(rep):
     # file's own self-test). The baseline is knob-ON, so it sits below
     # the knob-OFF gate by design; what the gate excludes is a box
     # whose knob-OFF class is an outlier, so compare the arm to the
-    # gate SCALED by the certified knob ratio (6.476 / 7.369).
-    KNOB = 6.476 / 7.369
+    # gate SCALED by the knob ratio.
+    #
+    # That ratio must be PAIRED. It was 6.476 / 7.369, which is a
+    # same-box knob-ON point over the THREE-BOX knob-OFF median --
+    # two numbers never measured together, so their quotient is not a
+    # knob ratio at all (review, gnf4#285). 6.476's own knob-OFF
+    # partner, on that box, is 7.25; that pair is the ratio.
+    # The correction is 1.6%, which on this gate is ~0.11 ms -- small
+    # against a 12.6%-wide window, but a wrong denominator does not
+    # become right by being applied to a wide gate.
+    #
+    # Standing caveat: the pair comes from ONE box, and M2 measured
+    # 8.5% inter-box dispersion in absolute step time. Whether the
+    # RATIO is box-invariant was never measured. So this stays what
+    # the anchor always was -- an outlier excluder, not a
+    # certification of the arm's class ([[bars-follow-the-claim]]).
+    KNOB = KNOB_PAIR[0] / KNOB_PAIR[1]
     lo, hi = gate[0] * KNOB, gate[1] * KNOB
     out["gates"]["baseline_gate"] = [lo, hi]
     if not (lo <= b <= hi):
@@ -182,6 +203,27 @@ def _mk(cut=0.5, aa=0.001, tok_differ=False, rec=0, err=None,
 
 
 def self_test():
+    # The knob ratio must stay PAIRED. 6.476/7.369 -- a same-box
+    # knob-ON point over the THREE-BOX knob-OFF median -- is not a
+    # ratio of anything (review, gnf4#285). It reads only 1.6% off,
+    # which is exactly the size of error a self-test has to catch,
+    # because no verdict computed from it would look wrong.
+    # Pin the VALUE, not the spelling: the first version of this
+    # check scanned the source for "6.476 / 7.369" and fired on the
+    # COMMENT that explains the fix. A test that cannot tell code
+    # from prose about the code is not testing the code.
+    import decode_anchor
+    ratio = KNOB_PAIR[0] / KNOB_PAIR[1]
+    assert abs(ratio - 6.476 / 7.25) < 1e-12, ratio
+    assert abs(ratio - 6.476 / decode_anchor.ANCHOR_MS) > 1e-3, \
+        ("the knob ratio is being computed against the three-box "
+         "anchor median again -- that pair was never measured "
+         "together")
+    assert KNOB_PAIR[1] == 7.25, \
+        "knob-OFF partner must be the same-box 7.25"
+    assert abs(KNOB_PAIR[1] - decode_anchor.ANCHOR_MS) > 0.05, \
+        ("the paired denominator must not BE the anchor median -- if "
+         "those ever coincide, the pairing has been lost again")
     assert verdict(_mk(cut=0.50))["verdict"][0] == "PASS"
     assert verdict(_mk(cut=0.41))["verdict"][0] == "PASS"
     assert verdict(_mk(cut=0.30))["verdict"][0] == "PARTIAL"
