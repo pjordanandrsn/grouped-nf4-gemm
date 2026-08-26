@@ -787,6 +787,25 @@ def _f32_fuse_default() -> bool:
     default."""
     return os.environ.get("GNF4_F32_FUSE_COMBINE", "1") == "1"
 
+
+def _compute_default() -> str:
+    """PREREG-k8 selector: ``GNF4_ATTN_COMPUTE=fp8`` routes decode
+    attention through the fp8-COMPUTE path when the caller did not ask
+    for a mode explicitly. Unset (or ``f32``) leaves the certified
+    path byte-identical -- this is a measurement knob until K8's
+    quality verdict, never a default flip.
+
+    An unrecognised value RAISES rather than falling back to f32: a
+    typo'd ``FP8`` that silently ran the f32 kernel would be recorded
+    as an fp8 arm and mis-attribute the whole cycle."""
+    v = os.environ.get("GNF4_ATTN_COMPUTE", "f32")
+    if v not in ("f32", "fp8"):
+        raise ValueError(
+            f"GNF4_ATTN_COMPUTE={v!r} is not a compute mode; expected "
+            "'f32' or 'fp8'. Refusing rather than silently running "
+            "f32 and letting it be recorded as the fp8 arm.")
+    return v
+
 def _fuse_counters(n: int, device) -> torch.Tensor:
     """Zeroed-once arrival counters for the fused combine; slots are
     reset by the combining CTA itself, so reuse needs no memset (a
@@ -825,7 +844,7 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
                                num_warps: int | None = None,
                                num_stages: int = 3,
                                pack_heads: bool = False,
-                               compute: str = "f32",
+                               compute: str | None = None,
                                fuse_combine: bool | None = None,
                                layout: str = "tokens"):
     """Decode attention over packed FP8 KV pool rows.
@@ -843,7 +862,10 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
     pack_heads   one CTA per (sequence, split) consuming ALL kv heads —
                  whole-line reads, tensor-core block-diagonal scores; the
                  tile is one BT-token block and ``ktile`` is ignored.
-    compute      "f32" (default): E4M3 decoded in registers, tf32 dots —
+    compute      None (default): resolved from ``GNF4_ATTN_COMPUTE``
+                 (PREREG-k8), which is "f32" unless exported — an
+                 explicit argument always wins.
+                 "f32": E4M3 decoded in registers, tf32 dots —
                  the bit-exact-est serving path. "fp8": payload bytes are
                  BITCAST into fp8 tensor-core dots, scales folded onto the
                  post-dot score tiles; requires sm_89+, ``v_groups == 1``,
@@ -855,6 +877,10 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
     Returns [B, H_q, D] in q's dtype.
     """
     assert paged_attn_available(), "needs CUDA + triton"
+    if compute is None:
+        compute = _compute_default()
+    elif compute not in ("f32", "fp8"):
+        raise ValueError(f"compute={compute!r}; expected 'f32' or 'fp8'")
     if fuse_combine is None:
         # per-path default: packed/fp8-compute fused combine is
         # certified; the f32 split port is under PREREG-f2-tail T1 and

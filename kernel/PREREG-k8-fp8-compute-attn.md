@@ -104,3 +104,33 @@ composed step cert on a fresh box — the K6-B posture, unchanged.
 perplexity pair, the on-box error-bound output, and box_meta with the
 anchor probe. `k8_verdict.py` (self-tested refusal directions) is
 committed BEFORE the box cycle.
+
+## AMENDMENT (2026-08-26, before measurement) — the quality
+## measurement must run THROUGH the decode path
+
+Recorded while building the instrument, before any arm ran. The
+obvious way to get held-out perplexity — a teacher-forced forward
+with `use_cache=False`, which is what `train.py:eval_loss` does — is
+**vacuous here**: that path never calls
+`fp8_paged_decode_attention` at all, so both arms would return
+bit-identical numbers and Q1 would "pass" for a reason unrelated to
+the mechanism under test
+([[check-the-result-could-have-failed]]).
+
+Q1 is therefore measured by teacher-forcing tokens one at a time
+through the paged DECODE path (`step_decomp.py --ppl-steps`), which
+is the only place the attention compute mode is exercised. Two
+further requirements fall out of the same reasoning and are part of
+the gate:
+
+- The KV is **rewound to the prompt boundary** first, discarding the
+  scheduler's warm tokens. Those are model-generated, so the two arms
+  could otherwise enter the scored window with different context and
+  the comparison would not be apples-to-apples.
+- **Every** scored step is teacher-forced. If either arm were allowed
+  to choose a token, the arms' contexts would diverge and the
+  perplexity difference would confound "worse model" with "different
+  text".
+
+The Q1 bar itself (<= f32 + 0.05) is unchanged; this amendment fixes
+the method that makes it non-vacuous.
