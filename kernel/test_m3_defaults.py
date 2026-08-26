@@ -203,6 +203,33 @@ def test_a_caller_supplied_ktile_gates_the_default(monkeypatch):
     assert fpa._compute_default(_Q(), 128, 1, 1, ktile=64) == "fp8"
 
 
+def test_ktile_does_not_gate_the_PACKED_branch(monkeypatch):
+    """Over-restriction is a cost too, not just a crash.
+
+    The packed kernel never takes KTILE -- it reduces over
+    block_tokens * n_kv_heads. Applying the split branch's ktile
+    constraint to a packed call downgraded it to f32 when packed fp8
+    would have run, losing the speedup for a constraint that branch
+    does not have (review, gnf4#291). A guard that is too strict
+    fails quietly, which is why it needs its own test.
+    """
+    monkeypatch.delenv("GNF4_ATTN_COMPUTE", raising=False)
+    _cap(monkeypatch, 9, 0)
+    # split: small ktile refuses
+    assert fpa.fp8_compute_unsupported(_Q(), 128, 1, 1, ktile=16) is not None
+    # packed with the SAME small ktile: fp8 is fine, BT*H_kv decides
+    assert fpa.fp8_compute_unsupported(
+        _Q(), 128, 1, 1, ktile=16, pack_heads=True,
+        block_tokens=16, n_kv_heads=2) is None
+    assert fpa._compute_default(
+        _Q(), 128, 1, 1, ktile=16, pack_heads=True,
+        block_tokens=16, n_kv_heads=2) == "fp8"
+    # ...and BT*H_kv still gates it
+    assert fpa._compute_default(
+        _Q(), 128, 1, 1, ktile=16, pack_heads=True,
+        block_tokens=8, n_kv_heads=2) == "f32"
+
+
 def test_every_reason_string_is_reachable(monkeypatch):
     """A predicate branch nothing can trigger is not a guard.
 

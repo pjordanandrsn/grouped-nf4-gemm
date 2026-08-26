@@ -851,7 +851,13 @@ def fp8_compute_unsupported(q, head_dim: int, k_groups: int,
     # so carries a precondition the split branch does not. A guard
     # that covered only the split path would still let the default
     # select fp8 into an assert -- there are TWO fp8 branches.
-    if ktile is not None and ktile < 32:
+    # ktile gates the SPLIT branch only. The packed kernel does not
+    # take KTILE at all -- it reduces over block_tokens * n_kv_heads,
+    # checked just below. Applying the ktile constraint to a packed
+    # call silently downgraded it to f32 when packed fp8 would have
+    # run fine (review, gnf4#291): not a crash, but the speedup lost
+    # for a constraint that branch does not have.
+    if not pack_heads and ktile is not None and ktile < 32:
         return f"fp8 P.V dot reduces over ktile: needs >= 32, got {ktile}"
     if pack_heads and block_tokens * n_kv_heads < 32:
         return ("packed fp8 P.V dot reduces over BT*H_kv: needs >= 32, "
