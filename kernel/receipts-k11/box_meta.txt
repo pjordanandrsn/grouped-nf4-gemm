@@ -1,0 +1,17 @@
+Stage A ran on TWO toolchains and TWO architectures, because the
+first answer changed with the version:
+
+  A2000 (sm_86), triton 3.4.0  -- tl.dot(M=8) REFUSES to compile
+  A2000 (sm_86), triton 3.7.1  -- tl.dot(M=8) COMPILES
+  RTX 5090 (sm_120), triton 3.7.1 -- tl.dot(M=8) COMPILES
+
+...and on both 3.7.1 runs the generated PTX is IDENTICAL to M=16:
+8x mma.sync.aligned.m16n8k16 either way. Compiling is not shrinking.
+
+The sm_86 probes ran in a throwaway container on the home-lab A2000
+(free, no rental) and were REMOVED afterwards. The sm_120 probe used
+a rented 5090 (instance 48801898) with NO model provisioning -- the
+question is compile-time -- destroyed and verified zero by-id AND
+list. Cost ~$0.10.
+
+Raw output for the sm_120 run is in sm120_probe.txt.

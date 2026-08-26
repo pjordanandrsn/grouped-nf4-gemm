@@ -1,0 +1,48 @@
+{
+ "triton": "3.7.1",
+ "torch": "2.7.0+cu128",
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "capability": [
+  12,
+  0
+ ],
+ "sub16_m": {
+  "8": {
+   "compiles": true,
+   "error": null
+  },
+  "16": {
+   "compiles": true,
+   "error": null
+  }
+ },
+ "sparse_mma": {
+  "tl_symbols": [],
+  "present": false,
+  "backend_files_mentioning_sparse": []
+ },
+ "probed": true
+}
+---PTX---
+{
+ "triton": "3.7.1",
+ "M=8": {
+  "mma_count": 8,
+  "shapes": {
+   "m16n8k16": 8
+  },
+  "correct": true,
+  "ptx_bytes": 9617
+ },
+ "M=16": {
+  "mma_count": 8,
+  "shapes": {
+   "m16n8k16": 8
+  },
+  "correct": true,
+  "ptx_bytes": 10022
+ }
+}
+
+mma instructions: M=8 -> 8, M=16 -> 8
+VERDICT: M=8 is COSMETIC -- same MMA count, Triton pads back
