@@ -1,0 +1,11 @@
+{
+ "id": "48793203",
+ "a": 7.37386257480315,
+ "b": 7.36490151968504,
+ "probe64_ms": 7.344421555555555,
+ "tokens_identical": true,
+ "recompiles": 0,
+ "driver": "610.43.02",
+ "torch": "2.13.0+cu130",
+ "gpu": "NVIDIA GeForce RTX 5090"
+}
