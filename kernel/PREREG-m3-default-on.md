@@ -86,6 +86,38 @@ therefore demotes to the PARTIAL path rather than refuting the cycle
 - Same box, one provisioning, all four arms.
 - Identical text digest and token budget across every quality arm.
 
+## AMENDMENT (2026-08-26, after registration, before the box)
+
+**Every arm must carry a mechanism receipt.**
+
+All four arms are selected by env vars, and an env var is a *request*.
+`GNF4_GEMV_DOTPAD=1` engages the dot-pad kernel only if the shape is
+in `_DOTPAD_CONFIGS` **and** the part carries >= 160 SMs; miss either
+and the call quietly takes the certified scalar path. That arm would
+then match OFF/OFF in step time and — because K6-B measured dot-pad
+**token-identical** at 127 tokens — in perplexity too. This cycle
+would read it as a knob that costs nothing and flip a default on an
+arm that never ran the mechanism. Recording `os.environ` is no
+defence: that records the request again.
+
+So `nf4_grouped.dispatch_counts()` and
+`fp8_paged_attn.compute_counts()` are recorded per arm, and
+`m3_verdict` REFUSES unless each arm's tally shows exactly the
+mechanism it names — and shows a non-zero tally at all, since an
+all-zero receipt proves nothing about which path ran.
+
+Why this is admissible after registration: **the gate can only
+REFUSE.** It cannot turn a REFUTED into a PASS, cannot move a bar,
+and cannot change which knob a PARTIAL names. It can only stop a
+verdict from being read off arms that did not exercise the treatment.
+Verified by mutation: with the check disabled, an arm whose knob was
+silently ignored returns `PASS — flip both`.
+
+The counters and their discrimination tests were validated on real
+silicon before the box — an RTX A2000 (26 SMs, below the guard), where
+the env var set and the tally showing scalar is the exact failure this
+receipt exists to catch.
+
 ## Frame note
 
 This cycle cannot raise the ceiling — 159.2 tok/s is already
