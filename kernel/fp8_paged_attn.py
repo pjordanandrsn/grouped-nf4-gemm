@@ -810,8 +810,8 @@ def reset_compute_counts() -> None:
 
 def fp8_compute_unsupported(q, head_dim: int, k_groups: int,
                             v_groups: int, *, pack_heads: bool = False,
-                            block_tokens: int = 16,
-                            n_kv_heads: int = 1) -> str | None:
+                            block_tokens: int = 16, n_kv_heads: int = 1,
+                            ktile: int | None = None) -> str | None:
     """Why fp8-COMPUTE cannot run on this call, or None if it can.
 
     SINGLE SOURCE OF TRUTH. The default selector below and the hard
@@ -820,11 +820,19 @@ def fp8_compute_unsupported(q, head_dim: int, k_groups: int,
     asserts that enforce it. Two copies of a predicate is how a
     default starts silently choosing a path its own asserts reject.
 
-    Deliberately NOT checked here: ``ktile >= 32``, because ktile is
-    derived FROM the resolved mode (64 for fp8) and so cannot gate the
-    choice of that mode without circularity -- the fp8 default always
-    satisfies it. ``layout`` likewise: the fp8 path accepts both
-    layouts, so it can never be the reason to refuse fp8.
+``ktile`` is checked only when the CALLER SUPPLIED it. An earlier
+    version skipped it entirely, reasoning that ktile is derived from
+    the resolved mode (64 for fp8) and so cannot gate that mode
+    without circularity. That was wrong: ktile is a kwarg, and it is
+    only derived when the caller passes None. A caller who passes
+    ``ktile=16`` would have had the default select fp8 and then hit
+    the leftover ``ktile >= 32`` assert on a call that previously ran
+    f32 (review, gnf4#291). Supplied means it is an input like any
+    other; None means the constraint is vacuous.
+
+    ``layout`` genuinely cannot be a reason to refuse fp8: the f32
+    path requires ``tokens`` while fp8 accepts ``tokens`` or
+    ``heads``, so anything fp8 rejects, f32 rejects too.
     """
     if v_groups != 1:
         return ("fp8 compute folds V scales into P: per-row only "
@@ -843,6 +851,8 @@ def fp8_compute_unsupported(q, head_dim: int, k_groups: int,
     # so carries a precondition the split branch does not. A guard
     # that covered only the split path would still let the default
     # select fp8 into an assert -- there are TWO fp8 branches.
+    if ktile is not None and ktile < 32:
+        return f"fp8 P.V dot reduces over ktile: needs >= 32, got {ktile}"
     if pack_heads and block_tokens * n_kv_heads < 32:
         return ("packed fp8 P.V dot reduces over BT*H_kv: needs >= 32, "
                 f"got {block_tokens} * {n_kv_heads}")
@@ -852,7 +862,8 @@ def fp8_compute_unsupported(q, head_dim: int, k_groups: int,
 def _compute_default(q=None, head_dim: int | None = None,
                      k_groups: int = 1, v_groups: int = 1, *,
                      pack_heads: bool = False, block_tokens: int = 16,
-                     n_kv_heads: int = 1) -> str:
+                     n_kv_heads: int = 1,
+                     ktile: int | None = None) -> str:
     """Which compute mode an unset ``GNF4_ATTN_COMPUTE`` selects.
 
     **fp8 is the default as of RESULTS-m3-default-on** (PASS: 8192
@@ -892,7 +903,8 @@ def _compute_default(q=None, head_dim: int | None = None,
         return "f32"
     return ("f32" if fp8_compute_unsupported(
         q, head_dim, k_groups, v_groups, pack_heads=pack_heads,
-        block_tokens=block_tokens, n_kv_heads=n_kv_heads) else "fp8")
+        block_tokens=block_tokens, n_kv_heads=n_kv_heads,
+        ktile=ktile) else "fp8")
 
 def _fuse_counters(n: int, device) -> torch.Tensor:
     """Zeroed-once arrival counters for the fused combine; slots are
@@ -966,10 +978,12 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
     """
     assert paged_attn_available(), "needs CUDA + triton"
     if compute is None:
+        # ktile here is still the RAW kwarg -- derivation happens
+        # below, after the mode is known
         compute = _compute_default(q, head_dim, k_groups, v_groups,
                                    pack_heads=pack_heads,
                                    block_tokens=block_tokens,
-                                   n_kv_heads=n_kv_heads)
+                                   n_kv_heads=n_kv_heads, ktile=ktile)
     elif compute not in ("f32", "fp8"):
         raise ValueError(f"compute={compute!r}; expected 'f32' or 'fp8'")
     _COMPUTE_COUNTS[compute] += 1

@@ -181,6 +181,28 @@ def test_the_PACKED_branch_precondition_gates_the_default(monkeypatch):
                                 block_tokens=16, n_kv_heads=2) == "fp8"
 
 
+def test_a_caller_supplied_ktile_gates_the_default(monkeypatch):
+    """The regression review caught (gnf4#291).
+
+    ktile is a KWARG, derived only when the caller passes None. I had
+    skipped it in the predicate on a circularity argument that does
+    not apply to a supplied value -- so `ktile=16` would have had the
+    default select fp8 and then hit the leftover `ktile >= 32` assert,
+    on a call that previously ran f32 without complaint.
+    """
+    monkeypatch.delenv("GNF4_ATTN_COMPUTE", raising=False)
+    _cap(monkeypatch, 9, 0)
+    # unsupplied -> vacuous, fp8 derives ktile=64
+    assert fpa.fp8_compute_unsupported(_Q(), 128, 1, 1, ktile=None) is None
+    assert fpa._compute_default(_Q(), 128, 1, 1, ktile=None) == "fp8"
+    # supplied and too small -> f32, NOT fp8-then-assert
+    why = fpa.fp8_compute_unsupported(_Q(), 128, 1, 1, ktile=16)
+    assert why and "ktile" in why, why
+    assert fpa._compute_default(_Q(), 128, 1, 1, ktile=16) == "f32"
+    # supplied and adequate -> fp8
+    assert fpa._compute_default(_Q(), 128, 1, 1, ktile=64) == "fp8"
+
+
 def test_every_reason_string_is_reachable(monkeypatch):
     """A predicate branch nothing can trigger is not a guard.
 
@@ -194,6 +216,9 @@ def test_every_reason_string_is_reachable(monkeypatch):
         fpa.fp8_compute_unsupported(_Q(), 64, 4, 1),           # width
         fpa.fp8_compute_unsupported(_Q(torch.float32), 128, 1, 1),  # dtype
     }
-    assert len(reasons) == 4 and None not in reasons, reasons
+    reasons.add(fpa.fp8_compute_unsupported(_Q(), 128, 1, 1, ktile=16))
+    reasons.add(fpa.fp8_compute_unsupported(_Q(), 128, 1, 1, pack_heads=True,
+                                            block_tokens=8, n_kv_heads=2))
+    assert len(reasons) == 6 and None not in reasons, reasons
     _cap(monkeypatch, 8, 0)
     assert fpa.fp8_compute_unsupported(_Q(), 128, 1, 1) not in reasons
