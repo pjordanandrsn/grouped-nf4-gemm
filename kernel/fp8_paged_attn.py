@@ -788,6 +788,26 @@ def _f32_fuse_default() -> bool:
     return os.environ.get("GNF4_F32_FUSE_COMBINE", "1") == "1"
 
 
+#: PREREG-m3 mechanism receipt, the attention half. Same reasoning as
+#: ``nf4_grouped._DISPATCH_COUNTS``: ``GNF4_ATTN_COMPUTE=fp8`` is a
+#: request, and the caller may also pass ``compute=`` explicitly, so
+#: reading the environment records an intention rather than an event.
+#: Incremented where the mode is actually resolved, once per decode
+#: call (once per capture under CUDA graphs).
+_COMPUTE_COUNTS = {"f32": 0, "fp8": 0}
+
+
+def compute_counts() -> dict:
+    """Copy of the decode-attention compute-mode tally (PREREG-m3)."""
+    return dict(_COMPUTE_COUNTS)
+
+
+def reset_compute_counts() -> None:
+    """Zero the tally, so a caller can scope it to one window."""
+    for _k in _COMPUTE_COUNTS:
+        _COMPUTE_COUNTS[_k] = 0
+
+
 def _compute_default() -> str:
     """PREREG-k8 selector: ``GNF4_ATTN_COMPUTE=fp8`` routes decode
     attention through the fp8-COMPUTE path when the caller did not ask
@@ -881,6 +901,7 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
         compute = _compute_default()
     elif compute not in ("f32", "fp8"):
         raise ValueError(f"compute={compute!r}; expected 'f32' or 'fp8'")
+    _COMPUTE_COUNTS[compute] += 1
     if fuse_combine is None:
         # per-path default: packed/fp8-compute fused combine is
         # certified; the f32 split port is under PREREG-f2-tail T1 and
