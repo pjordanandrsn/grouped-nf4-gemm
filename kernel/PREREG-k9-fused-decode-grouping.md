@@ -151,3 +151,41 @@ what this prereg is allowed to CLAIM before that measurement, which
 is: one sort per layer, 137.4 us, and an open question
 ([[eliminate-versus-account]] — the accounting that produced this
 lane also has to survive being checked).
+
+## VOID (2026-08-26, before any measurement) — the registered
+## mechanism is not on the path this cycle measures
+
+The first amendment withdrew the bucket attribution as unreconciled.
+Checking the call site settles it harder: **`build_group_tiles_device`
+is never called on the decode path.**
+
+`hot_residency.py` dispatches with
+
+```
+singleton_groups=(T == 1 or (FORCE_SINGLETON_GROUPS[0]
+                             and not DEVICE_GROUPING[0])),
+device_grouping=(DEVICE_GROUPING[0] and T > 1),
+```
+
+At decode `T == 1`, `singleton_groups` is unconditionally **True** and
+`device_grouping` unconditionally **False**, regardless of either
+flag. The device builder is an opt-in path for the T>1 speculative and
+batched arms (`DEVICE_GROUPING = [False]` by default), and SV2's
+census — like every single-stream measurement in this campaign — ran
+at T=1.
+
+So this prereg's Stage B has no subject. **K9 is VOID.** No box was
+rented and no bar was measured against it; the cost was the writing.
+
+**What the two failures have in common,** recorded because the lane's
+whole premise came from an accounting pass: both times the error was
+reading a *capability* in the source as a *fact about the run*. The
+builder exists, is capture-safe, and is genuinely used — by arms this
+cycle did not run. Counting ops in a function proves nothing about
+whether the measured step called it. Attribution has to start from
+what the profile says executed, then find its owner — not from a
+plausible owner, then assume it executed
+([[eliminate-versus-account]]).
+
+The 311.4 us router row is real and re-registered as K10, whose
+Stage A identifies the owner **before** any treatment is designed.
