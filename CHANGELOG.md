@@ -1,5 +1,73 @@
 # Changelog
 
+## Unreleased
+
+### Both decode knobs now ship ON by default (M3, PASS)
+
+0.16.0 shipped `GNF4_ATTN_COMPUTE=fp8` OFF and said a default flip
+"needs its own registration plus a longer-horizon quality window than
+1024 tokens". M3 is that registration and that window.
+
+**8192 teacher-forced tokens through the paged decode path**, four
+arms on one box, one provisioning
+(`kernel/RESULTS-m3-default-on.md`, receipts in `receipts-m3/`):
+
+| arm | step | Δppl vs OFF |
+|---|---|---|
+| off | 7.843 ms | — |
+| `GNF4_GEMV_DOTPAD` | 7.032 ms | −0.0133 |
+| `GNF4_ATTN_COMPUTE=fp8` | 7.620 ms | −0.0058 |
+| both | **6.803 ms** | −0.0021 |
+
+Bar was ±0.05 on each knob AND on the composition. Read the deltas as
+zero, not as gains — all four arms sit within 0.02 on a perplexity of
+8.05, and bf16/e4m3 rounding is unbiased.
+
+**K8's +0.0092 was window noise.** Over 8192 tokens the fp8 delta is
+−0.0058; the sign flipped. The cost does not grow with the horizon,
+which is the question 0.16.0 left open.
+
+### The flip is capability-conditional, and that is not cosmetic
+
+PASS licensed the defaults on **quality and speed**, not on
+**applicability**. The fp8 path asserts `sm_89+`, `v_groups == 1`,
+`k_groups in (1, 2, 4)`, and — on the packed-heads branch —
+`block_tokens * n_kv_heads >= 32`. M3 varied none of them.
+
+An unconditional flip would turn a working f32 install into an
+`AssertionError` on **every pre-Ada GPU** (A100 sm_80, 3090 sm_86,
+T4 sm_75). So:
+
+- **Unset env** → fp8 where fp8 can run, the certified f32 path
+  otherwise. Silent, and no install that worked before breaks.
+- **Explicit `GNF4_ATTN_COMPUTE=fp8`** → never downgraded. You get
+  the path you named, and its asserts tell you if it is unavailable.
+  Silently substituting f32 under the name the caller asked for is
+  how a benchmark arm gets mislabelled.
+- **`GNF4_ATTN_COMPUTE=f32`** → the certified path, as before.
+- **`GNF4_GEMV_DOTPAD=0`** → forces the scalar GEMV. Dot-pad needs no
+  capability guard: its dispatch already requires the shape to be in
+  `_DOTPAD_CONFIGS` and the part to carry ≥ 160 SMs, so a
+  non-qualifying call takes the scalar path on its own.
+- Both env vars now **REFUSE an unrecognised value** rather than
+  treating it as off. With the defaults ON, a typo'd `GNF4_GEMV_DOTPAD=true`
+  would otherwise read as a deliberate disable, which looks intentional.
+
+One predicate, `fp8_compute_unsupported()`, backs both the default
+selection and the asserts on both fp8 branches — two copies is how a
+default starts choosing a path its own asserts reject.
+
+### New: dispatch receipts
+
+`nf4_grouped.dispatch_counts()` and `fp8_paged_attn.compute_counts()`
+record which kernel actually ran, because an env var is a request:
+`GNF4_GEMV_DOTPAD=1` on a part below the SM guard silently takes the
+scalar path. M3's arms used these to prove each knob engaged.
+
+**Scope:** one box, one model (Qwen3-30B-A3B), one config. M2
+measured 8.5% inter-box dispersion, so the absolute numbers are that
+box's; every bar above is a same-box comparison.
+
 ## 0.16.0 — 2026-08-26
 
 Minor release: the fastest certified single-stream point this project

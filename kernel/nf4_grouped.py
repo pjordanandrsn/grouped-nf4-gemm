@@ -105,10 +105,33 @@ def reset_dispatch_counts() -> None:
 
 
 def _dotpad():
-    """PREREG-k6b opt-in: route the decode GEMV through the dot-pad
-    kernel. Default OFF until the P-fid stage certifies (the kernel is
-    numerics-changing -- see its docstring)."""
-    return os.environ.get("GNF4_GEMV_DOTPAD") == "1"
+    """Route the decode GEMV through the dot-pad kernel.
+
+    **ON by default as of RESULTS-m3-default-on** (PASS: 8192 scored
+    tokens, dppl -0.0133 against a +-0.05 bar, 0.81 ms off a 7.84 ms
+    step). It was opt-in through K6-B pending exactly that quality
+    evidence.
+
+    Set ``GNF4_GEMV_DOTPAD=0`` to force the certified scalar path.
+
+    No capability guard is needed HERE, unlike the fp8 attention
+    default: the dispatch site already requires the shape to be in
+    ``_DOTPAD_CONFIGS`` and the part to carry >= 160 SMs, so a
+    non-qualifying call silently takes the certified scalar path
+    instead of failing. That silent fallback is real, and it is what
+    ``dispatch_counts()`` exists to make visible -- M3's arms proved
+    the knob engaged rather than trusting the env var.
+    """
+    v = os.environ.get("GNF4_GEMV_DOTPAD")
+    if v is None:
+        return True                      # M3 PASS
+    if v not in ("0", "1"):
+        raise ValueError(
+            f"GNF4_GEMV_DOTPAD={v!r} is not 0 or 1. Refusing rather "
+            "than treating an unrecognised value as OFF -- a typo'd "
+            "'true' silently running the scalar path would be "
+            "recorded as the dot-pad arm.")
+    return v == "1"
 
 
 def _splitk_plan_sk(N: int, K: int):
