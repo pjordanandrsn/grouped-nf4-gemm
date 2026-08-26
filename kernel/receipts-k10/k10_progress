@@ -1,0 +1,34 @@
+K10-START 14:36:08
+8ea880f K10 verdict calculator: attribution gates before any treatment number (#275)
+013f487 K10 Stage A (e4b): counted-ablation topk probe (#280)
+[SELF-TEST FIXTURE, NOT A RESULT] K10 STAGE A: owner = torch.topk(sorted=True) in the router (48 sort + 48 gather per step, 48 layers); ablation drove the sort to 0
+[SELF-TEST FIXTURE, NOT A RESULT] K10 VERDICT: PASS  (step 6.460 -> 6.320 ms = +0.140 ms; ppl +0.0100 vs eps 0.05)
+k10_verdict self-test OK (eight Stage-A attribution refusals including the ablation, six B1 refusals, the quality epsilon either side, per-arm token determinism on both pairs, and the Stage-A-only path)
+ARM-START a_probe 14:36:10
+B1D_TIMED_GRAPH steps=127 step=6.50ms compile=default recompiles=0 out=/root/out/k10_a_probe.json
+ARM-OK a_probe 14:36:48
+ARM-START a_ablate 14:36:48
+B1D_TIMED_GRAPH steps=127 step=6.36ms compile=default recompiles=0 out=/root/out/k10_a_ablate.json
+ARM-OK a_ablate 14:37:31
+ARM-START base_a 14:37:31
+B1D_TIMED_GRAPH steps=127 step=6.49ms compile=default recompiles=0 out=/root/out/k10_base_a.json
+ARM-OK base_a 14:38:06
+ARM-START base_b 14:38:06
+B1D_TIMED_GRAPH steps=127 step=6.49ms compile=default recompiles=0 out=/root/out/k10_base_b.json
+ARM-OK base_b 14:38:41
+ARM-START sf_a 14:38:41
+B1D_TIMED_GRAPH steps=127 step=6.36ms compile=default recompiles=0 out=/root/out/k10_sf_a.json
+ARM-OK sf_a 14:39:16
+ARM-START sf_b 14:39:16
+B1D_TIMED_GRAPH steps=127 step=6.36ms compile=default recompiles=0 out=/root/out/k10_sf_b.json
+ARM-OK sf_b 14:39:52
+ARM-START ppl_base 14:39:52
+K8_PPL steps=1024 nll=1.59787 ppl=4.94248 compute=f32 sha=456e4ede9b4b out=/root/out/k10_ppl_base.json
+ARM-OK ppl_base 14:41:27
+ARM-START ppl_sf 14:41:27
+K8_PPL steps=1024 nll=1.60376 ppl=4.97169 compute=f32 sha=456e4ede9b4b out=/root/out/k10_ppl_sf.json
+ARM-OK ppl_sf 14:43:00
+K10 COMPOSED stageA {'topk_calls_per_step': 48.0, 'sort_calls_per_step': 48, 'gather_calls_per_step': 48, 'sort_calls_per_step_ablated': 0} ppl 4.9425 -> 4.9717
+K10 VERDICT: REFUSE
+  B1-C: selected expert SETS differ between arms -- that is a different model, not a reordering
+K10-DONE 14:43:00
