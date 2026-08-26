@@ -1,5 +1,62 @@
 # Changelog
 
+## 0.16.0 — 2026-08-26
+
+Minor release: the fastest certified single-stream point this project
+has measured, and an honest restatement of the slowest one.
+
+### `GNF4_ATTN_COMPUTE=fp8` — 159.2 tok/s single-stream (K8, PASS)
+
+`fp8_paged_decode_attention`'s fp8-COMPUTE path was built and sm_89+
+gated for two releases with its quality debt stated in its own
+docstring. K8 called it in: **0.217 ms off the step at a perplexity
+cost of +0.0092** (bar: +0.05), measured through the paged DECODE
+path over 1024 teacher-forced tokens, with the cited fp8 error bound
+re-measured on the same box (mean 0.00445, p99 0.01953, max 0.10547).
+
+- Ladder, composing on the dot-pad knob: 6.476 ms → **6.281 ms**,
+  154.4 → **159.2 tok/s**.
+- **Ships OFF.** An unset env is byte-identical to the certified
+  path; an unrecognised value REFUSES rather than silently running
+  f32 and being recorded as the fp8 arm. A default flip needs its own
+  registration plus a longer-horizon quality window than 1024 tokens.
+- Disclosure: all 127 greedy tokens matched between arms. That is
+  reported, not relied on — the prereg deliberately refused an
+  identity bar because this path's p99 element error (~5e-2) makes
+  one unsatisfiable by construction, and the verdict rests on the
+  perplexity delta.
+
+### The default ladder entry is now a RANGE (M2)
+
+Re-certifying the rental anchor on three boxes with A/A pairs found
+the constant itself was **right to 0.26%** (7.369 vs 7.35) — and that
+the 5090 "class" carries **8.5% inter-box dispersion** while each box
+repeats itself to 0.16%. A ±3% gate was narrower than the population
+it gated.
+
+- Certified default restated: **7.37 ms ±4.2% ≈ 130–142 tok/s**
+  (previously a bare "≈136"). The two knob rows are same-box
+  measurements and are unchanged.
+- `kernel/decode_anchor.py` is the committed source harnesses read,
+  with its bounds document-locked against RESULTS-m2. An uncertified
+  literal had been gating box rentals.
+
+### `GNF4_GEMV_SPLITK` ships OFF, refuted (K7)
+
+Split-K on the decode GEMV is **refuted**: the census pair is flat in
+split factor at `gate_up`, and on `down` every split is ~14% worse
+than not splitting. The kernel ships dormant because it is the
+evidence for that refutation and costs nothing unused. The 9.8% the
+cycle did produce is a config retune, not the registered mechanism.
+
+### Also
+
+- K10 attributed the census `router` row by ablation: one
+  `torch.topk(k=8, sorted=True)` per layer. `sorted=False` deletes
+  the sort kernel outright but changes the selected expert SETS, so
+  it was refused despite a passing perplexity delta.
+- No API changes. No default changes.
+
 ## 0.15.1 — 2026-08-25
 
 Patch release, one fix.
