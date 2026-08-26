@@ -114,6 +114,15 @@ def verdict(rep):
         if spread > AA_TOL:
             return _refuse(out, f"A/A: {label} spread {spread * 100:.2f}%"
                                 f" > {AA_TOL * 100:.0f}%")
+        # per-arm determinism: the prereg requires tokens identical as
+        # well as spread, and a non-deterministic pair that happens to
+        # land inside AA_TOL would otherwise clear the gate and produce
+        # a verdict instead of a REFUSE (Bugbot, gnf4#275)
+        if s[x].get("tokens") != s[y].get("tokens"):
+            return _refuse(out, f"A/A: {label} token streams differ "
+                                "between identical runs -- the arm is "
+                                "not deterministic, so its timing pair "
+                                "is not an A/A")
     base = (s["base_a"]["step_ms_clean"] + s["base_b"]["step_ms_clean"]) / 2
     sf = (s["sf_a"]["step_ms_clean"] + s["sf_b"]["step_ms_clean"]) / 2
     cert = rep.get("cert_knob_ms")
@@ -201,6 +210,15 @@ def self_test():
     r = _mk(); del r["stage_a"]["sort_calls_per_step_ablated"]
     assert verdict(r)["verdict"][1].startswith("A4"), "missing ablation"
     # B1 refusals
+    # a non-deterministic pair inside AA_TOL must still REFUSE
+    nd = _mk()
+    nd["step"]["base_b"]["tokens"] = [99] + nd["step"]["base_b"]["tokens"][1:]
+    r = verdict(nd)
+    assert r["verdict"][0] == "REFUSE" and "token streams differ" in \
+        r["verdict"][1], r["verdict"]
+    nd2 = _mk()
+    nd2["step"]["sf_b"]["tokens"] = []
+    assert verdict(nd2)["verdict"][0] == "REFUSE", "sf pair unchecked"
     for bad, why in ((_mk(sets=False), "B1-C"),
                      (_mk(checked=0), "B1-C"),
                      (_mk(tok=(1024, 512)), "B1-Q"),
@@ -214,7 +232,8 @@ def self_test():
         print(f"[SELF-TEST FIXTURE, NOT A RESULT] {line}")
     print("k10_verdict self-test OK (eight Stage-A attribution "
           "refusals including the ablation, six B1 refusals, the "
-          "quality epsilon either side, and the Stage-A-only path)")
+          "quality epsilon either side, per-arm token determinism "
+          "on both pairs, and the Stage-A-only path)")
 
 
 def main():
