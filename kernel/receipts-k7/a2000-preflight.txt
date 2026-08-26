@@ -1,0 +1,40 @@
+K7 pre-flight, QNAP RTX A2000 12GB (sm_86, 26 SM), 2026-08-26.
+Throwaway container from pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime
+(torch 2.8.0+cu128, triton 3.4.0) + gcc; removed after the run.
+
+CORRECTNESS ONLY -- this part cannot adjudicate PREREG-k7. Its bars
+are same-box ratios on a >=160-SM census part, and 26 SMs with the
+census grids is a different occupancy regime entirely. Timings below
+are shown only to prove the harness runs; they are NOT a verdict.
+
+  N= 1536 K= 2048 | plain d=5.8859e-01 (band 1.4521e+00)
+    sk=2: d_ref=5.8859e-01 d_plain=2.5000e-01 bitwise=True
+    sk=4: d_ref=5.8859e-01 d_plain=2.5000e-01 bitwise=True
+    sk=8: d_ref=5.8859e-01 d_plain=2.5000e-01 bitwise=True
+  N= 2048 K=  768 | plain d=3.2653e-01 (band 8.9556e-01)
+    sk=2: d_ref=3.2653e-01 d_plain=6.2500e-02 bitwise=True
+    sk=4: d_ref=3.2653e-01 d_plain=6.2500e-02 bitwise=True
+    sk=8: d_ref=3.2653e-01 d_plain=6.2500e-02 bitwise=True
+  N=   64 K=  128 | plain d=1.5526e-01 (band 2.9021e-01)
+    sk=2: d_ref=1.5526e-01 d_plain=0.0000e+00 bitwise=True
+  N=  130 K=  192 | plain d=1.4256e-01 (band 3.4518e-01)
+    sk=2: d_ref=1.4256e-01 d_plain=0.0000e+00 bitwise=True
+  env-plan == kwarg: True | unset env == plain dot-pad: True
+  K7 A2000 PRE-FLIGHT: PASS
+
+  k7_bench self-test OK (report validates; this box's non-census
+  ratio 1.616 is NOT a verdict) aa=[6.2, 6.5] us
+
+What this establishes before any box rental:
+  - the split-K dot-pad kernel COMPILES and runs on real silicon
+    (a second Triton major version, 3.4 vs the census box's 3.7)
+  - every cell lands inside the K6-B mechanism band vs dequant_ref
+  - run-to-run BITWISE determinism at every split factor -- G2 holds
+    by construction (fixed-order ws.sum(0), no atomics)
+  - the knob wiring: the shape plan selects the same kernel the
+    explicit kwarg does, and an UNSET env is byte-identical to the
+    certified plain dot-pad path
+What it does NOT establish: anything about the K7 ratio. The A2000's
+1.6x is a 32-program grid on 26 SMs with 2 K-blocks per split --
+reduction overhead over a trivial kernel, the opposite regime from
+768 programs on 170 SMs. Read no signal from it in either direction.
