@@ -196,6 +196,23 @@ def self_test():
     assert "different text" in verdict(mixed)["verdict"][1]
     mixed2 = _mk(); mixed2["arms"]["fp8"]["ppl_tokens"] = 4096
     assert "different budgets" in verdict(mixed2)["verdict"][1]
+    # THE invariant the Q2 hole violated: only PASS may move two
+    # defaults. Asserted over a sweep rather than at the one fixture
+    # that happened to expose it, so a future edit cannot reintroduce
+    # a two-knob PARTIAL through some other path.
+    for dd in (0.01, 0.06):
+        for df in (0.01, 0.06):
+            for db in (0.01, 0.06):
+                for bm in (6.28, 6.60):
+                    r = verdict(_mk(d_dot=dd, d_fp8=df, d_both=db,
+                                    both_ms=bm))
+                    tag, names = r["verdict"]
+                    if tag == "PARTIAL":
+                        assert len(names) == 1, (dd, df, db, bm, names)
+                    elif tag == "PASS":
+                        assert db <= PPL_EPS and dd <= PPL_EPS \
+                            and df <= PPL_EPS, (dd, df, db, bm)
+
     for line in render(verdict(_mk())).splitlines():
         print(f"[SELF-TEST FIXTURE, NOT A RESULT] {line}")
     print("m3_verdict self-test OK (PASS/PARTIAL/REFUTED bands, the "
