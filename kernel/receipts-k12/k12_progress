@@ -1,0 +1,52 @@
+K12-START 20:47:57
+cb7aae9 M3 RESULTS: PASS -- both defaults may move, and K8's quality cost was window noise (#290)
+bf3cb3e K12 arm 3: the both-compiled control needs an instrument, and the log line must not lie (#289)
+ARM-START both_disabled_a 20:48:07
+B1D_TIMED_GRAPH steps=127 step=6.90ms compile=default recompiles=0 out=/root/out/k12_both_disabled_a.json
+compiled 48 layer bodies (mode=default); dynamo-disabled: paged attention + MoE tier; graph step marking=False
+ARM-OK both_disabled_a 20:50:06
+ARM-START both_disabled_b 20:50:06
+B1D_TIMED_GRAPH steps=127 step=6.88ms compile=default recompiles=0 out=/root/out/k12_both_disabled_b.json
+compiled 48 layer bodies (mode=default); dynamo-disabled: paged attention + MoE tier; graph step marking=False
+ARM-OK both_disabled_b 20:51:45
+ARM-START moe_compiled_a 20:51:45
+B1D_TIMED_GRAPH steps=127 step=7.56ms compile=default recompiles=0 out=/root/out/k12_moe_compiled_a.json
+compiled 48 layer bodies (mode=default); dynamo-disabled: paged attention; graph step marking=False
+ARM-OK moe_compiled_a 20:53:10
+ARM-START moe_compiled_b 20:53:10
+B1D_TIMED_GRAPH steps=127 step=7.56ms compile=default recompiles=0 out=/root/out/k12_moe_compiled_b.json
+compiled 48 layer bodies (mode=default); dynamo-disabled: paged attention; graph step marking=False
+ARM-OK moe_compiled_b 20:54:40
+ARM-START both_compiled 20:54:40
+ARM-FAIL both_compiled
+W0826 20:55:59.850000 16529 site-packages/torch/_dynamo/convert_frame.py:1994] [6/8] To log all recompilation reasons, use TORCH_LOGS="recompiles".
+W0826 20:55:59.850000 16529 site-packages/torch/_dynamo/convert_frame.py:1994] [6/8] To diagnose recompilation issues, see https://docs.pytorch.org/docs/main/user_guide/torch_compiler/compile/programm
+Traceback (most recent call last):
+  File "/root/e4b/bench/hybrid-g9/step_decomp.py", line 2363, in <module>
+    main()
+  File "/root/e4b/bench/hybrid-g9/step_decomp.py", line 2066, in main
+    _b1d_stage_a(a, model, runner, sched, kv,
+  File "/root/e4b/bench/hybrid-g9/step_decomp.py", line 774, in _b1d_stage_a
+    one_step()
+  File "/root/e4b/bench/hybrid-g9/step_decomp.py", line 678, in one_step
+    out = model(input_ids=in_ids, position_ids=pos, use_cache=False)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1778, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ARM-FAIL-END both_compiled
+ARM-START census_baseline 20:56:08
+B1D_TIMED_GRAPH steps=127 step=6.89ms compile=default recompiles=0 out=/root/out/k12_census_baseline.json
+compiled 48 layer bodies (mode=default); dynamo-disabled: paged attention + MoE tier; graph step marking=False
+ARM-OK census_baseline 20:57:22
+ARM-START census_moe 20:57:22
+B1D_TIMED_GRAPH steps=127 step=7.56ms compile=default recompiles=0 out=/root/out/k12_census_moe.json
+compiled 48 layer bodies (mode=default); dynamo-disabled: paged attention; graph step marking=False
+ARM-OK census_moe 20:59:03
+K12 both_disabled  6.897/6.879 ms  recompiles=0
+K12 moe_compiled   7.559/7.563 ms  recompiles=0
+K12 both_compiled raised: True
+K12 mech (knob-ON check): {'dotpad': 384, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0}
+K12 VERDICT: REFUSE
+  attribution: no tracked raw-ATen row fell in count, so any step delta came from somewhere other than the mechanism this cycle registered
+K12-DONE 20:59:03

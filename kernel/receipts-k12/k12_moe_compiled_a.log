@@ -1,0 +1,87 @@
+[20:51:51]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[20:51:51]   quantized experts on 48/48 MoE layers (128 experts each)
+[20:51:51]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[20:51:53]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[20:51:53]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[20:52:34]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+fused q/k/v projections on 48 attention modules (RESULTS-f2-tail default)
+K12: MoE tier NOT dynamo-disabled (attention still is)
+compiled 48 layer bodies (mode=default); dynamo-disabled: paged attention; graph step marking=False
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0] Graph break from `Tensor.item()`, consider setting:
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]     torch._dynamo.config.capture_scalar_outputs = True
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0] or:
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]     env TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0] to include these operations in the captured graph.
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0] 
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0] Graph break: from user code at:
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]   File "/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py", line 346, in torch_dynamo_resume_in_forward_at_332
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]     hidden_states = self.mlp(hidden_states)
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]                     ^^^^^^^^^^^^^^^^^^^^^^^
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]   File "/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py", line 280, in forward
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]     final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]   File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1778, in _wrapped_call_impl
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]     return self._call_impl(*args, **kwargs)
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]   File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1789, in _call_impl
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]     return forward_call(*args, **kwargs)
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]   File "/root/e4b/experts4bit_qlora/engines/hot_residency.py", line 796, in _fwd
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]     return st.forward(hidden, top_k_index, top_k_weights)
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]   File "/root/e4b/experts4bit_qlora/engines/hybrid.py", line 480, in forward
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]     out = super().forward(hidden_states, top_k_index, top_k_weights)
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]   File "/root/e4b/experts4bit_qlora/engines/hot_residency.py", line 352, in forward
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]     and self._all_hot()):
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]         ^^^^^^^^^^^^^^^^^
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]   File "/root/e4b/experts4bit_qlora/engines/hot_residency.py", line 226, in _all_hot
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]     c = bool(self.is_hot.all()) and bool(
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0]         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0] 
+W0826 20:52:39.514000 14751 site-packages/torch/_dynamo/variables/tensor.py:1759] [3/0] 
+/opt/conda/lib/python3.11/site-packages/torch/_dynamo/variables/functions.py:2431: UserWarning: Dynamo does not know how to trace the builtin `cuda_utils.get_device_properties.` This function is either a Python builtin (e.g. _warnings.warn) or a third-party C/C++ Python extension (perhaps created with pybind).
+If it is a Python builtin, please file an issue on GitHub so the PyTorch team can add support for it and see the next case for a workaround.
+If it is a third-party C/C++ Python extension, please either wrap it into a PyTorch-understood custom operator (see https://pytorch.org/tutorials/advanced/custom_ops_landing_page.html for more details) or, if it is traceable, use `torch.compiler.allow_in_graph`.
+  torch._dynamo.utils.warn_once(explanation + "\n" + "\n".join(hints))
+W0826 20:52:57.255000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [17/8] torch._dynamo hit config.recompile_limit (8)
+W0826 20:52:57.255000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [17/8]    function: '_mm' (/root/e4b/experts4bit_qlora/engines/hot_residency.py:132)
+W0826 20:52:57.255000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [17/8]    last reason: 17/7: tensor 'am' size mismatch at index 1. expected 2048, actual 1536
+W0826 20:52:57.255000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [17/8] To log all recompilation reasons, use TORCH_LOGS="recompiles".
+W0826 20:52:57.255000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [17/8] To diagnose recompilation issues, see https://docs.pytorch.org/docs/main/user_guide/torch_compiler/compile/programming_model.recompilation.html
+W0826 20:52:58.245000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [14/8] torch._dynamo hit config.recompile_limit (8)
+W0826 20:52:58.245000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [14/8]    function: 'torch_dynamo_resume_in__fused_over_stack_at_123' (/root/e4b/experts4bit_qlora/engines/hot_residency.py:123)
+W0826 20:52:58.245000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [14/8]    last reason: 14/7: tensor '___stack0[0]' size mismatch at index 0. expected 75, actual 94
+W0826 20:52:58.245000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [14/8] To log all recompilation reasons, use TORCH_LOGS="recompiles".
+W0826 20:52:58.245000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [14/8] To diagnose recompilation issues, see https://docs.pytorch.org/docs/main/user_guide/torch_compiler/compile/programming_model.recompilation.html
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8] torch._dynamo hit config.recompile_limit (8)
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]    function: 'torch_dynamo_resume_in_forward_at_332' (/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py:332)
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]    last reason: 3/7: G['__import_nf4_grouped']._DISPATCH_COUNTS['dotpad'] == 12    # _DISPATCH_COUNTS["dotpad"] += 1  # oot/gnf4/kernel/nf4_grouped.py:1168 in gemm_4bit_grouped
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8] User stack trace:
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]   File "/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py", line 346, in forward
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]     hidden_states = self.mlp(hidden_states)
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]   File "/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py", line 280, in forward
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]     final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]   File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1778, in _wrapped_call_impl
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]     return self._call_impl(*args, **kwargs)
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]   File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1789, in _call_impl
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]     return forward_call(*args, **kwargs)
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]   File "/root/e4b/experts4bit_qlora/engines/hot_residency.py", line 796, in _fwd
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]     return st.forward(hidden, top_k_index, top_k_weights)
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]   File "/root/e4b/experts4bit_qlora/engines/hybrid.py", line 480, in forward
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]     out = super().forward(hidden_states, top_k_index, top_k_weights)
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]   File "/root/e4b/experts4bit_qlora/engines/hot_residency.py", line 356, in forward
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]     return self._forward_collapsed(x, flat, top_k_weights, T, k,
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]   File "/root/e4b/experts4bit_qlora/engines/hot_residency.py", line 438, in _forward_collapsed
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]     dn = _fused_over_stack(xr, flat, self.h_gu_p, self.h_gu_a,
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]   File "/root/e4b/experts4bit_qlora/engines/hot_residency.py", line 134, in _fused_over_stack
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]     gu = _mm(x_sorted, gu_p, gu_a)
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]   File "/root/e4b/experts4bit_qlora/engines/hot_residency.py", line 133, in _mm
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]     return gemm_4bit_grouped(xr, pk, am, sizes, eids)
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]   File "/root/gnf4/kernel/nf4_grouped.py", line 1168, in gemm_4bit_grouped
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8]     _DISPATCH_COUNTS["dotpad"] += 1
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8] To log all recompilation reasons, use TORCH_LOGS="recompiles".
+W0826 20:53:03.762000 14751 site-packages/torch/_dynamo/convert_frame.py:1994] [3/8] To diagnose recompilation issues, see https://docs.pytorch.org/docs/main/user_guide/torch_compiler/compile/programming_model.recompilation.html
+B1D_TIMED_GRAPH steps=127 step=7.56ms compile=default recompiles=0 out=/root/out/k12_moe_compiled_a.json
