@@ -110,3 +110,44 @@ way.
 `kernel/receipts-k9/` — Stage A attribution, the correctness matrix,
 paired step receipts, box_meta with the anchor probe. `k9_verdict.py`
 (self-tested refusal directions) is committed BEFORE the box cycle.
+
+## AMENDMENT (2026-08-26, before measurement) — the bucket
+## attribution does not reconcile, and is withdrawn as a premise
+
+Found while preparing the kernel, before renting anything. The
+section above asserts that the builder's ~26-op chain "lands in the
+census's generic `elementwise` and `other` buckets". That is an
+inference, and it does not survive arithmetic:
+
+- A CPU dispatch profile of one `build_group_tiles_device` call at
+  the decode shape counts **66 plausibly-launching aten ops** (95
+  total, less pure allocation/view ops).
+- At 48 layers that is **3168 launches/step**, against a census total
+  of **1220** non-matmul launches/step (elementwise 692 + other 432 +
+  router 96). The builder alone would exceed the whole bucket by 2.6x.
+- More specifically: the builder issues `index_select` 4x per call,
+  which at 48 layers is 192 — already more than the census's
+  `indexSelectS...` row at **145** calls/step.
+
+Something in the chain is false: aten dispatch counts are an UPPER
+bound on kernel launches (a same-dtype `to` launches nothing, and the
+kernel-view census deliberately excludes `aten::` op rows to avoid
+double-counting), or the builder is not called once per layer, or
+both. Source inspection cannot settle it.
+
+**What survives as measured fact:** `bitonicSortKVInPlace` fires 48
+times per step at 137.4 us total, the builder contains exactly one
+`torch.argsort`, and no other argsort was found in the decode path.
+That 137.4 us is the lane's demonstrated FLOOR.
+
+**What is now explicitly unknown:** everything above that floor. The
+lane's ceiling is whatever Stage A measures, not what the narrative
+above estimated.
+
+This does not change any bar — Stage B's bars were already fractions
+of Stage A's own measurement precisely because X was unknown, and
+Stage A already carried a refusal gate on the attribution. It changes
+what this prereg is allowed to CLAIM before that measurement, which
+is: one sort per layer, 137.4 us, and an open question
+([[eliminate-versus-account]] — the accounting that produced this
+lane also has to survive being checked).
