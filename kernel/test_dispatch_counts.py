@@ -60,13 +60,33 @@ def _call(dev):
 
 @needs_cuda
 def test_knob_off_dispatches_the_certified_scalar_path(monkeypatch):
-    monkeypatch.delenv("GNF4_GEMV_DOTPAD", raising=False)
+    # Explicitly "0", not unset. RESULTS-m3-default-on flipped the
+    # default ON, so `delenv` here now means ON -- this test used to
+    # pass by inheriting a default that has since moved, which is the
+    # same trap the accuracy suite hit.
+    monkeypatch.setenv("GNF4_GEMV_DOTPAD", "0")
     monkeypatch.setattr(nf4_grouped, "_sm_count", lambda d: 200)
     nf4_grouped.reset_dispatch_counts()
     _call(torch.device("cuda"))
     c = nf4_grouped.dispatch_counts()
     assert c["dotpad"] == 0 and c["dotpad_splitk"] == 0, c
     assert c["scalar"] + c["scalar_splitk"] > 0, c
+
+
+@needs_cuda
+def test_the_NEW_DEFAULT_dispatches_dot_pad_when_the_guard_allows(monkeypatch):
+    """Unset env now means ON (RESULTS-m3-default-on).
+
+    Asserted at the DISPATCH layer, not just on `_dotpad()`: the flip
+    is only real if the kernel actually changes.
+    """
+    monkeypatch.delenv("GNF4_GEMV_DOTPAD", raising=False)
+    monkeypatch.setattr(nf4_grouped, "_sm_count", lambda d: 200)
+    nf4_grouped.reset_dispatch_counts()
+    _call(torch.device("cuda"))
+    c = nf4_grouped.dispatch_counts()
+    assert c["dotpad"] + c["dotpad_splitk"] > 0, c
+    assert c["scalar"] + c["scalar_splitk"] == 0, c
 
 
 @needs_cuda

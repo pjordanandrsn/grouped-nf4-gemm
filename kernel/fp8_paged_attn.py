@@ -808,23 +808,91 @@ def reset_compute_counts() -> None:
         _COMPUTE_COUNTS[_k] = 0
 
 
-def _compute_default() -> str:
-    """PREREG-k8 selector: ``GNF4_ATTN_COMPUTE=fp8`` routes decode
-    attention through the fp8-COMPUTE path when the caller did not ask
-    for a mode explicitly. Unset (or ``f32``) leaves the certified
-    path byte-identical -- this is a measurement knob until K8's
-    quality verdict, never a default flip.
+def fp8_compute_unsupported(q, head_dim: int, k_groups: int,
+                            v_groups: int, *, pack_heads: bool = False,
+                            block_tokens: int = 16,
+                            n_kv_heads: int = 1) -> str | None:
+    """Why fp8-COMPUTE cannot run on this call, or None if it can.
 
-    An unrecognised value RAISES rather than falling back to f32: a
-    typo'd ``FP8`` that silently ran the f32 kernel would be recorded
-    as an fp8 arm and mis-attribute the whole cycle."""
-    v = os.environ.get("GNF4_ATTN_COMPUTE", "f32")
-    if v not in ("f32", "fp8"):
-        raise ValueError(
-            f"GNF4_ATTN_COMPUTE={v!r} is not a compute mode; expected "
-            "'f32' or 'fp8'. Refusing rather than silently running "
-            "f32 and letting it be recorded as the fp8 arm.")
-    return v
+    SINGLE SOURCE OF TRUTH. The default selector below and the hard
+    preconditions on the fp8 path both go through this, so the guard
+    that decides "is fp8 safe here?" cannot drift away from the
+    asserts that enforce it. Two copies of a predicate is how a
+    default starts silently choosing a path its own asserts reject.
+
+    Deliberately NOT checked here: ``ktile >= 32``, because ktile is
+    derived FROM the resolved mode (64 for fp8) and so cannot gate the
+    choice of that mode without circularity -- the fp8 default always
+    satisfies it. ``layout`` likewise: the fp8 path accepts both
+    layouts, so it can never be the reason to refuse fp8.
+    """
+    if v_groups != 1:
+        return ("fp8 compute folds V scales into P: per-row only "
+                f"(v_groups={v_groups})")
+    if k_groups not in (1, 2, 4):
+        return f"fp8 compute unrolls k_groups in (1, 2, 4), got {k_groups}"
+    if head_dim // k_groups < 32:
+        return ("fp8 dot needs >=32-wide key scale groups "
+                f"(head_dim {head_dim} // k_groups {k_groups})")
+    if q.dtype not in (torch.bfloat16, torch.float16):
+        return f"fp8 compute loads q as bf16/fp16, got {q.dtype}"
+    if torch.cuda.get_device_capability(q.device) < (8, 9):
+        cc = torch.cuda.get_device_capability(q.device)
+        return f"fp8 tensor-core dots need sm_89+, this device is sm_{cc[0]}{cc[1]}"
+    # The PACKED fp8 branch reduces over BT*H_kv instead of ktile and
+    # so carries a precondition the split branch does not. A guard
+    # that covered only the split path would still let the default
+    # select fp8 into an assert -- there are TWO fp8 branches.
+    if pack_heads and block_tokens * n_kv_heads < 32:
+        return ("packed fp8 P.V dot reduces over BT*H_kv: needs >= 32, "
+                f"got {block_tokens} * {n_kv_heads}")
+    return None
+
+
+def _compute_default(q=None, head_dim: int | None = None,
+                     k_groups: int = 1, v_groups: int = 1, *,
+                     pack_heads: bool = False, block_tokens: int = 16,
+                     n_kv_heads: int = 1) -> str:
+    """Which compute mode an unset ``GNF4_ATTN_COMPUTE`` selects.
+
+    **fp8 is the default as of RESULTS-m3-default-on** (PASS: 8192
+    scored tokens, dppl -0.0058 against a +-0.05 bar, 0.22 ms off the
+    step). It was opt-in through K8 because the quality question was
+    open; M3 closed it.
+
+    But PASS licensed the default on QUALITY AND SPEED, not on
+    APPLICABILITY -- the fp8 path asserts sm_89+, ``v_groups == 1``
+    and more, none of which that cycle varied. Flipping
+    unconditionally would turn a working f32 install into an
+    AssertionError on every pre-Ada GPU. So the default is
+    capability-conditional: fp8 where fp8 can run, the certified f32
+    path otherwise.
+
+    An EXPLICIT ``GNF4_ATTN_COMPUTE=fp8`` is never downgraded. A user
+    who names the mode gets it, and the path's asserts tell them it is
+    unavailable -- silently handing them f32 under the name they asked
+    for is how a benchmark arm gets mislabelled
+    ([[identical-output-is-not-identical-computation]]).
+
+    An unrecognised value RAISES rather than falling back: a typo'd
+    ``FP8`` that silently ran f32 would be recorded as an fp8 arm and
+    mis-attribute the whole cycle.
+    """
+    v = os.environ.get("GNF4_ATTN_COMPUTE")
+    if v is not None:
+        if v not in ("f32", "fp8"):
+            raise ValueError(
+                f"GNF4_ATTN_COMPUTE={v!r} is not a compute mode; expected "
+                "'f32' or 'fp8'. Refusing rather than silently running "
+                "f32 and letting it be recorded as the fp8 arm.")
+        return v
+    if q is None or head_dim is None:
+        # no call context to judge applicability against; the caller
+        # gets the certified path rather than a guess it cannot check
+        return "f32"
+    return ("f32" if fp8_compute_unsupported(
+        q, head_dim, k_groups, v_groups, pack_heads=pack_heads,
+        block_tokens=block_tokens, n_kv_heads=n_kv_heads) else "fp8")
 
 def _fuse_counters(n: int, device) -> torch.Tensor:
     """Zeroed-once arrival counters for the fused combine; slots are
@@ -898,7 +966,10 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
     """
     assert paged_attn_available(), "needs CUDA + triton"
     if compute is None:
-        compute = _compute_default()
+        compute = _compute_default(q, head_dim, k_groups, v_groups,
+                                   pack_heads=pack_heads,
+                                   block_tokens=block_tokens,
+                                   n_kv_heads=n_kv_heads)
     elif compute not in ("f32", "fp8"):
         raise ValueError(f"compute={compute!r}; expected 'f32' or 'fp8'")
     _COMPUTE_COUNTS[compute] += 1
@@ -971,12 +1042,12 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
                               device=q.device)
         o = torch.empty_like(q)
         if compute == "fp8":
-            assert v_groups == 1 and D // k_groups >= 32
-            assert k_groups in (1, 2, 4), \
-                f"fp8 compute unrolls k_groups in (1, 2, 4), got {k_groups}"
-            assert block_tokens * n_kv_heads >= 32, \
-                "packed fp8 P.V dot reduces over BT*H_kv: needs >= 32"
-            assert torch.cuda.get_device_capability(q.device) >= (8, 9)
+            # same predicate as the split branch and the default
+            # selector -- one definition, three call sites
+            _why = fp8_compute_unsupported(
+                q, D, k_groups, v_groups, pack_heads=True,
+                block_tokens=block_tokens, n_kv_heads=n_kv_heads)
+            assert _why is None, _why
             counters = _fuse_counters(B, q.device) if fuse_combine \
                 else m_buf
             _fp8_paged_decode_packed_f8[(B * n_split,)](
@@ -1028,17 +1099,16 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
     acc_buf = torch.empty(part * D, dtype=torch.float32, device=q.device)
 
     if compute == "fp8":
-        assert v_groups == 1, "fp8 compute folds V scales into P: per-row only"
-        # the kernels unroll one sub-dot per key scale group via constexpr
-        # guards — NG_K values outside the unroll would silently score only
-        # the first groups and drop the rest of the key (Bugbot, HIGH)
-        assert k_groups in (1, 2, 4), \
-            f"fp8 compute unrolls k_groups in (1, 2, 4), got {k_groups}"
-        assert D // k_groups >= 32, "fp8 dot needs >=32-wide key scale groups"
+        # Same predicate the default selector uses, so a
+        # capability-conditional default can never choose a path these
+        # asserts reject. The kernels unroll one sub-dot per key scale
+        # group via constexpr guards -- NG_K values outside the unroll
+        # would silently score only the first groups and drop the rest
+        # of the key (Bugbot, HIGH).
+        _why = fp8_compute_unsupported(q, D, k_groups, v_groups,
+                                       pack_heads=False)
+        assert _why is None, _why
         assert ktile >= 32, "fp8 P.V dot reduces over ktile: needs >= 32"
-        assert q.dtype in (torch.bfloat16, torch.float16)
-        assert torch.cuda.get_device_capability(q.device) >= (8, 9), \
-            "fp8 tensor-core dots need sm_89+"
         assert layout in ("tokens", "heads")
         counters = _fuse_counters(B * n_kv_heads, q.device) \
             if fuse_combine else m_buf

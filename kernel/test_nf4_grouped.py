@@ -122,9 +122,22 @@ class TestCensusShapes:
         ("gptoss_dn", 2880, 2880, 128, 4),
     ]
 
+    # RESULTS-m3-default-on flipped GNF4_GEMV_DOTPAD ON. Two of the
+    # SHAPES below -- qwen_gu (1536, 2048) and qwen_dn (2048, 768) --
+    # are exactly the _DOTPAD_CONFIGS entries, so at m=1 (the decode
+    # branch) this test silently changed which kernel it measures on
+    # any >= 160-SM part. That would have left the scalar fallback
+    # untested at those shapes AND dot-pad's accuracy unverified under
+    # this bar, while the suite stayed green. Pin the knob per case
+    # instead of inheriting a default that moved.
+    @pytest.mark.parametrize("dotpad", [False, True])
     @pytest.mark.parametrize("name,N,K,E,k", SHAPES)
     @pytest.mark.parametrize("m", [1, 128, 290])  # M=1 / ~p50 / ~p95
-    def test_pfid_and_brel(self, name, N, K, E, k, m):
+    def test_pfid_and_brel(self, name, N, K, E, k, m, dotpad, monkeypatch):
+        # a no-op except on the decode branch at a registered shape on
+        # a >= 160-SM part; everywhere else both values run the same
+        # scalar kernel, which is cheap duplication rather than a lie
+        monkeypatch.setenv("GNF4_GEMV_DOTPAD", "1" if dotpad else "0")
         B, A, packed, states = make_stack(E, N, K)
         a, sizes, ids = groups_for(E, k, m, K)
         out = gemm_4bit_grouped(a, B, A, sizes, ids)
