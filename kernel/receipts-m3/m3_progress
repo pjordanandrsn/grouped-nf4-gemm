@@ -1,0 +1,79 @@
+M3-START 19:48:59
+ab7130b k12_census: the attribution gate's input is instrument, and truncation eats counts (#288)
+bf3cb3e K12 arm 3: the both-compiled control needs an instrument, and the log line must not lie (#289)
+mech counters present
+ARM-START off_a [off] 19:49:04
+B1D_TIMED_GRAPH steps=127 step=7.84ms compile=default recompiles=0 out=/root/out/m3_off_a.json
+  MECH off: dotpad=0 scalar=384 fp8=0 f32=192
+ARM-OK off_a 19:49:53
+ARM-START off_b [off] 19:49:53
+B1D_TIMED_GRAPH steps=127 step=7.84ms compile=default recompiles=0 out=/root/out/m3_off_b.json
+  MECH off: dotpad=0 scalar=384 fp8=0 f32=192
+ARM-OK off_b 19:50:36
+ANCHOR off=7.843 gate=[7.004, 7.906] IN
+ARM-START off_ppl [off] 19:50:36
+K8_PPL steps=8192 nll=2.08548 ppl=8.04843 compute=f32 sha=5e3656e01e50 out=/root/out/m3_off_ppl.json
+  MECH off: dotpad=0 scalar=786432 fp8=0 f32=393216
+ARM-OK off_ppl 19:58:34
+ARM-START off_div [off] 19:58:34
+B1D_TIMED_GRAPH steps=1023 step=8.05ms compile=default recompiles=0 out=/root/out/m3_off_div.json
+  MECH off: dotpad=0 scalar=384 fp8=0 f32=192
+ARM-OK off_div 19:59:24
+ARM-START dotpad_a [dotpad] 19:59:24
+B1D_TIMED_GRAPH steps=127 step=7.03ms compile=default recompiles=0 out=/root/out/m3_dotpad_a.json
+  MECH dotpad: dotpad=384 scalar=0 fp8=0 f32=192
+ARM-OK dotpad_a 20:00:06
+ARM-START dotpad_b [dotpad] 20:00:06
+B1D_TIMED_GRAPH steps=127 step=7.03ms compile=default recompiles=0 out=/root/out/m3_dotpad_b.json
+  MECH dotpad: dotpad=384 scalar=0 fp8=0 f32=192
+ARM-OK dotpad_b 20:00:48
+ARM-START dotpad_ppl [dotpad] 20:00:48
+K8_PPL steps=8192 nll=2.08382 ppl=8.03510 compute=f32 sha=5e3656e01e50 out=/root/out/m3_dotpad_ppl.json
+  MECH dotpad: dotpad=786432 scalar=0 fp8=0 f32=393216
+ARM-OK dotpad_ppl 20:08:30
+ARM-START dotpad_div [dotpad] 20:08:30
+B1D_TIMED_GRAPH steps=1023 step=7.24ms compile=default recompiles=0 out=/root/out/m3_dotpad_div.json
+  MECH dotpad: dotpad=384 scalar=0 fp8=0 f32=192
+ARM-OK dotpad_div 20:09:19
+ARM-START fp8_a [fp8] 20:09:19
+B1D_TIMED_GRAPH steps=127 step=7.62ms compile=default recompiles=0 out=/root/out/m3_fp8_a.json
+  MECH fp8: dotpad=0 scalar=384 fp8=192 f32=0
+ARM-OK fp8_a 20:10:02
+ARM-START fp8_b [fp8] 20:10:02
+B1D_TIMED_GRAPH steps=127 step=7.62ms compile=default recompiles=0 out=/root/out/m3_fp8_b.json
+  MECH fp8: dotpad=0 scalar=384 fp8=192 f32=0
+ARM-OK fp8_b 20:10:44
+ARM-START fp8_ppl [fp8] 20:10:44
+K8_PPL steps=8192 nll=2.08476 ppl=8.04263 compute=fp8 sha=5e3656e01e50 out=/root/out/m3_fp8_ppl.json
+  MECH fp8: dotpad=0 scalar=786432 fp8=393216 f32=0
+ARM-OK fp8_ppl 20:18:37
+ARM-START fp8_div [fp8] 20:18:37
+B1D_TIMED_GRAPH steps=1023 step=7.78ms compile=default recompiles=0 out=/root/out/m3_fp8_div.json
+  MECH fp8: dotpad=0 scalar=384 fp8=192 f32=0
+ARM-OK fp8_div 20:19:27
+ARM-START both_a [both] 20:19:27
+B1D_TIMED_GRAPH steps=127 step=6.80ms compile=default recompiles=0 out=/root/out/m3_both_a.json
+  MECH both: dotpad=384 scalar=0 fp8=192 f32=0
+ARM-OK both_a 20:20:09
+ARM-START both_b [both] 20:20:09
+B1D_TIMED_GRAPH steps=127 step=6.81ms compile=default recompiles=0 out=/root/out/m3_both_b.json
+  MECH both: dotpad=384 scalar=0 fp8=192 f32=0
+ARM-OK both_b 20:20:51
+ARM-START both_ppl [both] 20:20:51
+K8_PPL steps=8192 nll=2.08521 ppl=8.04630 compute=fp8 sha=5e3656e01e50 out=/root/out/m3_both_ppl.json
+  MECH both: dotpad=786432 scalar=0 fp8=393216 f32=0
+ARM-OK both_ppl 20:28:32
+ARM-START both_div [both] 20:28:32
+B1D_TIMED_GRAPH steps=1023 step=6.96ms compile=default recompiles=0 out=/root/out/m3_both_div.json
+  MECH both: dotpad=384 scalar=0 fp8=192 f32=0
+ARM-OK both_div 20:29:21
+M3 off     7.841/7.844 ms  ppl 8.0484  div None  mech {'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 192, 'scalar_splitk': 192} {'f32': 192, 'fp8': 0}
+M3 dotpad  7.032/7.032 ms  ppl 8.0351  div 471  mech {'dotpad': 384, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0} {'f32': 192, 'fp8': 0}
+M3 fp8     7.619/7.621 ms  ppl 8.0426  div None  mech {'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 192, 'scalar_splitk': 192} {'f32': 0, 'fp8': 192}
+M3 both    6.800/6.805 ms  ppl 8.0463  div None  mech {'dotpad': 384, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0} {'f32': 0, 'fp8': 192}
+M3 VERDICT: PASS  (flip both)
+  off     7.843 ms   (baseline)
+  dotpad  7.032 ms   ppl -0.0133 OK
+  fp8     7.620 ms   ppl -0.0058 OK
+  both    6.803 ms   ppl -0.0021 OK
+M3-DONE 20:29:21
