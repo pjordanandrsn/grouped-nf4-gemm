@@ -170,7 +170,15 @@ def self_test():
     t = verdict(_mk(phase="trace"))
     assert "still shapes" in render(t)
 
-    print(render(r))
+    # Mark it. This render names hot_residency.py:226 -- which is the
+    # prereg's OPEN HYPOTHESIS, not a finding, and Stage A exists
+    # precisely because a plausible site is not an attribution. An
+    # unmarked line saying "TOP ... _all_hot" landing in a log beside
+    # real output reads as the answer ([[verify-the-instrument-claim]]).
+    # Every other calculator in this campaign marks its self-test
+    # output; this one did not.
+    for _line in render(r).splitlines():
+        print(f"[SELF-TEST FIXTURE, NOT A RESULT] {_line}")
     print("k13_verdict self-test OK (census render, ranking by count, "
           "the trace-phase caveat, and seven refusal directions)")
 
