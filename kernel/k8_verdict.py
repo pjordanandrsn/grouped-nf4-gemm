@@ -28,11 +28,21 @@ PASS_CUT_MS = 0.15      # SV2 frame's low-end price for this lane
 PARTIAL_CUT_MS = 0.05
 
 
+def _pos_finite(v):
+    """A duration must be finite AND positive. NaN slides through both
+    `not v` and `v <= 0` (NaN is truthy, and every NaN comparison is
+    False), and a zero denominator raises instead of refusing -- both
+    fail PERMISSIVELY, which is the wrong direction for a gate
+    (Bugbot, gnf4#267)."""
+    return isinstance(v, (int, float)) and math.isfinite(v) and v > 0
+
+
 def _arm_pair(rep, a, b, out, label):
     for k in (a, b):
         arm = rep.get(k)
-        if not arm or not math.isfinite(arm.get("step_ms_clean", float("nan"))):
-            return f"G1: arm {k} missing or non-finite"
+        if not arm or not _pos_finite(arm.get("step_ms_clean")):
+            return (f"G1: arm {k} missing, non-finite, or non-positive "
+                    f"({(arm or {}).get('step_ms_clean')!r})")
     x, y = rep[a]["step_ms_clean"], rep[b]["step_ms_clean"]
     spread = abs(x - y) / min(x, y)
     out["gates"][f"{label}_aa_spread"] = spread
@@ -60,8 +70,10 @@ def verdict(rep):
     out["gates"]["fp8_ms"] = fp8
 
     cert = rep.get("cert_knob_ms")
-    if not cert or cert <= 0:
-        return _refuse(out, "G2: no certified knob point to anchor against")
+    if not _pos_finite(cert):
+        return _refuse(out, f"G2: certified knob point is missing, "
+                            f"non-finite, or non-positive ({cert!r}) -- "
+                            "nothing to anchor against")
     drift = abs(f32 - cert) / cert
     out["gates"]["anchor_drift"] = drift
     if drift > ANCHOR_TOL:
@@ -174,7 +186,12 @@ def self_test():
                      (_mk(eb=False), "G4"),
                      (_mk(budget=(4096, 2048)), "G5"),
                      (_mk(sha=("abc", "def")), "G5"),
-                     (_mk(ppl_f32=float("nan")), "quality")):
+                     (_mk(ppl_f32=float("nan")), "quality"),
+                     (_mk(f32=0.0), "G1"),               # would divide by 0
+                     (_mk(fp8=-1.0), "G1"),
+                     (_mk(f32=float("nan")), "G1"),
+                     (_mk(cert=float("nan")), "G2"),     # would skip G2
+                     (_mk(cert=float("inf")), "G2")):
         r = verdict(bad)
         assert r["verdict"][0] == "REFUSE" and \
             r["verdict"][1].startswith(why), (why, r["verdict"])
@@ -185,7 +202,7 @@ def self_test():
     print(render(verdict(r)))
     print("k8_verdict self-test OK (both sides of both speed bars, "
           "the quality epsilon, quality-dominates-speed, and "
-          "eight refusal directions)")
+          "thirteen refusal directions)")
 
 
 def main():
