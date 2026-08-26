@@ -103,6 +103,35 @@ If arm 2 gets faster while those rows are unchanged, the speed came
 from somewhere else and the attribution is wrong — REFUSE rather than
 bank a number against a mechanism that did not move.
 
+## AMENDMENT (2026-08-26, before the box) — arm 3 needs a second flag
+
+The **Instrument required** section above names one flag and says
+"Nothing else changes". But Stage A lists **four** arms, and arm 3
+(`both-compiled`) needs the paged-attention `dynamo.disable` lifted
+too — which nothing in the harness could do, because that disable is
+applied unconditionally whenever `--compile-layers` is on. Arm 3 was
+therefore not runnable with the registered instrument.
+
+`--compile-attn-tier` (experts4bit-qlora#289) fills the gap, and is
+named **here** for the same reason the first flag was: a prereg whose
+instrument section says "so it is not smuggled in" does not get a
+quiet second instrument. It requires `--compile-moe-tier` — alone it
+would be an attention-only-compiled arm this prereg never registered
+and no bar would interpret.
+
+Arm 3 remains **recorded, not gated**: `k12_verdict` already treats
+`both_compiled` as optional, and the bars are the arm-2-vs-arm-1 step
+delta. Its purpose is the finding the Stage A text already names — if
+the both-compiled control does *not* fail, F1's exclusion may itself
+be stale.
+
+Found alongside a second defect in the merged instrument: the
+post-compile summary line printed "paged attention + MoE tier
+dynamo-disabled" unconditionally, including in the `--compile-moe-tier`
+arm where the MoE tier is not disabled, contradicting the K12 line
+printed a few lines above it. Arm logs are read back as receipts, so
+that line now names what was actually disabled.
+
 ## Frame note
 
 K11 closed 250; this cannot reopen it. At its PASS bar the step goes
