@@ -74,6 +74,43 @@ comparison rule is recorded as needing the between-box scale. No
 0.26% point correction is made, because publishing it would imply a
 precision the receipts refute.
 
+## A SECOND rule defect, found while committing the constant
+
+The widening rule says window = ±(spread/2) when spread > 6%. Applied
+here: ±4.25% on a median of 7.369 gives **[7.060, 7.678]** — which
+**excludes box 1 at 7.751**, one of the three boxes the constant was
+computed from.
+
+A half-spread window centred on the MEDIAN only spans the population
+when the median is also the midrange. Here the median is 7.369 and
+the midrange is 7.449, so the window misses the top of its own
+sample. The rule was written as if those coincide; they generally do
+not.
+
+**Recording it was not enough, and that is its own lesson.** The
+first version of this document described the defect and then still
+published ±4.2% as the harness constant — which would have destroyed
+box 1, a normal box, for being normal: the exact failure this cycle
+was run to diagnose. Documenting a defect is not fixing it (Bugbot,
+gnf4#278).
+
+**The gate is therefore no longer a centre±window at all.** It is an
+explicit bounds pair covering the MEASURED population with a 2%
+margin each side:
+
+```
+GATE = [7.004, 7.906] ms      (population [7.147, 7.751] + 2%)
+```
+
+It is 12.6% wide, and that width **is** the finding: against 8.5%
+inter-box dispersion, a rental gate can only exclude gross outliers —
+it cannot certify that two boxes inside it are comparable. The
+certified anchor (7.369 ms) remains the central estimate for
+reporting; it is no longer doing double duty as a gate centre.
+`test_decode_anchor.py` asserts that every box M2 measured passes,
+that a grossly broken box still fails, and that the retired ±4.2%
+window would have rejected box 1.
+
 ## Restated ladder entry
 
 | configuration | ms/step | tok/s |
@@ -96,10 +133,11 @@ obvious next question if the dispersion matters enough to model.
 
 ## Harness fixes (both required by this cycle)
 
-1. The hunt gate's constant becomes **7.369 ms ±4.2%**, read from a
-   committed source rather than a scratchpad literal — the defect
-   that let 7.39 (a number in no RESULTS document) gate every cycle
-   in this campaign.
+1. The hunt gate reads `kernel/decode_anchor.py` — a committed
+   source, not a scratchpad literal — which is the defect that let
+   7.39 (a number in no RESULTS document) gate every cycle in this
+   campaign. The gate is `GATE_LO_MS`/`GATE_HI_MS`, **not** a
+   centre±window; see the second rule defect above.
 2. Given 8.5% dispersion, an anchor gate should be understood as
    *excluding outliers*, not *certifying a class*. Every cycle's own
    G2 check against its same-box denominator is what actually
