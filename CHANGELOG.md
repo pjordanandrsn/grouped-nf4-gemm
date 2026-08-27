@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.17.0 — 2026-08-27
 
 ### Both decode knobs now ship ON by default (M3, PASS)
 
