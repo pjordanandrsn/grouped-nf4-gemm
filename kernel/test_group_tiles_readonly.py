@@ -47,3 +47,52 @@ def test_list_and_tensor_sizes_give_identical_tiles():
     for x, y in zip(build_group_tiles([5, 3], 2, "cpu"),
                     build_group_tiles(torch.tensor([5, 3], dtype=torch.int32), 2, "cpu")):
         assert torch.equal(x, y)
+
+
+# --- the twin-build memo (one entry, list callers only) ----------------------
+
+def test_list_twin_call_is_a_cache_hit():
+    """gate_up and down run off the same grouping: the second build must
+    return the SAME tensors, not equal copies."""
+    build_group_tiles = _build()
+    a = build_group_tiles([5, 3], 16, "cpu")
+    b = build_group_tiles([5, 3], 16, "cpu")
+    for x, y in zip(a, b):
+        assert x is y
+
+
+def test_memo_key_snapshots_the_sizes():
+    """Mutating the caller's list after a build must not corrupt a later
+    call: the key is a tuple snapshot, so the mutated list misses and
+    rebuilds correctly."""
+    build_group_tiles = _build()
+    sizes = [5, 3]
+    a = build_group_tiles(sizes, 16, "cpu")
+    sizes[0] = 7
+    b = build_group_tiles(sizes, 16, "cpu")
+    ref = _build()([7, 3], 16, "cpu")
+    for x, y in zip(b, ref):
+        assert torch.equal(x, y)
+    # and the original values still build the original tiles
+    c = build_group_tiles([5, 3], 16, "cpu")
+    for x, y in zip(a, c):
+        assert torch.equal(x, y)
+
+
+def test_memo_misses_on_block_m():
+    build_group_tiles = _build()
+    a = build_group_tiles([5, 3], 16, "cpu")
+    b = build_group_tiles([5, 3], 4, "cpu")
+    assert a[0].numel() != b[0].numel() or not torch.equal(a[0], b[0])
+
+
+def test_tensor_sizes_bypass_the_memo():
+    """Tensor callers keep pre-memo behavior: 0-dim views are
+    identity-hashed, so a value key would need a hidden D2H."""
+    build_group_tiles = _build()
+    t = torch.tensor([5, 3], dtype=torch.int32)
+    a = build_group_tiles(t, 16, "cpu")
+    b = build_group_tiles(t, 16, "cpu")
+    for x, y in zip(a, b):
+        assert torch.equal(x, y)
+        assert x is not y

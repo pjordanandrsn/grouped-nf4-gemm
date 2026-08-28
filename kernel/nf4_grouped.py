@@ -453,8 +453,24 @@ def to_device_i32(seqs, device):
     return out
 
 
+_TILE_MEMO: dict = {}
+
+
 def build_group_tiles(sizes, block_m: int, device):
     """Expand jagged group sizes into fixed M-tiles: (row0, valid_rows, group_idx).
+
+    LIST calls are memoized (one entry): a grouped MoE layer runs two GEMMs
+    (gate_up, then down) off the SAME grouping, and block_m depends only on
+    max(sizes), so the second build is always the twin of the first — yet it
+    paid the full Python walk plus a syncing H2D again. Measured at B=16
+    decode (Qwen3-30B-A3B, RTX 5090) the twin build was half of a
+    4-transfers-per-layer host bill; the memo plus keeping expert ids on
+    device took `to_device_i32` traffic ÷4 and the step 1.206x. The key
+    snapshots the sizes (tuple), so later mutation of the caller's list
+    cannot corrupt a hit; tensor `sizes` bypass the memo (0-dim views are
+    identity-hashed — a value key would be a hidden D2H). Callers must not
+    mutate the returned tensors, which was already the contract (the kernel
+    only reads them).
 
     ``sizes`` is READ-ONLY here, and `int(m)` is what keeps it that way. When
     `sizes` is a tensor, `enumerate` yields 0-dim VIEWS into it, so a bare
@@ -465,6 +481,13 @@ def build_group_tiles(sizes, block_m: int, device):
     tensor — gate/up/down within a single MoE layer — saw `[0, 0]` on the
     second call.
     """
+    if isinstance(sizes, list):
+        key = (tuple(sizes), block_m, str(device))
+        hit = _TILE_MEMO.get(key)
+        if hit is not None:
+            return hit
+    else:
+        key = None
     t_row0, t_rows, t_group = [], [], []
     row = 0
     for g, m in enumerate(sizes):
@@ -481,6 +504,9 @@ def build_group_tiles(sizes, block_m: int, device):
     # same dtype, same shapes -- see to_device_i32 for why the transfer kind
     # matters.
     a, b, c = to_device_i32((t_row0, t_rows, t_group), device)
+    if key is not None:
+        _TILE_MEMO.clear()          # one entry: only the gu->dn twin repeats
+        _TILE_MEMO[key] = (a, b, c)
     return a, b, c
 
 
