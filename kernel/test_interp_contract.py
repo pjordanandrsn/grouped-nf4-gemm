@@ -104,3 +104,34 @@ def test_adversarial_absmax():
     w = dequant_ref(B[0], A[0], 64, 128).float()
     ref = w @ acts[0].float()
     assert (out[0].float() - ref).abs().max() / ref.abs().max().clamp_min(1e-4) < 1e-2
+
+
+def test_captured_padding_tiles_match_exact_tiles():
+    """The static-budget tile table pads with rows == 0 slots; the kernel
+    early-exits them before the K-loop (they store nothing either way --
+    the exit makes them FREE rather than full weight reads: measured
+    1.651x captured-vs-eager at a 1.66x tile ratio before the exit).
+    Contract: the captured wrapper on a PADDED table must match
+    gemm_4bit_grouped on the exact tiles, element for element."""
+    from nf4_grouped import build_group_tiles_device, gemm_4bit_grouped_captured
+
+    torch.manual_seed(7)
+    E, N, K = 8, 64, 128
+    B, A = make_stack(E, N, K)
+    counts = [3, 0, 5, 0, 0, 1, 0, 2]           # zeros interleaved
+    ids, sizes = [], []
+    rows = []
+    for e, c in enumerate(counts):
+        if c:
+            ids.append(e); sizes.append(c); rows.extend([e] * c)
+    acts = torch.randn(sum(sizes), K, dtype=torch.bfloat16)
+    flat = torch.tensor([e for e, c in enumerate(counts) for _ in range(int(c))],
+                        dtype=torch.int64)
+    t0, t1, t2, order, _c = build_group_tiles_device(flat, E, 16)
+    assert (t1 == 0).any(), "budget must include padding slots here"
+    ref = gemm_4bit_grouped(
+        acts, B, A, sizes, torch.tensor(ids, dtype=torch.int32),
+        prefill_variant=0)
+    got = gemm_4bit_grouped_captured(
+        acts, B, A, t0, t1, t2, 16, prefill_variant=0)
+    torch.testing.assert_close(got, ref, rtol=0, atol=0)
