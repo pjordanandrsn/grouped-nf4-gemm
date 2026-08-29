@@ -251,7 +251,7 @@ challengers lost at the same cell (an SMEM-dequant mainloop, the per-row
 GEMV path, per-expert dequant+`mm`), and both kernels' configuration
 spaces are swept closed on sm_120. Numbers, gates, receipts, and the
 probe scripts:
-[bench/sm120-census/RESULTS-sm120-grouped-census.md](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/bench/sm120-census/RESULTS-sm120-grouped-census.md).
+[bench/sm120-census/RESULTS-sm120-grouped-census.md](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.17.0/bench/sm120-census/RESULTS-sm120-grouped-census.md).
 
 ### Training: the backward is a kernel too (0.7.0)
 
