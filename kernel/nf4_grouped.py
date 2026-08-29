@@ -577,9 +577,11 @@ def gemm_4bit_grouped_captured(a_sorted, B, absmax, t_row0, t_rows,
     ``t_group`` values are LOCAL expert indices into ``B``/``absmax``
     (expert-major == stack order), so the kernel's expert_ids indirection
     is the identity -- an ``arange`` is passed rather than adding an
-    id-less kernel variant. Padding tiles (``rows == 0``) no-op through
-    the kernel's own ``m_mask``; they still cost a program launch, which
+    id-less kernel variant. Padding tiles (``rows == 0``) EXIT before the
+    K-loop -- they cost a program launch and two tile-table loads, which
     is the price of a static grid (documented in the device builder).
+    Before the exit they ran full weight reads: measured 1.651x
+    captured-vs-eager at a 1.66x tile ratio on the B=16 census routing.
 
     No allocations beyond ``out`` and the arange (both legal in capture:
     they ride the graph's private pool -- the b1d-certified pattern)."""
@@ -738,6 +740,16 @@ def _gemm_nf4_grouped(
 
     row0 = tl.load(t_row0_ptr + pid_m)
     rows = tl.load(t_rows_ptr + pid_m)
+    # The static-budget tile table (build_group_tiles_device) pads to
+    # ceil(R/BM) + E tiles and marks the padding rows == 0. The store
+    # below is m_masked, so a rows == 0 tile writes NOTHING -- but
+    # without this exit it still ran its full K-loop of weight reads:
+    # measured 1.651x captured-vs-eager at a 1.66x tile ratio (B=16
+    # census routing, 136 budget vs ~82 real tiles). Exiting before
+    # the loop makes padding tiles genuinely free. Host-built tile
+    # tables never emit rows == 0, so the eager path is untouched.
+    if rows == 0:
+        return
     grp = tl.load(t_group_ptr + pid_m)
     eid = tl.load(expert_ids_ptr + grp)
     # int64 BEFORE any stride product: eid * stride_be overflows signed int32
