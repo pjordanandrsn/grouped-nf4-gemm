@@ -108,9 +108,17 @@ def _gemv_int4_b32(xq_ptr, xs_ptr, w_ptr, ws_ptr, eid_ptr, out_ptr,
 def _plan(N: int, K: int):
     """Config from the graph-metric sweep on sm_120 (receipts int4port):
     bn128/w4-8/sk8 class won every census cell; sk fills the grid to
-    2+ waves. Kept simple until a second box class is measured."""
+    2+ waves. KU (k-blocks per loop iteration) MUST divide K//32: the
+    kernel guards only the first block of each fat iteration, so a
+    non-dividing KU reads past the row tail -- caught by the checkout
+    parity gate at K=64/96 (garbage-scale errors), invisible on census
+    shapes where 4 | K//32. Kept simple until a second box class is
+    measured."""
+    kb = K // 32
+    ku = 4 if kb % 4 == 0 else (2 if kb % 2 == 0 else 1)
     sk = 8 if (triton.cdiv(N, 128) * 8) >= 256 else 16
-    return 128, 4, sk, 4                      # BLOCK_N, warps, SK, KU
+    sk = min(sk, max(1, kb // ku))            # never more splits than spans
+    return 128, 4, sk, ku                     # BLOCK_N, warps, SK, KU
 
 
 def gemv_int4_b32(xq, xs, packed, scales, eids, N: int, K: int,
