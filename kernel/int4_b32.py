@@ -38,15 +38,17 @@ from int4_pack_ref import BLOCK, dequant_int4_ref, pack_int4_b32  # noqa: F401
 def _quant_x_rows(x_ptr, xq_ptr, xs_ptr, K: tl.constexpr):
     """Per-row, per-32-block int8 symmetric quantise (Q8-style). One
     program per row; 32-wide inner blocks so K need not be a power of 2."""
+    # literal 32 throughout: triton JIT bodies cannot read imported
+    # module globals (BLOCK lives in int4_pack_ref for the host side)
     r = tl.program_id(0)
-    o32 = tl.arange(0, BLOCK)
-    for kb in range(0, K // BLOCK):
-        x = tl.load(x_ptr + r * K + kb * BLOCK + o32).to(tl.float32)
+    o32 = tl.arange(0, 32)
+    for kb in range(0, K // 32):
+        x = tl.load(x_ptr + r * K + kb * 32 + o32).to(tl.float32)
         s = tl.max(tl.abs(x)) / 127.0 + 1e-12
         q = tl.floor(x / s + 0.5)
         q = tl.minimum(tl.maximum(q, -127.0), 127.0)
-        tl.store(xq_ptr + r * K + kb * BLOCK + o32, q.to(tl.int8))
-        tl.store(xs_ptr + r * (K // BLOCK) + kb, s)
+        tl.store(xq_ptr + r * K + kb * 32 + o32, q.to(tl.int8))
+        tl.store(xs_ptr + r * (K // 32) + kb, s)
 
 
 def quant_x_rows(x: torch.Tensor):
