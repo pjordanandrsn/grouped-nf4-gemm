@@ -66,8 +66,17 @@ for tag, N, K in SHAPES:
     mt = lambda d: gemm_4bit_grouped(d["xs"], Bt, At, d["sizes"], d["eids"])
     ones = [1] * R
     sg = lambda d: gemm_4bit_grouped(d["xs"], Bt, At, ones, d["row_ids"])
-    ms_mt, ms_sg = t_of(mt), t_of(sg)
+    ms_mt = t_of(mt)
+    # ACROSS-FAMILY GATE (Bugbot, gnf4#299): the singleton arm runs the
+    # decode-GEMV kernel family, so bitwise vs the M-tile is not expected;
+    # it must pass max|d| <= max|ref| * 2^-7 on every draw BEFORE it may
+    # be timed. A failing arm is recorded and excluded, not published.
     bit = all(torch.equal(mt(d), sg(d)) for d in draws)
+    sg_rel = max(float((sg(d).float() - mt(d).float()).abs().max()
+                       / mt(d).float().abs().max().clamp_min(1e-5))
+                 for d in draws)
+    sg_gated = sg_rel <= 2 ** -7
+    ms_sg = t_of(sg) if sg_gated else None
 
     gmm = None
     if hasattr(torch, "_grouped_mm"):
@@ -84,10 +93,16 @@ for tag, N, K in SHAPES:
     nf4_gb = (len(draws[0]["sizes"]) * (N * K // 2 + N * (K // 64) * 4)) / 1e9
     out["arms"][tag] = {"mtile_ms": ms_mt, "singleton_ms": ms_sg,
                         "singleton_bitwise": bool(bit),
-                        "speedup_singleton": ms_mt / ms_sg,
+                        "singleton_rel_err": sg_rel,
+                        "singleton_gate": "PASS" if sg_gated else "FAIL-EXCLUDED",
+                        "speedup_singleton": (ms_mt / ms_sg) if ms_sg else None,
                         "gmm_bf16": gmm, "nf4_gb": nf4_gb}
     print(f"=== {tag} ===")
     print(f"  mtile     {ms_mt:8.4f} ms   {nf4_gb/(ms_mt/1e3):7.1f} GB/s")
-    print(f"  singleton {ms_sg:8.4f} ms   speedup {ms_mt/ms_sg:6.3f}x  bitwise={bit}")
+    if sg_gated:
+        print(f"  singleton {ms_sg:8.4f} ms   speedup {ms_mt/ms_sg:6.3f}x  "
+              f"rel_err {sg_rel:.2e} (gate PASS; bitwise={bit} as expected across families)")
+    else:
+        print(f"  singleton EXCLUDED: rel_err {sg_rel:.2e} > 2^-7")
     print(f"  gmm_bf16  {gmm}")
 json.dump(out, open("./gemm_p0b.json", "w"), indent=1)

@@ -1,0 +1,30 @@
+{
+ "arms": {
+  "gate_up": {
+   "mtile_ms": 0.42038876563310623,
+   "singleton_ms": 0.4588567341367404,
+   "singleton_bitwise": false,
+   "singleton_rel_err": 0.004975124262273312,
+   "singleton_gate": "PASS",
+   "speedup_singleton": 0.9161656228582872,
+   "gmm_bf16": {
+    "ms": 0.8778869484861692,
+    "rel_err": 0.004975124262273312
+   },
+   "nf4_gb": 0.148635648
+  },
+  "down": {
+   "mtile_ms": 0.20899642258882523,
+   "singleton_ms": 0.2541464443008105,
+   "singleton_bitwise": false,
+   "singleton_rel_err": 0.007575757801532745,
+   "singleton_gate": "PASS",
+   "speedup_singleton": 0.8223464355907131,
+   "gmm_bf16": {
+    "ms": 0.5231129005551338,
+    "rel_err": 0.004065040498971939
+   },
+   "nf4_gb": 0.074317824
+  }
+ }
+}

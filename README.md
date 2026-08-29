@@ -245,8 +245,8 @@ from nf4_grouped import gemm_4bit_grouped, dequant_ref
 At the Qwen3-30B-A3B serving cell (E=128, top-8, B=16, real expert shapes,
 RTX 5090), `gemm_4bit_grouped` runs the routed expert GEMM in
 **0.42 / 0.21 ms** where **`torch._grouped_mm` on unquantised bf16 — the
-engine transformers v5 ships for MoE — takes 1.28 / 1.30 ms: 3.0–6.0×,
-at 2× the weight bytes** (rel err vs the NF4 truth ≤ 5e-3). Three more
+engine transformers v5 ships for MoE — takes 0.88–1.30 ms: 2.1–6.0×
+across two boxes (worst case ≥ 2.1×), at 2× the weight bytes** (rel err vs the NF4 truth ≤ 5e-3). Three more
 challengers lost at the same cell (an SMEM-dequant mainloop, the per-row
 GEMV path, per-expert dequant+`mm`), and both kernels' configuration
 spaces are swept closed on sm_120. Numbers, gates, receipts, and the

@@ -4,25 +4,31 @@ RTX 5090 (sm_120), gnf4 main `4f1db333`, torch 2.8.0+cu128, bnb 0.50.1.
 Cell: the Qwen3-30B-A3B serving census routing — E=128, top-8, B=16
 (R=128 rows, mean group 1.6) at the real expert shapes
 (gate_up N=1536 K=2048, down N=2048 K=768). Arms alternate per draw;
-A/A twins ride along; every challenger is correctness-gated (bitwise
-within a kernel family, `max|Δ| ≤ max|ref|·2⁻⁷` across families) before
-it may be timed. Receipts in [receipts/](receipts/); probes committed
+A/A twins ride along; every challenger is correctness-gated — bitwise
+within a kernel family, `max|Δ| ≤ max|ref|·2⁻⁷` across families —
+**before it may be timed; a failing arm is excluded, and the probe
+enforces this in code** (the first cut of the singleton arm published a
+bitwise-only check; caught in review, gate enforced, receipts
+regenerated on a second box). Receipts in [receipts/](receipts/); probes committed
 beside them.
 
 ## The headline
 
 | challenger | gate_up | down | verdict |
 |---|---|---|---|
-| **`gemm_4bit_grouped` (this library)** | **0.42 ms** | **0.21 ms** | — |
-| `torch._grouped_mm` on **unquantised bf16** | 1.28 ms | 1.30 ms | **loses 3.0× / 6.0×** |
+| **`gemm_4bit_grouped` (this library)** | **0.42 ms** | **0.21 ms** | — (±1% across boxes) |
+| `torch._grouped_mm` on **unquantised bf16** | 0.88–1.28 ms | 0.52–1.30 ms | **loses 2.1–6.0× (two boxes; worst case ≥ 2.1×)** |
 | v0 mainloop (SMEM-dequant + `tl.dot`) | 0.65 ms | 0.35 ms | loses 1.55× |
-| per-row GEMV path (singleton groups) | 0.46 ms | 0.25 ms | loses 0.85–0.98× |
+| per-row GEMV path (singleton groups) | 0.46 ms | 0.25 ms | loses 0.82–0.98× (rel err 5.0e-3/7.6e-3, gate PASS) |
 | bnb `dequantize_4bit` + `mm` per expert | — | — | loses 5.4–9.3× at M=1 (crossover sweep) |
 
 `torch._grouped_mm` is the engine transformers v5 ships as
 `grouped_mm_experts_forward` — PyTorch's own grouped-MoE path, running
-on weights at **2× the bytes**, loses 3–6× at this routing
-(rel err vs the NF4 truth ≤ 5.0e-3; `receipts/gemm_p0b.json`).
+on weights at **2× the bytes**. Two boxes measured
+(`receipts/gemm_p0b.json`, `receipts/gemm_p0b_box2_gated.json`,
+rel err vs the NF4 truth ≤ 5.0e-3): **this kernel reproduces to ~1%
+across boxes while the torch engine varies up to 2.5×** — quote the
+worst-case ≥ 2.1×, not the best box.
 
 ## Configuration space is CLOSED on sm_120
 
