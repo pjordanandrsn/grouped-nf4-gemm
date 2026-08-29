@@ -240,6 +240,19 @@ automatic fallback for training and ineligible modules.
 from nf4_grouped import gemm_4bit_grouped, dequant_ref
 ```
 
+### sm_120 census: faster than PyTorch's own grouped engine — on half the bytes (0.17.x)
+
+At the Qwen3-30B-A3B serving cell (E=128, top-8, B=16, real expert shapes,
+RTX 5090), `gemm_4bit_grouped` runs the routed expert GEMM in
+**0.42 / 0.21 ms** where **`torch._grouped_mm` on unquantised bf16 — the
+engine transformers v5 ships for MoE — takes 0.88–1.30 ms: 2.1–6.0×
+across two boxes (worst case ≥ 2.1×), at 2× the weight bytes** (rel err vs the NF4 truth ≤ 5e-3). Three more
+challengers lost at the same cell (an SMEM-dequant mainloop, the per-row
+GEMV path, per-expert dequant+`mm`), and both kernels' configuration
+spaces are swept closed on sm_120. Numbers, gates, receipts, and the
+probe scripts:
+[bench/sm120-census/RESULTS-sm120-grouped-census.md](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.17.0/bench/sm120-census/RESULTS-sm120-grouped-census.md).
+
 ### Training: the backward is a kernel too (0.7.0)
 
 `gemm_4bit_grouped` is forward-only. `nf4_qlora` wraps it so `dL/dx` flows, and until

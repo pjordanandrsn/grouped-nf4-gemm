@@ -1,0 +1,330 @@
+{
+ "sm": [
+  12,
+  0
+ ],
+ "cells": {
+  "gate_up": {
+   "incumbent_ms": 0.41596943434948724,
+   "swept": 46,
+   "top": [
+    [
+     "v1g1bn128w4s4",
+     0.41703143700336415
+    ],
+    [
+     "v1g1bn128w4s3",
+     0.4182550357654691
+    ],
+    [
+     "v1g1bn128w4s2",
+     0.4204563020418087
+    ],
+    [
+     "v1g1bn256w8s3",
+     0.45248543222745263
+    ],
+    [
+     "v1g2bn128w4s2",
+     0.4566189328519007
+    ],
+    [
+     "v1g2bn128w4s3",
+     0.459571136161685
+    ]
+   ]
+  },
+  "down": {
+   "incumbent_ms": 0.20751320213700336,
+   "swept": 46,
+   "top": [
+    [
+     "v1g1bn128w4s4",
+     0.2073549316264689
+    ],
+    [
+     "v1g1bn128w4s3",
+     0.20750090091799697
+    ],
+    [
+     "v1g1bn128w4s2",
+     0.2096245026526352
+    ],
+    [
+     "v1g2bn128w4s2",
+     0.22403230347360173
+    ],
+    [
+     "v1g2bn128w4s3",
+     0.22533156831438345
+    ],
+    [
+     "v1g2bn128w4s4",
+     0.22538390088205537
+    ]
+   ]
+  }
+ },
+ "fails": [
+  {
+   "shape": "gate_up",
+   "cell": "v1g2bn256w4s2",
+   "why": "OutOfResources(137216, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v1g2bn256w4s3",
+   "why": "OutOfResources(143360, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v1g2bn256w4s4",
+   "why": "OutOfResources(149504, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v1g2bn256w8s2",
+   "why": "OutOfResources(137216, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v1g2bn256w8s3",
+   "why": "OutOfResources(143360, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v1g2bn256w8s4",
+   "why": "OutOfResources(149504, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v3g1bn128w4s4",
+   "why": "OutOfResources(105984, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v3g1bn128w8s4",
+   "why": "OutOfResources(105984, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v3g1bn256w4s3",
+   "why": "OutOfResources(137216, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v3g1bn256w4s4",
+   "why": "OutOfResources(205824, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v3g1bn256w8s3",
+   "why": "OutOfResources(137216, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v3g1bn256w8s4",
+   "why": "OutOfResources(205824, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v3g2bn64w4s4",
+   "why": "OutOfResources(128512, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v3g2bn64w8s4",
+   "why": "OutOfResources(128512, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v3g2bn128w4s2",
+   "why": "OutOfResources(103424, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v3g2bn128w4s3",
+   "why": "OutOfResources(174080, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v3g2bn128w4s4",
+   "why": "OutOfResources(244736, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v3g2bn128w8s2",
+   "why": "OutOfResources(103424, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v3g2bn128w8s3",
+   "why": "OutOfResources(174080, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v3g2bn128w8s4",
+   "why": "OutOfResources(244736, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v3g2bn256w4s2",
+   "why": "OutOfResources(202752, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v3g2bn256w4s3",
+   "why": "OutOfResources(339968, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v3g2bn256w4s4",
+   "why": "OutOfResources(477184, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v3g2bn256w8s2",
+   "why": "OutOfResources(202752, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v3g2bn256w8s3",
+   "why": "OutOfResources(339968, 101376, 'shared memory')"
+  },
+  {
+   "shape": "gate_up",
+   "cell": "v3g2bn256w8s4",
+   "why": "OutOfResources(477184, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v1g2bn256w4s2",
+   "why": "OutOfResources(137216, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v1g2bn256w4s3",
+   "why": "OutOfResources(143360, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v1g2bn256w4s4",
+   "why": "OutOfResources(149504, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v1g2bn256w8s2",
+   "why": "OutOfResources(137216, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v1g2bn256w8s3",
+   "why": "OutOfResources(143360, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v1g2bn256w8s4",
+   "why": "OutOfResources(149504, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v3g1bn128w4s4",
+   "why": "OutOfResources(105984, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v3g1bn128w8s4",
+   "why": "OutOfResources(105984, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v3g1bn256w4s3",
+   "why": "OutOfResources(137216, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v3g1bn256w4s4",
+   "why": "OutOfResources(205824, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v3g1bn256w8s3",
+   "why": "OutOfResources(137216, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v3g1bn256w8s4",
+   "why": "OutOfResources(205824, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v3g2bn64w4s4",
+   "why": "OutOfResources(128512, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v3g2bn64w8s4",
+   "why": "OutOfResources(128512, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v3g2bn128w4s2",
+   "why": "OutOfResources(103424, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v3g2bn128w4s3",
+   "why": "OutOfResources(174080, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v3g2bn128w4s4",
+   "why": "OutOfResources(244736, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v3g2bn128w8s2",
+   "why": "OutOfResources(103424, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v3g2bn128w8s3",
+   "why": "OutOfResources(174080, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v3g2bn128w8s4",
+   "why": "OutOfResources(244736, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v3g2bn256w4s2",
+   "why": "OutOfResources(202752, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v3g2bn256w4s3",
+   "why": "OutOfResources(339968, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v3g2bn256w4s4",
+   "why": "OutOfResources(477184, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v3g2bn256w8s2",
+   "why": "OutOfResources(202752, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v3g2bn256w8s3",
+   "why": "OutOfResources(339968, 101376, 'shared memory')"
+  },
+  {
+   "shape": "down",
+   "cell": "v3g2bn256w8s4",
+   "why": "OutOfResources(477184, 101376, 'shared memory')"
+  }
+ ]
+}
