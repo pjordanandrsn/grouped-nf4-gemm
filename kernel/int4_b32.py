@@ -202,7 +202,7 @@ def _gemm_int4_b32_grouped(aq_ptr, as_ptr, w_ptr, ws_ptr,
 def gemm_int4_b32_grouped_captured(aq_sorted, as_sorted, packed, scales,
                                    t_row0, t_rows, t_group,
                                    block_m: int = 16,
-                                   block_n: int = 128, warps: int = 4):
+                                   block_n: int = 64, warps: int = 8):
     """Grouped int4-b32 GEMM against prebuilt device tiles.
 
     ``aq_sorted [R, K] int8`` / ``as_sorted [R, K//32] fp32`` are the
@@ -213,7 +213,13 @@ def gemm_int4_b32_grouped_captured(aq_sorted, as_sorted, packed, scales,
     is legal inside CUDA-graph capture; the only allocation is ``out``
     (the certified private-pool pattern). Returns ``[R, N]`` bf16 in the
     SORTED row order -- the caller scatters back by the inverse of
-    ``order``, exactly as on the NF4 captured path."""
+    ``order``, exactly as on the NF4 captured path.
+
+    Default config bn64/w8: the graph-metric sweep's winner on BOTH
+    census cells (gate_up 208.28 vs 216.10 us at bn128/w4; down 45.06
+    vs 56.66 -- receipts INT4B16/P1). The first composed run shipped
+    the un-swept bn128/w4 default and paid ~0.9 ms/step for it: a
+    sweep that does not update the DEFAULT has not finished."""
     R, K = aq_sorted.shape
     E, N, _kh = packed.shape
     out = torch.empty(R, N, dtype=torch.bfloat16, device=aq_sorted.device)
