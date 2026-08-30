@@ -171,13 +171,17 @@ def _gemm_int4_b32_grouped(aq_ptr, as_ptr, w_ptr, ws_ptr,
     n_mask = offs_n < N
     KB: tl.constexpr = K // 32
     pair = tl.arange(0, 16)
+    o32 = tl.arange(0, 32)
     wbase = w_ptr + eid * N * (K // 2)
     sbase = ws_ptr + eid * N * KB
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
     for kb in range(0, KB):
-        aoff = (row0 + offs_m)[:, None] * K + kb * 32 + 2 * pair[None, :]
-        ae = tl.load(aq_ptr + aoff, mask=m_mask[:, None], other=0)
-        ao = tl.load(aq_ptr + aoff + 1, mask=m_mask[:, None], other=0)
+        # activations in NATURAL k order; the weight tile is rebuilt to
+        # match via tl.interleave (even k = LOW nibble), because int8
+        # tl.dot needs K >= 32 -- two K=16 nibble-lane dots refuse to
+        # compile (min_dot_size), found on the first GPU parity run.
+        a = tl.load(aq_ptr + (row0 + offs_m)[:, None] * K + kb * 32
+                    + o32[None, :], mask=m_mask[:, None], other=0)
         asv = tl.load(as_ptr + (row0 + offs_m) * KB + kb,
                       mask=m_mask, other=0.0)
         wb = tl.load(wbase + offs_n[:, None] * (K // 2) + kb * 16
@@ -185,8 +189,8 @@ def _gemm_int4_b32_grouped(aq_ptr, as_ptr, w_ptr, ws_ptr,
                      mask=n_mask[:, None], other=0).to(tl.int32)
         lo = ((wb & 0xF) - 8).to(tl.int8)
         hi = (((wb >> 4) & 0xF) - 8).to(tl.int8)
-        d = tl.dot(ae, tl.trans(lo), out_dtype=tl.int32) \
-          + tl.dot(ao, tl.trans(hi), out_dtype=tl.int32)
+        w32 = tl.interleave(lo, hi)              # [BLOCK_N, 32], k-order
+        d = tl.dot(a, tl.trans(w32), out_dtype=tl.int32)
         ws = tl.load(sbase + offs_n * KB + kb, mask=n_mask,
                      other=0.0).to(tl.float32)
         acc += d.to(tl.float32) * (asv[:, None] * ws[None, :])
