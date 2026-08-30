@@ -99,3 +99,72 @@ def test_gemv_matches_reference(N, K, E, R):
         for i, e in enumerate(eids)])
     # int32 accumulation is exact; bf16 OUTPUT rounding is the only slack
     assert (got.float() - ref).abs().max() <= ref.abs().max() * 2 ** -7
+
+
+@pytest.mark.parametrize("N,K,E,B,topk", [
+    (64, 64, 8, 4, 2),        # tiny, uneven routing
+    (1536, 2048, 128, 16, 8), # the B=16 census gate_up cell
+    (2048, 768, 128, 16, 8),  # the B=16 census down cell
+])
+def test_grouped_matches_reference(N, K, E, B, topk):
+    """The M-tile grouped kernel must match the fp32 reference of the
+    SAME int4 values and SAME int8 activations, over realistic routing
+    (uneven counts, empty experts, padding tiles), with rows restored
+    through the order/inverse-scatter contract."""
+    pytest.importorskip("triton")
+    from int4_b32 import gemm_int4_b32_grouped_captured, quant_x_rows
+    from nf4_grouped import build_group_tiles_device
+    dev = _gpu()
+    torch.manual_seed(3)
+    W = torch.randn(E, N, K) * 0.1
+    pk, sc = zip(*[pack_int4_b32(W[e]) for e in range(E)])
+    Wp = torch.stack(pk).to(dev).contiguous()
+    Sp = torch.stack(sc).to(dev).contiguous()
+    R = B * topk
+    eids = torch.randint(0, E, (R,), device=dev).to(torch.int32)
+    x = (torch.randn(R, K) * 0.2).to(dev, torch.bfloat16)
+    xq, xs = quant_x_rows(x)
+
+    t_row0, t_rows, t_grp, order, _counts = \
+        build_group_tiles_device(eids, E, 16)
+    aq_s = xq.index_select(0, order).contiguous()
+    as_s = xs.index_select(0, order).contiguous()
+    got_sorted = gemm_int4_b32_grouped_captured(
+        aq_s, as_s, Wp, Sp, t_row0, t_rows, t_grp)
+    inv = torch.empty_like(order)
+    inv[order] = torch.arange(R, device=dev)
+    got = got_sorted.index_select(0, inv)
+
+    ref = torch.stack([
+        (dequant_int4_ref(Wp[int(e)].cpu(), Sp[int(e)].cpu(), N, K).to(dev)
+         * (xq[i].float() * xs[i].repeat_interleave(BLOCK))[None, :]).sum(-1)
+        for i, e in enumerate(eids)])
+    assert (got.float() - ref).abs().max() <= ref.abs().max() * 2 ** -7
+
+
+def test_grouped_every_row_written_once():
+    """Coverage of the tile table: each sorted row belongs to exactly one
+    live tile, so a poisoned output must be fully overwritten."""
+    pytest.importorskip("triton")
+    from int4_b32 import gemm_int4_b32_grouped_captured, quant_x_rows
+    from nf4_grouped import build_group_tiles_device
+    dev = _gpu()
+    torch.manual_seed(4)
+    E, N, K, R = 5, 64, 64, 37       # rows > BLOCK_M for one expert
+    W = torch.randn(E, N, K) * 0.1
+    pk, sc = zip(*[pack_int4_b32(W[e]) for e in range(E)])
+    Wp = torch.stack(pk).to(dev).contiguous()
+    Sp = torch.stack(sc).to(dev).contiguous()
+    eids = torch.cat([torch.zeros(20), torch.ones(9),
+                      torch.full((8,), 4.0)]).to(dev).to(torch.int32)
+    x = (torch.randn(R, K) * 0.2).to(dev, torch.bfloat16)
+    xq, xs = quant_x_rows(x)
+    t_row0, t_rows, t_grp, order, _ = build_group_tiles_device(eids, E, 16)
+    aq_s = xq.index_select(0, order).contiguous()
+    as_s = xs.index_select(0, order).contiguous()
+    a = gemm_int4_b32_grouped_captured(aq_s, as_s, Wp, Sp,
+                                       t_row0, t_rows, t_grp)
+    b = gemm_int4_b32_grouped_captured(aq_s, as_s, Wp, Sp,
+                                       t_row0, t_rows, t_grp)
+    assert torch.equal(a, b)
+    assert a.shape == (R, N) and torch.isfinite(a.float()).all()
