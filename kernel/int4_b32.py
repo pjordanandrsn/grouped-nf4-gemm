@@ -135,3 +135,90 @@ def gemv_int4_b32(xq, xs, packed, scales, eids, N: int, K: int,
         xq, xs, packed, scales, eids, part,
         N, K=K, R=R, BLOCK_N=bn, SK=sk, KU=ku, num_warps=wp)
     return part.reshape(sk, R, N).sum(0).to(torch.bfloat16)
+
+
+# ------------------------------------------------- grouped M-tile GEMM --
+@triton.jit
+def _gemm_int4_b32_grouped(aq_ptr, as_ptr, w_ptr, ws_ptr,
+                           row0_ptr, rows_ptr, grp_ptr, out_ptr,
+                           N, K: tl.constexpr,
+                           BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr):
+    """M-tile grouped GEMM over PREBUILT device tiles (the NF4 captured
+    path's tile contract: ``build_group_tiles_device``). One program
+    computes ``rows[g] x BLOCK_N`` outputs of expert ``grp[g]``.
+
+    Same arithmetic as the decode GEMV: int8 activations against
+    arithmetically-unpacked int4 nibbles, exact integer accumulation,
+    one fp32 scale product per (row, k-block) -- but the integer MAC
+    runs as ``tl.dot`` int8 MMA. The byte interleave is handled the
+    GEMV's way: even-k activations dot the LOW nibbles, odd-k the HIGH,
+    two K=16 dots per 32-block, so no strided reshuffle of the weight
+    tile is ever built.
+
+    Zero-row tiles exit before the K loop (the shipped zero-tile
+    lesson: padding tiles at a static grid must cost a launch, not a
+    weight read)."""
+    g = tl.program_id(0)
+    pid_n = tl.program_id(1)
+    rows = tl.load(rows_ptr + g)
+    if rows == 0:
+        return
+    row0 = tl.load(row0_ptr + g).to(tl.int64)
+    eid = tl.load(grp_ptr + g).to(tl.int64)
+    offs_m = tl.arange(0, BLOCK_M)
+    m_mask = offs_m < rows
+    offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
+    n_mask = offs_n < N
+    KB: tl.constexpr = K // 32
+    pair = tl.arange(0, 16)
+    o32 = tl.arange(0, 32)
+    wbase = w_ptr + eid * N * (K // 2)
+    sbase = ws_ptr + eid * N * KB
+    acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
+    for kb in range(0, KB):
+        # activations in NATURAL k order; the weight tile is rebuilt to
+        # match via tl.interleave (even k = LOW nibble), because int8
+        # tl.dot needs K >= 32 -- two K=16 nibble-lane dots refuse to
+        # compile (min_dot_size), found on the first GPU parity run.
+        a = tl.load(aq_ptr + (row0 + offs_m)[:, None] * K + kb * 32
+                    + o32[None, :], mask=m_mask[:, None], other=0)
+        asv = tl.load(as_ptr + (row0 + offs_m) * KB + kb,
+                      mask=m_mask, other=0.0)
+        wb = tl.load(wbase + offs_n[:, None] * (K // 2) + kb * 16
+                     + pair[None, :],
+                     mask=n_mask[:, None], other=0).to(tl.int32)
+        lo = ((wb & 0xF) - 8).to(tl.int8)
+        hi = (((wb >> 4) & 0xF) - 8).to(tl.int8)
+        w32 = tl.interleave(lo, hi)              # [BLOCK_N, 32], k-order
+        d = tl.dot(a, tl.trans(w32), out_dtype=tl.int32)
+        ws = tl.load(sbase + offs_n * KB + kb, mask=n_mask,
+                     other=0.0).to(tl.float32)
+        acc += d.to(tl.float32) * (asv[:, None] * ws[None, :])
+    ooff = (row0 + offs_m)[:, None] * N + offs_n[None, :]
+    tl.store(out_ptr + ooff, acc.to(tl.bfloat16),
+             mask=m_mask[:, None] & n_mask[None, :])
+
+
+def gemm_int4_b32_grouped_captured(aq_sorted, as_sorted, packed, scales,
+                                   t_row0, t_rows, t_group,
+                                   block_m: int = 16,
+                                   block_n: int = 128, warps: int = 4):
+    """Grouped int4-b32 GEMM against prebuilt device tiles.
+
+    ``aq_sorted [R, K] int8`` / ``as_sorted [R, K//32] fp32`` are the
+    quantised activations gathered into expert-major order (the tile
+    builder's ``order``); ``t_group`` values are LOCAL indices into
+    ``packed [E, N, K//2]`` / ``scales [E, N, K//32]``. Every launch
+    parameter is static and every input is a device tensor, so the call
+    is legal inside CUDA-graph capture; the only allocation is ``out``
+    (the certified private-pool pattern). Returns ``[R, N]`` bf16 in the
+    SORTED row order -- the caller scatters back by the inverse of
+    ``order``, exactly as on the NF4 captured path."""
+    R, K = aq_sorted.shape
+    E, N, _kh = packed.shape
+    out = torch.empty(R, N, dtype=torch.bfloat16, device=aq_sorted.device)
+    _gemm_int4_b32_grouped[(t_row0.numel(), triton.cdiv(N, block_n))](
+        aq_sorted, as_sorted, packed, scales,
+        t_row0, t_rows, t_group, out,
+        N, K=K, BLOCK_M=block_m, BLOCK_N=block_n, num_warps=warps)
+    return out
