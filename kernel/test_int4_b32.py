@@ -262,3 +262,37 @@ def test_fused_tile_table_empty_routing():
     b = build_group_tiles_fused(eids, 8, 16)
     for n, x, y in zip(("row0", "rows", "grp", "order", "counts"), a, b):
         assert x.dtype == y.dtype and torch.equal(x, y), n
+
+
+@pytest.mark.parametrize("N,K,sk", [(64, 64, 2), (1536, 2048, 4),
+                                    (2048, 768, 8)])
+def test_grouped_sk_matches_single_span(N, K, sk):
+    """The split-K M-tile must match the single-span grouped kernel to
+    fp32-reduction reordering (int32 dots exact; only scale sums
+    reorder), over realistic top-k routing with an expert spanning
+    multiple tiles."""
+    pytest.importorskip("triton")
+    from int4_b32 import (build_group_tiles_fused,
+                          gemm_int4_b32_grouped_captured,
+                          gemm_int4_b32_grouped_sk, quant_x_rows)
+    dev = _gpu()
+    torch.manual_seed(21)
+    E, B, topk = 16, 8, 4
+    R = B * topk
+    W = torch.randn(E, N, K) * 0.1
+    pk, sc = zip(*[pack_int4_b32(W[e]) for e in range(E)])
+    Wp = torch.stack(pk).to(dev).contiguous()
+    Sp = torch.stack(sc).to(dev).contiguous()
+    eids = torch.stack([torch.randperm(E)[:topk] for _ in range(B)]
+                       ).reshape(-1).to(dev).to(torch.int32)
+    x = (torch.randn(R, K) * 0.2).to(dev, torch.bfloat16)
+    xq, xs = quant_x_rows(x)
+    t_row0, t_rows, t_grp, order, _ = build_group_tiles_fused(eids, E, 16)
+    aq = xq.index_select(0, order).contiguous()
+    asv = xs.index_select(0, order).contiguous()
+    a = gemm_int4_b32_grouped_captured(aq, asv, Wp, Sp,
+                                       t_row0, t_rows, t_grp)
+    b = gemm_int4_b32_grouped_sk(aq, asv, Wp, Sp, t_row0, t_rows, t_grp,
+                                 sk=sk)
+    assert (a.float() - b.float()).abs().max() <= \
+        a.float().abs().max() * 2 ** -7

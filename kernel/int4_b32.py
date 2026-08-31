@@ -385,3 +385,85 @@ def swiglu_rows(gu: torch.Tensor):
     _swiglu_rows[(R, triton.cdiv(inter, bs))](
         gu.contiguous(), h, I=inter, BS=bs)
     return h
+
+
+# ------------------------------------------------- split-K M-tile GEMM --
+@triton.jit
+def _gemm_int4_b32_grouped_sk(aq_ptr, as_ptr, w_ptr, ws_ptr,
+                              row0_ptr, rows_ptr, grp_ptr, part_ptr,
+                              N, R, K: tl.constexpr,
+                              BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr,
+                              SK: tl.constexpr):
+    """The grouped M-tile GEMM with a split-K grid axis: program
+    (g, n, sk) accumulates its K-span into fp32 partials at
+    ``part[sk, row, n]``; the wrapper reduces exactly (fp32 sum -- the
+    int32 block dots are exact, only the scale sums reorder). Same tile
+    table, same zero-tile exit, same nibble-lane arithmetic as the
+    single-span kernel; the extra grid axis exists to FILL the machine
+    when the tile count is small."""
+    g = tl.program_id(0)
+    pid_n = tl.program_id(1)
+    sk = tl.program_id(2)
+    rows = tl.load(rows_ptr + g)
+    if rows == 0:
+        return
+    row0 = tl.load(row0_ptr + g).to(tl.int64)
+    eid = tl.load(grp_ptr + g).to(tl.int64)
+    offs_m = tl.arange(0, BLOCK_M)
+    m_mask = offs_m < rows
+    offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
+    n_mask = offs_n < N
+    KB: tl.constexpr = K // 32
+    span: tl.constexpr = (KB + SK - 1) // SK
+    pair = tl.arange(0, 16)
+    o32 = tl.arange(0, 32)
+    wbase = w_ptr + eid * N * (K // 2)
+    sbase = ws_ptr + eid * N * KB
+    acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
+    for kbi in range(0, span):
+        kb = sk * span + kbi
+        if kb < KB:
+            a = tl.load(aq_ptr + (row0 + offs_m)[:, None] * K + kb * 32
+                        + o32[None, :], mask=m_mask[:, None], other=0)
+            asv = tl.load(as_ptr + (row0 + offs_m) * KB + kb,
+                          mask=m_mask, other=0.0)
+            wb = tl.load(wbase + offs_n[:, None] * (K // 2) + kb * 16
+                         + pair[None, :],
+                         mask=n_mask[:, None], other=0).to(tl.int32)
+            lo = ((wb & 0xF) - 8).to(tl.int8)
+            hi = (((wb >> 4) & 0xF) - 8).to(tl.int8)
+            w32 = tl.interleave(lo, hi)
+            d = tl.dot(a, tl.trans(w32), out_dtype=tl.int32)
+            ws = tl.load(sbase + offs_n * KB + kb, mask=n_mask,
+                         other=0.0).to(tl.float32)
+            acc += d.to(tl.float32) * (asv[:, None] * ws[None, :])
+    poff = (sk.to(tl.int64) * R + row0 + offs_m)[:, None] * N \
+        + offs_n[None, :]
+    tl.store(part_ptr + poff, acc,
+             mask=m_mask[:, None] & n_mask[None, :])
+
+
+def gemm_int4_b32_grouped_sk(aq_sorted, as_sorted, packed, scales,
+                             t_row0, t_rows, t_group,
+                             block_m: int = 16, block_n: int = 64,
+                             warps: int = 8, sk: int = 4,
+                             part: torch.Tensor | None = None):
+    """Split-K variant of :func:`gemm_int4_b32_grouped_captured`. The
+    partials buffer ``part [SK*R, N]`` fp32 must be ZEROED before each
+    call unless every row is covered by a live tile (rows not written by
+    any tile keep stale partials); pass a preallocated buffer under
+    capture. Reduction is an exact fp32 sum."""
+    R, K = aq_sorted.shape
+    E, N, _kh = packed.shape
+    if part is None:
+        part = torch.zeros(sk * R, N, dtype=torch.float32,
+                           device=aq_sorted.device)
+    else:
+        part.zero_()
+    _gemm_int4_b32_grouped_sk[(t_row0.numel(), triton.cdiv(N, block_n),
+                               sk)](
+        aq_sorted, as_sorted, packed, scales,
+        t_row0, t_rows, t_group, part,
+        N, R, K=K, BLOCK_M=block_m, BLOCK_N=block_n, SK=sk,
+        num_warps=warps)
+    return part.reshape(sk, R, N).sum(0).to(torch.bfloat16)
