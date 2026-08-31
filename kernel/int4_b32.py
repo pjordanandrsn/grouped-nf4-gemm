@@ -301,6 +301,17 @@ def build_group_tiles_fused(expert_ids, n_experts: int, block_m: int,
     if r > 256:
         raise ValueError(f"fused tile builder is decode-only (R <= 256); "
                          f"got R={r} -- use the chained builder")
+    if r == 0:
+        # empty routing: no launch (tl.arange(0, 0) is invalid) -- the
+        # zeroed table, empty order, and zero counts ARE the answer,
+        # matching the chained builder (review finding, round 1)
+        dev = expert_ids.device
+        tb = (n_experts if tiles_budget is None else tiles_budget)
+        return (torch.zeros(tb, dtype=torch.int32, device=dev),
+                torch.zeros(tb, dtype=torch.int32, device=dev),
+                torch.zeros(tb, dtype=torch.int32, device=dev),
+                torch.empty(0, dtype=torch.int64, device=dev),
+                torch.zeros(n_experts, dtype=torch.int64, device=dev))
     if tiles_budget is None:
         tiles_budget = -(-r // block_m) + n_experts
     dev = expert_ids.device

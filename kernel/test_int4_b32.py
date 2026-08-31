@@ -248,3 +248,17 @@ def test_swiglu_rows_matches_chain():
     # differ in the last bit between device libdevice and torch
     assert (got.float() - want.float()).abs().max() <= \
         want.float().abs().max() * 2 ** -7
+
+
+def test_fused_tile_table_empty_routing():
+    """R = 0 must match the chained builder without launching (an empty
+    tl.arange is invalid) -- review finding, round 1."""
+    pytest.importorskip("triton")
+    from int4_b32 import build_group_tiles_fused
+    from nf4_grouped import build_group_tiles_device
+    dev = _gpu()
+    eids = torch.empty(0, dtype=torch.int32, device=dev)
+    a = build_group_tiles_device(eids, 8, 16)
+    b = build_group_tiles_fused(eids, 8, 16)
+    for n, x, y in zip(("row0", "rows", "grp", "order", "counts"), a, b):
+        assert x.dtype == y.dtype and torch.equal(x, y), n
