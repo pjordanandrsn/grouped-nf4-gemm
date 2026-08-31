@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.18.0 — 2026-08-31
+
+### The uniform int4-b32 serve lane, from decode GEMV to the batched step
+
+Everything the B=16 serving campaign shipped to main since 0.17.0, all
+graph-metric measured with receipts in the audit tree (INT4B16/*):
+
+- **int4-b32 pack + decode GEMV** (`int4_b32`, `int4_pack_ref`):
+  uniform symmetric grid, arithmetic unpack, int8 activations, exact
+  integer accumulation. Census cells: 1,044 GB/s dense M=1, 6.9–7.2×
+  over the NF4 register-LUT GEMV; grouped top-8 cells 3.8–4.3×.
+- **Grouped M-tile int4 GEMM** against the captured tile contract
+  (K=32 int8 MMA, `tl.interleave` nibble planes, zero-tile exit):
+  gate_up 1.947× / down 4.500× over the NF4 grouped kernel at the
+  B=16 census cells; defaults are the swept winner (bn64/w8).
+- **Batched-slot fp8 KV append** (`fp8_kv_append_bt1`): one launch per
+  side replaces the per-slot loop (12,288 → 768 calls per B=16 step),
+  byte-identical to the T=1 kernel by CI gate.
+- **Tail fusion**: one-launch tile table (stable counting sort,
+  decode-shape contract, exact against the chained builder),
+  gather-folded activation quantise, fused SwiGLU.
+- **Quantise grid**: per-(row, block) launch, ~3.6× per call.
+
+Composed on the consumer's B=16 serving step these land 39.5 → 21.8 ms
+(405 → 734 tok/s aggregate). Measured refusals kept with receipts: the
+format stays OFF the lm_head (+0.18 ppl) and dense attention shapes
+lose to the bf16 baseline in both the GEMV and M=16 GEMM regimes
+(occupancy, mechanism isolated).
+
+
 ## 0.17.0 — 2026-08-27
 
 ### Both decode knobs now ship ON by default (M3, PASS)
