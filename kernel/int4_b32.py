@@ -231,3 +231,146 @@ def gemm_int4_b32_grouped_captured(aq_sorted, as_sorted, packed, scales,
         t_row0, t_rows, t_group, out,
         N, K=K, BLOCK_M=block_m, BLOCK_N=block_n, num_warps=warps)
     return out
+
+
+# ------------------------------------------------ tail-fusion kernels --
+@triton.jit
+def _tile_table_r1(eids_ptr, row0_ptr, rows_ptr, grp_ptr, order_ptr,
+                   counts_ptr, R: tl.constexpr, RB: tl.constexpr,
+                   E: tl.constexpr, EB: tl.constexpr, TB: tl.constexpr,
+                   BM: tl.constexpr, MAXT: tl.constexpr):
+    """ONE launch builds the whole expert-major tile table for decode
+    shapes: counts, exclusive row offsets, a STABLE counting-sort order,
+    and the (row0, rows, grp) tile slots -- the work the chained
+    argsort/cumsum/searchsorted/index_select builder spread over ~10
+    launches per layer (48 radix sorts per B=16 step in the census).
+
+    Stability is by construction: a row's rank within its expert is the
+    count of EARLIER rows with the same expert id, so ties keep input
+    order exactly as a stable argsort does. Decode-only by contract
+    (R <= a few hundred): the O(R^2) rank compare is one small block
+    here and would not scale to prefill chunks -- the caller keeps the
+    chained builder for those, where launches amortize."""
+    r = tl.arange(0, RB)
+    rmask = r < R
+    e = tl.load(eids_ptr + r, mask=rmask, other=E).to(tl.int32)
+    # per-expert counts (sentinel E lands in no bin)
+    ee = tl.arange(0, EB)
+    emask = ee < E
+    hits = (e[None, :] == ee[:, None]) & rmask[None, :]
+    counts = tl.sum(hits.to(tl.int32), axis=1)          # [EB]
+    tl.store(counts_ptr + ee, counts.to(tl.int64), mask=emask)
+    row_off = tl.cumsum(counts, axis=0) - counts         # exclusive
+    # stable rank: earlier rows with the same expert id
+    same = (e[:, None] == e[None, :]) & (r[None, :] < r[:, None])
+    rank = tl.sum(same.to(tl.int32), axis=1)             # [RB]
+    dst = tl.sum(tl.where(hits, row_off[:, None], 0), axis=0) + rank
+    tl.store(order_ptr + dst, r.to(tl.int64), mask=rmask)
+    # tile slots: expert e owns tiles [tile_off[e], tile_off[e]+tpe[e])
+    tpe = (counts + BM - 1) // BM
+    tile_off = tl.cumsum(tpe, axis=0) - tpe
+    ti = tl.arange(0, MAXT)
+    live = (ti[None, :] < tpe[:, None]) & emask[:, None]     # [EB, MAXT]
+    slot = tile_off[:, None] + ti[None, :]
+    slot = tl.where(live, slot, 0)        # dead lanes: address clamped,
+    rows_v = tl.minimum(counts[:, None] - ti[None, :] * BM, BM)
+    row0_v = row_off[:, None] + ti[None, :] * BM
+    grp_v = tl.broadcast_to(ee[:, None], (EB, MAXT))
+    # ... and the store MASKED off entirely: duplicate-address stores
+    # have undefined lane order, so "park on a slot and write zeros"
+    # would race a live lane's write. The caller pre-zeroes the static
+    # TB-slot table; padding slots simply stay untouched.
+    lf = tl.reshape(live, (EB * MAXT,))
+    sf = tl.reshape(slot, (EB * MAXT,))
+    tl.store(rows_ptr + sf, tl.reshape(rows_v.to(tl.int32),
+                                       (EB * MAXT,)), mask=lf)
+    tl.store(row0_ptr + sf, tl.reshape(row0_v.to(tl.int32),
+                                       (EB * MAXT,)), mask=lf)
+    tl.store(grp_ptr + sf, tl.reshape(grp_v.to(tl.int32),
+                                      (EB * MAXT,)), mask=lf)
+
+
+def build_group_tiles_fused(expert_ids, n_experts: int, block_m: int,
+                            tiles_budget: int | None = None):
+    """Drop-in for ``nf4_grouped.build_group_tiles_device`` on DECODE
+    shapes (R <= 256): same five outputs, same dtypes, same tile-slot
+    semantics (padding slots rows=0), one kernel launch. Raises on
+    shapes outside its contract -- the caller falls back to the chained
+    builder there rather than getting a silently different table."""
+    r = expert_ids.numel()
+    if r > 256:
+        raise ValueError(f"fused tile builder is decode-only (R <= 256); "
+                         f"got R={r} -- use the chained builder")
+    if tiles_budget is None:
+        tiles_budget = -(-r // block_m) + n_experts
+    dev = expert_ids.device
+    row0 = torch.zeros(tiles_budget, dtype=torch.int32, device=dev)
+    rows = torch.zeros(tiles_budget, dtype=torch.int32, device=dev)
+    grp = torch.zeros(tiles_budget, dtype=torch.int32, device=dev)
+    order = torch.empty(r, dtype=torch.int64, device=dev)
+    counts = torch.empty(n_experts, dtype=torch.int64, device=dev)
+    maxt = -(-r // block_m) + 1
+    _tile_table_r1[(1,)](
+        expert_ids.to(torch.int32), row0, rows, grp, order, counts,
+        R=r, RB=triton.next_power_of_2(r), E=n_experts,
+        EB=triton.next_power_of_2(n_experts), TB=tiles_budget,
+        BM=block_m, MAXT=triton.next_power_of_2(maxt))
+    return row0, rows, grp, order, counts
+
+
+@triton.jit
+def _quant_x_rows_gathered(x_ptr, ord_ptr, xq_ptr, xs_ptr,
+                           K: tl.constexpr):
+    """``_quant_x_rows`` with the expert-major GATHER folded in: output
+    row ``r`` quantises input row ``order[r]``. Kills the standalone
+    [R, K] index_select the serving loop paid per layer (census: 48
+    calls / 0.46 ms per B=16 step)."""
+    r = tl.program_id(0)
+    kb = tl.program_id(1)
+    src = tl.load(ord_ptr + r).to(tl.int64)
+    o32 = tl.arange(0, 32)
+    x = tl.load(x_ptr + src * K + kb * 32 + o32).to(tl.float32)
+    s = tl.max(tl.abs(x)) / 127.0 + 1e-12
+    q = tl.floor(x / s + 0.5)
+    q = tl.minimum(tl.maximum(q, -127.0), 127.0)
+    tl.store(xq_ptr + r * K + kb * 32 + o32, q.to(tl.int8))
+    tl.store(xs_ptr + r * (K // 32) + kb, s)
+
+
+def quant_x_rows_gathered(x: torch.Tensor, order: torch.Tensor):
+    """``(x [R, K], order [R]) -> (xq [R, K] int8, xs [R, K//32] fp32)``
+    with ``xq[r] = quantise(x[order[r]])`` -- bit-identical to
+    ``quant_x_rows(x.index_select(0, order))``."""
+    R, K = x.shape
+    xq = torch.empty(R, K, dtype=torch.int8, device=x.device)
+    xs = torch.empty(R, K // BLOCK, dtype=torch.float32, device=x.device)
+    _quant_x_rows_gathered[(R, K // BLOCK)](
+        x.contiguous(), order, xq, xs, K=K)
+    return xq, xs
+
+
+@triton.jit
+def _swiglu_rows(gu_ptr, h_ptr, I: tl.constexpr, BS: tl.constexpr):
+    """h = silu(gate) * up over a [R, 2I] gate-block-then-up-block
+    matrix, one kernel instead of the chunk/silu/mul chain."""
+    r = tl.program_id(0)
+    c = tl.program_id(1)
+    offs = c * BS + tl.arange(0, BS)
+    m = offs < I
+    g = tl.load(gu_ptr + r * (2 * I) + offs, mask=m,
+                other=0.0).to(tl.float32)
+    u = tl.load(gu_ptr + r * (2 * I) + I + offs, mask=m,
+                other=0.0).to(tl.float32)
+    h = (g * tl.sigmoid(g)) * u
+    tl.store(h_ptr + r * I + offs, h.to(tl.bfloat16), mask=m)
+
+
+def swiglu_rows(gu: torch.Tensor):
+    """``gu [R, 2I]`` (gate block then up block) -> ``h [R, I]`` bf16."""
+    R, twoI = gu.shape
+    inter = twoI // 2
+    h = torch.empty(R, inter, dtype=torch.bfloat16, device=gu.device)
+    bs = min(1024, triton.next_power_of_2(inter))
+    _swiglu_rows[(R, triton.cdiv(inter, bs))](
+        gu.contiguous(), h, I=inter, BS=bs)
+    return h
