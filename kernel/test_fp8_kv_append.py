@@ -152,3 +152,47 @@ def test_cpu_tensors_refuse_cleanly():
     lens = torch.zeros(1, dtype=torch.int32)
     with pytest.raises(RuntimeError, match="CUDA-resident"):
         fp8_kv_append_t1(x, pool, row, lens, 2048, 1024, 16, 4)
+
+
+@needs_cuda
+@pytest.mark.parametrize("groups", [1, 4])
+def test_bt1_bitwise_against_t1_loop(groups):
+    """The batched-slot append must write BYTE-IDENTICAL pool content to
+    S sequential calls of the T=1 kernel, over slots at different fills
+    and non-identity slot ordering (the B=16 serving shape)."""
+    from fp8_kv import fp8_kv_append_bt1
+    torch.manual_seed(31)
+    dev = "cuda"
+    S, H, D, bt, bps = 5, 4, 32, 8, 3
+    num_slots = 8
+    pay = bt * H * D
+    srow = H * groups * 4
+    row_bytes = pay + bt * srow
+    n_rows = num_slots * bps
+    pool_a = torch.zeros(n_rows * row_bytes, dtype=torch.uint8, device=dev)
+    pool_b = pool_a.clone()
+    # distinct table rows per (slot, block); non-trivial mapping
+    tbl = torch.arange(num_slots * bps, dtype=torch.int32,
+                       device=dev).flip(0).reshape(num_slots, bps).contiguous()
+    # slots used out of order, at different fills (some crossing blocks)
+    slot_idx = torch.tensor([6, 1, 4, 0, 7], dtype=torch.int32, device=dev)
+    lens = torch.zeros(num_slots, dtype=torch.int32, device=dev)
+    lens[slot_idx.long()] = torch.tensor([0, 7, 8, 15, 3],
+                                         dtype=torch.int32, device=dev)
+    x = (torch.randn(S, H, D, device=dev) * 2).to(torch.bfloat16)
+
+    # arm A: the batched kernel
+    fp8_kv_append_bt1(x, pool_a, tbl, slot_idx, lens,
+                      row_bytes, pay, bt, groups)
+    # arm B: S calls of the certified T=1 kernel
+    for s_ in range(S):
+        slot = int(slot_idx[s_])
+        fp8_kv_append_t1(x[s_], pool_b, tbl[slot],
+                         lens.narrow(0, slot, 1), row_bytes, pay, bt,
+                         groups)
+    assert torch.equal(pool_a, pool_b), "batched append diverged from the T=1 loop"
+    # lens untouched by BOTH (the caller publishes)
+    want = torch.zeros(num_slots, dtype=torch.int32, device=dev)
+    want[slot_idx.long()] = torch.tensor([0, 7, 8, 15, 3],
+                                         dtype=torch.int32, device=dev)
+    assert torch.equal(lens, want)

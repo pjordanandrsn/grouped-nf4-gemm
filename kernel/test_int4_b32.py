@@ -168,3 +168,21 @@ def test_grouped_every_row_written_once():
                                        t_row0, t_rows, t_grp)
     assert torch.equal(a, b)
     assert a.shape == (R, N) and torch.isfinite(a.float()).all()
+
+
+def test_quant_grid_matches_reference_bitwise():
+    """The (R, K//32) grid must produce byte-identical xq/xs to the
+    pure-torch reference of the same per-block arithmetic -- the grid
+    change moved the k loop into the launch, nothing else."""
+    pytest.importorskip("triton")
+    from int4_b32 import quant_x_rows
+    dev = _gpu()
+    torch.manual_seed(6)
+    R, K = 7, 96
+    x = (torch.randn(R, K) * 0.3).to(dev, torch.bfloat16)
+    xq, xs = quant_x_rows(x)
+    xf = x.float().reshape(R, K // BLOCK, BLOCK)
+    s_ref = xf.abs().amax(dim=2) / 127.0 + 1e-12
+    q_ref = torch.floor(xf / s_ref[:, :, None] + 0.5).clamp(-127, 127)
+    assert torch.equal(xq.float().cpu(), q_ref.reshape(R, K).cpu())
+    assert torch.equal(xs.cpu(), s_ref.cpu())
