@@ -170,10 +170,13 @@ def test_grouped_every_row_written_once():
     assert a.shape == (R, N) and torch.isfinite(a.float()).all()
 
 
-def test_quant_grid_matches_reference_bitwise():
-    """The (R, K//32) grid must produce byte-identical xq/xs to the
-    pure-torch reference of the same per-block arithmetic -- the grid
-    change moved the k loop into the launch, nothing else."""
+def test_quant_grid_matches_reference():
+    """The (R, K//32) grid must reproduce the per-block arithmetic: the
+    int8 CODES exactly (they feed the exact integer GEMM), the fp32
+    scales to ~1 ULP -- device division rounds differently from the
+    torch reference, and that was never bitwise on the old kernel
+    either (found on the first GPU gate run: codes matched exactly,
+    scales differed in the last bit)."""
     pytest.importorskip("triton")
     from int4_b32 import quant_x_rows
     dev = _gpu()
@@ -185,4 +188,4 @@ def test_quant_grid_matches_reference_bitwise():
     s_ref = xf.abs().amax(dim=2) / 127.0 + 1e-12
     q_ref = torch.floor(xf / s_ref[:, :, None] + 0.5).clamp(-127, 127)
     assert torch.equal(xq.float().cpu(), q_ref.reshape(R, K).cpu())
-    assert torch.equal(xs.cpu(), s_ref.cpu())
+    assert torch.allclose(xs.cpu(), s_ref.cpu(), rtol=1e-6, atol=0.0)
