@@ -189,3 +189,76 @@ def test_quant_grid_matches_reference():
     q_ref = torch.floor(xf / s_ref[:, :, None] + 0.5).clamp(-127, 127)
     assert torch.equal(xq.float().cpu(), q_ref.reshape(R, K).cpu())
     assert torch.allclose(xs.cpu(), s_ref.cpu(), rtol=1e-6, atol=0.0)
+
+
+@pytest.mark.parametrize("R,E,BM", [(128, 128, 16), (96, 128, 16),
+                                    (24, 8, 16), (5, 4, 4)])
+def test_fused_tile_table_matches_chained_builder(R, E, BM):
+    """The one-launch tile table must reproduce the chained builder's
+    five outputs EXACTLY -- including stable-sort order on ties and
+    zeroed padding slots -- over uneven routing with empty experts."""
+    pytest.importorskip("triton")
+    from int4_b32 import build_group_tiles_fused
+    from nf4_grouped import build_group_tiles_device
+    dev = _gpu()
+    torch.manual_seed(11 + R)
+    eids = torch.randint(0, E, (R,), device=dev).to(torch.int32)
+    a = build_group_tiles_device(eids, E, BM)
+    b = build_group_tiles_fused(eids, E, BM)
+    names = ("row0", "rows", "grp", "order", "counts")
+    for n, x, y in zip(names, a, b):
+        assert x.dtype == y.dtype, (n, x.dtype, y.dtype)
+        assert torch.equal(x, y), (n, x.cpu(), y.cpu())
+
+
+def test_fused_tile_table_refuses_prefill_shapes():
+    pytest.importorskip("triton")
+    from int4_b32 import build_group_tiles_fused
+    dev = _gpu()
+    eids = torch.zeros(1024, dtype=torch.int32, device=dev)
+    with pytest.raises(ValueError, match="decode-only"):
+        build_group_tiles_fused(eids, 128, 16)
+
+
+def test_gathered_quant_matches_gather_then_quant():
+    pytest.importorskip("triton")
+    from int4_b32 import quant_x_rows, quant_x_rows_gathered
+    dev = _gpu()
+    torch.manual_seed(12)
+    R, K = 24, 96
+    x = (torch.randn(R, K) * 0.3).to(dev, torch.bfloat16)
+    order = torch.randperm(R, device=dev)
+    q1, s1 = quant_x_rows(x.index_select(0, order).contiguous())
+    q2, s2 = quant_x_rows_gathered(x, order)
+    assert torch.equal(q1, q2) and torch.equal(s1, s2)
+
+
+def test_swiglu_rows_matches_chain():
+    pytest.importorskip("triton")
+    from int4_b32 import swiglu_rows
+    import torch.nn.functional as F
+    dev = _gpu()
+    torch.manual_seed(13)
+    R, inter = 24, 40                     # non-pow2 inner dim
+    gu = (torch.randn(R, 2 * inter) * 2).to(dev, torch.bfloat16)
+    got = swiglu_rows(gu)
+    g, u = gu.chunk(2, dim=-1)
+    want = (F.silu(g.float()) * u.float()).to(torch.bfloat16)
+    # fp32 silu*mul then one bf16 rounding in BOTH paths; sigmoid may
+    # differ in the last bit between device libdevice and torch
+    assert (got.float() - want.float()).abs().max() <= \
+        want.float().abs().max() * 2 ** -7
+
+
+def test_fused_tile_table_empty_routing():
+    """R = 0 must match the chained builder without launching (an empty
+    tl.arange is invalid) -- review finding, round 1."""
+    pytest.importorskip("triton")
+    from int4_b32 import build_group_tiles_fused
+    from nf4_grouped import build_group_tiles_device
+    dev = _gpu()
+    eids = torch.empty(0, dtype=torch.int32, device=dev)
+    a = build_group_tiles_device(eids, 8, 16)
+    b = build_group_tiles_fused(eids, 8, 16)
+    for n, x, y in zip(("row0", "rows", "grp", "order", "counts"), a, b):
+        assert x.dtype == y.dtype and torch.equal(x, y), n
