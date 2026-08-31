@@ -36,19 +36,22 @@ from int4_pack_ref import BLOCK, dequant_int4_ref, pack_int4_b32  # noqa: F401
 # ------------------------------------------------- activation quantise --
 @triton.jit
 def _quant_x_rows(x_ptr, xq_ptr, xs_ptr, K: tl.constexpr):
-    """Per-row, per-32-block int8 symmetric quantise (Q8-style). One
-    program per row; 32-wide inner blocks so K need not be a power of 2."""
+    """Per-(row, 32-block) int8 symmetric quantise (Q8-style). Grid
+    (R, K//32): blocks are independent, so the k loop the original
+    one-program-per-row kernel carried was pure serialization -- the
+    B=16 census priced it at 11.2 us/call for trivially-parallel work.
+    Same arithmetic per block, so outputs are bitwise-identical."""
     # literal 32 throughout: triton JIT bodies cannot read imported
     # module globals (BLOCK lives in int4_pack_ref for the host side)
     r = tl.program_id(0)
+    kb = tl.program_id(1)
     o32 = tl.arange(0, 32)
-    for kb in range(0, K // 32):
-        x = tl.load(x_ptr + r * K + kb * 32 + o32).to(tl.float32)
-        s = tl.max(tl.abs(x)) / 127.0 + 1e-12
-        q = tl.floor(x / s + 0.5)
-        q = tl.minimum(tl.maximum(q, -127.0), 127.0)
-        tl.store(xq_ptr + r * K + kb * 32 + o32, q.to(tl.int8))
-        tl.store(xs_ptr + r * (K // 32) + kb, s)
+    x = tl.load(x_ptr + r * K + kb * 32 + o32).to(tl.float32)
+    s = tl.max(tl.abs(x)) / 127.0 + 1e-12
+    q = tl.floor(x / s + 0.5)
+    q = tl.minimum(tl.maximum(q, -127.0), 127.0)
+    tl.store(xq_ptr + r * K + kb * 32 + o32, q.to(tl.int8))
+    tl.store(xs_ptr + r * (K // 32) + kb, s)
 
 
 def quant_x_rows(x: torch.Tensor):
@@ -56,7 +59,7 @@ def quant_x_rows(x: torch.Tensor):
     R, K = x.shape
     xq = torch.empty(R, K, dtype=torch.int8, device=x.device)
     xs = torch.empty(R, K // BLOCK, dtype=torch.float32, device=x.device)
-    _quant_x_rows[(R,)](x.contiguous(), xq, xs, K=K)
+    _quant_x_rows[(R, K // BLOCK)](x.contiguous(), xq, xs, K=K)
     return xq, xs
 
 

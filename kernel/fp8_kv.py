@@ -301,3 +301,89 @@ def fp8_kv_append_t1(x, pool_flat_u8, tbl_row_i32, lens_scalar_i32,
         lens_scalar_i32, int(row_bytes), int(pay_bytes),
         int(block_tokens), H=H, D=D, GROUPS=groups, GS=D // groups,
         E4M3_MAX=E4M3_MAX, num_warps=1)
+
+
+if HAS_TRITON:
+    @triton.jit
+    def _fp8_append_bt1_side(
+        x_ptr,            # [S, H, D] input (bf16/fp16/fp32), contiguous
+        pool_u8,          # flat uint8 view of this layer's pool arena
+        pool_i32,         # SAME memory viewed int32 (scale stores)
+        tbl_ptr,          # [num_slots, blocks_per_seq] int32 block table
+        slot_ptr,         # [S] int32: pool slot index of batch row s
+        lens_ptr,         # [num_slots] int32: tokens seen per slot
+        bps,              # blocks_per_seq (table row stride)
+        row_bytes,        # bytes per pool row
+        pay_bytes,        # payload region size (scales start here)
+        bt,               # tokens per block
+        H: tl.constexpr,
+        D: tl.constexpr,
+        GROUPS: tl.constexpr,
+        GS: tl.constexpr,
+        E4M3_MAX: tl.constexpr,
+    ):
+        """Batched-slot variant of ``_fp8_append_t1_side``: grid (S, H),
+        one launch appends one token to EVERY slot for one side. Same
+        per-(token, head) arithmetic and byte layout, addressed through
+        a slot-index indirection so each batch row lands at ITS slot's
+        advancing position. Replaces S launches with one -- the B=16
+        census priced the per-slot loop at 2.07 ms/step (1,536 calls)."""
+        s = tl.program_id(0)
+        h = tl.program_id(1)
+        slot = tl.load(slot_ptr + s).to(tl.int64)
+        pos = tl.load(lens_ptr + slot).to(tl.int64)
+        blk = pos // bt
+        fill = pos - blk * bt
+        row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+        pay = row * row_bytes + fill * (H * D) + h * D
+        sc = (row * row_bytes + pay_bytes
+              + (fill * (H * GROUPS) + h * GROUPS) * 4)
+        for g in tl.static_range(GROUPS):
+            offs = tl.arange(0, GS)
+            x = tl.load(x_ptr + s * (H * D) + h * D + g * GS + offs
+                        ).to(tl.float32)
+            amax = tl.max(tl.abs(x), axis=0)
+            scale = tl.where(amax > 0, amax / E4M3_MAX, 1.0)
+            q = (x / scale).to(tl.float8e4nv).to(tl.uint8, bitcast=True)
+            tl.store(pool_u8 + pay + g * GS + offs, q)
+            tl.store(pool_i32 + sc // 4 + g,
+                     scale.to(tl.float32).to(tl.int32, bitcast=True))
+
+
+def fp8_kv_append_bt1(x, pool_flat_u8, tbl_i32, slot_idx_i32, lens_i32,
+                      row_bytes: int, pay_bytes: int, block_tokens: int,
+                      groups: int):
+    """One-launch batched append of one side: one token to EVERY slot.
+
+    ``x``: [S, H, D] float tensor, row ``s`` belonging to slot
+    ``slot_idx_i32[s]``. ``tbl_i32``: the layer's FULL [num_slots,
+    blocks_per_seq] int32 block table (contiguous). ``lens_i32``: the
+    layer's [num_slots] int32 tokens-seen vector; READ by the kernel,
+    never written -- the caller publishes the increments after, exactly
+    as on the T=1 path. Bitwise-identical bytes to S calls of
+    :func:`fp8_kv_append_t1` (CI-gated).
+
+    Capture-safe by construction: every address comes from device state
+    and the launch shape is static.
+    """
+    S, H, D = x.shape
+    if D % groups:
+        raise ValueError(f"groups {groups} must divide head_dim {D}")
+    if pool_flat_u8.dtype != torch.uint8 or not pool_flat_u8.is_contiguous():
+        raise ValueError("pool view must be contiguous uint8")
+    if int(pay_bytes) % 4 or int(row_bytes) % 4:
+        raise ValueError("row/payload sizes must be 4-byte aligned")
+    if tbl_i32.dtype != torch.int32 or not tbl_i32.is_contiguous()             or tbl_i32.dim() != 2:
+        raise ValueError("block table must be a contiguous int32 "
+                         "[num_slots, blocks_per_seq]")
+    if not HAS_TRITON or not x.is_cuda:
+        raise RuntimeError("fp8_kv_append_bt1 needs triton and CUDA "
+                           "tensors (no eager fallback here -- the "
+                           "caller keeps its per-slot path for that)")
+    pool_i32 = pool_flat_u8.view(torch.int32)
+    _fp8_append_bt1_side[(S, H)](
+        x.contiguous(), pool_flat_u8, pool_i32, tbl_i32,
+        slot_idx_i32, lens_i32, tbl_i32.shape[1],
+        row_bytes, pay_bytes, block_tokens,
+        H=H, D=D, GROUPS=groups, GS=D // groups,
+        E4M3_MAX=448.0)
