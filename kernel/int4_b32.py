@@ -385,3 +385,75 @@ def swiglu_rows(gu: torch.Tensor):
     _swiglu_rows[(R, triton.cdiv(inter, bs))](
         gu.contiguous(), h, I=inter, BS=bs)
     return h
+
+
+# ---------------------------------------------------- fused T=1 router --
+@triton.jit
+def _router_topk_t1(x_ptr, w_ptr, logits_ptr, wout_ptr, idx_ptr,
+                    H: tl.constexpr, E: tl.constexpr, EB: tl.constexpr,
+                    K: tl.constexpr, CHUNK: tl.constexpr,
+                    NORM: tl.constexpr):
+    """One launch for the whole T=1 routing decision: router linear
+    (x[H] against w[E, H]), fp32 softmax over all E, top-K selection on
+    the probabilities, optional top-K renormalisation, bf16 outputs --
+    replacing the linear/softmax/topk/sort/renorm/cast chain the census
+    prices at ~6-8 launches per layer.
+
+    Selection is K passes of tl.argmax over the masked probabilities;
+    argmax ties resolve to the LOWEST index, giving a deterministic
+    order. Near-tie index differences vs the unfused chain are the
+    accepted reorder class (per-arm determinism + quality gates, the
+    kernel-swap frame) -- fp32 dot rounding differs from the dense
+    linear's path, so bitwise index equality is not the claim."""
+    ee = tl.arange(0, EB)
+    emask = ee < E
+    acc = tl.zeros((EB,), dtype=tl.float32)
+    for c in range(0, H // CHUNK):
+        offs = c * CHUNK + tl.arange(0, CHUNK)
+        xv = tl.load(x_ptr + offs).to(tl.float32)
+        wv = tl.load(w_ptr + ee[:, None] * H + offs[None, :],
+                     mask=emask[:, None], other=0.0).to(tl.float32)
+        acc += tl.sum(wv * xv[None, :], axis=1)
+    logits = tl.where(emask, acc, float("-inf"))
+    tl.store(logits_ptr + ee, logits.to(tl.bfloat16), mask=emask)
+    m = tl.max(logits, axis=0)
+    p = tl.exp(logits - m)
+    p = tl.where(emask, p, 0.0)
+    p = p / tl.sum(p, axis=0)
+    sel_sum = 0.0
+    probs = p
+    for k in tl.static_range(K):
+        j = tl.argmax(probs, axis=0)
+        v = tl.max(probs, axis=0)
+        tl.store(idx_ptr + k, j.to(tl.int64))
+        tl.store(wout_ptr + k, v)          # fp32 staging; host renorms cast
+        sel_sum += v
+        probs = tl.where(ee == j, float("-inf"), probs)
+    if NORM:
+        for k in tl.static_range(K):
+            v = tl.load(wout_ptr + k)
+            tl.store(wout_ptr + k, v / sel_sum)
+
+
+def router_topk_t1(x, weight, top_k: int, norm_topk_prob: bool):
+    """``x [1, H]`` (or ``[H]``), ``weight [E, H]`` -> ``(logits [1, E]
+    bf16, weights [1, top_k] bf16, indices [1, top_k] int64)`` with the
+    unfused chain's semantics: fp32 softmax over all experts, top-k on
+    the probabilities, optional renormalisation."""
+    if x.dim() == 2:
+        assert x.shape[0] == 1, "T=1 router only"
+        x = x[0]
+    H = x.numel()
+    E, H2 = weight.shape
+    assert H == H2
+    dev = x.device
+    logits = torch.empty(E, dtype=torch.bfloat16, device=dev)
+    wstage = torch.empty(top_k, dtype=torch.float32, device=dev)
+    idx = torch.empty(top_k, dtype=torch.int64, device=dev)
+    chunk = 256 if H % 256 == 0 else (128 if H % 128 == 0 else 64)
+    _router_topk_t1[(1,)](
+        x.contiguous(), weight.contiguous(), logits, wstage, idx,
+        H=H, E=E, EB=triton.next_power_of_2(E), K=top_k, CHUNK=chunk,
+        NORM=norm_topk_prob, num_warps=8)
+    return (logits.reshape(1, E), wstage.to(torch.bfloat16).reshape(1, top_k),
+            idx.reshape(1, top_k))

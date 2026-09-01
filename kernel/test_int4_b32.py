@@ -262,3 +262,54 @@ def test_fused_tile_table_empty_routing():
     b = build_group_tiles_fused(eids, 8, 16)
     for n, x, y in zip(("row0", "rows", "grp", "order", "counts"), a, b):
         assert x.dtype == y.dtype and torch.equal(x, y), n
+
+
+@pytest.mark.parametrize("E,H,K,norm", [(128, 2048, 8, True),
+                                        (64, 512, 4, False),
+                                        (60, 384, 8, True)])
+def test_router_t1_matches_reference(E, H, K, norm):
+    """The fused router must reproduce the unfused chain's semantics:
+    fp32 softmax over all experts, top-k on the probabilities, optional
+    renorm. Indices must match the reference SET-wise on random inputs
+    (ties are measure-zero there); weights within bf16 rounding of the
+    fp32 chain, aligned by expert id."""
+    pytest.importorskip("triton")
+    from int4_b32 import router_topk_t1
+    dev = _gpu()
+    torch.manual_seed(17 + E)
+    agree = 0
+    for trial in range(20):
+        x = (torch.randn(1, H) * 0.5).to(dev, torch.bfloat16)
+        w = (torch.randn(E, H) * 0.05).to(dev, torch.bfloat16)
+        logits, wt, idx = router_topk_t1(x, w, K, norm)
+        ref_logits = torch.nn.functional.linear(x, w)
+        ref_p = torch.nn.functional.softmax(ref_logits, dtype=torch.float,
+                                            dim=-1)
+        ref_v, ref_i = torch.topk(ref_p, K, dim=-1)
+        if norm:
+            ref_v = ref_v / ref_v.sum(dim=-1, keepdim=True)
+        ref_v = ref_v.to(torch.bfloat16)
+        if set(idx[0].tolist()) == set(ref_i[0].tolist()):
+            agree += 1
+            got = {int(i): float(v) for i, v in zip(idx[0], wt[0])}
+            want = {int(i): float(v) for i, v in zip(ref_i[0], ref_v[0])}
+            for e in got:
+                assert abs(got[e] - want[e]) <= max(2 ** -7 * abs(want[e]),
+                                                    2 ** -9), (e, got[e],
+                                                               want[e])
+        # logits sanity every trial
+        assert torch.allclose(logits.float(), ref_logits.float(),
+                              rtol=2 ** -6, atol=2 ** -8)
+    assert agree >= 19, f"index-set agreement {agree}/20 -- too many near-ties"
+
+
+def test_router_t1_selection_is_deterministic_on_exact_ties():
+    """Constructed ties must resolve to the LOWEST index, every call."""
+    pytest.importorskip("triton")
+    from int4_b32 import router_topk_t1
+    dev = _gpu()
+    H, E, K = 64, 16, 4
+    x = torch.ones(1, H, device=dev, dtype=torch.bfloat16)
+    w = torch.zeros(E, H, device=dev, dtype=torch.bfloat16)  # all logits equal
+    outs = [router_topk_t1(x, w, K, True)[2][0].tolist() for _ in range(3)]
+    assert outs[0] == outs[1] == outs[2] == list(range(K)), outs
