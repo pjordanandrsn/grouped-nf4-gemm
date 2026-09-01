@@ -457,3 +457,36 @@ def router_topk_t1(x, weight, top_k: int, norm_topk_prob: bool):
         NORM=norm_topk_prob, num_warps=8)
     return (logits.reshape(1, E), wstage.to(torch.bfloat16).reshape(1, top_k),
             idx.reshape(1, top_k))
+
+
+# --------------------------------------------------- fused T=1 RMSNorm --
+@triton.jit
+def _rmsnorm_rows(x_ptr, w_ptr, out_ptr, R, H: tl.constexpr,
+                  HB: tl.constexpr, EPS: tl.constexpr):
+    """One launch per RMSNorm site: the fp32 mean-square reduce, the
+    rsqrt scale, the weight multiply, and the cast back -- the chain
+    torch runs as 3-4 kernels per call at decode shapes. Row-parallel
+    (grid (R,)) so the same kernel serves the [1, H] layer norms and the
+    [heads, head_dim] q/k norms."""
+    r = tl.program_id(0)
+    offs = tl.arange(0, HB)
+    m = offs < H
+    x = tl.load(x_ptr + r * H + offs, mask=m, other=0.0).to(tl.float32)
+    ms = tl.sum(x * x, axis=0) / H
+    inv = 1.0 / tl.sqrt(ms + EPS)
+    w = tl.load(w_ptr + offs, mask=m, other=0.0).to(tl.float32)
+    y = x * inv * w
+    tl.store(out_ptr + r * H + offs, y.to(tl.bfloat16), mask=m)
+
+
+def rmsnorm_rows(x: torch.Tensor, weight: torch.Tensor, eps: float):
+    """``x [..., H]`` -> RMSNorm'd bf16, upstream semantics: fp32
+    mean-square over the LAST axis, ``x * rsqrt(ms + eps) * weight``,
+    cast back. Rows are all leading axes flattened."""
+    H = x.shape[-1]
+    xf = x.reshape(-1, H)
+    out = torch.empty_like(xf, dtype=torch.bfloat16)
+    _rmsnorm_rows[(xf.shape[0],)](
+        xf.contiguous(), weight.contiguous(), out, xf.shape[0],
+        H=H, HB=triton.next_power_of_2(H), EPS=eps, num_warps=8)
+    return out.reshape(x.shape)
