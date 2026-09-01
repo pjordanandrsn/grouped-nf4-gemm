@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.19.0 — 2026-09-01
+
+### A fused row-parallel RMSNorm for the decode glue
+
+One kernel (#306). `rmsnorm_rows` folds the T=1 RMSNorm — fp32
+mean-square reduce, rsqrt, weight multiply, bf16 cast — into a single
+row-parallel launch. The fusion is licensed by the occupancy rule the
+router kernel failed: the per-row data pull is ~4 KB, so one program
+per row costs nothing in occupancy, where the refused single-CTA
+fusions pulled hundreds of KB through one SM. Consumed by the serving
+package's opt-in decode glue (its #324); on the composed B=1 lane the
+glue round measured 8.344 → 6.469 ms per step on the rental class with
+a paired quality gate PASS (Δppl +0.0136 @ 8192 steps).
+
 ## 0.18.0 — 2026-08-31
 
 ### The uniform int4-b32 serve lane, from decode GEMV to the batched step
