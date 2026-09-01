@@ -262,3 +262,26 @@ def test_fused_tile_table_empty_routing():
     b = build_group_tiles_fused(eids, 8, 16)
     for n, x, y in zip(("row0", "rows", "grp", "order", "counts"), a, b):
         assert x.dtype == y.dtype and torch.equal(x, y), n
+
+
+@pytest.mark.parametrize("shape,H", [((1, 2048), 2048),
+                                     ((32, 128), 128),
+                                     ((1, 5, 96), 96)])
+def test_rmsnorm_rows_matches_reference(shape, H):
+    """Upstream RMSNorm semantics: fp32 mean-square, rsqrt, weight
+    multiply, bf16 cast -- within one output rounding of the fp32
+    chain."""
+    pytest.importorskip("triton")
+    from int4_b32 import rmsnorm_rows
+    dev = _gpu()
+    torch.manual_seed(23)
+    x = (torch.randn(*shape) * 2).to(dev, torch.bfloat16)
+    w = (torch.randn(H).abs() + 0.5).to(dev, torch.bfloat16)
+    eps = 1e-6
+    got = rmsnorm_rows(x, w, eps)
+    xf = x.float()
+    ref = (xf * torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + eps)
+           * w.float()).to(torch.bfloat16)
+    assert got.shape == x.shape
+    assert (got.float() - ref.float()).abs().max() <= \
+        ref.float().abs().max() * 2 ** -7
