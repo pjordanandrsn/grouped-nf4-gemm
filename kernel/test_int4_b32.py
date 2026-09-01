@@ -285,3 +285,59 @@ def test_rmsnorm_rows_matches_reference(shape, H):
     assert got.shape == x.shape
     assert (got.float() - ref.float()).abs().max() <= \
         ref.float().abs().max() * 2 ** -7
+
+
+@pytest.mark.parametrize("shape,H", [((1, 2048), 2048), ((16, 2048), 2048)])
+def test_rmsnorm_resid_rows_matches_reference(shape, H):
+    """Fused residual-add + RMSNorm: the add must round once to bf16
+    exactly as the upstream bf16 ``+`` (operands exact in fp32, one
+    rounding), the norm then reads that rounded value. new_resid is
+    BITWISE the bf16 sum; the normed output sits within one rounding
+    of the fp32 chain."""
+    pytest.importorskip("triton")
+    from int4_b32 import rmsnorm_resid_rows
+    dev = _gpu()
+    torch.manual_seed(31)
+    x = (torch.randn(*shape) * 2).to(dev, torch.bfloat16)
+    r = (torch.randn(*shape) * 2).to(dev, torch.bfloat16)
+    w = (torch.randn(H).abs() + 0.5).to(dev, torch.bfloat16)
+    eps = 1e-6
+    got, nres = rmsnorm_resid_rows(x, r, w, eps)
+    ref_res = (x.float() + r.float()).to(torch.bfloat16)
+    assert torch.equal(nres, ref_res), "residual sum must be bitwise bf16 add"
+    sf = ref_res.float()
+    ref = (sf * torch.rsqrt(sf.pow(2).mean(-1, keepdim=True) + eps)
+           * w.float()).to(torch.bfloat16)
+    assert got.shape == x.shape and nres.shape == x.shape
+    assert (got.float() - ref.float()).abs().max() <= \
+        ref.float().abs().max() * 2 ** -7
+
+
+@pytest.mark.parametrize("R,HEADS,D", [(1, 32, 128), (16, 4, 128)])
+def test_rope_norm_heads_matches_reference(R, HEADS, D):
+    """Fused per-head RMSNorm + rotate-half rotary against the exact
+    upstream chain (norm in fp32 -> bf16, then q*cos + rotate_half(q)
+    *sin). The fused kernel keeps one fp32 chain with a single final
+    rounding, so the frame is the K6 relative tolerance, not bitwise."""
+    pytest.importorskip("triton")
+    from int4_b32 import rope_norm_heads
+    dev = _gpu()
+    torch.manual_seed(37)
+    x = (torch.randn(R, HEADS, D) * 2).to(dev, torch.bfloat16)
+    w = (torch.randn(D).abs() + 0.5).to(dev, torch.bfloat16)
+    ang = torch.rand(R, D // 2) * 6.28
+    ang = torch.cat([ang, ang], dim=-1)          # upstream duplicates halves
+    cos = ang.cos().to(dev, torch.bfloat16)
+    sin = ang.sin().to(dev, torch.bfloat16)
+    eps = 1e-6
+    got = rope_norm_heads(x, w, cos, sin, eps)
+    xf = x.float()
+    xn = (xf * torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + eps)
+          * w.float()).to(torch.bfloat16).float()
+    half = D // 2
+    rot = torch.cat([-xn[..., half:], xn[..., :half]], dim=-1)
+    ref = (xn * cos.float().unsqueeze(1)
+           + rot * sin.float().unsqueeze(1)).to(torch.bfloat16)
+    assert got.shape == x.shape
+    assert (got.float() - ref.float()).abs().max() <= \
+        ref.float().abs().max() * 2 ** -7
