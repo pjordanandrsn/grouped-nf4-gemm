@@ -420,3 +420,94 @@ def rmsnorm_rows(x: torch.Tensor, weight: torch.Tensor, eps: float):
         xf.contiguous(), weight.contiguous(), out, xf.shape[0],
         H=H, HB=triton.next_power_of_2(H), EPS=eps, num_warps=8)
     return out.reshape(x.shape)
+
+
+# ----------------------------------------- fused residual + RMSNorm --
+@triton.jit
+def _rmsnorm_resid_rows(x_ptr, res_ptr, w_ptr, out_ptr, nres_ptr, H: tl.constexpr,
+                        HB: tl.constexpr, EPS: tl.constexpr):
+    """The decoder layer's ``resid = resid + x; h = rmsnorm(resid)``
+    pair as ONE launch: torch runs it as an elementwise add plus the
+    3-4 kernel norm chain, twice per layer. The add rounds once to
+    bf16 exactly as the upstream bf16 ``+`` does (both operands are
+    exact in fp32, so fp32-add-then-round is the same single
+    rounding), then the norm reads that rounded value -- upstream
+    semantics, not merely close. Row-parallel; ~4 KB weight pull."""
+    r = tl.program_id(0)
+    offs = tl.arange(0, HB)
+    m = offs < H
+    x = tl.load(x_ptr + r * H + offs, mask=m, other=0.0).to(tl.float32)
+    s = tl.load(res_ptr + r * H + offs, mask=m, other=0.0).to(tl.float32) + x
+    nr = s.to(tl.bfloat16)
+    tl.store(nres_ptr + r * H + offs, nr, mask=m)
+    sf = nr.to(tl.float32)
+    ms = tl.sum(sf * sf, axis=0) / H
+    inv = 1.0 / tl.sqrt(ms + EPS)
+    w = tl.load(w_ptr + offs, mask=m, other=0.0).to(tl.float32)
+    tl.store(out_ptr + r * H + offs, (sf * inv * w).to(tl.bfloat16), mask=m)
+
+
+def rmsnorm_resid_rows(x: torch.Tensor, resid: torch.Tensor,
+                       weight: torch.Tensor, eps: float):
+    """``(x + resid)`` then RMSNorm, one launch. Returns
+    ``(normed, new_resid)`` both bf16, shapes of ``x``."""
+    H = x.shape[-1]
+    xf = x.reshape(-1, H)
+    rf = resid.reshape(-1, H)
+    out = torch.empty_like(xf, dtype=torch.bfloat16)
+    nres = torch.empty_like(xf, dtype=torch.bfloat16)
+    _rmsnorm_resid_rows[(xf.shape[0],)](
+        xf.contiguous(), rf.contiguous(), weight.contiguous(), out, nres,
+        H=H, HB=triton.next_power_of_2(H), EPS=eps, num_warps=8)
+    return out.reshape(x.shape), nres.reshape(x.shape)
+
+
+# ------------------------------------ fused q/k RMSNorm + rotary ------
+@triton.jit
+def _rope_norm_heads(x_ptr, w_ptr, cos_ptr, sin_ptr, out_ptr,
+                     HEADS: tl.constexpr, D: tl.constexpr,
+                     DB: tl.constexpr, EPS: tl.constexpr):
+    """Per-head RMSNorm followed by rotate-half rotary, one launch for
+    all heads of one projection: replaces the norm launch plus the
+    ~6-kernel ``apply_rotary_pos_emb`` chain (cat, neg, two muls, add,
+    dtype glue). Grid (rows, heads); each program pulls one [D] head
+    vector plus the shared [D] weight and this row's [D] cos/sin --
+    ~2 KB, occupancy-safe. rotate_half convention: halves split at
+    D/2, ``y = xn * cos + [-xn2, xn1] * sin`` where xn is the NORMED
+    vector (norm precedes rotary upstream), fp32 math, bf16 store."""
+    r = tl.program_id(0)
+    h = tl.program_id(1)
+    offs = tl.arange(0, DB)
+    m = offs < D
+    base = (r * HEADS + h) * D
+    x = tl.load(x_ptr + base + offs, mask=m, other=0.0).to(tl.float32)
+    ms = tl.sum(x * x, axis=0) / D
+    inv = 1.0 / tl.sqrt(ms + EPS)
+    w = tl.load(w_ptr + offs, mask=m, other=0.0).to(tl.float32)
+    xn = x * inv * w
+    half = D // 2
+    lo = offs < half
+    pidx = tl.where(lo, offs + half, offs - half)
+    xp = tl.load(x_ptr + base + pidx, mask=m, other=0.0).to(tl.float32)
+    wp = tl.load(w_ptr + pidx, mask=m, other=0.0).to(tl.float32)
+    pn = xp * inv * wp
+    rot = tl.where(lo, -pn, pn)
+    cos = tl.load(cos_ptr + r * D + offs, mask=m, other=0.0).to(tl.float32)
+    sin = tl.load(sin_ptr + r * D + offs, mask=m, other=0.0).to(tl.float32)
+    tl.store(out_ptr + base + offs, (xn * cos + rot * sin).to(tl.bfloat16),
+             mask=m)
+
+
+def rope_norm_heads(x: torch.Tensor, weight: torch.Tensor,
+                    cos: torch.Tensor, sin: torch.Tensor, eps: float):
+    """``x [R, HEADS, D]`` -> per-head RMSNorm (``weight [D]``) then
+    rotate-half rotary with this row's ``cos/sin [R, D]``; bf16 out,
+    same shape. The norm-then-rotate order and the D/2 half split
+    mirror the upstream attention forward exactly."""
+    R, HEADS, D = x.shape
+    out = torch.empty(R, HEADS, D, dtype=torch.bfloat16, device=x.device)
+    _rope_norm_heads[(R, HEADS)](
+        x.contiguous(), weight.contiguous(), cos.contiguous(),
+        sin.contiguous(), out, HEADS=HEADS, D=D,
+        DB=triton.next_power_of_2(D), EPS=eps, num_warps=4)
+    return out

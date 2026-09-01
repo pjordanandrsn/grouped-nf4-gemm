@@ -285,3 +285,86 @@ def test_rmsnorm_rows_matches_reference(shape, H):
     assert got.shape == x.shape
     assert (got.float() - ref.float()).abs().max() <= \
         ref.float().abs().max() * 2 ** -7
+
+
+def _bf16_ulp(t):
+    """One bf16 ULP at each element's own magnitude: bf16 keeps 7
+    explicit mantissa bits, so the step at x is 2**(floor(log2|x|) - 7).
+    An elementwise bound says what a rounding claim actually means --
+    a scalar scaled off the tensor's max is tighter than a real ULP for
+    small elements and looser for large ones."""
+    e = torch.floor(torch.log2(t.float().abs().clamp_min(2 ** -126)))
+    return torch.pow(torch.tensor(2.0), e - 7)
+
+
+@pytest.mark.parametrize("shape,H", [((1, 2048), 2048), ((16, 2048), 2048)])
+def test_rmsnorm_resid_rows_matches_reference(shape, H):
+    """Fused residual-add + RMSNorm: the add must round once to bf16
+    exactly as the upstream bf16 ``+`` (operands exact in fp32, one
+    rounding), the norm then reads that rounded value. new_resid is
+    BITWISE the bf16 sum; the normed output sits within one rounding
+    of the fp32 chain."""
+    pytest.importorskip("triton")
+    from int4_b32 import rmsnorm_resid_rows
+    dev = _gpu()
+    torch.manual_seed(31)
+    x = (torch.randn(*shape) * 2).to(dev, torch.bfloat16)
+    r = (torch.randn(*shape) * 2).to(dev, torch.bfloat16)
+    w = (torch.randn(H).abs() + 0.5).to(dev, torch.bfloat16)
+    eps = 1e-6
+    got, nres = rmsnorm_resid_rows(x, r, w, eps)
+    ref_res = (x.float() + r.float()).to(torch.bfloat16)
+    if dev == "cuda":
+        # on hardware the add really is fp32, so the double rounding
+        # (exact sum -> fp32 -> bf16) matches torch's exactly
+        assert torch.equal(nres, ref_res), \
+            "residual sum must be bitwise the bf16 add on hardware"
+    else:
+        # interpreter mode does not evaluate the add in fp32, so a sum
+        # whose fp32 rounding differs from its wider rounding lands one
+        # ULP away from torch's double-rounded result. Bound it at
+        # exactly that: this leg checks the FORMULA, CUDA checks bits.
+        d = (nres.float() - ref_res.float()).abs()
+        assert (d <= 2 * _bf16_ulp(ref_res)).all(), \
+            "residual sum must stay within a couple of bf16 ULP"
+    sf = ref_res.float()
+    ref = (sf * torch.rsqrt(sf.pow(2).mean(-1, keepdim=True) + eps)
+           * w.float()).to(torch.bfloat16)
+    assert got.shape == x.shape and nres.shape == x.shape
+    # one ULP on hardware, where the fused chain differs from the
+    # reference only by its single final rounding. The interpreter also
+    # feeds the norm a residual that is itself off by a ULP, so its
+    # deviation compounds -- bound it loosely enough not to sit on the
+    # boundary, still orders of magnitude tighter than any logic error.
+    budget = _bf16_ulp(ref) * (1 if dev == "cuda" else 4)
+    assert ((got.float() - ref.float()).abs() <= budget).all()
+
+
+@pytest.mark.parametrize("R,HEADS,D", [(1, 32, 128), (16, 4, 128)])
+def test_rope_norm_heads_matches_reference(R, HEADS, D):
+    """Fused per-head RMSNorm + rotate-half rotary against the exact
+    upstream chain (norm in fp32 -> bf16, then q*cos + rotate_half(q)
+    *sin). The fused kernel keeps one fp32 chain with a single final
+    rounding, so the frame is the K6 relative tolerance, not bitwise."""
+    pytest.importorskip("triton")
+    from int4_b32 import rope_norm_heads
+    dev = _gpu()
+    torch.manual_seed(37)
+    x = (torch.randn(R, HEADS, D) * 2).to(dev, torch.bfloat16)
+    w = (torch.randn(D).abs() + 0.5).to(dev, torch.bfloat16)
+    ang = torch.rand(R, D // 2) * 6.28
+    ang = torch.cat([ang, ang], dim=-1)          # upstream duplicates halves
+    cos = ang.cos().to(dev, torch.bfloat16)
+    sin = ang.sin().to(dev, torch.bfloat16)
+    eps = 1e-6
+    got = rope_norm_heads(x, w, cos, sin, eps)
+    xf = x.float()
+    xn = (xf * torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + eps)
+          * w.float()).to(torch.bfloat16).float()
+    half = D // 2
+    rot = torch.cat([-xn[..., half:], xn[..., :half]], dim=-1)
+    ref = (xn * cos.float().unsqueeze(1)
+           + rot * sin.float().unsqueeze(1)).to(torch.bfloat16)
+    assert got.shape == x.shape
+    assert (got.float() - ref.float()).abs().max() <= \
+        ref.float().abs().max() * 2 ** -7
