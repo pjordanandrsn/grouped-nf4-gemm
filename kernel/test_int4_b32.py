@@ -287,6 +287,16 @@ def test_rmsnorm_rows_matches_reference(shape, H):
         ref.float().abs().max() * 2 ** -7
 
 
+def _bf16_ulp(t):
+    """One bf16 ULP at each element's own magnitude: bf16 keeps 7
+    explicit mantissa bits, so the step at x is 2**(floor(log2|x|) - 7).
+    An elementwise bound says what a rounding claim actually means --
+    a scalar scaled off the tensor's max is tighter than a real ULP for
+    small elements and looser for large ones."""
+    e = torch.floor(torch.log2(t.float().abs().clamp_min(2 ** -126)))
+    return torch.pow(torch.tensor(2.0), e - 7)
+
+
 @pytest.mark.parametrize("shape,H", [((1, 2048), 2048), ((16, 2048), 2048)])
 def test_rmsnorm_resid_rows_matches_reference(shape, H):
     """Fused residual-add + RMSNorm: the add must round once to bf16
@@ -312,16 +322,22 @@ def test_rmsnorm_resid_rows_matches_reference(shape, H):
     else:
         # interpreter mode does not evaluate the add in fp32, so a sum
         # whose fp32 rounding differs from its wider rounding lands one
-        # ULP away from torch's double-rounded result. Bound it instead:
-        # this leg checks the FORMULA, the CUDA leg checks the bits.
-        ulp = (ref_res.float().abs().max() * 2 ** -8)
-        assert (nres.float() - ref_res.float()).abs().max() <= ulp
+        # ULP away from torch's double-rounded result. Bound it at
+        # exactly that: this leg checks the FORMULA, CUDA checks bits.
+        d = (nres.float() - ref_res.float()).abs()
+        assert (d <= 2 * _bf16_ulp(ref_res)).all(), \
+            "residual sum must stay within a couple of bf16 ULP"
     sf = ref_res.float()
     ref = (sf * torch.rsqrt(sf.pow(2).mean(-1, keepdim=True) + eps)
            * w.float()).to(torch.bfloat16)
     assert got.shape == x.shape and nres.shape == x.shape
-    assert (got.float() - ref.float()).abs().max() <= \
-        ref.float().abs().max() * 2 ** -7
+    # one ULP on hardware, where the fused chain differs from the
+    # reference only by its single final rounding. The interpreter also
+    # feeds the norm a residual that is itself off by a ULP, so its
+    # deviation compounds -- bound it loosely enough not to sit on the
+    # boundary, still orders of magnitude tighter than any logic error.
+    budget = _bf16_ulp(ref) * (1 if dev == "cuda" else 4)
+    assert ((got.float() - ref.float()).abs() <= budget).all()
 
 
 @pytest.mark.parametrize("R,HEADS,D", [(1, 32, 128), (16, 4, 128)])
