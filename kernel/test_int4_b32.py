@@ -368,3 +368,51 @@ def test_rope_norm_heads_matches_reference(R, HEADS, D):
     assert got.shape == x.shape
     assert (got.float() - ref.float()).abs().max() <= \
         ref.float().abs().max() * 2 ** -7
+
+
+@pytest.mark.parametrize("N,K,R", [(512, 256, 1), (4096, 2048, 1),
+                                   (1024, 512, 16)])
+def test_gemv_fp8_matches_dequant_reference(N, K, R):
+    """The kernel must equal the dequantised weight matmul, not the
+    original bf16 one: quantisation error belongs to quant_fp8_rows, and
+    conflating the two would let a kernel bug hide inside the format's
+    own error budget."""
+    pytest.importorskip("triton")
+    from int4_b32 import gemv_fp8_rows, quant_fp8_rows
+    dev = _gpu()
+    torch.manual_seed(11)
+    w = (torch.randn(N, K) / (K ** 0.5)).to(dev, torch.bfloat16)
+    x = torch.randn(R, K).to(dev, torch.bfloat16)
+    q, s = quant_fp8_rows(w, group=128)
+    got = gemv_fp8_rows(x, q, s, group=128)
+    deq = (q.float().reshape(N, K // 128, 128)
+           * s.float()[..., None]).reshape(N, K)
+    ref = (x.float() @ deq.T)
+    assert got.shape == (R, N) and got.dtype == torch.bfloat16
+    assert (got.float() - ref).abs().max() <= ref.abs().max() * 2 ** -7
+
+
+@pytest.mark.parametrize("N,K", [(2048, 1024)])
+def test_quant_fp8_rows_beats_int4_error(N, K):
+    """The whole premise of this lane: e4m3's exponent tracks a weight
+    row's dynamic range where int4-b32's 4-bit linear grid cannot, so
+    per-weight error must come out materially lower at the SAME group
+    size. If this ever fails, the quality argument for the lane is gone
+    and the K8 gate would only confirm it more expensively."""
+    pytest.importorskip("triton")
+    from int4_b32 import quant_fp8_rows
+    torch.manual_seed(12)
+    w = (torch.randn(N, K) / (K ** 0.5)).to(torch.bfloat16)
+    q, s = quant_fp8_rows(w.cuda() if torch.cuda.is_available() else w,
+                          group=128)
+    deq = (q.float().reshape(N, K // 128, 128)
+           * s.float()[..., None]).reshape(N, K).cpu()
+    fp8_err = (deq - w.float()).abs().mean()
+    # int4-b32 reference: symmetric 4-bit, blocksize 32 (finer groups),
+    # quantised the way the shipped packer does
+    wf = w.float().reshape(N, K // 32, 32)
+    step = wf.abs().amax(-1, keepdim=True).clamp_min(1e-12) / 7.0
+    i4 = (wf / step).round().clamp(-8, 7) * step
+    int4_err = (i4.reshape(N, K) - w.float()).abs().mean()
+    assert fp8_err < int4_err * 0.6, (
+        f"fp8 mean|err| {fp8_err:.3e} vs int4 {int4_err:.3e}")

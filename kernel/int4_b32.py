@@ -511,3 +511,66 @@ def rope_norm_heads(x: torch.Tensor, weight: torch.Tensor,
         sin.contiguous(), out, HEADS=HEADS, D=D,
         DB=triton.next_power_of_2(D), EPS=eps, num_warps=4)
     return out
+
+
+# ------------------------------------------------- fp8 e4m3 dense GEMV --
+FP8_MAX = 448.0
+
+
+def quant_fp8_rows(w: torch.Tensor, group: int = 128):
+    """``w [N, K]`` -> ``(q e4m3 [N, K], scales fp32 [N, K // group])``.
+
+    Per-row, per-group absmax scaling: e4m3 carries ~2 decimal digits, so
+    a single per-tensor scale would waste most of the range on the tail
+    of the weight distribution. Group 128 costs 4 bytes per 128 weights
+    (3.1% on top of the 1 byte each) and keeps the quantisation error
+    local to a group."""
+    N, K = w.shape
+    assert K % group == 0, f"K={K} not divisible by group={group}"
+    wf = w.float().reshape(N, K // group, group)
+    scale = wf.abs().amax(-1, keepdim=True).clamp_min(1e-12) / FP8_MAX
+    q = (wf / scale).clamp(-FP8_MAX, FP8_MAX).to(torch.float8_e4m3fn)
+    return q.reshape(N, K), scale.reshape(N, K // group).float()
+
+
+@triton.jit
+def _gemv_fp8_rows(x_ptr, w_ptr, ws_ptr, out_ptr, N, K: tl.constexpr,
+                   BLOCK_N: tl.constexpr, GS: tl.constexpr):
+    """One program computes BLOCK_N outputs for activation row ``r``.
+    Grid (cdiv(N, BLOCK_N), R).
+
+    Unlike the int4 lane this keeps the ACTIVATION in its own precision
+    and dequantises only the weight, so there is no activation-quant
+    launch and no int8 rounding of x -- the whole error budget stays on
+    the weight, where fp8's exponent handles the dynamic range that
+    int4-b32 could not. One scale load per (row-block, group) rather
+    than per element."""
+    pid = tl.program_id(0)
+    r = tl.program_id(1)
+    offs_n = pid * BLOCK_N + tl.arange(0, BLOCK_N)
+    n_mask = offs_n < N
+    acc = tl.zeros((BLOCK_N,), dtype=tl.float32)
+    KB: tl.constexpr = K // GS
+    for kb in range(0, KB):
+        koff = kb * GS + tl.arange(0, GS)
+        x = tl.load(x_ptr + r * K + koff).to(tl.float32)
+        w = tl.load(w_ptr + offs_n[:, None] * K + koff[None, :],
+                    mask=n_mask[:, None], other=0.0).to(tl.float32)
+        s = tl.load(ws_ptr + offs_n * KB + kb, mask=n_mask, other=0.0)
+        acc += s * tl.sum(w * x[None, :], axis=1)
+    tl.store(out_ptr + r * N + offs_n, acc.to(tl.bfloat16), mask=n_mask)
+
+
+def gemv_fp8_rows(x: torch.Tensor, q: torch.Tensor, scales: torch.Tensor,
+                  group: int = 128):
+    """``x [R, K]`` (bf16) @ ``q [N, K]`` (e4m3, per-group scaled) -> bf16
+    ``[R, N]``. Weight bytes are halved against bf16, which is the whole
+    point at decode: these projections are memory bound."""
+    R, K = x.shape
+    N = q.shape[0]
+    out = torch.empty(R, N, dtype=torch.bfloat16, device=x.device)
+    bn = 64 if N <= 4096 else 128
+    _gemv_fp8_rows[(triton.cdiv(N, bn), R)](
+        x.contiguous(), q, scales.contiguous(), out, N,
+        K=K, BLOCK_N=bn, GS=group, num_warps=4)
+    return out
