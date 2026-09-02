@@ -78,6 +78,10 @@ py-modules = [
     "nf4_qlora",
     # The GGUF k-quant lane (Glimmer-era): reader + reference decoders.
     "gguf_reader", "kquant_ref",
+    # Calibrated (GPTQ-style) packing onto the shipped int4-b32 grid: same
+    # bytes, same kernels, grid points chosen against activation-weighted
+    # output error instead of weight error.
+    "gptq_pack",
     # Hybrid tier Phase 2: torch-facing wrappers for the native CPU kernels.
     "cpu_grouped",
     # Stage 3 (tribrid): the CPU destination for cold experts, and the

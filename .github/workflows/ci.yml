@@ -109,7 +109,7 @@ jobs:
       # These 8 were in the tree and invoked by nothing. They need triton (which
       # this job installs) but not a device, so CPU CI can run them.
       - name: CPU-reachable suites that CI never ran
-        run: cd kernel && python -m pytest test_arena_moe_patch.py test_k3_oracle.py test_moonshot_gather.py test_mxfp4_arena_layout.py test_mxfp4_oracle.py test_mxfp4_provenance.py test_group_tiles_readonly.py test_mxfp4_interp.py test_mxfp4_v4.py test_triton_shim.py -q
+        run: cd kernel && python -m pytest test_gptq_pack.py test_arena_moe_patch.py test_k3_oracle.py test_moonshot_gather.py test_mxfp4_arena_layout.py test_mxfp4_oracle.py test_mxfp4_provenance.py test_group_tiles_readonly.py test_mxfp4_interp.py test_mxfp4_v4.py test_triton_shim.py -q
 
       - name: hybrid CPU kernels (native build + exact-tree parity)
         # PYTHONPATH carries the repo root so gnf4_native imports from the
