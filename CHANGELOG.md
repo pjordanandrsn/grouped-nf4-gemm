@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.20.0 — 2026-09-01
+
+### Glue round 2: the residual add and the rotary chain fold away
+
+Two decode kernels (#308), both aimed by the shipped-stack censuses,
+which put the remaining non-GEMM step at ~1.9 ms of the 6.5 ms
+single-stream step and ~4.0 ms of the 15.5 ms batched one:
+
+- **`rmsnorm_resid_rows`** folds a decoder layer's residual add into
+  the following RMSNorm. The add rounds once to bf16 exactly as the
+  bf16 `+` it replaces — bitwise on hardware, asserted as such — and
+  the norm then reads that rounded value.
+- **`rope_norm_heads`** folds a projection's per-head RMSNorm together
+  with the rotate-half rotary chain (slice, negate, concatenate, two
+  multiplies, an add) into one launch, keeping upstream's ordering and
+  its pre-rotary bf16 rounding.
+
+Both are row/head-parallel with per-program pulls of ~2-4 KB, the same
+occupancy frame that licensed the fused norm in 0.19.0 and refused the
+single-CTA router. Measured through the serving package's consumer
+(its #326): **1.1557x at B=1** (6.575 -> 5.689 ms) and **1.0916x at
+B=16** (15.305 -> 14.021 ms, 1044.7 -> 1141.1 tok/s aggregate), with
+the paired quality gate PASSING at delta -0.00105 ppl over 8192
+sha-matched steps.
+
 ## 0.19.0 — 2026-09-01
 
 ### A fused row-parallel RMSNorm for the decode glue
