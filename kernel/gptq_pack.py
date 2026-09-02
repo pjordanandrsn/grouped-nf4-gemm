@@ -74,14 +74,16 @@ def gptq_pack_int4_b32(w: torch.Tensor, hessian: torch.Tensor,
     Hinv = torch.linalg.cholesky(
         torch.cholesky_inverse(torch.linalg.cholesky(H)), upper=True)
 
-    Qi = torch.zeros(N, K, dtype=torch.int8)         # grid integers
-    scales = torch.zeros(N, K // BLOCK, dtype=torch.float32)
+    # buffers follow the weight's device, as pack_int4_b32's do: a caller
+    # packing on the GPU must not have a CPU scale meet a CUDA column
+    Qi = torch.zeros(N, K, dtype=torch.int8, device=W.device)   # grid ints
+    scales = torch.zeros(N, K // BLOCK, dtype=torch.float32, device=W.device)
 
     for i0 in range(0, K, blocksize):
         i1 = min(i0 + blocksize, K)
         W1 = W[:, i0:i1].clone()
         E1 = torch.zeros_like(W1)
-        Hb = Hinv[i0:i1, i1 and i0:i1]
+        Hb = Hinv[i0:i1, i0:i1]
         for j in range(i1 - i0):
             c = i0 + j
             if c % BLOCK == 0:                        # entering a new block
