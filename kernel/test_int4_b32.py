@@ -368,3 +368,37 @@ def test_rope_norm_heads_matches_reference(R, HEADS, D):
     assert got.shape == x.shape
     assert (got.float() - ref.float()).abs().max() <= \
         ref.float().abs().max() * 2 ** -7
+
+
+@pytest.mark.parametrize("R,E,K,norm", [(1, 128, 8, True), (16, 128, 8, True),
+                                        (1, 64, 4, False)])
+def test_router_epilogue_matches_torch(R, E, K, norm):
+    """Must reproduce torch's softmax->topk->renormalise exactly enough
+    that the SELECTION is identical: a different expert set is a routing
+    change, not a rounding one, and no ppl gate would forgive it."""
+    pytest.importorskip("triton")
+    from int4_b32 import router_epilogue
+    dev = _gpu()
+    torch.manual_seed(41)
+    logits = (torch.randn(R, E) * 3).to(dev, torch.float32)
+    probs, w, idx = router_epilogue(logits, K, norm)
+
+    ref_p = torch.softmax(logits, dim=-1, dtype=torch.float32)
+    ref_v, ref_i = torch.topk(ref_p, K, dim=-1)
+    if norm:
+        ref_v = ref_v / ref_v.sum(dim=-1, keepdim=True)
+    assert torch.equal(idx, ref_i), "selected experts must match exactly"
+    assert (probs - ref_p).abs().max() <= ref_p.abs().max() * 2 ** -18
+    assert (w - ref_v).abs().max() <= ref_v.abs().max() * 2 ** -18
+
+
+def test_router_epilogue_breaks_ties_to_the_lower_index():
+    """Equal logits must select the lower expert index, the rule a
+    stable descending sort follows -- otherwise two engines routing the
+    same token could disagree while both look correct."""
+    pytest.importorskip("triton")
+    from int4_b32 import router_epilogue
+    dev = _gpu()
+    logits = torch.zeros(1, 8, dtype=torch.float32, device=dev)
+    _, _, idx = router_epilogue(logits, 3, False)
+    assert idx.flatten().tolist() == [0, 1, 2]

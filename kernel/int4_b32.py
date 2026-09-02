@@ -511,3 +511,61 @@ def rope_norm_heads(x: torch.Tensor, weight: torch.Tensor,
         sin.contiguous(), out, HEADS=HEADS, D=D,
         DB=triton.next_power_of_2(D), EPS=eps, num_warps=4)
     return out
+
+
+# ------------------------------------------- fused router epilogue (T=1) --
+@triton.jit
+def _router_epilogue(logit_ptr, prob_ptr, wout_ptr, iout_ptr,
+                     E: tl.constexpr, EB: tl.constexpr, K: tl.constexpr,
+                     NORM: tl.constexpr):
+    """softmax over all experts, top-K select, optional renormalise --
+    the five-launch chain torch runs per layer (softmax, gatherTopK, its
+    bitonic sort, the sum, the divide) as one launch on ONE row.
+
+    This is the epilogue only: the router's own GEMM stays where it is.
+    That distinction is the whole reason this fusion is licensed where
+    the fused router GEMM was refused -- a program here pulls E floats
+    (512 B at E=128), not the router weight matrix, so the single-CTA
+    bandwidth trap does not apply and what remains is launch count.
+
+    Selection is by iterated max with ties going to the LOWER expert
+    index, matching a stable descending sort."""
+    r = tl.program_id(0)
+    offs = tl.arange(0, EB)
+    m = offs < E
+    x = tl.load(logit_ptr + r * E + offs, mask=m,
+                other=-float("inf")).to(tl.float32)
+    ex = tl.exp(x - tl.max(x, axis=0))
+    ex = tl.where(m, ex, 0.0)
+    p = ex / tl.sum(ex, axis=0)
+    tl.store(prob_ptr + r * E + offs, p, mask=m)
+    # -1.0 is below every softmax probability, so masked and already
+    # selected lanes can never win a later round
+    sel = tl.where(m, p, -1.0)
+    kk = tl.arange(0, K)
+    vals = tl.zeros((K,), dtype=tl.float32)
+    idxs = tl.zeros((K,), dtype=tl.int32)
+    for j in range(K):
+        v = tl.max(sel, axis=0)
+        i = tl.argmax(sel, axis=0).to(tl.int32)
+        vals = tl.where(kk == j, v, vals)
+        idxs = tl.where(kk == j, i, idxs)
+        sel = tl.where(offs == i, -1.0, sel)
+    if NORM:
+        vals = vals / tl.sum(vals, axis=0)
+    tl.store(wout_ptr + r * K + kk, vals)
+    tl.store(iout_ptr + r * K + kk, idxs.to(tl.int64))
+
+
+def router_epilogue(logits: torch.Tensor, k: int, norm: bool):
+    """``logits [R, E]`` -> ``(probs [R, E] fp32, weights [R, k] fp32,
+    indices [R, k] int64)``, upstream semantics: fp32 softmax over ALL
+    experts, then top-k, then the optional renormalisation."""
+    R, E = logits.shape
+    probs = torch.empty(R, E, dtype=torch.float32, device=logits.device)
+    w = torch.empty(R, k, dtype=torch.float32, device=logits.device)
+    idx = torch.empty(R, k, dtype=torch.int64, device=logits.device)
+    _router_epilogue[(R,)](
+        logits.contiguous(), probs, w, idx, E=E,
+        EB=triton.next_power_of_2(E), K=k, NORM=bool(norm), num_warps=4)
+    return probs, w, idx
