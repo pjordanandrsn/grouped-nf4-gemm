@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.21.0 — 2026-09-02
+
+### Glue round 3: the router epilogue in one launch
+
+One kernel (#311). After the router's GEMM, torch runs a softmax over
+every expert, a top-k it serves with a gather plus a bitonic sort, a
+sum and a divide — five launches per layer, which the shipped-stack
+census put at ~0.43 ms of a 5.66 ms single-stream step.
+`router_epilogue` does all of it in one: fp32 softmax, iterated-max
+top-k with ties to the lower expert index, optional renormalisation,
+returning probs, weights and indices with upstream's dtypes. `top_k`
+need not be a power of two — the register vectors are padded and
+masked, since `tl.arange` spans only powers of two and a model whose
+top_k is 6 would otherwise fail at launch.
+
+**Why this is licensed where a fused router was refused in 0.12.x:**
+that fusion folded the router GEMM, so a single CTA pulled the whole
+router weight matrix and lost on occupancy. This folds only the
+epilogue, where a program reads E floats — 512 bytes at E=128 — so
+what is left to win is launch count. Measured through the serving
+package (its #329): **1.0735x at B=1** (5.657 → 5.270 ms) and
+**1.0464x at B=16** (13.823 → 13.210 ms, 1,157.5 → 1,211.2 tok/s
+aggregate), with the paired quality gate PASSING at **-0.01968 ppl** —
+an improvement, since the fused chain softmaxes and renormalises in a
+single fp32 pass.
+
+Tests pin the selected expert set exactly, because a different set is
+a routing change rather than a rounding one.
+
 ## 0.20.0 — 2026-09-01
 
 ### Glue round 2: the residual add and the rotary chain fold away
