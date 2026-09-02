@@ -371,7 +371,9 @@ def test_rope_norm_heads_matches_reference(R, HEADS, D):
 
 
 @pytest.mark.parametrize("R,E,K,norm", [(1, 128, 8, True), (16, 128, 8, True),
-                                        (1, 64, 4, False)])
+                                        (1, 64, 4, False),
+                                        (1, 128, 6, True),
+                                        (4, 100, 3, True)])
 def test_router_epilogue_matches_torch(R, E, K, norm):
     """Must reproduce torch's softmax->topk->renormalise exactly enough
     that the SELECTION is identical: a different expert set is a routing
@@ -390,6 +392,24 @@ def test_router_epilogue_matches_torch(R, E, K, norm):
     assert torch.equal(idx, ref_i), "selected experts must match exactly"
     assert (probs - ref_p).abs().max() <= ref_p.abs().max() * 2 ** -18
     assert (w - ref_v).abs().max() <= ref_v.abs().max() * 2 ** -18
+
+
+def test_router_epilogue_handles_non_power_of_two_k():
+    """top_k is a model choice, not a kernel choice: 6 and 3 are as
+    legitimate as 8, and tl.arange only spans powers of two."""
+    pytest.importorskip("triton")
+    from int4_b32 import router_epilogue
+    dev = _gpu()
+    torch.manual_seed(43)
+    logits = (torch.randn(4, 100) * 3).to(dev, torch.float32)
+    for k in (3, 5, 6, 7):
+        _, w, idx = router_epilogue(logits, k, True)
+        ref_p = torch.softmax(logits, dim=-1, dtype=torch.float32)
+        ref_v, ref_i = torch.topk(ref_p, k, dim=-1)
+        ref_v = ref_v / ref_v.sum(dim=-1, keepdim=True)
+        assert w.shape == (4, k) and idx.shape == (4, k)
+        assert torch.equal(idx, ref_i)
+        assert (w - ref_v).abs().max() <= ref_v.abs().max() * 2 ** -18
 
 
 def test_router_epilogue_breaks_ties_to_the_lower_index():

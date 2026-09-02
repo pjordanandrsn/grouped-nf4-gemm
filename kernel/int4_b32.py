@@ -517,7 +517,7 @@ def rope_norm_heads(x: torch.Tensor, weight: torch.Tensor,
 @triton.jit
 def _router_epilogue(logit_ptr, prob_ptr, wout_ptr, iout_ptr,
                      E: tl.constexpr, EB: tl.constexpr, K: tl.constexpr,
-                     NORM: tl.constexpr):
+                     KB: tl.constexpr, NORM: tl.constexpr):
     """softmax over all experts, top-K select, optional renormalise --
     the five-launch chain torch runs per layer (softmax, gatherTopK, its
     bitonic sort, the sum, the divide) as one launch on ONE row.
@@ -529,7 +529,10 @@ def _router_epilogue(logit_ptr, prob_ptr, wout_ptr, iout_ptr,
     bandwidth trap does not apply and what remains is launch count.
 
     Selection is by iterated max with ties going to the LOWER expert
-    index, matching a stable descending sort."""
+    index, matching a stable descending sort. ``K`` need not be a power
+    of two: the register vectors are padded to ``KB`` and masked, since
+    ``tl.arange`` only spans powers of two and a model whose top_k is
+    not one would otherwise fail at launch."""
     r = tl.program_id(0)
     offs = tl.arange(0, EB)
     m = offs < E
@@ -542,9 +545,10 @@ def _router_epilogue(logit_ptr, prob_ptr, wout_ptr, iout_ptr,
     # -1.0 is below every softmax probability, so masked and already
     # selected lanes can never win a later round
     sel = tl.where(m, p, -1.0)
-    kk = tl.arange(0, K)
-    vals = tl.zeros((K,), dtype=tl.float32)
-    idxs = tl.zeros((K,), dtype=tl.int32)
+    kk = tl.arange(0, KB)
+    kmask = kk < K
+    vals = tl.zeros((KB,), dtype=tl.float32)
+    idxs = tl.zeros((KB,), dtype=tl.int32)
     for j in range(K):
         v = tl.max(sel, axis=0)
         i = tl.argmax(sel, axis=0).to(tl.int32)
@@ -552,9 +556,9 @@ def _router_epilogue(logit_ptr, prob_ptr, wout_ptr, iout_ptr,
         idxs = tl.where(kk == j, i, idxs)
         sel = tl.where(offs == i, -1.0, sel)
     if NORM:
-        vals = vals / tl.sum(vals, axis=0)
-    tl.store(wout_ptr + r * K + kk, vals)
-    tl.store(iout_ptr + r * K + kk, idxs.to(tl.int64))
+        vals = vals / tl.sum(tl.where(kmask, vals, 0.0), axis=0)
+    tl.store(wout_ptr + r * K + kk, vals, mask=kmask)
+    tl.store(iout_ptr + r * K + kk, idxs.to(tl.int64), mask=kmask)
 
 
 def router_epilogue(logits: torch.Tensor, k: int, norm: bool):
@@ -567,5 +571,6 @@ def router_epilogue(logits: torch.Tensor, k: int, norm: bool):
     idx = torch.empty(R, k, dtype=torch.int64, device=logits.device)
     _router_epilogue[(R,)](
         logits.contiguous(), probs, w, idx, E=E,
-        EB=triton.next_power_of_2(E), K=k, NORM=bool(norm), num_warps=4)
+        EB=triton.next_power_of_2(E), K=k, KB=triton.next_power_of_2(k),
+        NORM=bool(norm), num_warps=4)
     return probs, w, idx
