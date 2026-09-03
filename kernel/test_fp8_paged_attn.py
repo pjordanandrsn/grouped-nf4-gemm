@@ -90,15 +90,21 @@ def _modes():
 def _run_both(B, hq, hkv, d, seq_lens, mode_kw=None, **kw):
     q, kp, vp, tab, lens = _build(B, hq, hkv, d, seq_lens, **kw)
     dev = lambda t: t.cuda()  # noqa: E731
+    sinks = kw.get("sinks")
     got = fp8_paged_decode_attention(
         dev(q), dev(kp), dev(vp), dev(tab), dev(lens),
         n_kv_heads=hkv, head_dim=d, **(mode_kw or {}),
         layout=kw.get("layout", "tokens"),
-        k_groups=kw.get("k_groups", 1), v_groups=kw.get("v_groups", 1))
+        k_groups=kw.get("k_groups", 1), v_groups=kw.get("v_groups", 1),
+        window=kw.get("window", 0),
+        sinks=dev(sinks) if sinks is not None else None,
+        sm_scale=kw.get("sm_scale"))
     want = paged_attn_ref(q, kp, vp, tab, lens, n_kv_heads=hkv, head_dim=d,
                           k_groups=kw.get("k_groups", 1),
                           v_groups=kw.get("v_groups", 1),
-                          layout=kw.get("layout", "tokens"))
+                          layout=kw.get("layout", "tokens"),
+                          window=kw.get("window", 0), sinks=sinks,
+                          sm_scale=kw.get("sm_scale"))
     return got.cpu().float(), want.float()
 
 
@@ -390,3 +396,57 @@ def test_attn_compute_env_selector(monkeypatch):
         monkeypatch.setenv("GNF4_ATTN_COMPUTE", bad)
         with pytest.raises(ValueError, match="not a compute mode"):
             _compute_default()
+
+
+# ---- sliding windows and attention sinks (model parity: Gemma-4, gpt-oss)
+
+@needs_gpu
+@pytest.mark.parametrize("mode,mkw", _modes())
+@pytest.mark.parametrize("window", [1, 5, 16, 33, 64])
+def test_sliding_window_keeps_only_the_last_keys(mode, mkw, window):
+    """Each query sees exactly the last ``window`` keys: tiles wholly
+    below the window are skipped, the boundary tile is masked per token.
+    Lengths straddle tile and block boundaries on purpose."""
+    got, want = _run_both(4, 16, 4, 64, [64, 130, 17, 96], mode_kw=mkw,
+                          window=window)
+    _close(got, want, mode)
+
+
+@needs_gpu
+@pytest.mark.parametrize("mode,mkw", _modes())
+def test_window_wider_than_context_is_full_attention(mode, mkw):
+    got_w, want_w = _run_both(2, 16, 4, 64, [40, 9], mode_kw=mkw, window=4096)
+    got_0, _ = _run_both(2, 16, 4, 64, [40, 9], mode_kw=mkw, window=0)
+    _close(got_w, want_w, mode)
+    torch.testing.assert_close(got_w, got_0, rtol=0, atol=0)
+
+
+@needs_gpu
+@pytest.mark.parametrize("mode,mkw", _modes())
+def test_attention_sinks_join_the_denominator_only(mode, mkw):
+    """A sink logit per q head enters the softmax max and sum with no
+    value; a large sink drives the output toward zero, a tiny one toward
+    plain attention -- both against the torch reference."""
+    torch.manual_seed(11)
+    for sinks in (torch.randn(16) * 3, torch.full((16,), -30.0), torch.full((16,), 12.0)):
+        got, want = _run_both(3, 16, 4, 64, [64, 5, 100], mode_kw=mkw, sinks=sinks)
+        _close(got, want, mode)
+
+
+@needs_gpu
+@pytest.mark.parametrize("mode,mkw", _modes())
+def test_window_and_sinks_together(mode, mkw):
+    torch.manual_seed(12)
+    got, want = _run_both(2, 16, 4, 64, [77, 130], mode_kw=mkw, window=32,
+                          sinks=torch.randn(16))
+    _close(got, want, mode)
+
+
+@needs_gpu
+@pytest.mark.parametrize("mode,mkw", _modes())
+def test_custom_scale_reaches_the_kernel(mode, mkw):
+    """Granite's attention_multiplier and Gemma-4's 1.0 must not be
+    replaced by head_dim**-0.5 inside the kernel."""
+    for scale in (0.015625, 1.0):
+        got, want = _run_both(2, 16, 4, 64, [64, 30], mode_kw=mkw, sm_scale=scale)
+        _close(got, want, mode)
