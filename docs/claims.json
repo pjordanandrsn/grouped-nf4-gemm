@@ -116,7 +116,7 @@
       "evidence": [
         "bench/phase1/results/dequant_forward/RESULTS-e2e-training.md"
       ],
-      "notes": "Baseline is e4b's own per-expert loop, not CUDA-graphed; peak VRAM does not improve."
+      "notes": "Baseline is e4b's own per-expert loop, not CUDA-graphed; peak VRAM does not improve. Random token ids understate the kernel by ~1.6x (4.50/2.75, 4.75/2.81); benchmark on real text."
     },
     {
       "id": "gnf4.kernel.dgrad",
