@@ -104,3 +104,23 @@ def test_dead_channels_are_handled():
     p, s = gptq_pack_int4_b32(w, acc.H)
     d = dequant_int4_ref(p, s, *w.shape)
     assert torch.isfinite(d).all()
+
+
+def test_hessian_accumulator_stores_where_asked():
+    """The Gram is computed where the activations are; the running
+    Hessian lives on the requested device and matches the closed form."""
+    from gptq_pack import HessianAccumulator
+    torch.manual_seed(7)
+    xs = [torch.randn(n, 16) * (i + 1) for i, n in enumerate((5, 3, 8))]
+    acc = HessianAccumulator(16, device="cpu")
+    assert acc.H is None                       # nothing allocated until data
+    for x in xs:
+        acc.add(x)
+    allx = torch.cat(xs)
+    ref = 2.0 * allx.t() @ allx / allx.shape[0]
+    assert acc.H.device.type == "cpu" and acc.n == allx.shape[0]
+    assert torch.allclose(acc.H, ref, rtol=1e-5, atol=1e-5)
+    # default device follows the first activation
+    acc2 = HessianAccumulator(16)
+    acc2.add(xs[0])
+    assert acc2.H.device == xs[0].device
