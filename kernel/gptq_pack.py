@@ -106,18 +106,32 @@ def gptq_pack_int4_b32(w: torch.Tensor, hessian: torch.Tensor,
 
 
 class HessianAccumulator:
-    """Collects ``2 X X^T`` for one layer over calibration batches."""
+    """Collects ``2 X X^T`` for one layer over calibration batches.
+
+    ``device`` is where the accumulated Hessian LIVES (default: the
+    first activation's device). Each batch's Gram is computed where the
+    activations are -- the GPU, at GPU speed -- and only the ``K x K``
+    fp32 result is moved. Storing on the CPU (``device="cpu"``) keeps a
+    whole model's worth of Hessians off the card: Mixtral-8x7B's 128
+    attention projections at K=4096 are 8 GB of fp32 Hessians, which
+    OOMed a 32 GB card beside the 23 GB model when they were kept on it.
+    """
 
     def __init__(self, in_features: int, device=None):
-        self.H = torch.zeros(in_features, in_features, dtype=torch.float32,
-                             device=device)
+        self.k = in_features
+        self.device = torch.device(device) if device is not None else None
+        self.H = None
         self.n = 0
 
     def add(self, x: torch.Tensor) -> None:
         """``x [..., in_features]`` activations seen by this layer."""
         rows = x.reshape(-1, x.shape[-1]).float()
         b = rows.shape[0]
+        gram = rows.t() @ rows                      # on the activation's device
+        if self.H is None:
+            dev = self.device if self.device is not None else gram.device
+            self.H = torch.zeros(self.k, self.k, dtype=torch.float32, device=dev)
         # running mean so batches of different sizes weight correctly
         self.H *= self.n / (self.n + b)
         self.n += b
-        self.H += (2.0 / self.n) * (rows.t() @ rows)
+        self.H.add_(gram.to(self.H.device), alpha=2.0 / self.n)
