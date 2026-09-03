@@ -88,23 +88,25 @@ def _modes():
 
 
 def _run_both(B, hq, hkv, d, seq_lens, mode_kw=None, **kw):
+    # attention-side options ride on kw but are not pool-builder arguments
+    attn = {k: kw.pop(k) for k in ("window", "sinks", "sm_scale") if k in kw}
     q, kp, vp, tab, lens = _build(B, hq, hkv, d, seq_lens, **kw)
     dev = lambda t: t.cuda()  # noqa: E731
-    sinks = kw.get("sinks")
+    sinks = attn.get("sinks")
     got = fp8_paged_decode_attention(
         dev(q), dev(kp), dev(vp), dev(tab), dev(lens),
         n_kv_heads=hkv, head_dim=d, **(mode_kw or {}),
         layout=kw.get("layout", "tokens"),
         k_groups=kw.get("k_groups", 1), v_groups=kw.get("v_groups", 1),
-        window=kw.get("window", 0),
+        window=attn.get("window", 0),
         sinks=dev(sinks) if sinks is not None else None,
-        sm_scale=kw.get("sm_scale"))
+        sm_scale=attn.get("sm_scale"))
     want = paged_attn_ref(q, kp, vp, tab, lens, n_kv_heads=hkv, head_dim=d,
                           k_groups=kw.get("k_groups", 1),
                           v_groups=kw.get("v_groups", 1),
                           layout=kw.get("layout", "tokens"),
-                          window=kw.get("window", 0), sinks=sinks,
-                          sm_scale=kw.get("sm_scale"))
+                          window=attn.get("window", 0), sinks=sinks,
+                          sm_scale=attn.get("sm_scale"))
     return got.cpu().float(), want.float()
 
 
