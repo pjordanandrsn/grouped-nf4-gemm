@@ -105,11 +105,15 @@ def main():
               f"unique {uniq_mb:.1f} MB  floor {out['floor_us_at_1790GBs']} us")
 
         # ---- ship: exactly as served (wrapper + its reduce) ----
-        bn, wp, sk, ku = _plan(N, K)
+        # the wrapper plans for the row count it serves (R-aware since the
+        # batched-cell overrides landed); size the partial buffer the same
+        # way or the wrapper's shape guard refuses it
+        bn, wp, sk, ku = _plan(N, K, R)
         part = torch.empty(sk * R, N, dtype=torch.float32, device=dev)
         us = _graph_us(lambda: gemv_int4_b32(xq, xs, packed, scales, eids,
                                              N, K, part=part))
-        out["ship"] = {"plan": [bn, wp, sk, ku], "us": round(us, 2),
+        out["ship"] = {"plan": [bn, wp, sk, ku], "plan_r1": list(_plan(N, K)),
+                       "us": round(us, 2),
                        "GBs_unique": round(uniq_mb / us * 1e3, 1)}
         print(f"  ship  plan bn{bn}/w{wp}/sk{sk}/ku{ku}: {us:8.2f} us  "
               f"{out['ship']['GBs_unique']:7.1f} GB/s (unique)")
