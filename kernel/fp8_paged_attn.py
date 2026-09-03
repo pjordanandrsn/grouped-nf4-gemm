@@ -91,12 +91,13 @@ if _TRITON:
         stride_qb, stride_qh, stride_tb,
         stride_ob, stride_oh,
         k_row_bytes, v_row_bytes,
-        sm_scale, n_split,
+        sm_scale, n_split, win, sink_ptr,
         H_KV: tl.constexpr, G: tl.constexpr, D: tl.constexpr,
         BT: tl.constexpr, KTILE: tl.constexpr,
         NG_K: tl.constexpr, NG_V: tl.constexpr,
         BLOCK_G: tl.constexpr,
         FUSE_COMBINE: tl.constexpr,
+        HAS_SINK: tl.constexpr,
     ):
         pid = tl.program_id(0)
         s_id = pid % n_split
@@ -110,6 +111,10 @@ if _TRITON:
         tiles_per = (n_tiles + n_split - 1) // n_split
         t_lo = s_id * tiles_per * KTILE
         t_hi = tl.minimum(t_len, (s_id + 1) * tiles_per * KTILE)
+        # sliding window (win > 0): keys below t_len - win are outside
+        # the query's window -- skip whole tiles below it, mask the rest
+        w_lo = tl.where(win > 0, tl.maximum(t_len - win, 0), 0)
+        t_lo = tl.maximum(t_lo, (w_lo // KTILE) * KTILE)
 
         offs_g = tl.arange(0, BLOCK_G)
         offs_d = tl.arange(0, D)
@@ -138,7 +143,7 @@ if _TRITON:
 
         for start in range(t_lo, t_hi, KTILE):
             tok = start + offs_t
-            t_mask = tok < t_hi
+            t_mask = (tok < t_hi) & (tok >= w_lo)
             blk = tl.load(table_ptr + b * stride_tb + tok // BT,
                           mask=t_mask, other=0)
 
@@ -198,8 +203,18 @@ if _TRITON:
                     m_s = tl.load(m_ptr + (bh * n_split + s_i) * BLOCK_G
                                   + offs_g)
                     m_glob = tl.maximum(m_glob, m_s)
+                # attention sink (gpt-oss): one extra logit per q head in
+                # the softmax denominator, no value -- it joins the max
+                # and the sum, never the numerator
+                sk = tl.full([BLOCK_G], float("-inf"), tl.float32)
+                if HAS_SINK:
+                    sk = tl.load(sink_ptr + h * G + offs_g, mask=g_mask,
+                                 other=float("-inf"))
+                    m_glob = tl.maximum(m_glob, sk)
                 m_glob = tl.where(m_glob == float("-inf"), 0.0, m_glob)
                 l_tot = tl.zeros([BLOCK_G], tl.float32)
+                if HAS_SINK:
+                    l_tot += tl.exp2((sk - m_glob) * 1.4426950408889634)
                 out = tl.zeros([BLOCK_G, D], tl.float32)
                 for s_i in range(0, n_split):
                     base = (bh * n_split + s_i) * BLOCK_G
@@ -225,11 +240,12 @@ if _TRITON:
         m_ptr, l_ptr, acc_ptr,
         stride_qb, stride_qh, stride_tb,
         k_row_bytes, v_row_bytes,
-        sm_scale, n_split,
+        sm_scale, n_split, win, sink_ptr,
         H_KV: tl.constexpr, G: tl.constexpr, D: tl.constexpr,
         BT: tl.constexpr,
         NG_K: tl.constexpr, NG_V: tl.constexpr,
         BLOCK_Q: tl.constexpr,
+        HAS_SINK: tl.constexpr,
     ):
         # Head-PACKED variant: one CTA consumes ALL kv heads of its token
         # span, so every 512 B token line (H_KV * D payload bytes) is read
@@ -257,6 +273,8 @@ if _TRITON:
         blocks_per = (n_blocks + n_split - 1) // n_split
         blk_lo = s_id * blocks_per
         blk_hi = tl.minimum(n_blocks, blk_lo + blocks_per)
+        w_lo = tl.where(win > 0, tl.maximum(t_len - win, 0), 0)
+        blk_lo = tl.maximum(blk_lo, w_lo // BT)
 
         offs_q = tl.arange(0, BLOCK_Q)
         offs_d = tl.arange(0, D)
@@ -285,7 +303,7 @@ if _TRITON:
         for blk_i in range(blk_lo, blk_hi):
             blk = tl.load(table_ptr + b * stride_tb + blk_i)
             t0 = blk_i * BT
-            t_mask_c = (t0 + c_tok) < t_len
+            t_mask_c = ((t0 + c_tok) < t_len) & ((t0 + c_tok) >= w_lo)
 
             k_base = blk * k_row_bytes
             ku = tl.load(kpool_u8 + k_base + offs_t[:, None] * (H_KV * D)
@@ -364,13 +382,14 @@ if _TRITON:
         stride_qb, stride_qh, stride_tb,
         stride_ob, stride_oh,
         k_row_bytes, v_row_bytes,
-        sm_scale, n_split,
+        sm_scale, n_split, win, sink_ptr,
         H_KV: tl.constexpr, G: tl.constexpr, D: tl.constexpr,
         BT: tl.constexpr, KTILE: tl.constexpr,
         NG_K: tl.constexpr,
         BLOCK_G: tl.constexpr,
         FUSE_COMBINE: tl.constexpr,
         LAYOUT_HEADS: tl.constexpr,
+        HAS_SINK: tl.constexpr,
     ):
         # FP8-tensor-core variant: the E4M3 payload is BITCAST and fed to
         # fp8 MMA units — no decode at all. The sweep surface demanded
@@ -417,6 +436,10 @@ if _TRITON:
         tiles_per = (n_tiles + n_split - 1) // n_split
         t_lo = s_id * tiles_per * KTILE
         t_hi = tl.minimum(t_len, (s_id + 1) * tiles_per * KTILE)
+        # sliding window (win > 0): keys below t_len - win are outside
+        # the query's window -- skip whole tiles below it, mask the rest
+        w_lo = tl.where(win > 0, tl.maximum(t_len - win, 0), 0)
+        t_lo = tl.maximum(t_lo, (w_lo // KTILE) * KTILE)
 
         offs_g = tl.arange(0, BLOCK_G)
         offs_d = tl.arange(0, D)
@@ -464,7 +487,7 @@ if _TRITON:
 
         for start in range(t_lo, t_hi, KTILE):
             tok = start + offs_t
-            t_mask = tok < t_hi
+            t_mask = (tok < t_hi) & (tok >= w_lo)
             blk = tl.load(table_ptr + b * stride_tb + tok // BT,
                           mask=t_mask, other=0)
 
@@ -539,8 +562,18 @@ if _TRITON:
                     m_s = tl.load(m_ptr + (bh * n_split + s_i) * BLOCK_G
                                   + offs_g)
                     m_glob = tl.maximum(m_glob, m_s)
+                # attention sink (gpt-oss): one extra logit per q head in
+                # the softmax denominator, no value -- it joins the max
+                # and the sum, never the numerator
+                sk = tl.full([BLOCK_G], float("-inf"), tl.float32)
+                if HAS_SINK:
+                    sk = tl.load(sink_ptr + h * G + offs_g, mask=g_mask,
+                                 other=float("-inf"))
+                    m_glob = tl.maximum(m_glob, sk)
                 m_glob = tl.where(m_glob == float("-inf"), 0.0, m_glob)
                 l_tot = tl.zeros([BLOCK_G], tl.float32)
+                if HAS_SINK:
+                    l_tot += tl.exp2((sk - m_glob) * 1.4426950408889634)
                 out = tl.zeros([BLOCK_G, D], tl.float32)
                 for s_i in range(0, n_split):
                     base = (bh * n_split + s_i) * BLOCK_G
@@ -587,12 +620,13 @@ if _TRITON:
         stride_qb, stride_qh, stride_tb,
         stride_ob, stride_oh,
         k_row_bytes, v_row_bytes,
-        sm_scale, n_split,
+        sm_scale, n_split, win, sink_ptr,
         H_KV: tl.constexpr, G: tl.constexpr, D: tl.constexpr,
         BT: tl.constexpr,
         NG_K: tl.constexpr,
         BLOCK_Q: tl.constexpr,
         FUSE_COMBINE: tl.constexpr,
+        HAS_SINK: tl.constexpr,
     ):
         # Packed structure + fp8 MMA: the combination neither parent could
         # run. The packed layout (one CTA owns ALL kv heads of its span,
@@ -620,6 +654,8 @@ if _TRITON:
         blocks_per = (n_blocks + n_split - 1) // n_split
         blk_lo = s_id * blocks_per
         blk_hi = tl.minimum(n_blocks, blk_lo + blocks_per)
+        w_lo = tl.where(win > 0, tl.maximum(t_len - win, 0), 0)
+        blk_lo = tl.maximum(blk_lo, w_lo // BT)
 
         offs_q = tl.arange(0, BLOCK_Q)
         offs_d = tl.arange(0, D)
@@ -660,7 +696,7 @@ if _TRITON:
 
         for blk_i in range(blk_lo, blk_hi):
             blk = tl.load(table_ptr + b * stride_tb + blk_i)
-            t_mask_c = (blk_i * BT + c_tok) < t_len
+            t_mask_c = ((blk_i * BT + c_tok) < t_len) & ((blk_i * BT + c_tok) >= w_lo)
 
             k_base = blk * k_row_bytes
             ks_base = k_base // 4 + BT * H_KV * D // 4 + offs_c * NG_K
@@ -713,8 +749,15 @@ if _TRITON:
                     m_s = tl.load(m_ptr + (b * n_split + s_i) * BLOCK_Q
                                   + offs_q)
                     m_glob = tl.maximum(m_glob, m_s)
+                sk = tl.full([BLOCK_Q], float("-inf"), tl.float32)
+                if HAS_SINK:
+                    sk = tl.load(sink_ptr + offs_q, mask=q_mask,
+                                 other=float("-inf"))
+                    m_glob = tl.maximum(m_glob, sk)
                 m_glob = tl.where(m_glob == float("-inf"), 0.0, m_glob)
                 l_tot = tl.zeros([BLOCK_Q], tl.float32)
+                if HAS_SINK:
+                    l_tot += tl.exp2((sk - m_glob) * 1.4426950408889634)
                 out = tl.zeros([BLOCK_Q, D], tl.float32)
                 for s_i in range(0, n_split):
                     base = (b * n_split + s_i) * BLOCK_Q
@@ -736,9 +779,10 @@ if _TRITON:
     def _fp8_combine(
         m_ptr, l_ptr, acc_ptr, o_ptr,
         stride_ob, stride_oh,
-        n_split,
+        n_split, sink_ptr,
         H_KV: tl.constexpr, G: tl.constexpr, D: tl.constexpr,
         BLOCK_G: tl.constexpr,
+        HAS_SINK: tl.constexpr,
     ):
         bh = tl.program_id(0)
         b = bh // H_KV
@@ -751,10 +795,17 @@ if _TRITON:
         for s in range(0, n_split):
             m_s = tl.load(m_ptr + (bh * n_split + s) * BLOCK_G + offs_g)
             m_glob = tl.maximum(m_glob, m_s)
+        sk = tl.full([BLOCK_G], float("-inf"), tl.float32)
+        if HAS_SINK:
+            sk = tl.load(sink_ptr + h * G + offs_g, mask=g_mask,
+                         other=float("-inf"))
+            m_glob = tl.maximum(m_glob, sk)
         # an all-empty group (t_len 0) never occurs in decode; guard anyway
         m_glob = tl.where(m_glob == float("-inf"), 0.0, m_glob)
 
         l_tot = tl.zeros([BLOCK_G], tl.float32)
+        if HAS_SINK:
+            l_tot += tl.exp2((sk - m_glob) * 1.4426950408889634)
         out = tl.zeros([BLOCK_G, D], tl.float32)
         for s in range(0, n_split):
             base = (bh * n_split + s) * BLOCK_G
@@ -952,8 +1003,28 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
                                pack_heads: bool = False,
                                compute: str | None = None,
                                fuse_combine: bool | None = None,
-                               layout: str = "tokens"):
+                               layout: str = "tokens",
+                               window: int = 0,
+                               sinks: torch.Tensor | None = None,
+                               k_row_bytes: int | None = None,
+                               v_row_bytes: int | None = None):
     """Decode attention over packed FP8 KV pool rows.
+
+    k_row_bytes / v_row_bytes
+                 the pool's row STRIDE when it is larger than this
+                 geometry's natural row (a cache serving layers of two
+                 KV geometries -- Gemma-4's 256/8 sliding and 512/2 full
+                 layers -- sizes every row for the larger one). The
+                 payload and scale layout inside a row is still this
+                 launch's (H_KV, D); only the stride changes.
+
+    window       sliding window in tokens (0 = full causal): each query
+                 attends only to the last ``window`` keys of its sequence
+                 (Gemma-4 sliding layers, gpt-oss). Tiles wholly below
+                 the window are skipped, the boundary tile is masked.
+    sinks        [H_q] fp32 attention-sink logits (gpt-oss ``s_aux``):
+                 one extra logit per q head in the softmax denominator
+                 and max, contributing no value. Applied in the combine.
 
     q            [B, H_q, D] bf16/fp16 — ONE decode token per sequence.
     k_pool/v_pool  flat uint8 pools of packed block rows (payload then
@@ -1014,6 +1085,14 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
     assert ktile % block_tokens == 0
     if sm_scale is None:
         sm_scale = D ** -0.5
+    win = int(window or 0)
+    assert win >= 0, window
+    has_sink = sinks is not None
+    if has_sink:
+        assert sinks.numel() == Hq, (tuple(sinks.shape), Hq)
+        sink_t = sinks.detach().to(device=q.device, dtype=torch.float32).contiguous()
+    else:
+        sink_t = seq_lens          # inert placeholder, never read
     if n_split is None:
         # f32 decode: ~8 CTAs/SM (the sweep plateau — fewer starves the
         # serial tile loop, the B=1..8 latency pedestal; 2x more pays
@@ -1043,10 +1122,15 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
         n_split = int(min(32, want, max_useful))
 
     from fp8_kv import kv_block_bytes
-    k_row = kv_block_bytes(block_tokens, n_kv_heads, head_dim) \
+    k_nat = kv_block_bytes(block_tokens, n_kv_heads, head_dim) \
         + block_tokens * n_kv_heads * 4 * (k_groups - 1)
-    v_row = kv_block_bytes(block_tokens, n_kv_heads, head_dim) \
+    v_nat = kv_block_bytes(block_tokens, n_kv_heads, head_dim) \
         + block_tokens * n_kv_heads * 4 * (v_groups - 1)
+    k_row = int(k_row_bytes) if k_row_bytes else k_nat
+    v_row = int(v_row_bytes) if v_row_bytes else v_nat
+    assert k_row >= k_nat and v_row >= v_nat, \
+        (f"row stride {k_row}/{v_row} smaller than the natural row "
+         f"{k_nat}/{v_nat} for H={n_kv_heads} D={head_dim}")
     assert k_pool.numel() % k_row == 0 and v_pool.numel() % v_row == 0
 
     if pack_heads:
@@ -1078,19 +1162,20 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
                 o, counters,
                 q.stride(0), q.stride(1), block_table.stride(0),
                 o.stride(0), o.stride(1),
-                k_row, v_row, sm_scale, n_split,
+                k_row, v_row, sm_scale, n_split, win, sink_t,
                 H_KV=n_kv_heads, G=G, D=D, BT=block_tokens,
                 NG_K=k_groups, BLOCK_Q=block_q,
                 FUSE_COMBINE=fuse_combine,
+                HAS_SINK=has_sink,
                 num_warps=num_warps, num_stages=num_stages,
             )
             if fuse_combine:
                 return o
             _fp8_combine[(B,)](
                 m_buf, l_buf, acc_buf, o,
-                o.stride(0), o.stride(1), n_split,
+                o.stride(0), o.stride(1), n_split, sink_t,
                 H_KV=1, G=Hq, D=D, BLOCK_G=block_q,
-                num_warps=4,
+                HAS_SINK=has_sink, num_warps=4,
             )
             return o
         _fp8_paged_decode_packed[(B * n_split,)](
@@ -1099,16 +1184,17 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
             block_table, seq_lens.to(torch.int32),
             m_buf, l_buf, acc_buf,
             q.stride(0), q.stride(1), block_table.stride(0),
-            k_row, v_row, sm_scale, n_split,
+            k_row, v_row, sm_scale, n_split, win, sink_t,
             H_KV=n_kv_heads, G=G, D=D, BT=block_tokens,
             NG_K=k_groups, NG_V=v_groups, BLOCK_Q=block_q,
+            HAS_SINK=has_sink,
             num_warps=num_warps, num_stages=num_stages,
         )
         _fp8_combine[(B,)](
             m_buf, l_buf, acc_buf, o,
-            o.stride(0), o.stride(1), n_split,
+            o.stride(0), o.stride(1), n_split, sink_t,
             H_KV=1, G=Hq, D=D, BLOCK_G=block_q,
-            num_warps=4,
+            HAS_SINK=has_sink, num_warps=4,
         )
         return o
 
@@ -1140,11 +1226,12 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
             o, counters,
             q.stride(0), q.stride(1), block_table.stride(0),
             o.stride(0), o.stride(1),
-            k_row, v_row, sm_scale, n_split,
+            k_row, v_row, sm_scale, n_split, win, sink_t,
             H_KV=n_kv_heads, G=G, D=D, BT=block_tokens, KTILE=ktile,
             NG_K=k_groups, BLOCK_G=block_g,
             FUSE_COMBINE=fuse_combine,
             LAYOUT_HEADS=(layout == "heads"),
+            HAS_SINK=has_sink,
             num_warps=num_warps, num_stages=num_stages,
         )
         if fuse_combine:
@@ -1164,19 +1251,20 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
             o, counters,
             q.stride(0), q.stride(1), block_table.stride(0),
             o.stride(0), o.stride(1),
-            k_row, v_row, sm_scale, n_split,
+            k_row, v_row, sm_scale, n_split, win, sink_t,
             H_KV=n_kv_heads, G=G, D=D, BT=block_tokens, KTILE=ktile,
             NG_K=k_groups, NG_V=v_groups, BLOCK_G=block_g,
             FUSE_COMBINE=fuse_combine,
+            HAS_SINK=has_sink,
             num_warps=num_warps, num_stages=num_stages,
         )
         if fuse_combine:
             return o
     _fp8_combine[(B * n_kv_heads,)](
         m_buf, l_buf, acc_buf, o,
-        o.stride(0), o.stride(1), n_split,
+        o.stride(0), o.stride(1), n_split, sink_t,
         H_KV=n_kv_heads, G=G, D=D, BLOCK_G=block_g,
-        num_warps=4,
+        HAS_SINK=has_sink, num_warps=4,
     )
     return o
 
@@ -1184,9 +1272,13 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
 def paged_attn_ref(q, k_pool, v_pool, block_table, seq_lens, *,
                    n_kv_heads: int, head_dim: int, block_tokens: int = 16,
                    k_groups: int = 1, v_groups: int = 1,
-                   layout: str = "tokens"):
+                   layout: str = "tokens", window: int = 0,
+                   sinks: torch.Tensor | None = None, sm_scale=None):
     """Pure-torch oracle: unpack every block through the reference dequant,
-    run fp32 attention per sequence. Slow — test sizes only."""
+    run fp32 attention per sequence. Slow — test sizes only. ``window``
+    keeps the last ``window`` keys; ``sinks`` [H_q] adds one logit per q
+    head to the softmax (dropped from the numerator), as gpt-oss' eager
+    forward does."""
     from fp8_kv import dequant_kv_fp8_ref, unpack_kv_block_grouped
 
     B, Hq, D = q.shape
@@ -1207,11 +1299,17 @@ def paged_attn_ref(q, k_pool, v_pool, block_table, seq_lens, *,
                     raw, block_tokens, n_kv_heads, head_dim, groups,
                     layout=layout)
                 dst.append(dequant_kv_fp8_ref(qq, ss, dtype=torch.float32))
-        k = torch.cat(ks)[:t].permute(1, 0, 2)    # [H_kv, t, D]
-        v = torch.cat(vs)[:t].permute(1, 0, 2)
+        lo = max(0, t - int(window)) if window else 0
+        k = torch.cat(ks)[lo:t].permute(1, 0, 2)  # [H_kv, t-lo, D]
+        v = torch.cat(vs)[lo:t].permute(1, 0, 2)
         qq = q[b].float().view(n_kv_heads, G, D)
-        att = torch.einsum("hgd,htd->hgt", qq, k) * (D ** -0.5)
-        w = torch.softmax(att, dim=-1)
+        scale = (D ** -0.5) if sm_scale is None else float(sm_scale)
+        att = torch.einsum("hgd,htd->hgt", qq, k) * scale
+        if sinks is not None:
+            sk = sinks.float().to(att.device).view(n_kv_heads, G, 1)
+            w = torch.softmax(torch.cat([att, sk], dim=-1), dim=-1)[..., :-1]
+        else:
+            w = torch.softmax(att, dim=-1)
         o = torch.einsum("hgt,htd->hgd", w, v)
         outs.append(o.reshape(Hq, D))
     return torch.stack(outs).to(q.dtype)
