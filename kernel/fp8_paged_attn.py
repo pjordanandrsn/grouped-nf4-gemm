@@ -1005,8 +1005,18 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
                                fuse_combine: bool | None = None,
                                layout: str = "tokens",
                                window: int = 0,
-                               sinks: torch.Tensor | None = None):
+                               sinks: torch.Tensor | None = None,
+                               k_row_bytes: int | None = None,
+                               v_row_bytes: int | None = None):
     """Decode attention over packed FP8 KV pool rows.
+
+    k_row_bytes / v_row_bytes
+                 the pool's row STRIDE when it is larger than this
+                 geometry's natural row (a cache serving layers of two
+                 KV geometries -- Gemma-4's 256/8 sliding and 512/2 full
+                 layers -- sizes every row for the larger one). The
+                 payload and scale layout inside a row is still this
+                 launch's (H_KV, D); only the stride changes.
 
     window       sliding window in tokens (0 = full causal): each query
                  attends only to the last ``window`` keys of its sequence
@@ -1112,10 +1122,15 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
         n_split = int(min(32, want, max_useful))
 
     from fp8_kv import kv_block_bytes
-    k_row = kv_block_bytes(block_tokens, n_kv_heads, head_dim) \
+    k_nat = kv_block_bytes(block_tokens, n_kv_heads, head_dim) \
         + block_tokens * n_kv_heads * 4 * (k_groups - 1)
-    v_row = kv_block_bytes(block_tokens, n_kv_heads, head_dim) \
+    v_nat = kv_block_bytes(block_tokens, n_kv_heads, head_dim) \
         + block_tokens * n_kv_heads * 4 * (v_groups - 1)
+    k_row = int(k_row_bytes) if k_row_bytes else k_nat
+    v_row = int(v_row_bytes) if v_row_bytes else v_nat
+    assert k_row >= k_nat and v_row >= v_nat, \
+        (f"row stride {k_row}/{v_row} smaller than the natural row "
+         f"{k_nat}/{v_nat} for H={n_kv_heads} D={head_dim}")
     assert k_pool.numel() % k_row == 0 and v_pool.numel() % v_row == 0
 
     if pack_heads:
