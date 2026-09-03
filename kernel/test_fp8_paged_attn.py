@@ -89,8 +89,11 @@ def _modes():
 
 def _run_both(B, hq, hkv, d, seq_lens, mode_kw=None, **kw):
     # attention-side options ride on kw but are not pool-builder arguments
-    attn = {k: kw.pop(k) for k in ("window", "sinks", "sm_scale") if k in kw}
+    attn = {k: kw.pop(k) for k in ("window", "sinks", "sm_scale", "q_mult")
+            if k in kw}
     q, kp, vp, tab, lens = _build(B, hq, hkv, d, seq_lens, **kw)
+    if attn.get("q_mult") is not None:
+        q = q * attn["q_mult"]
     dev = lambda t: t.cuda()  # noqa: E731
     sinks = attn.get("sinks")
     got = fp8_paged_decode_attention(
@@ -448,7 +451,17 @@ def test_window_and_sinks_together(mode, mkw):
 @pytest.mark.parametrize("mode,mkw", _modes())
 def test_custom_scale_reaches_the_kernel(mode, mkw):
     """Granite's attention_multiplier and Gemma-4's 1.0 must not be
-    replaced by head_dim**-0.5 inside the kernel."""
+    replaced by head_dim**-0.5 inside the kernel.
+
+    The query amplitude is divided by (scale / head_dim**-0.5) so the
+    SCALED scores keep the default test's distribution: the fp8 path's
+    query rounding error is proportional to the scaled score magnitude
+    (0.8% of |q||k|*scale), so unit-variance inputs at scale 1.0 would
+    probe that envelope at 8x the usual score range, not the plumbing.
+    A kernel that silently used head_dim**-0.5 would see scores 8x too
+    small (or too large) and miss the oracle grossly."""
+    default = 64 ** -0.5
     for scale in (0.015625, 1.0):
-        got, want = _run_both(2, 16, 4, 64, [64, 30], mode_kw=mkw, sm_scale=scale)
+        got, want = _run_both(2, 16, 4, 64, [64, 30], mode_kw=mkw,
+                              sm_scale=scale, q_mult=default / scale)
         _close(got, want, mode)
