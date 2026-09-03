@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.23.0 — 2026-09-03
+
+### HessianAccumulator stores off-device
+
+One change (#316). Calibrating Mixtral-8x7B's attention — 128
+projections at K=4096 — held 8 GB of fp32 Hessians on a 32 GB card
+beside a 23 GB model and ran out of memory. `HessianAccumulator` now
+computes each batch's Gram where the activations are and accumulates
+into a Hessian that lives on the requested `device` (`"cpu"` for a
+whole model), moving only the K×K result per batch; allocation is
+deferred to the first batch so the default storage follows the
+activations. Closed-form test over unequal batch sizes. Validated on
+Mixtral on a 5090: the calibration completes (the pack itself was then
+refused by experts4bit-qlora's quality gate on that model, +0.09 ppl —
+calibrated int4 attention is a win on Qwen3-30B-A3B, not everywhere).
+
 ## 0.22.0 — 2026-09-03
 
 ### Calibrated int4 packing on the int4-b32 grid
