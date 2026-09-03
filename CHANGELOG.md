@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.24.0 — 2026-09-03
+
+### Paged decode: sliding windows, attention sinks, custom scale
+
+One change (#318). `fp8_paged_decode_attention` gains `window` (keys
+older than the last `window` tokens are skipped tile-wise and masked
+within the boundary tile; `0` keeps full attention), `sinks` (a
+per-head `[H]` logit that joins the softmax denominator without a
+value, the gpt-oss `s_aux` convention; `None` keeps the plain softmax)
+and honours the `sm_scale` already accepted — Granite's
+`attention_multiplier` and Gemma-4's `1.0` reach every compute mode.
+All four decode kernels take the window and sink pointer as runtime
+arguments, so an engine serving a model that mixes sliding and full
+layers (Gemma-4: 25 of 30 layers at 1024) launches the same compiled
+kernel per layer. `k_row_bytes` / `v_row_bytes` let a pool whose stride
+is wider than a layer's natural row (per-layer KV geometry, one pool)
+address it correctly; a stride narrower than the row is refused.
+`paged_attn_ref` takes the same three options.
+
+Tests: `test_sliding_window_keeps_only_the_last_keys` (windows 1, 5,
+16, 33, 64 against a reference that drops the keys outright),
+`test_window_wider_than_context_is_full_attention` (bitwise equal to
+`window=0`), `test_attention_sinks_join_the_denominator_only`,
+`test_window_and_sinks_together`, `test_custom_scale_reaches_the_kernel`
+(the scaled-score distribution is held fixed while the scale varies:
+the fp8 path's query rounding error is proportional to the scaled
+score magnitude). 35/35 in the fp8 compute modes on an RTX 5090
+(torch 2.8.0+cu128, triton 3.4.0). The f32 compute modes miss the
+reference on that torch/triton pair on unmodified `main` as well —
+tracked as #319, unrelated to this release.
+
+Bytes on the wire and the kernels' arithmetic for `window=0`,
+`sinks=None` are unchanged; a model served before this release scores
+identically after it.
+
 ## 0.23.0 — 2026-09-03
 
 ### HessianAccumulator stores off-device
