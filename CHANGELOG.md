@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.22.0 — 2026-09-03
+
+### Calibrated int4 packing on the int4-b32 grid
+
+One packer (#313). `gptq_pack_int4_b32(w, hessian)` produces exactly
+the bytes and the fp16 per-32 scales `pack_int4_b32` produces — the
+same grid, the same GEMV, the same store — and differs only in *which*
+grid point each weight lands on. It quantises column by column against
+`H = 2·XXᵀ` accumulated over the model's own activations
+(`HessianAccumulator`), pushing each column's rounding residual into
+the columns that follow through the Cholesky factor of `H⁻¹`, with the
+per-block scale chosen on the *compensated* weights (a scale taken from
+the source weights and a round-trip through the plain packer both
+measured worse than rounding). Dead input channels are pinned; 1 %
+damping.
+
+Why it exists: round-to-nearest int4 on Qwen3-30B-A3B's attention
+projections failed the perplexity gate at +0.056, and fp8 e4m3 —
+carrying 4.6× lower *weight* error — bought almost none of that back.
+Weight error is not what the gate measures. Packed with calibration on
+a C4 validation shard, the same bytes score **−0.042** on the wikitext
+gate and **−0.115** on an out-of-domain C4 text (both improvements over
+bf16 attention, same sign; `experts4bit-qlora` 0.28.0 carries the
+serving lane and the one-sided gate for calibrated packs). Buffers
+follow the weight's device (a CPU scale meeting a CUDA column was
+caught in review). CPU tests: three activation regimes against
+rounding, byte-identical format, identity Hessian ≈ rounding, dead
+channels.
+
+Not in this release: a row-count-aware GEMV plan (#314) that won on a
+uniform-routing microbench and lost 11 % in the real serving path —
+kept as a draft with the measurement.
+
 ## 0.21.0 — 2026-09-02
 
 ### Glue round 3: the router epilogue in one launch
