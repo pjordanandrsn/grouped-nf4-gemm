@@ -1,0 +1,390 @@
+{
+  "package": "grouped-nf4-gemm",
+  "generated": "2026-09-03",
+  "schema": "docs/claims-schema.md",
+  "status_vocabulary": {
+    "confirmed": "pre-registered, OpenTimestamps-stamped blind confirmatory run; protocol and pass/fail fixed before data",
+    "measured": "one or more runs with a committed receipt in this repo; not blind-confirmed",
+    "measured-private": "a run whose receipt exists only in the private audit tree; a reader of this repo cannot check it",
+    "projected": "arithmetic, not a run",
+    "retired": "was published, now known wrong; kept so the retraction is findable",
+    "superseded": "true as measured, but a later entry is the number to quote",
+    "open": "a question the docs raise that has no evidence either way"
+  },
+  "claims": [
+    {
+      "id": "gnf4.kernel.fused-more-accurate-than-dequant-bf16",
+      "area": "kernel",
+      "claim": "The fused NF4 grouped GEMM (fp32 accumulate, bf16 epilogue) has never measured less accurate than the dequantize-to-bf16-then-GEMM baseline, in every confirmatory cell.",
+      "status": "confirmed",
+      "hardware": "sm_86 (A2000, 3090), sm_89, sm_90",
+      "evidence": [
+        "kernel/RESULTS-v6-confirmatory.md",
+        "kernel/RESULTS-v3-confirmatory.md",
+        "docs/TOLERANCE_CONTRACT.md"
+      ],
+      "notes": "PORTABILITY.md records this as TF32-specific; it is a CUDA-tensor-core statement, not a vendor-independent one."
+    },
+    {
+      "id": "gnf4.kernel.energy-104-of-112",
+      "area": "kernel",
+      "claim": "Fused J/token is below the dequant baseline in 104 of 112 confirmatory-grade cells across v1-v3; six of the eight misses are the top_k=1 / tiny-shape class.",
+      "value": 104,
+      "unit": "of 112 cells",
+      "status": "confirmed",
+      "hardware": "sm_86, two devices, n=3 fresh-process reps",
+      "evidence": [
+        "kernel/RESULTS-v3-confirmatory.md",
+        "kernel/RESULTS-v2-confirmatory.md"
+      ]
+    },
+    {
+      "id": "gnf4.kernel.decode-speed-census",
+      "area": "kernel",
+      "claim": "At batch-1 decode on sm_86, census MoE shapes (OLMoE, Qwen3-30B, Gemma-4, gpt-oss-120b) run 1.16-2.73x the dequant baseline at median; top_k=1 and tiny (<~5M weight elements) shapes are known losers.",
+      "value": "1.16-2.73",
+      "unit": "x at median",
+      "status": "confirmed",
+      "hardware": "sm_86",
+      "evidence": [
+        "kernel/RESULTS-v6-confirmatory.md",
+        "kernel/RESULTS-v3-confirmatory.md"
+      ],
+      "notes": "gpt-oss `down` 2880x2880 is instance-sensitive (0.7-2.0x across five instances)."
+    },
+    {
+      "id": "gnf4.kernel.h2h-unsloth",
+      "area": "kernel",
+      "claim": "Head-to-head against Unsloth's own MoE grouped-GEMM kernel, same pod and process, in the 4-bit-storage regime: decode 1.70x on H100 (their TMA path live) and 2.79x on RTX 4090; J/token 2.51x and 3.32x better. Unsloth wins its own bf16-resident regime by 2.6-5.3x at prefill on the H100.",
+      "value": 1.7,
+      "unit": "x decode, H100",
+      "status": "confirmed",
+      "hardware": "H100 80GB HBM3 (sm_90); RTX 4090 (sm_89)",
+      "evidence": [
+        "kernel/RESULTS-unsloth-head-to-head.md",
+        "kernel/prereg_unsloth_head_to_head.json"
+      ],
+      "supersedes": [
+        "gnf4.kernel.comparators-v6-execution-class"
+      ],
+      "notes": "Forward pass only; the training-axis leg is exploratory and licenses no claim."
+    },
+    {
+      "id": "gnf4.kernel.comparators-v6-execution-class",
+      "area": "kernel",
+      "claim": "SUPERSEDED: the grouped-bf16-GEMM execution class (tgale96's grouped_gemm, dequant in the timed path) loses to the fused kernel on every census cell, decode median 4.67x.",
+      "status": "superseded",
+      "superseded_by": "gnf4.kernel.h2h-unsloth",
+      "evidence": [
+        "bench/phase1/results/comparators_v6/RESULTS-comparators-v6.md"
+      ],
+      "notes": "That backend never executed Unsloth's own kernel and the proxy is 1.33x slower than the real thing; the number was measured against a weaker opponent than the label implied. Kept because the README still quotes it, with the caveat."
+    },
+    {
+      "id": "gnf4.kernel.sm120-census-vs-grouped-mm",
+      "area": "kernel",
+      "claim": "At the Qwen3-30B-A3B serving cell (E=128, top-8, B=16) on an RTX 5090, gemm_4bit_grouped runs the routed expert GEMM in 0.42 / 0.21 ms where torch._grouped_mm on unquantised bf16 takes 0.88-1.30 ms: 2.1-6.0x across two boxes, on half the weight bytes.",
+      "value": "2.1-6.0",
+      "unit": "x vs torch._grouped_mm",
+      "status": "measured",
+      "hardware": "RTX 5090 (sm_120), two rented boxes",
+      "evidence": [
+        "bench/sm120-census/RESULTS-sm120-grouped-census.md"
+      ],
+      "measured_on": "2026-08"
+    },
+    {
+      "id": "gnf4.kernel.graphed-baseline-decode-loses",
+      "area": "kernel",
+      "claim": "Against a CUDA-graphed per-expert baseline at the decode band (T=32) the fused path LOSES on both 4090 and H100 (0.949x, 0.858x); the memory-traffic win survives only at training shape on bandwidth-limited cards (1.489x on the 4090, parity 1.059x on the H100).",
+      "status": "confirmed",
+      "hardware": "RTX 4090 (sm_89), H100 (sm_90)",
+      "evidence": [
+        "bench/phase1/results/dequant_forward/RESULTS-leg4-routed.md",
+        "bench/phase1/results/dequant_forward/RESULTS-graphed-buckets.md"
+      ],
+      "notes": "The README states this. Any 'fused wins at decode' reading that ignores graphing is wrong."
+    },
+    {
+      "id": "gnf4.kernel.e2e-training-real-prose",
+      "area": "kernel",
+      "claim": "Inside a real OLMoE QLoRA finetune, fused vs the per-expert loop runs 4.50x on a 4090 and 4.75x on an H100 on real prose; random token ids understate it at 2.75x / 2.81x because prose routes to 98.4% of experts (cv 0.687) where random ids hit 87.5% (cv 1.463).",
+      "value": 4.5,
+      "unit": "x, 4090, prose",
+      "status": "confirmed",
+      "hardware": "RTX 4090, H100",
+      "evidence": [
+        "bench/phase1/results/dequant_forward/RESULTS-e2e-training.md"
+      ],
+      "notes": "Baseline is e4b's own per-expert loop, not CUDA-graphed; peak VRAM does not improve."
+    },
+    {
+      "id": "gnf4.kernel.dgrad",
+      "area": "kernel",
+      "claim": "dgrad_4bit_grouped is the training backward in one launch: gate_up E=256 5.92 ms vs 61.78 ms for the per-expert loop, down 3.28 vs 85.12 ms (A2000, T_cat=4096); one training step at E=256 goes 403.7 to 26.5 ms. On by default since 0.9.1; gradient lands ~2.9e-3 from the exact loop, inside the bf16 budget.",
+      "value": "403.7 -> 26.5",
+      "unit": "ms per step, E=256",
+      "status": "measured",
+      "hardware": "A2000 (sm_86)",
+      "evidence": [
+        "kernel/RESULTS-*.md (0.7.0)",
+        "experts4bit-qlora bench/dgrad-gate/RESULTS-dgrad-gate.md"
+      ]
+    },
+    {
+      "id": "gnf4.serve.decode-anchor-5090",
+      "area": "serve",
+      "claim": "The certified single-stream decode anchor for Qwen3-30B-A3B on the RTX 5090 class is 7.37 ms/step +-4.2%, about 130-142 tok/s, with the class carrying 8.5% inter-box dispersion while each box repeats to 0.16%.",
+      "value": 7.37,
+      "unit": "ms/step +-4.2%",
+      "status": "measured",
+      "hardware": "RTX 5090 (sm_120), three rented boxes, A/A pairs",
+      "evidence": [
+        "kernel/RESULTS-m2-anchor-recert.md",
+        "kernel/decode_anchor.py"
+      ],
+      "measured_on": "2026-08-26"
+    },
+    {
+      "id": "gnf4.serve.m3-defaults-on",
+      "area": "serve",
+      "claim": "GNF4_GEMV_DOTPAD and GNF4_ATTN_COMPUTE=fp8 ship ON by default (capability-conditional): 8192 teacher-forced tokens through the paged decode path, both knobs 7.843 -> 6.803 ms/step at delta-ppl -0.0021 against a +-0.05 bar. The fp8 path asserts sm_89+, v_groups==1, k_groups in (1,2,4); unset env falls back to f32 where fp8 cannot run, an explicit fp8 request is never downgraded.",
+      "value": 6.803,
+      "unit": "ms/step",
+      "status": "measured",
+      "hardware": "RTX 5090, one box",
+      "evidence": [
+        "kernel/RESULTS-m3-default-on.md",
+        "receipts-m3/"
+      ],
+      "measured_on": "2026-08-27",
+      "notes": "Read the ppl deltas as zero, not gains. Dispatch receipts (dispatch_counts, compute_counts) exist because an env var is a request, not an event."
+    },
+    {
+      "id": "gnf4.serve.fp8-paged-attn-windows-sinks-scale",
+      "area": "serve",
+      "claim": "fp8_paged_decode_attention takes window (sliding), sinks (per-head logit in the softmax denominator, the gpt-oss s_aux convention), sm_scale, and k_row_bytes/v_row_bytes stride overrides in all four decode kernels; 35/35 fp8-mode GPU tests on an RTX 5090 (torch 2.8.0+cu128, triton 3.4.0); bytes and arithmetic for window=0, sinks=None unchanged.",
+      "status": "measured",
+      "hardware": "RTX 5090",
+      "measured_on": "2026-09-03",
+      "evidence": [
+        "kernel/test_fp8_paged_attn.py",
+        "CHANGELOG.md 0.24.0"
+      ],
+      "notes": "End-to-end parity of the SERVING path built on these (Granite, gpt-oss, Gemma-4) is measured in experts4bit-qlora's receipts, which are private -- see e4b's register."
+    },
+    {
+      "id": "gnf4.open.f32-compute-modes-triton34",
+      "area": "serve",
+      "claim": "OPEN: the f32 compute modes (split, packed) of the fp8 paged decode miss their reference by up to 0.074 (tol 0.02) on 10 of 35 tests on torch 2.8.0+cu128 / triton 3.4.0 (sm_120), on unmodified main; the fp8 modes -- the sm_120 serving default -- pass.",
+      "status": "open",
+      "hardware": "RTX 5090",
+      "evidence": [
+        "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/319"
+      ],
+      "notes": "Serving on sm_120 is unaffected; the f32 path is the Ampere/Hopper compute path and its tests cannot gate a lane on these boxes with -x."
+    },
+    {
+      "id": "gnf4.serve.int4-b32-gemv",
+      "area": "serve",
+      "claim": "The uniform int4-b32 decode GEMV (int8 activations, exact integer accumulation) reaches 1,044 GB/s dense at M=1 on the 5090, 6.9-7.2x over the NF4 register-LUT GEMV; grouped top-8 cells 3.8-4.3x. The grouped M-tile int4 GEMM runs gate_up 1.947x / down 4.500x over the NF4 grouped kernel at the B=16 census cells.",
+      "value": 1044,
+      "unit": "GB/s dense M=1",
+      "status": "measured-private",
+      "hardware": "RTX 5090",
+      "evidence": [],
+      "evidence_private": [
+        "INT4B16/P1",
+        "INT4B16/P15-B16"
+      ],
+      "quoted_in": [
+        "CHANGELOG.md 0.18.0"
+      ],
+      "notes": "Measured refusals kept: the format stays OFF the lm_head (+0.18 ppl) and dense attention shapes lose to bf16 in both the GEMV and M=16 GEMM regimes."
+    },
+    {
+      "id": "gnf4.serve.gptq-pack-int4-b32",
+      "area": "serve",
+      "claim": "gptq_pack_int4_b32 produces byte-identical format to pack_int4_b32 and chooses grid points against H = 2XX^T; packed on a C4 shard, Qwen3-30B-A3B's attention scores -0.042 ppl on wikitext and -0.115 on out-of-domain C4 against bf16 attention. HessianAccumulator stores off-device (0.23.0) so Mixtral's 128 projections fit.",
+      "status": "measured-private",
+      "hardware": "RTX 5090",
+      "evidence": [
+        "kernel/test_gptq_pack.py"
+      ],
+      "evidence_private": [
+        "INT4B16/P21-CALIBINT4",
+        "INT4B16/P22-CALIBINT4-C4"
+      ],
+      "notes": "A Qwen3-30B-A3B win, not a general lever: refused on Mixtral (+0.09) and OLMoE (+0.60) by the consumer's gate."
+    },
+    {
+      "id": "gnf4.serve.decode-glue-kernels",
+      "area": "serve",
+      "claim": "Three decode glue kernels (rmsnorm_rows 0.19.0; rmsnorm_resid_rows + rope_norm_heads 0.20.0; router_epilogue 0.21.0) fold the non-GEMM decode step; measured through the consumer, the three rounds compose 8.344 -> 5.270 ms/step at B=1 on the rental class with paired ppl deltas of +0.0136, -0.00105 and -0.01968 over 8192 sha-matched steps.",
+      "value": 5.27,
+      "unit": "ms/step B=1 after round 3",
+      "status": "measured-private",
+      "hardware": "RTX 5090",
+      "evidence": [
+        "kernel/test_*.py for each kernel"
+      ],
+      "evidence_private": [
+        "INT4B16/P16-GLUER2",
+        "INT4B16/P18-GLUER3"
+      ],
+      "quoted_in": [
+        "CHANGELOG.md 0.19.0, 0.20.0, 0.21.0"
+      ]
+    },
+    {
+      "id": "gnf4.retired.splitk-gemv",
+      "area": "serve",
+      "claim": "REFUTED (K7): split-K on the decode GEMV -- flat at gate_up, ~14% worse at down for every split. GNF4_GEMV_SPLITK ships dormant as the evidence.",
+      "status": "retired",
+      "evidence": [
+        "kernel/RESULTS-k7-gemv-round2.md"
+      ]
+    },
+    {
+      "id": "gnf4.retired.sm120-parked",
+      "area": "roadmap",
+      "claim": "RETIRED (stale README text): 'Parked: sm_120 (three consecutive cloud provisioning failures on 5090s)'.",
+      "status": "retired",
+      "retired_reason": "sm_120 became the primary serving target in 0.15.0-0.24.0: M=1 configs retuned for it, the sm_120 census, the decode anchor, M3 defaults, the int4 lanes and the fp8 paged attention were all measured on rented RTX 5090s.",
+      "quoted_in": [
+        "README.md#Status / roadmap"
+      ]
+    },
+    {
+      "id": "gnf4.flagship.235b-phaseA",
+      "area": "offload",
+      "claim": "Qwen3-235B-A22B with all NF4 experts in ~128 GB pinned host RAM streams at 5.57 tok/s = 102-103% of the measured 44.3 GB/s link's waterfall ceiling on a 13.6 GB working set (synthetic weights, real attention + router); the dequant path on the identical pipeline: 1.81 tok/s.",
+      "value": 5.57,
+      "unit": "tok/s",
+      "status": "confirmed",
+      "hardware": "datacenter PCIe link 44.3 GB/s",
+      "evidence": [
+        "bench/phase3/flagship/RESULTS-flagship-offload.md"
+      ]
+    },
+    {
+      "id": "gnf4.flagship.235b-phaseB",
+      "area": "offload",
+      "claim": "The real 438 GB Qwen3-235B checkpoint, stream-quantised to NF4, generates coherent greedy text at 4.3-4.4 tok/s on 15.2 GB VRAM across five pods at 45-55 GB/s links; per-token time follows t ~= c_box + bytes/link with c_box measured 53.5-114.0 ms across seven hosts. A fixed fraction-of-waterfall is NOT the law (retired 2026-07-22).",
+      "value": "4.3-4.4",
+      "unit": "tok/s",
+      "status": "confirmed",
+      "hardware": "five rented pods; gen4 desktop L40S 2.6 tok/s; gen5 bare-metal H100 PCIe 3.9",
+      "evidence": [
+        "bench/phase3/flagship/RESULTS-flagship-phaseB.md",
+        "bench/phase3/flagship/RESULTS-flagship-gen5-metal.md"
+      ]
+    },
+    {
+      "id": "gnf4.flagship.prefetch-closed-negative",
+      "area": "offload",
+      "claim": "Expert prefetch is CLOSED, negative, over four registered arcs: stickiness 0.44 (B2); the pre-attention router predicts the post-attention top-8 at 0.93 but the win does not land (B3); threaded issuance 0.57x (B4); zero-copy speculative gather loses by the (2-H)x bytes law, break-even needs H >~ 0.95 (B5). Recommended copy path is --prefetch-mode gpu (UVA gather), +1.5% on one host.",
+      "status": "confirmed",
+      "evidence": [
+        "bench/phase3/flagship/RESULTS-flagship-phaseB2.md",
+        "RESULTS-flagship-phaseB3.md",
+        "RESULTS-flagship-phaseB4.md",
+        "RESULTS-flagship-phaseB5.md"
+      ]
+    },
+    {
+      "id": "gnf4.nvme.tier-batch-only",
+      "area": "offload",
+      "claim": "The NVMe tier is a batch tier: at the measured per-box S ~= 3.45 GB/s a fully cold 235B streams ~2.3 s/token and a K3-class model ~7.5 s/token. What it buys is reachability and provenance, not latency.",
+      "value": 3.45,
+      "unit": "GB/s sustained read at 13-50 MiB requests, QD>=4",
+      "status": "measured",
+      "hardware": "QNAP Xeon W-1250, FireCuda 530 on PCIe Gen3 x4",
+      "evidence": [
+        "docs/nvme-ceilings.md",
+        "docs/RESULTS-nvme-determinism.md"
+      ]
+    },
+    {
+      "id": "gnf4.mxfp4.serve-tax-deleted",
+      "area": "provenance",
+      "claim": "Serving gpt-oss-120b on its exact released MXFP4 bytes scores exact-chunk ppl 26.72 against the shipped-precision reference 26.75, deleting the +9.4% ppl / KL 0.066 NF4-requantisation tax; per-shard provenance sha256(loaded) == sha256(file range) on a 4-tensor spot sample (a spot check, not shard-level coverage).",
+      "value": 26.72,
+      "unit": "ppl",
+      "status": "confirmed",
+      "hardware": "DO H200 pod",
+      "evidence": [
+        "docs/mxfp4/RESULTS-mxfp4-serve.md",
+        "docs/mxfp4/PREREG-mxfp4-serve.md"
+      ],
+      "notes": "P1 (per-K relative bound 2e-2) MISSED-AS-STAMPED; its own receipt attributes that to a mis-calibrated stamp, not the kernel."
+    },
+    {
+      "id": "gnf4.mxfp4.train-9.82gb",
+      "area": "provenance",
+      "claim": "gpt-oss-120b QLoRA on native MXFP4 bytes trains at 9.82 GB peak VRAM with 144/144 sha256(file) == sha256(loaded) == sha256(post-train): the frozen base is byte-identical after training.",
+      "value": 9.82,
+      "unit": "GB peak VRAM",
+      "status": "confirmed",
+      "hardware": "RunPod L40S (Run B); A2000 (Run A, 20b)",
+      "evidence": [
+        "docs/mxfp4/RESULTS-mxfp4-train.md",
+        "docs/mxfp4/PREREG-mxfp4-train.md",
+        "docs/provenance/gptoss20b_expert_bytes.md"
+      ]
+    },
+    {
+      "id": "gnf4.k3.oracle-exact",
+      "area": "provenance",
+      "claim": "The reference MXFP4 decode reproduces Kimi K3's own declared reference (compressed-tensors 0.17.1, mxfp4-pack-quantized) exactly: 33,030,144 elements across w1/w3/w2, max abs delta 0; an arena round-trip on a byte-verified 1.56 TB store came back 48/48 segments identical with a byte-flip control, row fixed at 17,547,264 B.",
+      "status": "measured",
+      "evidence": [
+        "docs/RESULTS-k3-phase1-oracle.md",
+        "docs/RESULTS-k3-slice-roundtrip.md",
+        "docs/K3-PROVENANCE-CHAIN.md"
+      ],
+      "notes": "Both .ots stamps were applied AFTER their runs, so this sits at the measured tier, not confirmed; the oracle gates the reference decode, not the Triton kernel; no throughput claim."
+    },
+    {
+      "id": "gnf4.projection.multiarch",
+      "area": "portability",
+      "claim": "PROJECTED (stamped pre-silicon): the pure-waterfall gen5 row is falsified; the revised gen4 band 2.4-3.0 tok/s is confirmed (L40S 2.60-2.61); the revised gen5 band 4.0-5.0 missed narrowly (H100 PCIe 3.924); unified-memory rows are ceilings only (17-22 tok/s on 128 GB boxes). NF4-vs-bf16 is a 3.56x byte reduction, not 4x.",
+      "status": "projected",
+      "evidence": [
+        "PROJECTIONS-multiarch.md",
+        "PROTOCOL-multiarch.md",
+        "RESULTS-multiarch-mi300x.md",
+        "RESULTS-multiarch-mi300x-followup.md"
+      ]
+    },
+    {
+      "id": "gnf4.cold-engine.phase0-premise-refuted",
+      "area": "offload",
+      "claim": "The cold-engine 'free floor' premise (bnb's CPU dequantize_4bit as a ready-made decode arm) is REFUTED on the target NAS box: no AVX-512, bnb falls to its reference path at 0.041 GB/s against a ~12 GB/s DDR ceiling. Design-stage; no registered claims.",
+      "status": "measured",
+      "hardware": "QNAP Xeon W-1250 (AVX2 only)",
+      "evidence": [
+        "docs/cold-engine/PHASE0-premise.md"
+      ],
+      "notes": "PHASE0-premise self-declares as incomplete (roofline pipe term pending). STAGE3-SYNTHESIS carries one correction still outstanding (gate 1 read counts must not be quoted until re-run)."
+    },
+    {
+      "id": "gnf4.open.context-budgets-rung-two",
+      "area": "serve",
+      "claim": "OPEN: context-budgets.md's KB/token table is rung-one (A2000) measured; full-depth real-weight confirmation is pending and the K3 row is a declared gap. Its own text forbids promoting pending rows to READMEs.",
+      "status": "open",
+      "evidence": [
+        "docs/context-budgets.md"
+      ]
+    },
+    {
+      "id": "gnf4.open.issues",
+      "area": "kernel",
+      "claim": "OPEN issues at 2026-09-03: #319 (f32 paged compute modes on triton 3.4), #87 (gemm_4bit_grouped int32 offset overflow when max(expert_ids) is large -- distinct from the 2 GiB fix in 0.13.2/0.14.0), #73 (K3 fetch host copy ~71% of a layer), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #60 (arena staging blocks ~30% of a training step), #58 (8 requests per layer where 2 would do).",
+      "status": "open",
+      "evidence": [
+        "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues"
+      ]
+    }
+  ]
+}
