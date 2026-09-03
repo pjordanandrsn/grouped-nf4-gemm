@@ -316,7 +316,7 @@ no user will ever have — and the error is **against** this kernel. Measured in
 a real QLoRA finetune (OLMoE-1B-7B, 16 layers / 64 experts, seq 512, LoRA r=8,
 grad checkpointing, e4b 0.17.5 + published wheels), fused vs the per-expert
 dequant-and-project loop, on two architectures
-([receipts](https://github.com/pjordanandrsn/grouped-nf4-gemm/tree/v0.23.0/bench/phase1/results/dequant_forward/leg-e2e),
+([receipts](https://github.com/pjordanandrsn/grouped-nf4-gemm/tree/v0.24.0/bench/phase1/results/dequant_forward/leg-e2e),
 [write-up](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.24.0/bench/phase1/results/dequant_forward/RESULTS-e2e-training.md),
 prereg stamped pre-data):
 
@@ -694,7 +694,7 @@ extended it — under the same receipts discipline — into a stamped, pre-silic
 projection table for AMD, Intel, and NVIDIA unified-memory parts:
 [`PROJECTIONS-multiarch.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.24.0/PROJECTIONS-multiarch.md) (protocol:
 [`PROTOCOL-multiarch.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.24.0/PROTOCOL-multiarch.md); model + R1 anchor gate:
-[`projections/`](https://github.com/pjordanandrsn/grouped-nf4-gemm/tree/v0.23.0/projections/)). Both docs are OpenTimestamps-anchored (`.ots`)
+[`projections/`](https://github.com/pjordanandrsn/grouped-nf4-gemm/tree/v0.24.0/projections/)). Both docs are OpenTimestamps-anchored (`.ots`)
 **before any of this silicon was run** — the projections are a falsifiable
 prediction, not a marketing table.
 
