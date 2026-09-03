@@ -663,11 +663,22 @@ report-only addendum landed 2026-07-20
 ([`kernel/RESULTS-v6-a2000-report.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.24.0/kernel/RESULTS-v6-a2000-report.md)):
 paired prefill medians inside the confirmed band on 7/8 cells at 26 SM
 (the eighth 0.9% below the floor, quantified in-doc) — the mainloop is
-bracketed 26→170 SM with zero retune. Pending: a bare-metal gen4
-replication when stock returns. Parked: sm_120 (three consecutive cloud
-provisioning failures on 5090s — availability, not code). Ecosystem landing
-is calendar-gated on the bitsandbytes v0.50.0 release; see the coordination
-note on #1949.
+bracketed 26→170 SM with zero retune.
+
+**sm_120 (RTX 5090) is the primary serving target as of 0.15.0**, not
+parked — an earlier version of this paragraph said three cloud
+provisioning failures had parked it, which was true in July and false
+since. The M=1 decode configs were retuned for it, the sm_120 census
+above was run on it, the certified decode anchor (7.37 ms/step ±4.2%,
+≈130–142 tok/s single-stream on Qwen3-30B-A3B) is measured on it, and
+the M3 default flip, the int4-b32 lanes (0.18.0–0.23.0) and the paged
+attention's windows/sinks/scale (0.24.0) were all measured on rented
+5090s. Its one open defect: the **f32** paged compute modes miss their
+reference on torch 2.8 / triton 3.4 (#319); the fp8 modes, which are the
+sm_120 default, pass.
+
+Current position in one page: [`docs/STATUS.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.24.0/docs/STATUS.md);
+every number with its evidence path and status: [`docs/claims.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.24.0/docs/claims.json).
 
 **Downstream serving** lives in the sibling package
 [`experts4bit-qlora`](https://pypi.org/project/experts4bit-qlora/): its
