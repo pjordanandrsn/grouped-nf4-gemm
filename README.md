@@ -43,6 +43,69 @@ Trusted publishing; every wheel carries a PEP 740 attestation. The fused
 GEMM is CUDA-only (`triton>=3.4`, Linux); the reference decode and the
 provenance hashing are pure torch and run anywhere.
 
+## Try it on CPU right now
+
+No GPU needed for the pack/decode/provenance surface — the fused GEMM is
+CUDA-only, but the reference decode and the provenance hashing are pure torch.
+
+> **On Linux this works from a bare `pip install`; on macOS and Windows it does
+> not, today.** `nf4_pack_ref` imports `nf4_grouped`, which does a module-level
+> `import triton` — and triton is declared
+> `triton>=3.4; platform_system == 'Linux'`, so it is simply absent elsewhere and
+> these blocks raise `ModuleNotFoundError`. The *math* is pure torch; the import
+> graph is not. CI executes these blocks on Linux, where triton is present, so it
+> validates the code without validating this sentence. Tracked as a real defect —
+> the reference decode should not need the kernel's dependency.
+These three blocks are extracted and executed by CI (`test_readme_cpu_block.py`),
+so they cannot drift from the API.
+
+<!-- CPU-QUICKSTART-START -->
+**1. NF4 round-trip** — pack a weight, decode it back, check the error:
+
+```python
+import torch
+from nf4_pack_ref import quantize_pack_nf4
+from nf4_grouped import dequant_ref
+
+w = torch.randn(256, 512)                      # a per-expert weight [N, K]
+packed, absmax = quantize_pack_nf4(w)          # [256, 256] uint8, [256, 8] fp32
+wq = dequant_ref(packed, absmax, 256, 512)     # decode back to [N, K]
+print("nf4 rel-err:", round(((wq - w).norm() / w.norm()).item(), 3))     # ~0.09
+print("nf4 re-pack idempotent:", torch.equal(quantize_pack_nf4(wq)[0], packed))  # True
+```
+
+**2. MXFP4 round-trip** — the gpt-oss expert format, same shape story:
+
+```python
+import torch
+from mxfp4_pack_ref import quantize_pack_mxfp4, dequant_mxfp4
+
+w = torch.randn(128, 256)                      # [.., K], K a multiple of 32
+blocks, scales = quantize_pack_mxfp4(w)        # [128, 8, 16] u8, [128, 8] u8 (e8m0)
+wq = dequant_mxfp4(blocks, scales)             # [128, 256]
+print("mxfp4 rel-err:", round(((wq - w).norm() / w.norm()).item(), 3))   # ~0.12
+```
+
+**3. Provenance in four lines** — hash on-disk bytes, catch a tampered one:
+
+```python
+import torch, json, struct, tempfile, os
+from mxfp4_loader import file_tensor_sha256, tensor_sha256
+
+t = torch.arange(64, dtype=torch.uint8)        # stand-in for an expert's packed bytes
+hdr = json.dumps({"w": {"dtype": "U8", "shape": [64], "data_offsets": [0, 64]}}).encode()
+path = tempfile.mktemp(suffix=".safetensors")
+with open(path, "wb") as f:
+    f.write(struct.pack("<Q", len(hdr))); f.write(hdr); f.write(t.numpy().tobytes())
+print("prov bytes match:", file_tensor_sha256(path, "w") == tensor_sha256(t))    # True
+b = bytearray(open(path, "rb").read()); b[-1] ^= 0xFF; open(path, "wb").write(bytes(b))
+print("prov tamper detected:", file_tensor_sha256(path, "w") != tensor_sha256(t))  # True
+os.remove(path)
+```
+
+That's the same instrument the 144/144 training receipt used.
+<!-- CPU-QUICKSTART-END -->
+
 ## Which entry point? Pick by where the weights live
 
 | the bytes are in… | call |
