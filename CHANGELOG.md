@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.25.0 — 2026-09-03
+
+### Documentation release: the README says what is measured, with each number's evidence tier
+
+No kernel changes. This release exists so that what PyPI renders matches
+the repository after the docs audit: the README is distilled from 768
+lines to one page — what the kernel is and what ships around it, the
+see-it-yourself script, install, the entry-point table, one table of
+what is measured with each row's evidence tier, the three limits stated
+up front (a CUDA-graphed baseline wins at decode; Unsloth wins its own
+bf16-resident regime; the known loser classes), where the receipts are,
+what was retired, what is open.
+
+- `docs/claims.json` — a machine-readable register of 29 claims, each
+  with value, unit, hardware, tier and evidence path
+  (`docs/claims-schema.md`). Every number in the README's measured
+  section maps to an entry, checked mechanically.
+- **`measured-private`** is a tier, not a footnote: the int4-b32 GEMV
+  cells, the calibrated-pack quality numbers and the decode-glue
+  composition come from a private audit tree and are labelled so.
+- `docs/STATUS.md` — one page: what the kernel does today, what was
+  retired, what is open, how to read the numbers.
+- `docs/INDEX.md` — what each of the 22 documents is for and whether
+  it is current; names the gap that the serving-side kernels of
+  0.14–0.24 have no reference page under `docs/` yet.
+- **Retired from the README:** "Parked: sm_120 (three consecutive
+  cloud provisioning failures)". True in July, false since 0.15.0 —
+  the RTX 5090 has been the primary serving target for every release
+  since, and the same README carried an sm_120 census.
+
 ## 0.24.0 — 2026-09-03
 
 ### Paged decode: sliding windows, attention sinks, custom scale
