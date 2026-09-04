@@ -235,19 +235,63 @@ def test_f8dot_error_is_bounded_and_reported():
 @needs_gpu
 @pytest.mark.skipif(not FP8_DOT_OK, reason="needs fp8 MMA (sm_89+)")
 def test_f8dot_refuses_unrolled_group_counts():
-    """k_groups=8 with head_dim=256 passes the >=32-wide check but is
-    outside the kernels' constexpr unroll — it must refuse, not silently
-    score only the first four groups (Bugbot, HIGH)."""
-    q, kp, vp, tab, lens = _build(1, 16, 4, 256, [32], k_groups=8)
+    """k_groups=32 with head_dim=1024 passes the >=32-wide check but is
+    outside the kernels' constexpr unroll (1, 2, 4, 8, 16) — it must
+    refuse, not silently score only the first groups (Bugbot, HIGH)."""
+    q, kp, vp, tab, lens = _build(1, 8, 2, 1024, [32], k_groups=32)
     with pytest.raises(AssertionError, match="unrolls k_groups"):
         fp8_paged_decode_attention(
             q.cuda(), kp.cuda(), vp.cuda(), tab.cuda(), lens.cuda(),
-            n_kv_heads=4, head_dim=256, k_groups=8, compute="fp8")
+            n_kv_heads=2, head_dim=1024, k_groups=32, compute="fp8")
     with pytest.raises(AssertionError, match="unrolls k_groups"):
         fp8_paged_decode_attention(
             q.cuda(), kp.cuda(), vp.cuda(), tab.cuda(), lens.cuda(),
-            n_kv_heads=4, head_dim=256, k_groups=8, compute="fp8",
+            n_kv_heads=2, head_dim=1024, k_groups=32, compute="fp8",
             pack_heads=True)
+
+
+@needs_gpu
+@pytest.mark.skipif(not FP8_DOT_OK, reason="needs fp8 MMA (sm_89+)")
+@pytest.mark.parametrize("d,kg,hkv,G", [(128, 4, 4, 4), (256, 4, 8, 2), (256, 8, 8, 2),
+                                        (512, 4, 2, 8), (512, 8, 2, 8), (512, 16, 2, 8)])
+@pytest.mark.parametrize("mode,mkw", [("f8dot", {"compute": "fp8"}),
+                                      ("pf8", {"pack_heads": True, "compute": "fp8"})])
+def test_fp8_modes_across_head_dims_and_group_counts(d, kg, hkv, G, mode, mkw):
+    """Every fp8 mode at the three KV geometries the serving path meets
+    (Qwen3 128/4, Gemma-4 sliding 256/8, Gemma-4 full 512/2) and at every
+    unrolled group count that keeps >=32-wide scales, against the fp32
+    oracle on identical bytes. 16 groups at head_dim 512 is the config
+    the Gemma-4 lane measured at 0.017 nats against 0.046 for 4 groups
+    (gnf4#324)."""
+    got, want = _run_both(1, G * hkv, hkv, d, [64, 200], k_groups=kg,
+                          v_groups=1, mode_kw=mkw)
+    _close(got, want, mode)
+
+
+@needs_gpu
+@pytest.mark.skipif(not FP8_DOT_OK, reason="needs fp8 MMA (sm_89+)")
+def test_packed_fp8_falls_back_when_the_tile_overflows_shared_memory():
+    """head_dim 256 with 8 kv heads is the geometry where the packed tile
+    asked for 148 KB of shared memory on a 101 KB card and Triton raised
+    OutOfResources from inside the launch (gnf4#324). The call must
+    return the split kernel's result and say so once, not raise."""
+    import warnings
+    from fp8_paged_attn import _PACKED_FALLBACK_WARNED
+    _PACKED_FALLBACK_WARNED.clear()
+    q, kp, vp, tab, lens = _build(1, 16, 8, 256, [64], k_groups=4)
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("always")
+        got = fp8_paged_decode_attention(
+            q.cuda(), kp.cuda(), vp.cuda(), tab.cuda(), lens.cuda(),
+            n_kv_heads=8, head_dim=256, k_groups=4, compute="fp8",
+            pack_heads=True)
+    want = paged_attn_ref(q, kp, vp, tab, lens, n_kv_heads=8, head_dim=256,
+                          k_groups=4)
+    _close(got.cpu().float(), want.float(), "f8dot")
+    fell_back = [w for w in rec if "falling back to the split fp8 kernel" in str(w.message)]
+    # on a card whose shared memory holds the packed tile there is nothing
+    # to fall back from; either way the result is right
+    assert len(fell_back) <= 1
 
 
 @needs_gpu

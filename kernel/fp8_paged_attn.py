@@ -454,8 +454,9 @@ if _TRITON:
         q_amax = tl.max(tl.abs(qf))
         q_s = tl.where(q_amax > 0, P448 / q_amax, 1.0)
         # static q sub-tiles, one per scale group, hoisted out of the
-        # token loop (Triton's tracer has no lists — NG_K in {1, 2, 4}
-        # is unrolled by constexpr guards, wrapper-asserted)
+        # token loop (Triton's tracer has no lists — NG_K in {1, 2, 4, 8,
+        # 16} is unrolled by constexpr guards, wrapper-asserted; 16 groups
+        # keep 32-wide key scales at head_dim 512, gnf4#324)
         q8_0 = _q_sub(q_ptrs, offs_dg, 0 * DG, g_mask, q_s)
         q8_1 = q8_0
         q8_2 = q8_0
@@ -465,6 +466,32 @@ if _TRITON:
         if NG_K >= 4:
             q8_2 = _q_sub(q_ptrs, offs_dg, 2 * DG, g_mask, q_s)
             q8_3 = _q_sub(q_ptrs, offs_dg, 3 * DG, g_mask, q_s)
+        q8_4 = q8_0
+        q8_5 = q8_0
+        q8_6 = q8_0
+        q8_7 = q8_0
+        q8_8 = q8_0
+        q8_9 = q8_0
+        q8_10 = q8_0
+        q8_11 = q8_0
+        q8_12 = q8_0
+        q8_13 = q8_0
+        q8_14 = q8_0
+        q8_15 = q8_0
+        if NG_K >= 8:
+            q8_4 = _q_sub(q_ptrs, offs_dg, 4 * DG, g_mask, q_s)
+            q8_5 = _q_sub(q_ptrs, offs_dg, 5 * DG, g_mask, q_s)
+            q8_6 = _q_sub(q_ptrs, offs_dg, 6 * DG, g_mask, q_s)
+            q8_7 = _q_sub(q_ptrs, offs_dg, 7 * DG, g_mask, q_s)
+        if NG_K >= 16:
+            q8_8 = _q_sub(q_ptrs, offs_dg, 8 * DG, g_mask, q_s)
+            q8_9 = _q_sub(q_ptrs, offs_dg, 9 * DG, g_mask, q_s)
+            q8_10 = _q_sub(q_ptrs, offs_dg, 10 * DG, g_mask, q_s)
+            q8_11 = _q_sub(q_ptrs, offs_dg, 11 * DG, g_mask, q_s)
+            q8_12 = _q_sub(q_ptrs, offs_dg, 12 * DG, g_mask, q_s)
+            q8_13 = _q_sub(q_ptrs, offs_dg, 13 * DG, g_mask, q_s)
+            q8_14 = _q_sub(q_ptrs, offs_dg, 14 * DG, g_mask, q_s)
+            q8_15 = _q_sub(q_ptrs, offs_dg, 15 * DG, g_mask, q_s)
         scale_fold = sm_scale / q_s
 
         m_i = tl.full([BLOCK_G], float("-inf"), tl.float32)
@@ -508,6 +535,32 @@ if _TRITON:
                                pay_row, offs_dg, 2 * DG, 2, t_mask)
                 s += _k_scored(q8_3, kpool_u8, kpool_f32, k_base, ks_base,
                                pay_row, offs_dg, 3 * DG, 3, t_mask)
+            if NG_K >= 8:
+                s += _k_scored(q8_4, kpool_u8, kpool_f32, k_base, ks_base,
+                               pay_row, offs_dg, 4 * DG, 4, t_mask)
+                s += _k_scored(q8_5, kpool_u8, kpool_f32, k_base, ks_base,
+                               pay_row, offs_dg, 5 * DG, 5, t_mask)
+                s += _k_scored(q8_6, kpool_u8, kpool_f32, k_base, ks_base,
+                               pay_row, offs_dg, 6 * DG, 6, t_mask)
+                s += _k_scored(q8_7, kpool_u8, kpool_f32, k_base, ks_base,
+                               pay_row, offs_dg, 7 * DG, 7, t_mask)
+            if NG_K >= 16:
+                s += _k_scored(q8_8, kpool_u8, kpool_f32, k_base, ks_base,
+                               pay_row, offs_dg, 8 * DG, 8, t_mask)
+                s += _k_scored(q8_9, kpool_u8, kpool_f32, k_base, ks_base,
+                               pay_row, offs_dg, 9 * DG, 9, t_mask)
+                s += _k_scored(q8_10, kpool_u8, kpool_f32, k_base, ks_base,
+                               pay_row, offs_dg, 10 * DG, 10, t_mask)
+                s += _k_scored(q8_11, kpool_u8, kpool_f32, k_base, ks_base,
+                               pay_row, offs_dg, 11 * DG, 11, t_mask)
+                s += _k_scored(q8_12, kpool_u8, kpool_f32, k_base, ks_base,
+                               pay_row, offs_dg, 12 * DG, 12, t_mask)
+                s += _k_scored(q8_13, kpool_u8, kpool_f32, k_base, ks_base,
+                               pay_row, offs_dg, 13 * DG, 13, t_mask)
+                s += _k_scored(q8_14, kpool_u8, kpool_f32, k_base, ks_base,
+                               pay_row, offs_dg, 14 * DG, 14, t_mask)
+                s += _k_scored(q8_15, kpool_u8, kpool_f32, k_base, ks_base,
+                               pay_row, offs_dg, 15 * DG, 15, t_mask)
             s = s * scale_fold
             s = tl.where(t_mask[None, :], s, float("-inf"))
 
@@ -677,6 +730,32 @@ if _TRITON:
         if NG_K >= 4:
             q8_2 = _q_sub(q_ptrs, offs_dg, 2 * DG, q_mask, q_s)
             q8_3 = _q_sub(q_ptrs, offs_dg, 3 * DG, q_mask, q_s)
+        q8_4 = q8_0
+        q8_5 = q8_0
+        q8_6 = q8_0
+        q8_7 = q8_0
+        q8_8 = q8_0
+        q8_9 = q8_0
+        q8_10 = q8_0
+        q8_11 = q8_0
+        q8_12 = q8_0
+        q8_13 = q8_0
+        q8_14 = q8_0
+        q8_15 = q8_0
+        if NG_K >= 8:
+            q8_4 = _q_sub(q_ptrs, offs_dg, 4 * DG, q_mask, q_s)
+            q8_5 = _q_sub(q_ptrs, offs_dg, 5 * DG, q_mask, q_s)
+            q8_6 = _q_sub(q_ptrs, offs_dg, 6 * DG, q_mask, q_s)
+            q8_7 = _q_sub(q_ptrs, offs_dg, 7 * DG, q_mask, q_s)
+        if NG_K >= 16:
+            q8_8 = _q_sub(q_ptrs, offs_dg, 8 * DG, q_mask, q_s)
+            q8_9 = _q_sub(q_ptrs, offs_dg, 9 * DG, q_mask, q_s)
+            q8_10 = _q_sub(q_ptrs, offs_dg, 10 * DG, q_mask, q_s)
+            q8_11 = _q_sub(q_ptrs, offs_dg, 11 * DG, q_mask, q_s)
+            q8_12 = _q_sub(q_ptrs, offs_dg, 12 * DG, q_mask, q_s)
+            q8_13 = _q_sub(q_ptrs, offs_dg, 13 * DG, q_mask, q_s)
+            q8_14 = _q_sub(q_ptrs, offs_dg, 14 * DG, q_mask, q_s)
+            q8_15 = _q_sub(q_ptrs, offs_dg, 15 * DG, q_mask, q_s)
         scale_fold = sm_scale / q_s
 
         # column c of a score tile = (token t, kv head h), c = t*H_KV + h
@@ -710,6 +789,32 @@ if _TRITON:
                                 pay_c, offs_dg, 2 * DG, 2, t_mask_c)
                 s += _kc_scored(q8_3, kpool_u8, kpool_f32, k_base, ks_base,
                                 pay_c, offs_dg, 3 * DG, 3, t_mask_c)
+            if NG_K >= 8:
+                s += _kc_scored(q8_4, kpool_u8, kpool_f32, k_base, ks_base,
+                                pay_c, offs_dg, 4 * DG, 4, t_mask_c)
+                s += _kc_scored(q8_5, kpool_u8, kpool_f32, k_base, ks_base,
+                                pay_c, offs_dg, 5 * DG, 5, t_mask_c)
+                s += _kc_scored(q8_6, kpool_u8, kpool_f32, k_base, ks_base,
+                                pay_c, offs_dg, 6 * DG, 6, t_mask_c)
+                s += _kc_scored(q8_7, kpool_u8, kpool_f32, k_base, ks_base,
+                                pay_c, offs_dg, 7 * DG, 7, t_mask_c)
+            if NG_K >= 16:
+                s += _kc_scored(q8_8, kpool_u8, kpool_f32, k_base, ks_base,
+                                pay_c, offs_dg, 8 * DG, 8, t_mask_c)
+                s += _kc_scored(q8_9, kpool_u8, kpool_f32, k_base, ks_base,
+                                pay_c, offs_dg, 9 * DG, 9, t_mask_c)
+                s += _kc_scored(q8_10, kpool_u8, kpool_f32, k_base, ks_base,
+                                pay_c, offs_dg, 10 * DG, 10, t_mask_c)
+                s += _kc_scored(q8_11, kpool_u8, kpool_f32, k_base, ks_base,
+                                pay_c, offs_dg, 11 * DG, 11, t_mask_c)
+                s += _kc_scored(q8_12, kpool_u8, kpool_f32, k_base, ks_base,
+                                pay_c, offs_dg, 12 * DG, 12, t_mask_c)
+                s += _kc_scored(q8_13, kpool_u8, kpool_f32, k_base, ks_base,
+                                pay_c, offs_dg, 13 * DG, 13, t_mask_c)
+                s += _kc_scored(q8_14, kpool_u8, kpool_f32, k_base, ks_base,
+                                pay_c, offs_dg, 14 * DG, 14, t_mask_c)
+                s += _kc_scored(q8_15, kpool_u8, kpool_f32, k_base, ks_base,
+                                pay_c, offs_dg, 15 * DG, 15, t_mask_c)
             s = s * scale_fold
             s = tl.where(diag & t_mask_c[None, :], s, float("-inf"))
 
@@ -859,6 +964,25 @@ def reset_compute_counts() -> None:
         _COMPUTE_COUNTS[_k] = 0
 
 
+_PACKED_FALLBACK_WARNED: set = set()
+
+
+def _warn_packed_fallback(head_dim: int, n_kv_heads: int, block_tokens: int,
+                          err: Exception) -> None:
+    """Once per geometry: the packed fp8 tile did not fit shared memory and
+    the split fp8 kernel ran instead (same result, different tile)."""
+    import warnings
+    key = (head_dim, n_kv_heads, block_tokens)
+    if key in _PACKED_FALLBACK_WARNED:
+        return
+    _PACKED_FALLBACK_WARNED.add(key)
+    warnings.warn(
+        f"packed fp8 paged attention does not fit shared memory at head_dim "
+        f"{head_dim}, {n_kv_heads} kv heads, {block_tokens} tokens/block "
+        f"({str(err)[:80]}); falling back to the split fp8 kernel",
+        RuntimeWarning, stacklevel=3)
+
+
 def fp8_compute_unsupported(q, head_dim: int, k_groups: int,
                             v_groups: int, *, pack_heads: bool = False,
                             block_tokens: int = 16, n_kv_heads: int = 1,
@@ -888,8 +1012,8 @@ def fp8_compute_unsupported(q, head_dim: int, k_groups: int,
     if v_groups != 1:
         return ("fp8 compute folds V scales into P: per-row only "
                 f"(v_groups={v_groups})")
-    if k_groups not in (1, 2, 4):
-        return f"fp8 compute unrolls k_groups in (1, 2, 4), got {k_groups}"
+    if k_groups not in (1, 2, 4, 8, 16):
+        return f"fp8 compute unrolls k_groups in (1, 2, 4, 8, 16), got {k_groups}"
     if head_dim // k_groups < 32:
         return ("fp8 dot needs >=32-wide key scale groups "
                 f"(head_dim {head_dim} // k_groups {k_groups})")
@@ -1154,21 +1278,41 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
             assert _why is None, _why
             counters = _fuse_counters(B, q.device) if fuse_combine \
                 else m_buf
-            _fp8_paged_decode_packed_f8[(B * n_split,)](
-                q, k_pool, v_pool,
-                k_pool.view(torch.float32), v_pool.view(torch.float32),
-                block_table, seq_lens.to(torch.int32),
-                m_buf, l_buf, acc_buf,
-                o, counters,
-                q.stride(0), q.stride(1), block_table.stride(0),
-                o.stride(0), o.stride(1),
-                k_row, v_row, sm_scale, n_split, win, sink_t,
-                H_KV=n_kv_heads, G=G, D=D, BT=block_tokens,
-                NG_K=k_groups, BLOCK_Q=block_q,
-                FUSE_COMBINE=fuse_combine,
-                HAS_SINK=has_sink,
-                num_warps=num_warps, num_stages=num_stages,
-            )
+            try:
+                _fp8_paged_decode_packed_f8[(B * n_split,)](
+                    q, k_pool, v_pool,
+                    k_pool.view(torch.float32), v_pool.view(torch.float32),
+                    block_table, seq_lens.to(torch.int32),
+                    m_buf, l_buf, acc_buf,
+                    o, counters,
+                    q.stride(0), q.stride(1), block_table.stride(0),
+                    o.stride(0), o.stride(1),
+                    k_row, v_row, sm_scale, n_split, win, sink_t,
+                    H_KV=n_kv_heads, G=G, D=D, BT=block_tokens,
+                    NG_K=k_groups, BLOCK_Q=block_q,
+                    FUSE_COMBINE=fuse_combine,
+                    HAS_SINK=has_sink,
+                    num_warps=num_warps, num_stages=num_stages,
+                )
+            except Exception as e:  # noqa: BLE001 -- only the resource class is caught
+                # The packed tile reduces over BT*H_kv columns of D bytes in
+                # shared memory; at head_dim 256 with 8 kv heads it asks for
+                # 148 KB against a 101 KB card and Triton raises
+                # OutOfResources from inside the launch (gnf4#324). Nothing
+                # has been written yet, so the split fp8 kernel -- same
+                # bytes, same roundings, a different tile -- serves the call.
+                if type(e).__name__ != "OutOfResources":
+                    raise
+                _warn_packed_fallback(D, n_kv_heads, block_tokens, e)
+                return fp8_paged_decode_attention(
+                    q, k_pool, v_pool, block_table, seq_lens,
+                    n_kv_heads=n_kv_heads, head_dim=head_dim,
+                    block_tokens=block_tokens, k_groups=k_groups,
+                    v_groups=v_groups, sm_scale=sm_scale,
+                    num_stages=num_stages, pack_heads=False, compute="fp8",
+                    fuse_combine=fuse_combine, layout=layout, window=window,
+                    sinks=sinks, k_row_bytes=k_row_bytes,
+                    v_row_bytes=v_row_bytes)
             if fuse_combine:
                 return o
             _fp8_combine[(B,)](
