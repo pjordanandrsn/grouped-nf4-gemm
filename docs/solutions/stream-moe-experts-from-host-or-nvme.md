@@ -1,7 +1,7 @@
 # How do I run a MoE whose experts do not fit in VRAM, streaming them from pinned host RAM or an NVMe arena?
 <!-- summary: The kernel-side storage primitives for experts that do not fit VRAM: the NVMe arena bake and O_DIRECT reader, the pinned-DRAM row tier and low-level residency, and the GPU-driven host gather. -->
 
-**Role of this page: kernel/storage primitives.** The arena bake and verifier, the O_DIRECT reader, the pinned-DRAM row tier and the low-level residency engines. It is not the decision page and not the model-level integration; those live in the consumer.
+**Role of this page: kernel/storage primitives.** The arena bake and verifier, the O_DIRECT reader, the pinned-DRAM row tier and the low-level residency engines. It is not the decision page and not the model-level integration; those live in the consumer. An NVMe primitive (arena, reader, row tier, residency engine) belongs here; model-level NVMe integration — binding those primitives to a loaded model and deciding which bytes live where — belongs to experts4bit-qlora.
 
 **Use this page when…** you are building or debugging the storage layer itself: baking an expert-major arena, sizing a pinned row tier, reading rows with `ArenaReader`, or wiring `ColdTier` / `ArenaExpertSource` under your own forward. Start in [experts4bit-qlora](https://github.com/pjordanandrsn/experts4bit-qlora) instead when the question starts from a model:
 

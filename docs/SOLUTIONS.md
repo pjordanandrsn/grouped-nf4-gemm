@@ -34,6 +34,18 @@ statement that the page describes a capability without a measurement).
   larger than VRAM", "offload experts to RAM or NVMe" — belong there; its
   own solution index is
   [docs/SOLUTIONS.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/SOLUTIONS.md).
+- **Version compatibility, and who owns a number.** The minimum
+  `grouped-nf4-gemm` (gnf4) version each `experts4bit-qlora` (e4b) release
+  requires through its `[fast]` extra is the current `compatibility` record
+  in [`system-manifest.json`](system-manifest.json) (the consumer's `[fast]`
+  extra pins it; `scripts/check_system_manifest.py` validates the pair): do
+  not copy the floor from a page. Kernel-level numbers are registered in
+  [`claims.json`](claims.json) here; model-level numbers (tok/s for a named
+  model on a named card, perplexity-gate verdicts) are registered in
+  experts4bit-qlora's `docs/claims.json`, and a model-level figure is quoted
+  only with that register's claim ID and status. `measured-private` there,
+  as here, means the receipt is outside the public repository, so the
+  number is not publicly reproducible.
 
 Lookup aliases (`nf4gemm`, `gnf4`, `grouped-mxfp4-gemm`) install this
 package; always install and cite `grouped-nf4-gemm`.
@@ -71,9 +83,10 @@ three limits where the fused path loses and what is measured-private, is
   closed negative. The register records each of these.
 - Numbers live in [`claims.json`](claims.json), tiered in the public
   register (confirmed, measured, measured-private, projected, open,
-  superseded, retired); a page quotes a figure only beside the claim ID
-  and tier it comes from, and a retired or superseded claim is never
-  current.
+  superseded, retired — `status_vocabulary` in `claims.json`,
+  `evidence_vocabulary` in [`system-manifest.json`](system-manifest.json));
+  a page quotes a figure only beside the claim ID and tier it comes from,
+  and a retired or superseded claim is never current.
 - The fp8 paged attention is two support states, carried as two entries
   in [`capabilities.json`](capabilities.json): the fp8 compute path
   (sm_89+ precondition, measured on the RTX 5090 only) is supported; the
