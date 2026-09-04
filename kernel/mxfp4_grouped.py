@@ -180,3 +180,86 @@ def gemm_mxfp4_grouped(a_cat, blocks, scales, sizes, expert_ids,
         VARIANT=prefill_variant, num_warps=(8 if block_m >= 128 else 4),
         num_stages=(3 if block_m >= 128 else 2))
     return out
+
+
+# ------------------------------------------- decode-grade GEMV (B=1) --
+@triton.jit
+def _gemv_mxfp4_b32(xq_ptr, xs_ptr, w_ptr, ws_ptr, eid_ptr, out_ptr,
+                    N, K: tl.constexpr, R: tl.constexpr,
+                    BLOCK_N: tl.constexpr, SK: tl.constexpr,
+                    KU: tl.constexpr):
+    """The int4-b32 decode GEMV structure (split-K over 32-wide groups,
+    KU groups per iteration, fp32 partials the wrapper reduces) on the
+    NATIVE MXFP4 store: element 2j = LOW nibble, 2j+1 = HIGH, e8m0
+    scale per (row, 32-group). Activations are the int4-b32 int8 rows
+    with a per-32 fp32 scale (``quant_x_rows``), so the block dot is
+    an EXACT int32 sum: an e2m1 nibble ``s|e1e0|m`` decodes to twice
+    its value as the integer ``m`` (e == 0) or ``(2 + m) << (e - 1)``
+    -- {0,1,2,3,4,6,8,12} -- and the 0.5 goes into the scale with
+    ``exp2(e8 - 127)``. Same grid/plan as ``_gemv_int4_b32`` (receipts
+    int4port): grid (cdiv(N, BN), R, SK); ``out[(sk*R + e)*N + n]``."""
+    pid = tl.program_id(0)
+    e = tl.program_id(1)
+    sk = tl.program_id(2)
+    eid = tl.load(eid_ptr + e).to(tl.int64)
+    offs_n = pid * BLOCK_N + tl.arange(0, BLOCK_N)
+    n_mask = offs_n < N
+    acc = tl.zeros((BLOCK_N,), dtype=tl.float32)
+    KB: tl.constexpr = K // 32
+    span: tl.constexpr = (KB + SK * KU - 1) // (SK * KU)
+    ku = tl.arange(0, KU)
+    pair = tl.arange(0, 16)
+    wbase = w_ptr + eid * N * (K // 2)
+    sbase = ws_ptr + eid * N * KB
+    for kbi in range(0, span):
+        kb0 = (sk * span + kbi) * KU
+        if kb0 < KB:
+            xoff = e * K + kb0 * 32 + ku[:, None] * 32 + 2 * pair[None, :]
+            xe = tl.load(xq_ptr + xoff).to(tl.int32)
+            xo = tl.load(xq_ptr + xoff + 1).to(tl.int32)
+            xsv = tl.load(xs_ptr + e * KB + kb0 + ku)
+            wb = tl.load(wbase + offs_n[:, None] * (K // 2) + kb0 * 16
+                         + tl.arange(0, KU * 16)[None, :],
+                         mask=n_mask[:, None], other=0).to(tl.int32)
+            wb = tl.reshape(wb, (BLOCK_N, KU, 16))
+            lo = wb & 0xF
+            hi = (wb >> 4) & 0xF
+            # e2m1 -> 2*value as an exact integer, sign applied after
+            lo_e = (lo >> 1) & 0x3
+            lo_m = lo & 0x1
+            lo_v = tl.where(lo_e == 0, lo_m,
+                            (2 + lo_m) << tl.maximum(lo_e - 1, 0))
+            lo_v = tl.where((lo & 0x8) != 0, -lo_v, lo_v)
+            hi_e = (hi >> 1) & 0x3
+            hi_m = hi & 0x1
+            hi_v = tl.where(hi_e == 0, hi_m,
+                            (2 + hi_m) << tl.maximum(hi_e - 1, 0))
+            hi_v = tl.where((hi & 0x8) != 0, -hi_v, hi_v)
+            d = tl.sum(lo_v * xe[None, :, :], axis=2) \
+              + tl.sum(hi_v * xo[None, :, :], axis=2)
+            e8 = tl.load(sbase + offs_n[:, None] * KB + kb0 + ku[None, :],
+                         mask=n_mask[:, None], other=127).to(tl.int32)
+            ws = tl.exp2((e8 - 128).to(tl.float32))     # 0.5 * 2^(e8-127)
+            acc += tl.sum(d.to(tl.float32) * (ws * xsv[None, :]), axis=1)
+    tl.store(out_ptr + (sk * R + e) * N + offs_n, acc, mask=n_mask)
+
+
+def gemv_mxfp4_b32(xq, xs, blocks, scales, eids, N: int, K: int,
+                   part: torch.Tensor | None = None):
+    """Grouped decode GEMV on the native MXFP4 store: ``R = eids.numel()``
+    activation rows (``quant_x_rows`` int8 + fp32 per-32 scales), row
+    ``e`` against expert ``eids[e]``. ``blocks [E, N, K//2]`` uint8,
+    ``scales [E, N, K//32]`` uint8 (e8m0). Returns ``[R, N]`` bf16;
+    ``part`` may be a preallocated ``[SK*R, N]`` fp32 buffer (pass it
+    under capture). Plan shared with ``gemv_int4_b32``."""
+    from int4_b32 import _plan
+    R = eids.numel()
+    assert blocks.dtype == torch.uint8 and scales.dtype == torch.uint8
+    assert scales.shape[-1] == K // MX_BLOCK, (scales.shape, K)
+    bn, wp, sk, ku = _plan(N, K)
+    if part is None:
+        part = torch.empty(sk * R, N, dtype=torch.float32, device=xq.device)
+    _gemv_mxfp4_b32[(triton.cdiv(N, bn), R, sk)](
+        xq, xs, blocks, scales, eids, part,
+        N, K=K, R=R, BLOCK_N=bn, SK=sk, KU=ku, num_warps=wp)
+    return part.reshape(sk, R, N).sum(0).to(torch.bfloat16)
