@@ -431,6 +431,29 @@ def test_rope_norm_heads_matches_reference(R, HEADS, D):
         ref.float().abs().max() * 2 ** -7
 
 
+@pytest.mark.parametrize("R,HEADS,D", [(1, 32, 64), (16, 8, 128), (3, 4, 96)])
+def test_rope_heads_matches_reference(R, HEADS, D):
+    """Rotary-only fold (attention without a head norm): the exact
+    upstream ``q*cos + rotate_half(q)*sin`` on the bf16 projection
+    output, fp32 chain, one final rounding."""
+    pytest.importorskip("triton")
+    from int4_b32 import rope_heads
+    dev = _gpu()
+    torch.manual_seed(41)
+    x = (torch.randn(R, HEADS, D) * 2).to(dev, torch.bfloat16)
+    ang = torch.rand(R, D // 2) * 6.28
+    ang = torch.cat([ang, ang], dim=-1)
+    cos = ang.cos().to(dev, torch.bfloat16)
+    sin = ang.sin().to(dev, torch.bfloat16)
+    got = rope_heads(x, cos, sin)
+    xf = x.float()
+    half = D // 2
+    rot = torch.cat([-xf[..., half:], xf[..., :half]], dim=-1)
+    ref = (xf * cos.float().unsqueeze(1) + rot * sin.float().unsqueeze(1)).to(torch.bfloat16)
+    assert got.shape == x.shape
+    assert (got.float() - ref.float()).abs().max() <= ref.float().abs().max() * 2 ** -7
+
+
 @pytest.mark.parametrize("R,E,K,norm", [(1, 128, 8, True), (16, 128, 8, True),
                                         (1, 64, 4, False),
                                         (1, 128, 6, True),
