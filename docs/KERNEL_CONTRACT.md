@@ -6,6 +6,24 @@ sources that actually exist: the locked Experts4bit design (bnb #1849 discussion
 and the **merged** #1949 `gemm_4bit` kernel family (bnb main, milestone v0.50.0, merged
 2026-05-21).*
 
+> **Status note (2026-09-04).** This contract is the Gate-0 design record of
+> the NF4 kernel and is kept as written: "Phase 4" for sm_120 below is that
+> schedule (sm_120 shipped in 0.15.0 and is the primary serving target, per
+> `docs/STATUS.md`), and the "storage-only asterisk" framing is version-aware
+> on `docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md`. The
+> next section is the current layout summary for every shipped format; the
+> consumer's stores are built to it, and moving a layout is a
+> `public-api-change` under `docs/change-impact.json`.
+
+## Layouts at a glance (current)
+
+| format (module) | packed | scales | notes |
+|---|---|---|---|
+| NF4 (`nf4_grouped`) | `[E, N, K//2]` uint8, high nibble first — the bitsandbytes `gemm_4bit` layout | absmax `[E, N, K//64]` fp32 | `K % 64 == 0`; `nf4_grouped.repack_from_bnb` builds these from per-expert `quantize_4bit` state and de-nests `compress_statistics` |
+| MXFP4 (`mxfp4_grouped`) | blocks `[E, N, K//2]` uint8, low nibble first (even element) | e8m0 `[E, N, K//32]` uint8 | `K % 32 == 0`; gpt-oss `[E, N, K//32, 16]` blocks flatten to that width as a contiguous view (`mxfp4_loader.to_kernel_shapes`) |
+| int4-b32 (`int4_b32`) | `[E, N, K//2]` uint8, levels -8..7 stored offset-binary, even `k` in the low nibble | `[E, N, K//32]` fp16 | `K % 32 == 0`; `int4_pack_ref.pack_int4_b32` (round-to-nearest) and `gptq_pack.gptq_pack_int4_b32` (calibrated) emit the same bytes |
+| fp8 KV (`fp8_kv`) | 16-token packed rows, e4m3 payload plus fp32 scales (`pack_kv_block`, `kv_block_bytes`) | per-(token, head), or `k_groups` sub-row groups | `fp8_paged_attn.fp8_paged_decode_attention` reads them through a block table; `k_row_bytes` / `v_row_bytes` override the stride per layer |
+
 ## What the kernel computes
 
 For each MoE block projection (`gate_up`, `down`) and a batch of routed tokens:

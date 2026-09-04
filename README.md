@@ -19,7 +19,10 @@ GEMMs, decode kernels, packers, references, host and NVMe primitives;
 [`experts4bit-qlora`](https://github.com/pjordanandrsn/experts4bit-qlora)
 is the consumer that loads and quantises models, trains adapters, places
 bytes across tiers and serves, and installs this package through its
-`[fast]` extra. **Environment:** Linux, an NVIDIA GPU of sm_80 or newer
+`[fast]` extra (the kernel version each consumer release requires is the
+`compatibility` record in
+[`docs/system-manifest.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/system-manifest.json),
+not a number copied here). **Environment:** Linux, an NVIDIA GPU of sm_80 or newer
 with Triton ≥ 3.4 for the kernels (sm_120 is the primary serving target;
 Python 3.11 is what CI tests); the pack references, `dequant_ref`, the
 relocation arena bake and the provenance hashing are pure torch (the NF4
@@ -209,8 +212,8 @@ That's the same instrument the 144/144 training receipt used.
 
 **Do not quantise-bake a checkpoint that is already MXFP4.** Relocation
 keeps the bytes and hands packed nibbles to the kernel; re-quantising to
-NF4 costs a dequant per read — measured ~4× slower per request on
-DeepSeek-V4-Flash.
+NF4 costs a dequant per read and breaks provenance; no registered claim
+carries a figure for that cost, so none is quoted here.
 
 Training goes through `nf4_qlora` / `mxfp4_qlora`, which is what
 [`experts4bit-qlora`](https://pypi.org/project/experts4bit-qlora/)
@@ -224,20 +227,24 @@ stamped blind confirmatory run; **measured** = a run with a committed
 receipt here; **measured-private** = a real run whose receipt lives in a
 private audit tree, so you cannot check it from this repository.
 
-| | result | tier |
-|---|---|---|
-| Fidelity, fused vs the dequantise-to-bf16-then-GEMM comparator | not less accurate in any registered confirmatory cell (fp32 accumulate) | confirmed |
-| Decode, census MoE shapes vs the dequant path (sm_86) | 1.16–2.73× at median | confirmed |
-| Energy, J/token | below baseline in 104 of 112 cells | confirmed |
-| Real OLMoE QLoRA finetune, fused vs per-expert loop, real prose | 4.50× (4090), 4.75× (H100) | confirmed |
-| vs Unsloth's own kernel, 4-bit-storage regime, decode | 1.70× (H100, their TMA live), 2.79× (4090) | confirmed |
-| vs `torch._grouped_mm` on bf16, Qwen3-30B cell (RTX 5090) | 2.1–6.0×, on half the bytes | measured |
-| Training backward in one launch, E=256 step | 403.7 → 26.5 ms | measured |
-| Single-stream decode anchor, Qwen3-30B-A3B on the 5090 class | 7.37 ms/step ±4.2% (≈130–142 tok/s) | measured |
-| Qwen3-235B-A22B from pinned host RAM on ≤16 GB VRAM | 4.3–4.4 tok/s, five pods; `t ≈ c_box + bytes/link` | confirmed |
-| gpt-oss-120b served on its exact MXFP4 bytes | ppl 26.72 vs shipped reference 26.75; the NF4 requant tax deleted | confirmed |
-| gpt-oss-120b QLoRA on native bytes | 9.82 GB peak; 144/144 hashes identical after training | confirmed |
-| int4-b32 decode GEMV, dense M=1 (5090) | 1,044 GB/s; 6.9–7.2× over the NF4 GEMV | measured-private |
+| | result | tier | claim ID in `docs/claims.json` |
+|---|---|---|---|
+| Fidelity, fused vs the dequantise-to-bf16-then-GEMM comparator | not less accurate in any registered confirmatory cell (fp32 accumulate) | confirmed | `gnf4.kernel.fused-more-accurate-than-dequant-bf16` |
+| Decode, census MoE shapes vs the dequant path (sm_86) | 1.16–2.73× at median | confirmed | `gnf4.kernel.decode-speed-census` |
+| Energy, J/token | below baseline in 104 of 112 cells | confirmed | `gnf4.kernel.energy-104-of-112` |
+| Real OLMoE QLoRA finetune, fused vs per-expert loop, real prose | 4.50× (4090), 4.75× (H100) | confirmed | `gnf4.kernel.e2e-training-real-prose` |
+| vs Unsloth's own kernel, 4-bit-storage regime, decode | 1.70× (H100, their TMA live), 2.79× (4090) | confirmed | `gnf4.kernel.h2h-unsloth` |
+| vs `torch._grouped_mm` on bf16, Qwen3-30B cell (RTX 5090) | 2.1–6.0×, on half the bytes | measured | `gnf4.kernel.sm120-census-vs-grouped-mm` |
+| Training backward in one launch, E=256 step | 403.7 → 26.5 ms | measured | `gnf4.kernel.dgrad` |
+| Single-stream decode anchor, Qwen3-30B-A3B on the 5090 class | 7.37 ms/step ±4.2% (≈130–142 tok/s) | measured | `gnf4.serve.decode-anchor-5090` |
+| Qwen3-235B-A22B from pinned host RAM on ≤16 GB VRAM | 4.3–4.4 tok/s, five pods; `t ≈ c_box + bytes/link` | confirmed | `gnf4.flagship.235b-phaseB` |
+| gpt-oss-120b served on its exact MXFP4 bytes | ppl 26.72 vs shipped reference 26.75; the NF4 requant tax deleted | confirmed | `gnf4.mxfp4.serve-tax-deleted` |
+| gpt-oss-120b QLoRA on native bytes | 9.82 GB peak; 144/144 hashes identical after training | confirmed | `gnf4.mxfp4.train-9.82gb` |
+| int4-b32 decode GEMV, dense M=1 (5090) | 1,044 GB/s; 6.9–7.2× over the NF4 GEMV | measured-private | `gnf4.serve.int4-b32-gemv` |
+
+The tier column is the claim's `status` in the register; the ID is the entry
+to check before quoting a row, and a row whose entry is later retired or
+superseded is no longer current whatever this table says.
 
 **Three limits, stated here rather than in a footnote:**
 
@@ -245,17 +252,18 @@ private audit tree, so you cannot check it from this repository.
    (0.949× on a 4090, 0.858× on an H100). What graphing cannot touch is
    the memory-traffic win at training shape on bandwidth-limited cards
    (1.489× on the 4090; parity on the H100). The position is narrow on
-   purpose: competitive at equal VRAM, wins when VRAM binds.
+   purpose: competitive at equal VRAM, wins when VRAM binds
+   (`gnf4.kernel.graphed-baseline-decode-loses`).
 2. **Unsloth wins its own regime.** Against their bf16-resident kernel
-   they run 2.6–5.3× faster at prefill on an H100.
+   they run 2.6–5.3× faster at prefill on an H100 (`gnf4.kernel.h2h-unsloth`).
 3. **Known losers:** `top_k=1` cells are instance-unstable in both
    directions; shapes under ~5 M weight elements lose outright and are
-   routed back to the dequant path.
+   routed back to the dequant path (`gnf4.kernel.decode-speed-census`).
 
 And one about your benchmark: **random token ids understate this kernel
 by ~1.6×.** Prose routes to 98.4% of experts, random ids to 87.5%, and
 fewer hit experts means fewer iterations of the loop this replaces.
-Benchmark on real text.
+Benchmark on real text (`gnf4.kernel.e2e-training-real-prose`).
 
 *Dated note (2026-09-04).* Every "dequant path" comparator in this table
 is this repository's own per-expert loop as each receipt ran it:
@@ -300,7 +308,9 @@ never ran Unsloth's own kernel.
 f32 paged compute modes miss their reference on torch 2.8 / triton 3.4
 (the fp8 modes, the sm_89+ default, pass; the f32 path is the sm_80–sm_88
 default and every explicit f32 request, and `docs/capabilities.json`
-carries it as its own `unsupported` entry until this closes);
+carries it as its own `unsupported` entry, `fp8-paged-attention-f32-compute`,
+beside the supported `fp8-paged-attention-fp8-compute`, until this closes;
+claim `gnf4.open.f32-compute-modes-triton34`);
 [#87](https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/87) int32
 offset overflow at large `max(expert_ids)`; #73, #60, #58 arena/NVMe
 efficiency; #71 pinned-row factor, conservative on cgroup v1 (v2 unmeasured). Every non-CUDA row is a

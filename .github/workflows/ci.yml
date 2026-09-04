@@ -141,7 +141,7 @@ jobs:
         run: cd bench/phase1 && python -m pytest test_plan_modes.py -q
 
       - name: packaging allowlist + test-wiring guard
-        run: cd kernel && python -m pytest test_packaging_covers_kernel.py test_check_readme_links.py -q
+        run: cd kernel && python -m pytest test_packaging_covers_kernel.py test_check_readme_links.py test_check_scripts.py -q
 
   wheel-smoke:
     # Built-artifact gate: the README's promised import surface must equal the
@@ -189,13 +189,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history and tags: the change-impact check diffs against the
+          # PR base, and the manifest check compares every consumer floor to
+          # the latest released tag (kernel-first invariant).
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: capability contract (schema, pyproject, source symbols, claims, install routes)
         run: python scripts/check_capabilities.py
-      - name: discovery contract (queries -> solution pages -> concepts, canonical install, limitations)
-        run: python scripts/check_discovery_contract.py --bm25
+      - name: system manifest (names, kernel-first floors vs pyproject and tags, evidence vocabulary, capability ownership)
+        run: python scripts/check_system_manifest.py
+      - name: version statements in the current docs agree with pyproject and the manifest's current record
+        run: python scripts/check_dependency_floor.py
+      - name: change-impact contract on pull requests (the companions this diff is missing)
+        if: github.event_name == 'pull_request'
+        run: python scripts/check_change_impact.py --base ${{ github.event.pull_request.base.sha }}
+      - name: discovery contract (queries -> pages -> concepts, canonical install, limitations; BM25 floor)
+        # --bm25-min-top1 33 is the measured baseline (35/44 on this corpus;
+        # 27/36 before the eight agent-perspective queries and the orientation
+        # corpus were added) minus a two-query margin. A failure names the
+        # queries that stopped ranking first. A local proxy over the corpus,
+        # not a ranking claim, and never evidence of LLM discoverability.
+        run: python scripts/check_discovery_contract.py --bm25 --bm25-min-top1 33
       - name: llms bundle is current
         run: python scripts/build_llms_bundle.py --check
       - name: solution-page code blocks parse (python) and every local link resolves

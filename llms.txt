@@ -2,6 +2,8 @@
 
 > Triton kernels for 4-bit MoE inference: grouped NF4/MXFP4 GEMM, INT4 GEMV, FP8 paged attention, and CPU/NVMe expert streaming. Canonical PyPI package `grouped-nf4-gemm` (flat modules `nf4_grouped`, `mxfp4_grouped`, `int4_b32`, `fp8_paged_attn`, `nvme_arena`, `mxfp4_loader`, …); `nf4gemm`, `gnf4` and `grouped-mxfp4-gemm` are lookup aliases only.
 
+Router: a model, training, serving or fit problem → experts4bit-qlora · a packed layout, kernel, GEMM/GEMV, attention or arena primitive → grouped-nf4-gemm (this repository) · a current number → docs/claims.json · current support or status → docs/STATUS.md + docs/capabilities.json · changing public behaviour → AGENTS.md, 'When you change something'.
+
 Read `docs/STATUS.md` before quoting a position and `docs/claims.json` before quoting a number: `status` is the vocabulary, and retired or superseded claims are not current. Division of responsibility: this project owns the packed-expert kernels (grouped NF4 and native MXFP4 GEMMs), the decode kernels (int4-b32 GEMV, FP8 paged attention, decode glue), the packing and reference operations, and the host/NVMe primitives; experts4bit-qlora owns model loading, quantization orchestration, adapters, training, residency integration and serving, and installs this package through its `[fast]` extra. Every kernel is asserted against a pure-torch reference, and nothing falls back silently on CPU: the NF4 grouped GEMM (`gemm_4bit_grouped` / `dgrad_4bit_grouped`) refuses CPU tensors with an error that names `dequant_ref`; the other kernels raise from the Triton launch or from their own CUDA+Triton check without naming a reference. Environment: Linux, NVIDIA sm_80+ with Triton ≥ 3.4 for the kernels; Python 3.11 tested.
 
 ## Start here
@@ -27,7 +29,9 @@ Read `docs/STATUS.md` before quoting a position and `docs/claims.json` before qu
 - [Kernel contract](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/KERNEL_CONTRACT.md): op signatures and tensor layouts (NF4, MXFP4, int4-b32)
 - [Tolerance contract](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/TOLERANCE_CONTRACT.md): the registered fidelity bound and its test
 - [Portability](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/PORTABILITY.md): the pre-port hazard register for non-CUDA backends (port targets, not support)
-- [AGENTS.md](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/AGENTS.md): operational rules for coding agents — sources of truth, build/test commands, what to update when
+- [System manifest](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/system-manifest.json): the two-repository manifest — what each package owns, capability IDs per package, the compatibility records (which consumer versions require which kernel floor), the evidence vocabulary and the invariants; byte-identical in experts4bit-qlora
+- [Change-impact contract](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/change-impact.json): the companion changes each class of change requires — new kernel capability, public API change, measured result, dependency floor
+- [AGENTS.md](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/AGENTS.md): operational rules for coding agents — router, ownership boundary, sources of truth, public API map, build/test, rules that have bitten, change-impact rules, platform caveats
 
 ## Related
 

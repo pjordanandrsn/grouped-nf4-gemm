@@ -15,7 +15,7 @@ MXFP4 (OCP MX v1.0) is a different codebook from NF4: sixteen e2m1 values, ±{0,
 
 ## Which project solves it
 
-`grouped-nf4-gemm` owns the native MXFP4 kernels (`gemm_mxfp4_grouped`; `gemv_mxfp4_b32` for decode), the pack/decode reference, the loader helpers that map checkpoint shapes to kernel shapes without copying (`mxfp4_loader.to_kernel_shapes`), the arena source for per-expert releases (`arena_experts.ArenaExpertSource`), and the training wrapper (`mxfp4_qlora`). [experts4bit-qlora](https://github.com/pjordanandrsn/experts4bit-qlora) ([PyPI](https://pypi.org/project/experts4bit-qlora/)) drives them from a model; `mxfp4_native_load.build_native_qlora_model(snap, r, alpha)` here is the gpt-oss-specific loader that builds a QLoRA model without entering the dequant path.
+`grouped-nf4-gemm` owns the native MXFP4 kernels (`gemm_mxfp4_grouped`; `gemv_mxfp4_b32`, the packed MXFP4 decode GEMV — optimising that GEMV is a change in this kernel repository, per AGENTS.md section 8, not in the consumer), the pack/decode reference, the loader helpers that map checkpoint shapes to kernel shapes without copying (`mxfp4_loader.to_kernel_shapes`), the arena source for per-expert releases (`arena_experts.ArenaExpertSource`), and the training wrapper (`mxfp4_qlora`). [experts4bit-qlora](https://github.com/pjordanandrsn/experts4bit-qlora) ([PyPI](https://pypi.org/project/experts4bit-qlora/)) drives them from a model; `mxfp4_native_load.build_native_qlora_model(snap, r, alpha)` here is the gpt-oss-specific loader that builds a QLoRA model without entering the dequant path.
 
 ## Install
 

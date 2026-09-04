@@ -1,11 +1,16 @@
 {
-  "$comment": "Discoverability regression corpus: realistic user queries and the page that must answer each. Checked offline by scripts/check_discovery_contract.py; the optional BM25 report is a local proxy, never evidence of external ranking.",
+  "$comment": "Discoverability regression corpus: realistic user queries and the page that must answer each. Checked offline by scripts/check_discovery_contract.py; the optional BM25 report is a local proxy, never evidence of external ranking. A BM25 regression is never evidence of LLM discoverability, and a BM25 pass is never a ranking claim: the --bm25-min-top1 floor guards the corpus against an edit that stops a page answering its own queries, nothing more. page_kind 'orientation' marks a record whose page orients rather than solves (AGENTS.md, docs/STATUS.md, docs/INDEX.md): checked for concepts, package name and routing, not for an install route or a limitations section, and ranked over bm25_orientation_corpus so the solution corpus keeps measuring what it measured before those pages joined.",
   "project": "grouped-nf4-gemm",
   "minimum_queries": 30,
   "bm25_corpus": [
     "docs/solutions/*.md",
     "docs/SOLUTIONS.md",
     "README.md"
+  ],
+  "bm25_orientation_corpus": [
+    "AGENTS.md",
+    "docs/STATUS.md",
+    "docs/INDEX.md"
   ],
   "queries": [
     {
@@ -537,6 +542,141 @@
         ],
         [
           "run-moe-larger-than-vram"
+        ]
+      ]
+    },
+    {
+      "query": "My MoE still OOMs after load_in_4bit; where do I start?",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/SOLUTIONS.md",
+      "required_concepts": [
+        [
+          "experts4bit-qlora"
+        ],
+        [
+          "load_in_4bit"
+        ],
+        [
+          "OOMs",
+          "OOM"
+        ]
+      ]
+    },
+    {
+      "query": "I need to optimize a packed MXFP4 decode GEMV; which repository owns it?",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/native-mxfp4-moe-inference.md",
+      "required_concepts": [
+        [
+          "gemv_mxfp4_b32"
+        ],
+        [
+          "decode"
+        ],
+        [
+          "owns"
+        ]
+      ]
+    },
+    {
+      "query": "What is the current minimum gnf4 version for e4b [fast]?",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/SOLUTIONS.md",
+      "required_concepts": [
+        [
+          "system-manifest.json"
+        ],
+        [
+          "fast"
+        ],
+        [
+          "compatibility"
+        ]
+      ]
+    },
+    {
+      "query": "Can I quote the 204.6 tok/s Qwen result as publicly reproducible?",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/STATUS.md",
+      "required_concepts": [
+        [
+          "experts4bit-qlora"
+        ],
+        [
+          "measured-private"
+        ],
+        [
+          "model-level"
+        ]
+      ],
+      "page_kind": "orientation"
+    },
+    {
+      "query": "I added a new decode kernel; what else must change before release?",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "AGENTS.md",
+      "required_concepts": [
+        [
+          "change-impact.json"
+        ],
+        [
+          "new-kernel-capability"
+        ],
+        [
+          "CHANGELOG.md"
+        ]
+      ],
+      "page_kind": "orientation"
+    },
+    {
+      "query": "Where do I check whether a benchmark claim has been superseded?",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/STATUS.md",
+      "required_concepts": [
+        [
+          "superseded"
+        ],
+        [
+          "claims.json"
+        ],
+        [
+          "retired"
+        ]
+      ],
+      "page_kind": "orientation"
+    },
+    {
+      "query": "Does a green CI run prove the GPU path executed?",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "AGENTS.md",
+      "required_concepts": [
+        [
+          "skipped",
+          "skip"
+        ],
+        [
+          "evidence"
+        ],
+        [
+          "GPU"
+        ]
+      ],
+      "page_kind": "orientation"
+    },
+    {
+      "query": "Where does an NVMe primitive belong versus model-level NVMe integration?",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/stream-moe-experts-from-host-or-nvme.md",
+      "required_concepts": [
+        [
+          "primitives",
+          "primitive"
+        ],
+        [
+          "experts4bit-qlora"
+        ],
+        [
+          "offload-moe-experts-to-cpu-or-nvme"
         ]
       ]
     }
