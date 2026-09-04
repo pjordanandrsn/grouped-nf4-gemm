@@ -20,6 +20,17 @@ the README's confirmatory section for how the kernel numbers were made.
 - **[`discovery-queries.json`](discovery-queries.json)** — the
   discoverability regression corpus (`scripts/check_discovery_contract.py`).
   Current.
+- **[`system-manifest.json`](system-manifest.json)** — the two-repository
+  system manifest: what each package owns, the capability IDs per package,
+  the `compatibility` records (which consumer versions require which kernel
+  floor), the evidence vocabulary and the invariants. Byte-identical in
+  experts4bit-qlora; validated in CI by `scripts/check_system_manifest.py`
+  (and `scripts/check_dependency_floor.py` for the version statements the
+  current documents make). Current.
+- **[`change-impact.json`](change-impact.json)** — the change-impact
+  contract: the companion changes each class of change requires;
+  `scripts/check_change_impact.py --base <ref>` names the missing ones on
+  pull requests. Current.
 - **[`RELEASE_NOTES_GUIDE.md`](RELEASE_NOTES_GUIDE.md)** — how the first
   paragraph of a release note is written. Current.
 
@@ -27,7 +38,7 @@ the README's confirmatory section for how the kernel numbers were made.
 |---|---|
 | [`STATUS.md`](STATUS.md) | what the kernel does today, its three limits, what was retired, what is open |
 | [`claims.json`](claims.json) / [`claims-schema.md`](claims-schema.md) | machine-readable register of every claim, with status and evidence path |
-| [`KERNEL_CONTRACT.md`](KERNEL_CONTRACT.md) | the op signature and layout conventions (note: it schedules sm_120 as "Phase 4"; sm_120 shipped in 0.15.0 and is the primary serving target; its "storage-only asterisk" is the Gate-0 framing — the version-aware bitsandbytes boundary, 0.50.0 packed 2-D inference upstream with the grouped routed-MoE GEMM a separate contract, is on [`solutions/nf4-grouped-gemm-without-bf16-materialization.md`](solutions/nf4-grouped-gemm-without-bf16-materialization.md)) |
+| [`KERNEL_CONTRACT.md`](KERNEL_CONTRACT.md) | the op signature and layout conventions, with "Layouts at a glance" for every shipped format (note: it schedules sm_120 as "Phase 4"; sm_120 shipped in 0.15.0 and is the primary serving target; its "storage-only asterisk" is the Gate-0 framing — the version-aware bitsandbytes boundary, 0.50.0 packed 2-D inference upstream with the grouped routed-MoE GEMM a separate contract, is on [`solutions/nf4-grouped-gemm-without-bf16-materialization.md`](solutions/nf4-grouped-gemm-without-bf16-materialization.md)) |
 | [`TOLERANCE_CONTRACT.md`](TOLERANCE_CONTRACT.md) | the registered fidelity bound and test spec |
 | [`PORTABILITY.md`](PORTABILITY.md) | pre-port hazard register (captured 2026-07-15; verify before a port session). No claim in it is a port result. |
 | [`nvme-ceilings.md`](nvme-ceilings.md) | the per-box NVMe constant `S ≈ 3.45 GB/s` and what it implies |

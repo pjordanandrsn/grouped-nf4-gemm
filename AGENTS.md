@@ -1,80 +1,82 @@
 # AGENTS.md — working in grouped-nf4-gemm
 
-Operational notes for coding agents and contributors. Not a second README:
-[`README.md`](README.md) argues the case, [`docs/STATUS.md`](docs/STATUS.md)
-states the position, [`docs/claims.json`](docs/claims.json) holds the numbers.
+## 1. Router
 
-## Purpose
+Starting from a model, training, serving, or fit problem? → experts4bit-qlora.
+Starting from a packed layout, kernel, GEMM/GEMV, attention, or arena primitive? → grouped-nf4-gemm (this repository).
+Need a current number? → docs/claims.json.
+Need current support/status? → docs/STATUS.md + docs/capabilities.json.
+Changing public behaviour? → AGENTS.md: 'When you change something'.
 
-`grouped-nf4-gemm` is the kernel side of 4-bit Mixture-of-Experts serving:
-one Triton launch for the grouped expert GEMM directly on NF4-packed
-(bitsandbytes `gemm_4bit` layout) or native MXFP4 (e2m1 + e8m0) expert
-stacks, plus the int4-b32 decode GEMV and its calibrated packer, the fp8
-paged decode attention, the decode glue kernels, the pure-torch references
-every kernel is asserted against, and the host/NVMe arena primitives. The
-consumer is [`experts4bit-qlora`](https://github.com/pjordanandrsn/experts4bit-qlora),
-which loads and quantises models, trains adapters, places bytes across
-tiers and serves, and installs this package through its `[fast]` extra. A
-kernel lands here first; the consumer floors on the release that ships it.
+## 2. Purpose and ownership boundary
 
-## Repository map
+`grouped-nf4-gemm` is the kernel package of a two-package system: the grouped
+expert GEMMs directly on NF4-packed (bitsandbytes `gemm_4bit` layout) and native
+MXFP4 (e2m1 + e8m0) stacks, the int4-b32 decode GEMV and its calibrated packer,
+the fp8 paged decode attention, the decode glue, the pure-torch references every
+kernel is asserted against, and the host/NVMe arena primitives. The consumer,
+[`experts4bit-qlora`](https://github.com/pjordanandrsn/experts4bit-qlora), loads
+and quantises models, trains adapters, places bytes across tiers, serves, owns
+model-level measurement and its own claims register, and installs this package
+through its `[fast]` extra; this package never depends on it. A kernel lands and
+is released here first; the consumer floors on the release that ships it. The
+machine-readable boundary — ownership, capability IDs per package, the `compatibility`
+records (which consumer versions require which kernel floor), the evidence vocabulary,
+the invariants — is [`docs/system-manifest.json`](docs/system-manifest.json), byte-identical
+in both repositories and validated by `scripts/check_system_manifest.py`.
+
+## 3. Repository map
 
 | path | what |
 |---|---|
-| `kernel/` | the shipped flat modules (`pyproject.toml` `py-modules`): `nf4_grouped`, `mxfp4_grouped`, `int4_b32`, `int4_pack_ref`, `gptq_pack`, `nf4_pack_ref`, `mxfp4_pack_ref`, `mxfp4_loader`, `verify_provenance`, `fp8_kv`, `fp8_paged_attn`, `nvme_arena`, `nvme_bake_nf4`, `nvme_reader`, `nvme_residency`, `row_pool`, `arena_experts`, `mxfp4_residency`, `nf4_qlora`, `mxfp4_qlora`, `cpu_grouped`, … — and their tests (`kernel/test_*.py`) beside them; `_triton_shim` binds triton or a stand-in |
+| `kernel/` | the shipped flat modules (`pyproject.toml` `py-modules`) with their tests (`kernel/test_*.py`) beside them; `_triton_shim` binds triton or a stand-in |
 | `gnf4_native/` | the compile-at-first-use CPU kernels (the hybrid CPU path) |
 | `examples/dequant_tax.py` | the one-minute on-your-own-GPU demonstration; CI runs it on CPU and asserts the CPU note |
-| `docs/` | `STATUS.md`, `claims.json` + `claims-schema.md`, `KERNEL_CONTRACT.md`, `TOLERANCE_CONTRACT.md`, `PORTABILITY.md`, `SOLUTIONS.md` + `solutions/`, `capabilities.json`, `INDEX.md`, results and pre-registrations (many anchored) |
+| `docs/` | `STATUS.md`, `claims.json` + `claims-schema.md`, `capabilities.json`, `system-manifest.json`, `change-impact.json`, `KERNEL_CONTRACT.md`, `TOLERANCE_CONTRACT.md`, `PORTABILITY.md`, `SOLUTIONS.md` + `solutions/`, `INDEX.md` (which documents are current, which are anchored), results and pre-registrations |
 | `bench/`, `projections/`, `router_probe/` | receipts, the projection model and its anchor gate |
-| `scripts/` | README link checker, wheel smoke, capability/discovery/llms checks |
+| `scripts/` | the CPU-only contract checks of section 6, the README link checker, the wheel smoke |
 
-## Canonical public API
+## 4. Sources of truth
 
-The entry-point table in `README.md` ("Which entry point? Pick by where the
-weights live") and `docs/capabilities.json` (`entrypoints`) are the list.
-Kernels: `nf4_grouped.gemm_4bit_grouped` / `gemm_4bit_grouped_captured` /
-`dgrad_4bit_grouped`, `mxfp4_grouped.gemm_mxfp4_grouped` /
-`gemv_mxfp4_b32`, `int4_b32.gemv_int4_b32` / `quant_x_rows` /
-`gemm_int4_b32_grouped_captured` and the glue (`rmsnorm_rows`,
-`rmsnorm_resid_rows`, `scaled_resid_add_rows`, `rope_norm_heads`,
-`rope_heads`, `router_epilogue`, `swiglu_rows`, `combine_rows`,
-`reduce_partials`), `fp8_kv.*`, `fp8_paged_attn.fp8_paged_decode_attention`.
-References and packers (pure torch): `nf4_grouped.dequant_ref`,
-`nf4_pack_ref.quantize_pack_nf4`, `int4_pack_ref.pack_int4_b32`,
-`gptq_pack.gptq_pack_int4_b32` + `HessianAccumulator`,
-`mxfp4_pack_ref.*`. Storage and provenance: `nvme_arena.bake` /
-`bake_expert_tensors` / `verify`, `nvme_bake_nf4.bake_nf4`,
-`nvme_reader.ArenaReader`, `nvme_residency.ColdTier` /
-`capacity_for_bytes`, `arena_experts.ArenaExpertSource`,
-`mxfp4_residency.Mxfp4NvmeResidency`, `mxfp4_loader.file_tensor_sha256` /
-`provenance_table` / `verify_arena_matches`, `python -m verify_provenance`.
-Modules shipped in the wheel but not in that list (`cold_*`, `reuse_profile`,
-`vram_slots`, `segmented_pool`, `dev_row_cache`, `run_mxfp4_20b_qlora`,
-`gate_native_load_20b`, `_triton_shim`) are internal; shipping is not
-publishing.
+- **claims.json wins for numbers.** Whether a number is current is
+  [`docs/claims.json`](docs/claims.json), not CHANGELOG prose or a README
+  sentence; prose quotes the claim ID and its status.
+- **STATUS.md wins for position** ([`docs/STATUS.md`](docs/STATUS.md)),
+  including the three limits where the fused path loses.
+- **Historical and anchored records are never rewritten.** A document with a
+  sibling `.ots` file (`find . -name '*.ots'`) or an `ots-attestation-footer` marker
+  is never edited in place; corrections go in a sibling file ([`docs/INDEX.md`](docs/INDEX.md)
+  says which documents are current).
+- **A green skipped test is not evidence** that a path was exercised: a green
+  CI run whose GPU suites skipped proves nothing about the GPU path.
+- **A private measurement is not publicly reproducible**: `measured-private`
+  is a real run receipted outside this repository, and is always labelled.
+- **A noise floor is not a budget**: the registered gate is applied in its
+  own units, with the floor quoted beside the verdict.
+- **Failed gates stay failed**; a gate is never retuned to fit.
 
-## Sources of truth
+These are the `invariants` and the `evidence_vocabulary` (confirmed, verified,
+measured, measured-private, projected, open, superseded, retired — every tier
+distinct) of `docs/system-manifest.json`; `docs/claims.json` `status_vocabulary`
+defines the tiers this register uses. Dependency floors live in `pyproject.toml`
+(validated by `scripts/check_system_manifest.py` and `scripts/check_dependency_floor.py`):
+never copy a floor into prose. Kernel-level numbers are registered here;
+model-level numbers (tok/s for a named model, perplexity gates) are the consumer's.
 
-- **Whether a number is current: `docs/claims.json`**, not CHANGELOG prose
-  or a README sentence. `status` is the vocabulary (`confirmed`,
-  `measured`, `measured-private`, `projected`, `retired`, `superseded`,
-  `open`); retired and superseded claims are never repeated as current.
-- **The current position: `docs/STATUS.md`** — including the three limits
-  where the fused path loses.
-- **Which documents are current: `docs/INDEX.md`.** Anchoring here is a
-  sibling `.ots` file (`find . -name '*.ots'` lists them): an anchored
-  document is never edited in place; corrections go in a sibling file.
-- **The comparator, named precisely.** Every "dequant path" ratio is
-  against this repository's own per-expert loop (bitsandbytes
-  `dequantize_4bit` per expert, then a bf16 matmul) as its receipt ran
-  it. bitsandbytes 0.50.0 computes supported ordinary 2-D inference cells
-  from the packed weights directly and has no grouped routed-MoE
-  contract; the conventional 4-bit backward still dequantises for dX.
-  Never write "stock 4-bit always dequantises": the version-, workload-
-  and shape-aware statement is on
-  `docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md`.
+## 5. Public API and capability map
 
-## Build and test
+[`docs/capabilities.json`](docs/capabilities.json) is the list: one entry per
+capability ID — `grouped-nf4-gemm`, `native-mxfp4-moe-inference`, `int4-decode-gemv`,
+`fp8-paged-attention-fp8-compute`, `fp8-paged-attention-f32-compute`,
+`decode-glue-kernels`, `stream-experts-from-host-or-nvme`, `verify-checkpoint-provenance`
+— with its `entrypoints` (`module:Symbol`, `cli:…`, `flag:…`), environment,
+limitations, `status` and claim IDs. `scripts/check_capabilities.py` resolves every
+entry point against the shipped modules; the README's "Which entry point?" table is
+the human form. Shipped modules outside that list (`cold_*`, `reuse_profile`, `vram_slots`,
+`segmented_pool`, `dev_row_cache`, the 20b drivers, `_triton_shim`) are internal;
+shipping is not publishing.
+
+## 6. Build and test
 
 ```bash
 pip install -e . pytest numpy                      # CPU torch + triton (Linux) run the interpreter suites
@@ -82,87 +84,85 @@ cd kernel && TRITON_INTERPRET=1 python -m pytest test_interp_contract.py test_mx
 cd kernel && TRITON_INTERPRET=1 python -m pytest test_int4_b32.py -q             # a compiled-path file: its own process (why: below)
 cd kernel && python -m pytest test_packaging_covers_kernel.py test_check_readme_links.py -q
 python examples/dequant_tax.py                     # prints the CPU note without a GPU; ~1 min on one GPU
-python -m build && python -m twine check dist/*
-python scripts/wheel_smoke.py                      # from outside the tree, against the wheel
-python scripts/check_readme_links.py               # README links are absolute; self-refs = v<version> or main
+python -m build && python -m twine check dist/* && python scripts/wheel_smoke.py   # the smoke runs from outside the tree, against the wheel
+python scripts/check_readme_links.py               # README links are absolute; self-refs = v<version> or main (network)
+python scripts/check_system_manifest.py            # docs/system-manifest.json vs pyproject, claims, capabilities; --sibling PATH for the pair
+python scripts/check_dependency_floor.py           # version statements in current docs vs pyproject and the manifest
+python scripts/check_change_impact.py --base origin/main   # docs/change-impact.json: the companions a diff is missing
 python scripts/check_capabilities.py               # docs/capabilities.json vs schema, pyproject, source, claims
-python scripts/check_discovery_contract.py         # docs/discovery-queries.json vs docs/solutions/
+python scripts/check_discovery_contract.py --bm25 --bm25-min-top1 33   # docs/discovery-queries.json vs the pages; BM25 floor = baseline 35/44 minus two
 python scripts/check_docs_examples.py --root .     # doc code blocks parse, links resolve; --run-cpu-blocks kernel executes the CPU-only ones
 python scripts/build_llms_bundle.py --check        # llms-full.txt is current
 ```
 
-The two interpreter commands stay separate on purpose: `kernel/conftest.py`
-raises `pytest.UsageError` when a CUDA device is present and an
-`_INTERP_FILES` member (`test_interp_contract.py`, `test_mxfp4_interp.py`,
-`test_mxfp4_gemv_b32.py`) is collected in the same process as a
-compiled-path file such as `test_int4_b32.py`, because `TRITON_INTERPRET`
-latches process-wide at triton's first import. CI's CPU-only runner never
-trips that guard; a GPU box does.
+The two interpreter commands stay separate on purpose: `kernel/conftest.py` raises
+`pytest.UsageError` when a CUDA device is present and an `_INTERP_FILES` member
+(`test_interp_contract.py`, `test_mxfp4_interp.py`, `test_mxfp4_gemv_b32.py`) is
+collected in the same process as a compiled-path file such as `test_int4_b32.py`, because
+`TRITON_INTERPRET` latches process-wide at triton's first import; CI's CPU-only runner
+never trips that guard, a GPU box does. An interpreter-mode file
+must be registered in `_INTERP_FILES` and named in the CI step
+(`test_packaging_covers_kernel.py` enforces both). CI (`.github/workflows/ci.yml`)
+runs the anchor gate, the CPU example, the interpreter suites, the wheel smoke and
+the `discoverability` job (every `scripts/check_*.py` above), asserting triton is importable so a skip is never silent.
 
-CI (`.github/workflows/ci.yml`) runs the anchor gate, the example on CPU,
-the interpreter-contract suites under `TRITON_INTERPRET=1`, and the wheel
-smoke; it asserts triton is importable so a skip can never be silent. GPU
-measurements come from rented lanes with receipts; **a green skip is not
-evidence a path was exercised** — an interpreter-mode file must be
-registered in `kernel/conftest.py` (`_INTERP_FILES`) and named in the CI
-step, and the meta-tests enforce both.
-
-## Rules that have bitten
+## 7. Rules that have bitten
 
 - Every kernel has a pure-torch reference and is asserted against it;
   parity with the reference outranks speed in review.
 - Claims carry receipts, a self-pair beside every ratio, and the cells that
   lose; a pre-registered protocol is stamped before the data exists.
-- Examples must not silently fall back: the NF4 grouped GEMM refuses CPU
-  tensors with an error that names `dequant_ref` (the MXFP4 and int4_b32
-  kernels carry no device guard and fail inside the Triton launch);
-  `examples/dequant_tax.py` prints a CPU note and returns rather than
-  pretending.
-- Layouts are contracts (`docs/KERNEL_CONTRACT.md`): NF4 `[E, N, K//2]` u8 +
-  absmax `[E, N, K//64]` fp32; MXFP4 blocks `[E, N, K//2]` u8 (low nibble
-  first) + e8m0 scales `[E, N, K//32]` u8; int4-b32 packed `[E, N, K//2]` +
-  scales `[E, N, K//32]` fp16. The consumer's stores are built to these.
+- Nothing falls back silently: the NF4 grouped GEMM refuses CPU tensors with an
+  error that names `dequant_ref` (the MXFP4 and int4_b32 kernels fail inside the
+  Triton launch); `examples/dequant_tax.py` prints a CPU note rather than pretending.
+- Layouts are contracts ("Layouts at a glance" in [`docs/KERNEL_CONTRACT.md`](docs/KERNEL_CONTRACT.md));
+  the consumer's stores are built to them.
+- Name the comparator: every "dequant path" ratio is against this repository's
+  own per-expert loop as its receipt ran it; bitsandbytes 0.50.0 has a packed 2-D
+  inference path and no grouped routed-MoE contract, so never write "stock 4-bit
+  always dequantises" (the version-aware statement is on the NF4 solution page).
+- The BM25 floor in `scripts/check_discovery_contract.py` is a local proxy over
+  the query corpus: a BM25 regression is never evidence of LLM discoverability,
+  and a BM25 pass is never a ranking claim.
 
-## When you change something
+## 8. When you change something (change-impact rules)
 
-- **A public kernel or reference** (signature, layout, return): update the
-  module docstring, `docs/KERNEL_CONTRACT.md` if a layout moved, the
-  README entry-point table, `docs/capabilities.json`, the affected
-  `docs/solutions/*.md`, `CHANGELOG.md` under `## Unreleased`, and open the
-  consumer-side change (or issue) in experts4bit-qlora.
-- **A dependency floor** (`torch`, `triton`, `numpy`): the pyproject comment
-  records why; the README install note and `docs/capabilities.json`
-  environments follow.
-- **The README opening, `docs/SOLUTIONS.md`, `docs/STATUS.md`,
-  `docs/capabilities.json` or a listed document:** regenerate
-  `llms-full.txt` (`python scripts/build_llms_bundle.py`); `--check` is a
-  CI gate.
-- **A measured position:** the claim entry first, then `docs/STATUS.md`,
-  then prose that quotes the claim ID.
+The contract is [`docs/change-impact.json`](docs/change-impact.json);
+`python scripts/check_change_impact.py --base origin/main` names the companions
+a diff is missing, and CI runs it on every pull request. Classes:
 
-## Platform caveats
+- **new-kernel-capability** (a module added to `py-modules`, or a new
+  `@triton.jit` kernel): the ten-step flow in the contract — kernel and reference,
+  layout docs, capability entry, tests wired into CI, consumer integration,
+  consumer floor if required (only after the release is tagged), model-level
+  measurement, quality gate, claim registration, release notes. `docs/capabilities.json`
+  and `CHANGELOG.md` in the same diff (FAIL); `docs/KERNEL_CONTRACT.md` when a
+  layout constant moved (WARN).
+- **public-api-change** (signature, layout, return, or the entry-point set):
+  docstring, contract, README table, capabilities entry points, the affected
+  solution page, `CHANGELOG.md` under `## Unreleased` (FAIL), the consumer-side change.
+- **measured-result**: receipt → claim entry → `docs/STATUS.md` (FAIL without
+  it; `--allow-claims-only` downgrades) → prose quoting the ID.
+- **dependency-floor**: a version bump needs `CHANGELOG.md` (FAIL); a
+  torch/triton/numpy floor needs the pyproject comment, README install note and
+  capabilities environments; a consumer floor is a new `compatibility` record
+  in `docs/system-manifest.json` in both repositories, only after the kernel
+  release exists.
 
-Kernels: Linux + NVIDIA sm_80+ with Triton ≥ 3.4 (sm_120 is the primary
-serving target). CI tests Python 3.11 only, on Linux. On macOS/Windows the
-wheel installs (triton is a Linux-only marker): the pure-torch surface (pack
-references, dequant, provenance, arena bake/verify) imports and runs without
-triton via `_triton_shim` (#78); the Triton kernels need a CUDA GPU; macOS
-and Windows are not exercised by CI, so say "not exercised by CI" rather
-than "supported". `int4_b32` imports triton directly and is not importable
-without it. ROCm/XPU are port targets (`docs/PORTABILITY.md`),
-not supported. The fp8 paged kernel's f32 compute modes — the sm_80–sm_88
-default and every explicit f32 request — miss their reference on triton
-3.4 (`gnf4.open.f32-compute-modes-triton34`, #319);
-`docs/capabilities.json` carries that path as its own `unsupported` entry
-beside the supported fp8 compute path (sm_89+, measured on the RTX 5090
-only).
+Then regenerate `llms-full.txt` (`--check` is a CI gate). Release notes follow
+[`docs/RELEASE_NOTES_GUIDE.md`](docs/RELEASE_NOTES_GUIDE.md); releases are `v<version>`
+tags cut by the maintainer (`publish.yml` refuses a tag that disagrees with `pyproject.toml`), never from a branch.
 
-## Release notes
+## 9. Platform caveats
 
-First paragraph in ordinary language — which problem changed, who is
-affected, whether to upgrade — then mechanism, measurements with receipts
-and tiers, corrections and caveats
-([`docs/RELEASE_NOTES_GUIDE.md`](docs/RELEASE_NOTES_GUIDE.md)). Releases
-are GitHub releases on `v<version>` tags cut by the maintainer
-(`publish.yml` refuses a tag that disagrees with `pyproject.toml`); do not
-tag or publish from a branch.
+Kernels: Linux + NVIDIA sm_80+ with Triton ≥ 3.4 (sm_120 is the primary serving
+target). CI tests Python 3.11 only, on Linux. On macOS/Windows the wheel installs
+(triton is a Linux-only marker): the pure-torch surface (pack references, dequant,
+provenance, arena bake/verify) imports and runs without triton via `_triton_shim`;
+the Triton kernels need a CUDA GPU; macOS and Windows are not exercised by CI, so
+say "not exercised by CI" rather than "supported". `int4_b32` imports triton
+directly and is not importable without it. ROCm/XPU are port targets
+(`docs/PORTABILITY.md`), not supported. The fp8 paged kernel's f32 compute modes
+(the sm_80–sm_88 default and every explicit f32 request) miss their reference on
+triton 3.4 (#319, `gnf4.open.f32-compute-modes-triton34`); `docs/capabilities.json` carries them as
+`fp8-paged-attention-f32-compute` (`unsupported`) beside `fp8-paged-attention-fp8-compute` (supported: sm_89+, measured on the RTX 5090 only).
