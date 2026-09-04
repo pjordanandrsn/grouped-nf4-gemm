@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.26.0 — 2026-09-04
+
+### fp8 paged attention: key scale groups up to 16; packed variant falls back instead of failing
+
+- Both fp8 compute kernels (split and packed) now unroll **8 and 16 key
+  scale groups** beside 1/2/4, so a 512-dim head keeps 32-wide key scales
+  (`k_groups=16`) instead of 128-wide. Measured on Gemma-4-26B-A4B-it's
+  five 512-dim layers through experts4bit-qlora's paged decode: the fp8
+  cache+dot cost falls from 0.046 to 0.017 nats in the fake-quant model
+  and the served path moves −0.020 nats on the same window. Synthetic
+  precision is flat across group counts (the gain is real activations'
+  outlier channels). `fp8_compute_unsupported` admits `(1, 2, 4, 8, 16)`
+  with the `head_dim // k_groups >= 32` rule unchanged.
+- The packed variant's `OutOfResources` at head_dim 256 with 8 kv heads
+  (148 KB of shared memory against a 101 KB card) is caught before
+  anything is written; the split fp8 kernel serves the call, the
+  geometry is remembered so later calls skip the packed launch, a
+  `RuntimeWarning` fires once, and `compute_counts()` tallies the call
+  once (#324).
+- Tests: every fp8 mode at head_dim 128/256/512 × 4/8/16 groups against
+  the fp32 oracle on identical bytes; the fallback; the refusal moves to
+  a count outside the unroll. Validated on a rented RTX 5090 (47 passed
+  at the fp8 modes).
+
 ## 0.25.0 — 2026-09-03
 
 ### Documentation release: the README says what is measured, with each number's evidence tier
