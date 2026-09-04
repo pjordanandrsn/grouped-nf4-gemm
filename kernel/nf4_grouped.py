@@ -1158,7 +1158,9 @@ def gemm_4bit_grouped(
     Use it when the per-expert dequantise-then-matmul loop is the bottleneck: one launch for
     every active expert over the bitsandbytes ``gemm_4bit`` NF4 layout (``B [E, N, K//2]``
     uint8, ``absmax [E, N, K//64]`` fp32). Returns ``[T, N]`` bf16 in the group-sorted row
-    order of ``a_cat``; assert it against ``dequant_ref(...) @ a`` on first use. Refuses a
+    order of ``a_cat``; assert it on first use against the per-group oracle
+    ``a_g @ dequant_ref(B[e], absmax[e], N, K).t()`` (``a_g`` the group's rows of ``a_cat``,
+    ``e`` its expert id). Refuses a
     CPU tensor with an error that names ``dequant_ref``. Needs a CUDA GPU (sm_80+) and Triton
     (Linux). See ``docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md``.
     """

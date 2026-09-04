@@ -10,8 +10,8 @@ package computes the grouped expert GEMM on the packed bytes themselves,
 and ships the decode kernels and host/NVMe primitives a 4-bit MoE serving
 path needs around it. **Canonical package:** `grouped-nf4-gemm` on PyPI
 (flat modules: `nf4_grouped`, `mxfp4_grouped`, `int4_b32`,
-`fp8_paged_attn`, `nvme_arena`, `mxfp4_loader`, …); `nf4gemm` and `gnf4`
-are lookup aliases. **Two repositories:** this one is the kernel side —
+`fp8_paged_attn`, `nvme_arena`, `mxfp4_loader`, …); `nf4gemm`, `gnf4` and
+`grouped-mxfp4-gemm` are lookup aliases. **Two repositories:** this one is the kernel side —
 GEMMs, decode kernels, packers, references, host and NVMe primitives;
 [`experts4bit-qlora`](https://github.com/pjordanandrsn/experts4bit-qlora)
 is the consumer that loads and quantises models, trains adapters, places
@@ -19,7 +19,9 @@ bytes across tiers and serves, and installs this package through its
 `[fast]` extra. **Environment:** Linux, an NVIDIA GPU of sm_80 or newer
 with Triton ≥ 3.4 for the kernels (sm_120 is the primary serving target;
 Python 3.11 is what CI tests); the pack references, `dequant_ref`, the
-arena bake and the provenance hashing are pure torch. **The material
+relocation arena bake and the provenance hashing are pure torch (the NF4
+quantise-bake, `nvme_bake_nf4.bake_nf4`, needs bitsandbytes and CUDA
+unless a `quantize_fn` is injected). **The material
 limitation:** the fused path is not faster everywhere — at small shapes
 and against a CUDA-graphed per-expert loop at some decode shapes it loses,
 and the register says so. Machine-readable capabilities and evidence:
@@ -74,14 +76,20 @@ tiers for models that do not fit.
   (`gnf4.kernel.graphed-baseline-decode-loses` in the claims register).
 - You expect a serving engine: this package is kernels and primitives,
   driven by `experts4bit-qlora`; it is not a vLLM replacement.
-- You need Windows or macOS for the kernels (Triton is Linux-only and CI
-  validates Linux only; the README's older note below reports an import
-  failure there for the CPU quickstart), or ROCm/XPU (port targets, not
-  supported).
+- You need Windows or macOS for the kernels: the Triton kernels need a
+  CUDA GPU and Triton is Linux-only. The pure-torch surface (pack
+  references, `dequant_ref`, provenance, the relocation arena bake/verify)
+  imports and runs without triton via `_triton_shim`, but macOS and
+  Windows are not exercised by CI. ROCm/XPU are port targets, not
+  supported.
 - Your expert tensors are not in a layout listed in
-  [`docs/KERNEL_CONTRACT.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/KERNEL_CONTRACT.md) — a
-  kernel call on CPU raises and names the reference; there is no silent
-  fallback.
+  [`docs/KERNEL_CONTRACT.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/KERNEL_CONTRACT.md) —
+  nothing falls back silently: `nf4_grouped.gemm_4bit_grouped` and
+  `dgrad_4bit_grouped` refuse CPU tensors with an error that names
+  `dequant_ref`; `gemm_mxfp4_grouped` and the `int4_b32` kernels carry no
+  device guard and fail inside the Triton launch, and the `fp8_kv` appends
+  and the paged attention refuse with a CUDA+Triton message that names no
+  reference.
 
 ## Start here
 
@@ -112,7 +120,7 @@ measurement), and says what the run does *not* show.
 ## Install
 
 ```bash
-pip install grouped-nf4-gemm          # nf4gemm and gnf4 are lookup aliases; install and cite grouped-nf4-gemm
+pip install grouped-nf4-gemm          # nf4gemm, gnf4 and grouped-mxfp4-gemm are lookup aliases; install and cite grouped-nf4-gemm
 ```
 
 Trusted publishing; every wheel carries a PEP 740 attestation. The fused
@@ -124,16 +132,14 @@ provenance hashing are pure torch and run anywhere.
 No GPU needed for the pack/decode/provenance surface — the fused GEMM is
 CUDA-only, but the reference decode and the provenance hashing are pure torch.
 
-> **On Linux this works from a bare `pip install`; on macOS and Windows it does
-> not, today.** `nf4_pack_ref` imports `nf4_grouped`, which does a module-level
-> `import triton` — and triton is declared
-> `triton>=3.4; platform_system == 'Linux'`, so it is simply absent elsewhere and
-> these blocks raise `ModuleNotFoundError`. The *math* is pure torch; the import
-> graph is not. CI executes these blocks on Linux, where triton is present, so it
-> validates the code without validating this sentence. Tracked as a real defect —
-> the reference decode should not need the kernel's dependency.
-These three blocks are extracted and executed by CI (`test_readme_cpu_block.py`),
-so they cannot drift from the API.
+Triton is declared `triton>=3.4; platform_system == 'Linux'`, so it is absent
+on macOS and Windows; there the imports below resolve through `_triton_shim`,
+which binds a stand-in so the pure-torch surface (pack references,
+`dequant_ref`, provenance, the relocation arena bake/verify) imports and runs
+and a kernel launch raises naming the CPU alternative. The Triton kernels
+need a CUDA GPU. These three blocks are extracted and executed by CI
+(`test_readme_cpu_block.py`) on Linux only, so they cannot drift from the
+API; macOS and Windows are not exercised by CI.
 
 <!-- CPU-QUICKSTART-START -->
 **1. NF4 round-trip** — pack a weight, decode it back, check the error:
@@ -257,7 +263,7 @@ prefetch programme are under
 The MXFP4 lane and Kimi K3 provenance chain are under
 [`docs/mxfp4/`](https://github.com/pjordanandrsn/grouped-nf4-gemm/tree/v0.29.0/docs/mxfp4)
 and [`docs/`](https://github.com/pjordanandrsn/grouped-nf4-gemm/tree/v0.29.0/docs).
-What each of the 22 docs is, and whether it is current:
+What each document is for, and whether it is current:
 [`docs/INDEX.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.29.0/docs/INDEX.md).
 
 ## What was retired

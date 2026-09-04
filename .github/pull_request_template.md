@@ -14,7 +14,12 @@
 - [ ] **README routing** (Use this when / Do not use this when / Start here) still accurate.
 - [ ] **Examples** in new docs are executed in CI, executed in a hardware lane, or explicitly marked as needing GPU / network / model download / large storage. No example silently falls back.
 - [ ] **Related repository** updated (or an issue filed there) if the kernel/consumer contract changed.
-- [ ] **Anchored docs untouched**: nothing under `docs/` with an `ots-attestation-footer` was edited (`grep -l ots-attestation-footer docs/*.md`).
+- [ ] **Anchored docs untouched**: no edited file has a sibling `.ots` (`for f in $(git diff --name-only origin/main); do test -e "$f.ots" && echo ANCHORED $f; done` prints nothing); a correction to an anchored document goes in a sibling file.
+- [ ] **README links are absolute** (`python scripts/check_readme_links.py` passes): PyPI renders the README, so a relative path is a dead link there.
+- [ ] **A runnable CPU block for any new documented call**: `kernel/test_readme_cpu_block.py` and `kernel/test_cpu_refusal.py` pass.
+- [ ] **No private-lane paths or markers** in committed text (the `private-marker-guard` workflow passes).
+- [ ] **Cursor Bugbot** reads *pass*, not *skipping* — skipping means it FOUND something.
+- [ ] **Measured numbers** cite a committed receipt with a self-pair, two devices or the named architecture, and the cells that lose.
 
 ## Evidence
 

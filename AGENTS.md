@@ -62,14 +62,15 @@ publishing.
 - **The current position: `docs/STATUS.md`** — including the three limits
   where the fused path loses.
 - **Which documents are current: `docs/INDEX.md`.** Anchoring here is a
-  sibling `.ots` file (100 of them; `find . -name "*.ots"`): an anchored
+  sibling `.ots` file (`find . -name '*.ots'` lists them): an anchored
   document is never edited in place; corrections go in a sibling file.
 
 ## Build and test
 
 ```bash
 pip install -e . pytest numpy                      # CPU torch + triton (Linux) run the interpreter suites
-cd kernel && TRITON_INTERPRET=1 python -m pytest test_interp_contract.py test_int4_b32.py -q
+cd kernel && TRITON_INTERPRET=1 python -m pytest test_interp_contract.py test_mxfp4_interp.py test_mxfp4_gemv_b32.py -q   # the _INTERP_FILES members, alone
+cd kernel && TRITON_INTERPRET=1 python -m pytest test_int4_b32.py -q             # a compiled-path file: its own process (why: below)
 cd kernel && python -m pytest test_packaging_covers_kernel.py test_check_readme_links.py -q
 python examples/dequant_tax.py                     # prints the CPU note without a GPU; ~1 min on one GPU
 python -m build && python -m twine check dist/*
@@ -79,6 +80,14 @@ python scripts/check_capabilities.py               # docs/capabilities.json vs s
 python scripts/check_discovery_contract.py         # docs/discovery-queries.json vs docs/solutions/
 python scripts/build_llms_bundle.py --check        # llms-full.txt is current
 ```
+
+The two interpreter commands stay separate on purpose: `kernel/conftest.py`
+raises `pytest.UsageError` when a CUDA device is present and an
+`_INTERP_FILES` member (`test_interp_contract.py`, `test_mxfp4_interp.py`,
+`test_mxfp4_gemv_b32.py`) is collected in the same process as a
+compiled-path file such as `test_int4_b32.py`, because `TRITON_INTERPRET`
+latches process-wide at triton's first import. CI's CPU-only runner never
+trips that guard; a GPU box does.
 
 CI (`.github/workflows/ci.yml`) runs the anchor gate, the example on CPU,
 the interpreter-contract suites under `TRITON_INTERPRET=1`, and the wheel
@@ -94,9 +103,11 @@ step, and the meta-tests enforce both.
   parity with the reference outranks speed in review.
 - Claims carry receipts, a self-pair beside every ratio, and the cells that
   lose; a pre-registered protocol is stamped before the data exists.
-- Examples must not silently fall back: a kernel call on CPU raises and
-  names the reference; `examples/dequant_tax.py` prints a CPU note and
-  returns rather than pretending.
+- Examples must not silently fall back: the NF4 grouped GEMM refuses CPU
+  tensors with an error that names `dequant_ref` (the MXFP4 and int4_b32
+  kernels carry no device guard and fail inside the Triton launch);
+  `examples/dequant_tax.py` prints a CPU note and returns rather than
+  pretending.
 - Layouts are contracts (`docs/KERNEL_CONTRACT.md`): NF4 `[E, N, K//2]` u8 +
   absmax `[E, N, K//64]` fp32; MXFP4 blocks `[E, N, K//2]` u8 (low nibble
   first) + e8m0 scales `[E, N, K//32]` u8; int4-b32 packed `[E, N, K//2]` +
@@ -123,11 +134,12 @@ step, and the meta-tests enforce both.
 
 Kernels: Linux + NVIDIA sm_80+ with Triton ≥ 3.4 (sm_120 is the primary
 serving target). CI tests Python 3.11 only, on Linux. On macOS/Windows the
-wheel installs (triton is a Linux-only marker); the README's older note
-reports the CPU quickstart failing at import there, `_triton_shim` binds a
-stand-in so define-time imports resolve, and CI does not validate either
-statement — say "not validated" rather than either. ROCm/XPU are port
-targets (`docs/PORTABILITY.md`),
+wheel installs (triton is a Linux-only marker): the pure-torch surface (pack
+references, dequant, provenance, arena bake/verify) imports and runs without
+triton via `_triton_shim` (#78); the Triton kernels need a CUDA GPU; macOS
+and Windows are not exercised by CI, so say "not exercised by CI" rather
+than "supported". `int4_b32` imports triton directly and is not importable
+without it. ROCm/XPU are port targets (`docs/PORTABILITY.md`),
 not supported. The fp8 paged kernel's f32 compute modes fail on triton 3.4
 (`gnf4.open.f32-compute-modes-triton34`).
 

@@ -95,8 +95,8 @@ The CPU block passes its assertions and prints two output errors; on skewed chan
 ## Limitations
 
 - Decode-only: rows are single tokens. Prefill and training stay on the NF4 and MXFP4 paths.
-- Measured refusals, kept: the format stays off the `lm_head`, and dense attention shapes lose to bf16 in both the GEMV and small-M GEMM regimes (claim `gnf4.serve.int4-b32-gemv`, measured-private).
-- Calibrated packing is a Qwen3-30B-A3B result; the consumer's gate refused it on Mixtral and OLMoE (claim `gnf4.serve.gptq-pack-int4-b32`, measured-private).
+- Measured refusals, kept: the format stays off the `lm_head`, and dense attention shapes lose to bf16 in both the GEMV and small-M GEMM regimes. Not a registered claim: this is recorded in the `notes` field of claim `gnf4.serve.int4-b32-gemv` (measured-private), not in that claim's measured statement.
+- Calibrated packing is a Qwen3-30B-A3B result; the consumer's gate refused it on Mixtral and OLMoE. Not a registered claim: this is recorded in the `notes` field of claim `gnf4.serve.gptq-pack-int4-b32` (measured-private), not in that claim's measured statement.
 - Pack from source weights only; quantising onto an already-quantised grid compounds the cost (`int4_pack_ref` docstring).
 - Time under CUDA-graph replay, never eager: eager sweeps anti-select split-K. Split-K on the NF4 decode GEMV was refuted and ships dormant as the evidence ([`STATUS.md`](../STATUS.md)).
 - `int4_b32` is not importable without triton; no ROCm or XPU ([`PORTABILITY.md`](../PORTABILITY.md)).

@@ -20,10 +20,14 @@ Historical release notes are not rewritten to this shape.
 
 Example opening:
 
-> **0.34.0.** Single-stream decode of Qwen3-30B-A3B on the calibrated int4
-> stack is faster because the round-2 norm+rotary fold now engages on the
-> separate-projection attention that stack actually runs; nothing changes for
-> the fused-qkv path or for training. Affects serving on Qwen3-MoE-shaped
-> attention (q/k/v/o with per-head norms) on sm_80+ NVIDIA GPUs under Linux;
-> Granite and Mixtral get the norm-less variant of the same fold. Upgrade if
-> you serve with `E4B_FUSE_T1_GLUE_R2=1`; requires grouped-nf4-gemm ≥ 0.28.0.
+> **0.29.0.** Decode steps that run the int4-b32 or MXFP4 expert GEMVs spend
+> less on their split-K tail: `int4_b32.reduce_partials` reduces the fp32
+> partials and casts to bf16 in one launch where a multi-dispatch torch chain
+> ran before, and `combine_rows` folds the top-k weighted combine the same
+> way; values are unchanged to bf16 rounding. Affects serving through
+> experts4bit-qlora's collapsed decode forward on sm_80+ NVIDIA GPUs under
+> Linux; nothing changes for prefill, training or the NF4 grouped GEMM.
+> Upgrade if you serve the decode GEMVs through the consumer; no action
+> otherwise. No new number: the register has no entry for these kernels, and
+> the glue position they extend is claim `gnf4.serve.decode-glue-kernels`
+> (measured-private), which does not yet include them.

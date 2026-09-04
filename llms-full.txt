@@ -19,8 +19,8 @@ package computes the grouped expert GEMM on the packed bytes themselves,
 and ships the decode kernels and host/NVMe primitives a 4-bit MoE serving
 path needs around it. **Canonical package:** `grouped-nf4-gemm` on PyPI
 (flat modules: `nf4_grouped`, `mxfp4_grouped`, `int4_b32`,
-`fp8_paged_attn`, `nvme_arena`, `mxfp4_loader`, …); `nf4gemm` and `gnf4`
-are lookup aliases. **Two repositories:** this one is the kernel side —
+`fp8_paged_attn`, `nvme_arena`, `mxfp4_loader`, …); `nf4gemm`, `gnf4` and
+`grouped-mxfp4-gemm` are lookup aliases. **Two repositories:** this one is the kernel side —
 GEMMs, decode kernels, packers, references, host and NVMe primitives;
 [`experts4bit-qlora`](https://github.com/pjordanandrsn/experts4bit-qlora)
 is the consumer that loads and quantises models, trains adapters, places
@@ -28,7 +28,9 @@ bytes across tiers and serves, and installs this package through its
 `[fast]` extra. **Environment:** Linux, an NVIDIA GPU of sm_80 or newer
 with Triton ≥ 3.4 for the kernels (sm_120 is the primary serving target;
 Python 3.11 is what CI tests); the pack references, `dequant_ref`, the
-arena bake and the provenance hashing are pure torch. **The material
+relocation arena bake and the provenance hashing are pure torch (the NF4
+quantise-bake, `nvme_bake_nf4.bake_nf4`, needs bitsandbytes and CUDA
+unless a `quantize_fn` is injected). **The material
 limitation:** the fused path is not faster everywhere — at small shapes
 and against a CUDA-graphed per-expert loop at some decode shapes it loses,
 and the register says so. Machine-readable capabilities and evidence:
@@ -83,14 +85,20 @@ tiers for models that do not fit.
   (`gnf4.kernel.graphed-baseline-decode-loses` in the claims register).
 - You expect a serving engine: this package is kernels and primitives,
   driven by `experts4bit-qlora`; it is not a vLLM replacement.
-- You need Windows or macOS for the kernels (Triton is Linux-only and CI
-  validates Linux only; the README's older note below reports an import
-  failure there for the CPU quickstart), or ROCm/XPU (port targets, not
-  supported).
+- You need Windows or macOS for the kernels: the Triton kernels need a
+  CUDA GPU and Triton is Linux-only. The pure-torch surface (pack
+  references, `dequant_ref`, provenance, the relocation arena bake/verify)
+  imports and runs without triton via `_triton_shim`, but macOS and
+  Windows are not exercised by CI. ROCm/XPU are port targets, not
+  supported.
 - Your expert tensors are not in a layout listed in
-  [`docs/KERNEL_CONTRACT.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/KERNEL_CONTRACT.md) — a
-  kernel call on CPU raises and names the reference; there is no silent
-  fallback.
+  [`docs/KERNEL_CONTRACT.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/KERNEL_CONTRACT.md) —
+  nothing falls back silently: `nf4_grouped.gemm_4bit_grouped` and
+  `dgrad_4bit_grouped` refuse CPU tensors with an error that names
+  `dequant_ref`; `gemm_mxfp4_grouped` and the `int4_b32` kernels carry no
+  device guard and fail inside the Triton launch, and the `fp8_kv` appends
+  and the paged attention refuse with a CUDA+Triton message that names no
+  reference.
 
 ## Start here
 
@@ -121,7 +129,7 @@ measurement), and says what the run does *not* show.
 ## Install
 
 ```bash
-pip install grouped-nf4-gemm          # nf4gemm and gnf4 are lookup aliases; install and cite grouped-nf4-gemm
+pip install grouped-nf4-gemm          # nf4gemm, gnf4 and grouped-mxfp4-gemm are lookup aliases; install and cite grouped-nf4-gemm
 ```
 
 Trusted publishing; every wheel carries a PEP 740 attestation. The fused
@@ -133,16 +141,14 @@ provenance hashing are pure torch and run anywhere.
 No GPU needed for the pack/decode/provenance surface — the fused GEMM is
 CUDA-only, but the reference decode and the provenance hashing are pure torch.
 
-> **On Linux this works from a bare `pip install`; on macOS and Windows it does
-> not, today.** `nf4_pack_ref` imports `nf4_grouped`, which does a module-level
-> `import triton` — and triton is declared
-> `triton>=3.4; platform_system == 'Linux'`, so it is simply absent elsewhere and
-> these blocks raise `ModuleNotFoundError`. The *math* is pure torch; the import
-> graph is not. CI executes these blocks on Linux, where triton is present, so it
-> validates the code without validating this sentence. Tracked as a real defect —
-> the reference decode should not need the kernel's dependency.
-These three blocks are extracted and executed by CI (`test_readme_cpu_block.py`),
-so they cannot drift from the API.
+Triton is declared `triton>=3.4; platform_system == 'Linux'`, so it is absent
+on macOS and Windows; there the imports below resolve through `_triton_shim`,
+which binds a stand-in so the pure-torch surface (pack references,
+`dequant_ref`, provenance, the relocation arena bake/verify) imports and runs
+and a kernel launch raises naming the CPU alternative. The Triton kernels
+need a CUDA GPU. These three blocks are extracted and executed by CI
+(`test_readme_cpu_block.py`) on Linux only, so they cannot drift from the
+API; macOS and Windows are not exercised by CI.
 
 <!-- CPU-QUICKSTART-START -->
 **1. NF4 round-trip** — pack a weight, decode it back, check the error:
@@ -257,11 +263,14 @@ package; always install and cite `grouped-nf4-gemm`.
 ## Environment, in one line
 
 Linux; NVIDIA sm_80+ with Triton ≥ 3.4 and torch ≥ 2.8 for the kernels;
-the pack references, `dequant_ref`, the arena bake and the provenance
-hashing are pure torch. CI tests Python 3.11 on Linux only. No macOS or
-Windows for the kernels (the README's older note reports an import failure
-there for the CPU quickstart; `_triton_shim` is the mitigation and CI does
-not validate it); no ROCm or XPU (port targets, see
+the pack references, `dequant_ref`, the relocation arena bake and the
+provenance hashing are pure torch (the NF4 quantise-bake needs bitsandbytes
+and CUDA unless a `quantize_fn` is injected). CI tests Python 3.11 on Linux
+only. No macOS or Windows for the kernels (the Triton kernels need a CUDA
+GPU and triton is Linux-only); the pure-torch surface (pack references,
+dequant, provenance, arena bake/verify) imports and runs without triton via
+`_triton_shim`, but macOS and Windows are not exercised by CI. No ROCm or
+XPU (port targets, see
 [`PORTABILITY.md`](PORTABILITY.md)). The current position, including the
 three limits where the fused path loses and what is measured-private, is
 [`STATUS.md`](STATUS.md).
@@ -269,10 +278,16 @@ three limits where the fused path loses and what is measured-private, is
 ## Limitations that apply to every page
 
 - Linux + NVIDIA sm_80+ with Triton ≥ 3.4 for the kernels; Python 3.11 is
-  what CI tests. The pure-torch surface (references, packers, bake,
-  provenance) has no GPU requirement and is validated by CI on Linux only.
-- Nothing falls back silently: a kernel call on CPU raises and names its
-  pure-torch reference.
+  what CI tests. The pure-torch surface (references, packers, relocation
+  bake/verify, provenance) has no GPU requirement, imports without triton via
+  `_triton_shim`, and is exercised by CI on Linux only; the NF4 quantise-bake
+  needs bitsandbytes and CUDA unless a `quantize_fn` is injected.
+- Nothing falls back silently. `nf4_grouped.gemm_4bit_grouped` and
+  `dgrad_4bit_grouped` refuse CPU tensors with an error that names
+  `dequant_ref`; `gemm_mxfp4_grouped` and the `int4_b32` kernels carry no
+  device guard and fail inside the Triton launch, and the `fp8_kv` appends
+  and the paged attention refuse with a CUDA+Triton message that names no
+  reference.
 - The fused path loses at small shapes and to a CUDA-graphed per-expert
   loop at some decode shapes; the NVMe tier is batch-only; expert prefetch
   closed negative. The register records each of these.
@@ -345,7 +360,8 @@ torch.testing.assert_close(out.float(), want, rtol=1e-2, atol=1e-2)
 GPU: the kernel against the reference, recording which compute mode actually ran.
 
 ```python
-# GPU (sm_80+) + triton; the fp8 compute mode needs sm_89+
+# GPU (sm_89+ for the fp8 compute default) + triton; sm_80-sm_88 take the f32 path,
+# open under #319 on triton 3.4 (claim gnf4.open.f32-compute-modes-triton34)
 import torch
 from fp8_paged_attn import (fp8_paged_decode_attention, paged_attn_ref,
                             paged_attn_available, compute_counts)
@@ -489,8 +505,8 @@ The CPU block passes its assertions and prints two output errors; on skewed chan
 ## Limitations
 
 - Decode-only: rows are single tokens. Prefill and training stay on the NF4 and MXFP4 paths.
-- Measured refusals, kept: the format stays off the `lm_head`, and dense attention shapes lose to bf16 in both the GEMV and small-M GEMM regimes (claim `gnf4.serve.int4-b32-gemv`, measured-private).
-- Calibrated packing is a Qwen3-30B-A3B result; the consumer's gate refused it on Mixtral and OLMoE (claim `gnf4.serve.gptq-pack-int4-b32`, measured-private).
+- Measured refusals, kept: the format stays off the `lm_head`, and dense attention shapes lose to bf16 in both the GEMV and small-M GEMM regimes. Not a registered claim: this is recorded in the `notes` field of claim `gnf4.serve.int4-b32-gemv` (measured-private), not in that claim's measured statement.
+- Calibrated packing is a Qwen3-30B-A3B result; the consumer's gate refused it on Mixtral and OLMoE. Not a registered claim: this is recorded in the `notes` field of claim `gnf4.serve.gptq-pack-int4-b32` (measured-private), not in that claim's measured statement.
 - Pack from source weights only; quantising onto an already-quantised grid compounds the cost (`int4_pack_ref` docstring).
 - Time under CUDA-graph replay, never eager: eager sweeps anti-select split-K. Split-K on the NF4 decode GEMV was refuted and ships dormant as the evidence ([`STATUS.md`](../STATUS.md)).
 - `int4_b32` is not importable without triton; no ROCm or XPU ([`PORTABILITY.md`](../PORTABILITY.md)).
@@ -590,7 +606,7 @@ The CPU block completes: the packed shapes are the gpt-oss tensor shapes and the
 
 ## Limitations
 
-- CUDA + Triton only; no ROCm or XPU ([`PORTABILITY.md`](../PORTABILITY.md)). The macOS/Windows CPU import defect on [`nf4-grouped-gemm-without-bf16-materialization.md`](nf4-grouped-gemm-without-bf16-materialization.md) applies.
+- CUDA + Triton only for the kernels; no ROCm or XPU ([`PORTABILITY.md`](../PORTABILITY.md)). `mxfp4_grouped` binds triton through `_triton_shim`, so the pure-torch surface (`mxfp4_pack_ref`, the `mxfp4_loader` hashing, the relocation arena bake/verify) imports and runs without triton; the Triton kernels need a CUDA GPU; macOS and Windows are not exercised by CI.
 - Do not quantize-bake a checkpoint that is already MXFP4 ([README](../../README.md)); relocation keeps the bytes, re-quantizing to NF4 costs a decode per read and breaks provenance.
 - The e8m0 `0xFF` byte decodes as transformers' oracle does (ldexp, no NaN reservation); real checkpoints do not contain it.
 - The reference decode agrees with two independent implementations (transformers' gpt-oss path; compressed-tensors for K3). Agreement rules out a convention mismatch, not a shared misreading of the OCP spec ([`K3-PROVENANCE-CHAIN.md`](../K3-PROVENANCE-CHAIN.md)).
@@ -631,7 +647,7 @@ bitsandbytes stores NF4 as a 16-entry codebook index per weight plus a blockwise
 pip install grouped-nf4-gemm
 ```
 
-Linux, NVIDIA GPU of compute capability sm_80 or newer (sm_120 is the primary serving target), `triton>=3.4` (Linux-only distribution), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. `nf4gemm` and `gnf4` are lookup aliases, not separate packages. Through the consumer:
+Linux, NVIDIA GPU of compute capability sm_80 or newer (sm_120 is the primary serving target), `triton>=3.4` (Linux-only distribution), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. `nf4gemm`, `gnf4` and `grouped-mxfp4-gemm` are lookup aliases, not separate packages. Through the consumer:
 
 ```bash
 pip install "experts4bit-qlora[fast]"
@@ -699,7 +715,7 @@ Both blocks finish without an assertion. The GPU block returns `[T, N]` bf16 in 
 - Shapes under a weight-byte floor lose outright; `nf4_grouped.decode_dispatch(N, K, T, sm_count)` returns `("dequant",)` for them and the caller routes those cells back. The op itself never switches algorithm.
 - `top_k=1` cells are instance-unstable; peak VRAM does not improve, only the forward-to-backward transient shrinks ([`STATUS.md`](../STATUS.md)).
 - The fidelity ordering is a CUDA tensor-core statement; other backends must re-measure. No ROCm or XPU ([`PORTABILITY.md`](../PORTABILITY.md)).
-- CUDA + Triton only. The [README](../../README.md) records that on macOS and Windows the CPU quickstart fails today because `nf4_pack_ref` imports `nf4_grouped`, which imports triton at module level; the tree carries `kernel/_triton_shim.py` against that, but CI runs the CPU blocks only on Linux, so treat non-Linux CPU use as unverified.
+- CUDA + Triton only for the kernel. `nf4_pack_ref` imports `nf4_grouped`, which binds triton through `_triton_shim`, so the pure-torch surface (pack references, `dequant_ref`, provenance, arena bake/verify) imports and runs without triton, and a `gemm_4bit_grouped` call on CPU tensors raises naming `dequant_ref` on a triton-less box too; the Triton kernels need a CUDA GPU; macOS and Windows are not exercised by CI.
 - Open: `#87`, int32 offset overflow at large `max(expert_ids)`.
 
 ## Related
@@ -982,7 +998,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
       "a serving engine or a vLLM replacement: this is a kernel package driven by experts4bit-qlora",
       "operating systems other than Linux for the kernels (triton is Linux-only); ROCm/XPU are port targets, not supported",
       "models that already fit in bf16 with headroom: the grouped kernel loses at small shapes and to a CUDA-graphed per-expert loop at some decode shapes (claims gnf4.kernel.graphed-baseline-decode-loses)",
-      "silent fallbacks: a kernel call on CPU raises and names the pure-torch reference"
+      "silent fallbacks: nothing falls back silently on CPU — nf4_grouped.gemm_4bit_grouped and dgrad_4bit_grouped refuse CPU tensors with an error that names dequant_ref; gemm_mxfp4_grouped and the int4_b32 kernels carry no device guard and fail inside the Triton launch, and the fp8_kv appends and the paged attention refuse with a CUDA+Triton message that names no reference"
     ]
   },
   "capabilities": [
@@ -1235,7 +1251,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
           "Linux"
         ],
         "accelerator": [
-          "NVIDIA CUDA GPU, sm_80 or newer (sm_120 is the primary serving target)"
+          "NVIDIA CUDA GPU, sm_89 or newer for the fp8 compute default (sm_120 is the primary serving target); sm_80-sm_88 fall to the f32 path, open under #319 (claim gnf4.open.f32-compute-modes-triton34)"
         ],
         "special_requirements": [
           "triton>=3.4 (Linux-only distribution)",
@@ -1277,7 +1293,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
         "gnf4.serve.decode-glue-kernels"
       ],
       "limitations": [
-        "The f32 compute modes of the paged kernel fail on triton 3.4 (claim gnf4.open.f32-compute-modes-triton34 records the open item); the fp8 compute modes are the serving default",
+        "The f32 compute modes of the paged kernel fail on triton 3.4 (claim gnf4.open.f32-compute-modes-triton34 records the open item). With GNF4_ATTN_COMPUTE unset, fp8 compute is the default only where it can run (sm_89+, v_groups == 1, head_dim // k_groups >= 32, bf16/fp16 q, ktile >= 32 when supplied); every other call, including all of sm_80-sm_88, takes the open f32 path",
         "The decode glue kernels are measured-private (claim gnf4.serve.decode-glue-kernels)",
         "KV budgets in docs/context-budgets.md are rung-one (A2000) numbers; pending rows must not be promoted"
       ],
@@ -1315,12 +1331,13 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
           "Linux"
         ],
         "accelerator": [
-          "NVIDIA CUDA GPU for the serving tiers; the bake and verify are pure torch"
+          "NVIDIA CUDA GPU for the serving tiers and for the default NF4 quantise bake (nvme_bake_nf4.bake_nf4 with quantize_fn=None); the relocation bake and verify (nvme_arena.bake / bake_expert_tensors / verify) need no GPU"
         ],
         "special_requirements": [
           "pinned host RAM sized from measured free memory (capacity_for_bytes)",
           "a local NVMe or fast block device for the arena; O_DIRECT reads",
-          "torch>=2.8"
+          "torch>=2.8",
+          "bitsandbytes and CUDA for the NF4 quantise bake (nvme_bake_nf4.bake_nf4 with the default quantiser); the geometry/manifest path is pure torch when a quantize_fn is injected"
         ]
       },
       "install": [
@@ -1397,7 +1414,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
         ],
         "special_requirements": [
           "torch>=2.8 (pre-releases accepted)",
-          "macOS/Windows: not validated by CI (the README's older note reports an import failure for the CPU quickstart there; _triton_shim is the mitigation)"
+          "macOS/Windows: the pure-torch surface (pack references, dequant, provenance, arena bake/verify) imports and runs without triton via _triton_shim; the Triton kernels need a CUDA GPU; macOS and Windows are not exercised by CI"
         ]
       },
       "install": [
@@ -1437,7 +1454,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
 
 # Status — what this kernel does, what changed, what is open
 
-**As of 2026-09-03, version 0.24.0.** One page. The README argues; this
+**As of 2026-09-03, version 0.29.0.** One page. The README argues; this
 page states. Every line here has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
 here that does not.
@@ -1757,14 +1774,15 @@ publishing.
 - **The current position: `docs/STATUS.md`** — including the three limits
   where the fused path loses.
 - **Which documents are current: `docs/INDEX.md`.** Anchoring here is a
-  sibling `.ots` file (100 of them; `find . -name "*.ots"`): an anchored
+  sibling `.ots` file (`find . -name '*.ots'` lists them): an anchored
   document is never edited in place; corrections go in a sibling file.
 
 ## Build and test
 
 ```bash
 pip install -e . pytest numpy                      # CPU torch + triton (Linux) run the interpreter suites
-cd kernel && TRITON_INTERPRET=1 python -m pytest test_interp_contract.py test_int4_b32.py -q
+cd kernel && TRITON_INTERPRET=1 python -m pytest test_interp_contract.py test_mxfp4_interp.py test_mxfp4_gemv_b32.py -q   # the _INTERP_FILES members, alone
+cd kernel && TRITON_INTERPRET=1 python -m pytest test_int4_b32.py -q             # a compiled-path file: its own process (why: below)
 cd kernel && python -m pytest test_packaging_covers_kernel.py test_check_readme_links.py -q
 python examples/dequant_tax.py                     # prints the CPU note without a GPU; ~1 min on one GPU
 python -m build && python -m twine check dist/*
@@ -1774,6 +1792,14 @@ python scripts/check_capabilities.py               # docs/capabilities.json vs s
 python scripts/check_discovery_contract.py         # docs/discovery-queries.json vs docs/solutions/
 python scripts/build_llms_bundle.py --check        # llms-full.txt is current
 ```
+
+The two interpreter commands stay separate on purpose: `kernel/conftest.py`
+raises `pytest.UsageError` when a CUDA device is present and an
+`_INTERP_FILES` member (`test_interp_contract.py`, `test_mxfp4_interp.py`,
+`test_mxfp4_gemv_b32.py`) is collected in the same process as a
+compiled-path file such as `test_int4_b32.py`, because `TRITON_INTERPRET`
+latches process-wide at triton's first import. CI's CPU-only runner never
+trips that guard; a GPU box does.
 
 CI (`.github/workflows/ci.yml`) runs the anchor gate, the example on CPU,
 the interpreter-contract suites under `TRITON_INTERPRET=1`, and the wheel
@@ -1789,9 +1815,11 @@ step, and the meta-tests enforce both.
   parity with the reference outranks speed in review.
 - Claims carry receipts, a self-pair beside every ratio, and the cells that
   lose; a pre-registered protocol is stamped before the data exists.
-- Examples must not silently fall back: a kernel call on CPU raises and
-  names the reference; `examples/dequant_tax.py` prints a CPU note and
-  returns rather than pretending.
+- Examples must not silently fall back: the NF4 grouped GEMM refuses CPU
+  tensors with an error that names `dequant_ref` (the MXFP4 and int4_b32
+  kernels carry no device guard and fail inside the Triton launch);
+  `examples/dequant_tax.py` prints a CPU note and returns rather than
+  pretending.
 - Layouts are contracts (`docs/KERNEL_CONTRACT.md`): NF4 `[E, N, K//2]` u8 +
   absmax `[E, N, K//64]` fp32; MXFP4 blocks `[E, N, K//2]` u8 (low nibble
   first) + e8m0 scales `[E, N, K//32]` u8; int4-b32 packed `[E, N, K//2]` +
@@ -1818,11 +1846,12 @@ step, and the meta-tests enforce both.
 
 Kernels: Linux + NVIDIA sm_80+ with Triton ≥ 3.4 (sm_120 is the primary
 serving target). CI tests Python 3.11 only, on Linux. On macOS/Windows the
-wheel installs (triton is a Linux-only marker); the README's older note
-reports the CPU quickstart failing at import there, `_triton_shim` binds a
-stand-in so define-time imports resolve, and CI does not validate either
-statement — say "not validated" rather than either. ROCm/XPU are port
-targets (`docs/PORTABILITY.md`),
+wheel installs (triton is a Linux-only marker): the pure-torch surface (pack
+references, dequant, provenance, arena bake/verify) imports and runs without
+triton via `_triton_shim` (#78); the Triton kernels need a CUDA GPU; macOS
+and Windows are not exercised by CI, so say "not exercised by CI" rather
+than "supported". `int4_b32` imports triton directly and is not importable
+without it. ROCm/XPU are port targets (`docs/PORTABILITY.md`),
 not supported. The fp8 paged kernel's f32 compute modes fail on triton 3.4
 (`gnf4.open.f32-compute-modes-triton34`).
 
@@ -1840,31 +1869,37 @@ tag or publish from a branch.
 
 Active claims (projection of docs/claims.json; the file is authoritative and carries evidence paths):
 
-- gnf4.kernel.fused-more-accurate-than-dequant-bf16 [?]: The fused NF4 grouped GEMM (fp32 accumulate, bf16 epilogue) has never measured less accurate than the dequantize-to-bf16-then-GEMM baseline, in every confirmatory cell.
-- gnf4.kernel.energy-104-of-112 [?]: Fused J/token is below the dequant baseline in 104 of 112 confirmatory-grade cells across v1-v3; six of the eight misses are the top_k=1 / tiny-shape class.
-- gnf4.kernel.decode-speed-census [?]: At batch-1 decode on sm_86, census MoE shapes (OLMoE, Qwen3-30B, Gemma-4, gpt-oss-120b) run 1.16-2.73x the dequant baseline at median; top_k=1 and tiny (<~5M weight elements) shapes are known losers.
-- gnf4.kernel.h2h-unsloth [?]: Head-to-head against Unsloth's own MoE grouped-GEMM kernel, same pod and process, in the 4-bit-storage regime: decode 1.70x on H100 (their TMA path live) and 2.79x on RTX 4090; J/token 2.51x and 3.32x better. Unsloth wins its own bf16-resident regime by 2.6-5.3x at prefill on the H100.
-- gnf4.kernel.sm120-census-vs-grouped-mm [?]: At the Qwen3-30B-A3B serving cell (E=128, top-8, B=16) on an RTX 5090, gemm_4bit_grouped runs the routed expert GEMM in 0.42 / 0.21 ms where torch._grouped_mm on unquantised bf16 takes 0.88-1.30 ms: 2.1-6.0x across two boxes, on half the weight bytes.
-- gnf4.kernel.graphed-baseline-decode-loses [?]: Against a CUDA-graphed per-expert baseline at the decode band (T=32) the fused path LOSES on both 4090 and H100 (0.949x, 0.858x); the memory-traffic win survives only at training shape on bandwidth-limited cards (1.489x on the 4090, parity 1.059x on the H100).
-- gnf4.kernel.e2e-training-real-prose [?]: Inside a real OLMoE QLoRA finetune, fused vs the per-expert loop runs 4.50x on a 4090 and 4.75x on an H100 on real prose; random token ids understate it at 2.75x / 2.81x because prose routes to 98.4% of experts (cv 0.687) where random ids hit 87.5% (cv 1.463).
-- gnf4.kernel.dgrad [?]: dgrad_4bit_grouped is the training backward in one launch: gate_up E=256 5.92 ms vs 61.78 ms for the per-expert loop, down 3.28 vs 85.12 ms (A2000, T_cat=4096); one training step at E=256 goes 403.7 to 26.5 ms. On by default since 0.9.1; gradient lands ~2.9e-3 from the exact loop, inside the bf16 budget.
-- gnf4.serve.decode-anchor-5090 [?]: The certified single-stream decode anchor for Qwen3-30B-A3B on the RTX 5090 class is 7.37 ms/step +-4.2%, about 130-142 tok/s, with the class carrying 8.5% inter-box dispersion while each box repeats to 0.16%.
-- gnf4.serve.m3-defaults-on [?]: GNF4_GEMV_DOTPAD and GNF4_ATTN_COMPUTE=fp8 ship ON by default (capability-conditional): 8192 teacher-forced tokens through the paged decode path, both knobs 7.843 -> 6.803 ms/step at delta-ppl -0.0021 against a +-0.05 bar. The fp8 path asserts sm_89+, v_groups==1, k_groups in (1,2,4); unset env falls back to f32 where fp8 cannot run, an explicit fp8 request is never downgraded.
-- gnf4.serve.fp8-paged-attn-windows-sinks-scale [?]: fp8_paged_decode_attention takes window (sliding), sinks (per-head logit in the softmax denominator, the gpt-oss s_aux convention), sm_scale, and k_row_bytes/v_row_bytes stride overrides in all four decode kernels; 35/35 fp8-mode GPU tests on an RTX 5090 (torch 2.8.0+cu128, triton 3.4.0); bytes and arithmetic for window=0, sinks=None unchanged.
-- gnf4.open.f32-compute-modes-triton34 [?]: OPEN: the f32 compute modes (split, packed) of the fp8 paged decode miss their reference by up to 0.074 (tol 0.02) on 10 of 35 tests on torch 2.8.0+cu128 / triton 3.4.0 (sm_120), on unmodified main; the fp8 modes -- the sm_120 serving default -- pass.
-- gnf4.serve.int4-b32-gemv [?]: The uniform int4-b32 decode GEMV (int8 activations, exact integer accumulation) reaches 1,044 GB/s dense at M=1 on the 5090, 6.9-7.2x over the NF4 register-LUT GEMV; grouped top-8 cells 3.8-4.3x. The grouped M-tile int4 GEMM runs gate_up 1.947x / down 4.500x over the NF4 grouped kernel at the B=16 census cells.
-- gnf4.serve.gptq-pack-int4-b32 [?]: gptq_pack_int4_b32 produces byte-identical format to pack_int4_b32 and chooses grid points against H = 2XX^T; packed on a C4 shard, Qwen3-30B-A3B's attention scores -0.042 ppl on wikitext and -0.115 on out-of-domain C4 against bf16 attention. HessianAccumulator stores off-device (0.23.0) so Mixtral's 128 projections fit.
-- gnf4.serve.decode-glue-kernels [?]: Three decode glue kernels (rmsnorm_rows 0.19.0; rmsnorm_resid_rows + rope_norm_heads 0.20.0; router_epilogue 0.21.0) fold the non-GEMM decode step; measured through the consumer, the three rounds compose 8.344 -> 5.270 ms/step at B=1 on the rental class with paired ppl deltas of +0.0136, -0.00105 and -0.01968 over 8192 sha-matched steps.
-- gnf4.flagship.235b-phaseA [?]: Qwen3-235B-A22B with all NF4 experts in ~128 GB pinned host RAM streams at 5.57 tok/s = 102-103% of the measured 44.3 GB/s link's waterfall ceiling on a 13.6 GB working set (synthetic weights, real attention + router); the dequant path on the identical pipeline: 1.81 tok/s.
-- gnf4.flagship.235b-phaseB [?]: The real 438 GB Qwen3-235B checkpoint, stream-quantised to NF4, generates coherent greedy text at 4.3-4.4 tok/s on 15.2 GB VRAM across five pods at 45-55 GB/s links; per-token time follows t ~= c_box + bytes/link with c_box measured 53.5-114.0 ms across seven hosts. A fixed fraction-of-waterfall is NOT the law (retired 2026-07-22).
-- gnf4.flagship.prefetch-closed-negative [?]: Expert prefetch is CLOSED, negative, over four registered arcs: stickiness 0.44 (B2); the pre-attention router predicts the post-attention top-8 at 0.93 but the win does not land (B3); threaded issuance 0.57x (B4); zero-copy speculative gather loses by the (2-H)x bytes law, break-even needs H >~ 0.95 (B5). Recommended copy path is --prefetch-mode gpu (UVA gather), +1.5% on one host.
-- gnf4.nvme.tier-batch-only [?]: The NVMe tier is a batch tier: at the measured per-box S ~= 3.45 GB/s a fully cold 235B streams ~2.3 s/token and a K3-class model ~7.5 s/token. What it buys is reachability and provenance, not latency.
-- gnf4.mxfp4.serve-tax-deleted [?]: Serving gpt-oss-120b on its exact released MXFP4 bytes scores exact-chunk ppl 26.72 against the shipped-precision reference 26.75, deleting the +9.4% ppl / KL 0.066 NF4-requantisation tax; per-shard provenance sha256(loaded) == sha256(file range) on a 4-tensor spot sample (a spot check, not shard-level coverage).
-- gnf4.mxfp4.train-9.82gb [?]: gpt-oss-120b QLoRA on native MXFP4 bytes trains at 9.82 GB peak VRAM with 144/144 sha256(file) == sha256(loaded) == sha256(post-train): the frozen base is byte-identical after training.
-- gnf4.k3.oracle-exact [?]: The reference MXFP4 decode reproduces Kimi K3's own declared reference (compressed-tensors 0.17.1, mxfp4-pack-quantized) exactly: 33,030,144 elements across w1/w3/w2, max abs delta 0; an arena round-trip on a byte-verified 1.56 TB store came back 48/48 segments identical with a byte-flip control, row fixed at 17,547,264 B.
-- gnf4.projection.multiarch [?]: PROJECTED (stamped pre-silicon): the pure-waterfall gen5 row is falsified; the revised gen4 band 2.4-3.0 tok/s is confirmed (L40S 2.60-2.61); the revised gen5 band 4.0-5.0 missed narrowly (H100 PCIe 3.924); unified-memory rows are ceilings only (17-22 tok/s on 128 GB boxes). NF4-vs-bf16 is a 3.56x byte reduction, not 4x.
-- gnf4.cold-engine.phase0-premise-refuted [?]: The cold-engine 'free floor' premise (bnb's CPU dequantize_4bit as a ready-made decode arm) is REFUTED on the target NAS box: no AVX-512, bnb falls to its reference path at 0.041 GB/s against a ~12 GB/s DDR ceiling. Design-stage; no registered claims.
-- gnf4.open.context-budgets-rung-two [?]: OPEN: context-budgets.md's KB/token table is rung-one (A2000) measured; full-depth real-weight confirmation is pending and the K3 row is a declared gap. Its own text forbids promoting pending rows to READMEs.
-- gnf4.open.issues [?]: OPEN issues at 2026-09-03: #319 (f32 paged compute modes on triton 3.4), #87 (gemm_4bit_grouped int32 offset overflow when max(expert_ids) is large -- distinct from the 2 GiB fix in 0.13.2/0.14.0), #73 (K3 fetch host copy ~71% of a layer), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #60 (arena staging blocks ~30% of a training step), #58 (8 requests per layer where 2 would do).
+- gnf4.kernel.fused-more-accurate-than-dequant-bf16 [confirmed]: The fused NF4 grouped GEMM (fp32 accumulate, bf16 epilogue) has never measured less accurate than the dequantize-to-bf16-then-GEMM baseline, in every confirmatory cell.
+- gnf4.kernel.energy-104-of-112 [confirmed]: Fused J/token is below the dequant baseline in 104 of 112 confirmatory-grade cells across v1-v3; six of the eight misses are the top_k=1 / tiny-shape class.
+- gnf4.kernel.decode-speed-census [confirmed]: At batch-1 decode on sm_86, census MoE shapes (OLMoE, Qwen3-30B, Gemma-4, gpt-oss-120b) run 1.16-2.73x the dequant baseline at median; top_k=1 and tiny (<~5M weight elements) shapes are known losers.
+- gnf4.kernel.h2h-unsloth [confirmed]: Head-to-head against Unsloth's own MoE grouped-GEMM kernel, same pod and process, in the 4-bit-storage regime: decode 1.70x on H100 (their TMA path live) and 2.79x on RTX 4090; J/token 2.51x and 3.32x better. Unsloth wins its own bf16-resident regime by 2.6-5.3x at prefill on the H100.
+- gnf4.kernel.sm120-census-vs-grouped-mm [measured]: At the Qwen3-30B-A3B serving cell (E=128, top-8, B=16) on an RTX 5090, gemm_4bit_grouped runs the routed expert GEMM in 0.42 / 0.21 ms where torch._grouped_mm on unquantised bf16 takes 0.88-1.30 ms: 2.1-6.0x across two boxes, on half the weight bytes.
+- gnf4.kernel.graphed-baseline-decode-loses [confirmed]: Against a CUDA-graphed per-expert baseline at the decode band (T=32) the fused path LOSES on both 4090 and H100 (0.949x, 0.858x); the memory-traffic win survives only at training shape on bandwidth-limited cards (1.489x on the 4090, parity 1.059x on the H100).
+- gnf4.kernel.e2e-training-real-prose [confirmed]: Inside a real OLMoE QLoRA finetune, fused vs the per-expert loop runs 4.50x on a 4090 and 4.75x on an H100 on real prose; random token ids understate it at 2.75x / 2.81x because prose routes to 98.4% of experts (cv 0.687) where random ids hit 87.5% (cv 1.463).
+- gnf4.kernel.dgrad [measured]: dgrad_4bit_grouped is the training backward in one launch: gate_up E=256 5.92 ms vs 61.78 ms for the per-expert loop, down 3.28 vs 85.12 ms (A2000, T_cat=4096); one training step at E=256 goes 403.7 to 26.5 ms. On by default since 0.9.1; gradient lands ~2.9e-3 from the exact loop, inside the bf16 budget.
+- gnf4.serve.decode-anchor-5090 [measured]: The certified single-stream decode anchor for Qwen3-30B-A3B on the RTX 5090 class is 7.37 ms/step +-4.2%, about 130-142 tok/s, with the class carrying 8.5% inter-box dispersion while each box repeats to 0.16%.
+- gnf4.serve.m3-defaults-on [measured]: GNF4_GEMV_DOTPAD and GNF4_ATTN_COMPUTE=fp8 ship ON by default (capability-conditional): 8192 teacher-forced tokens through the paged decode path, both knobs 7.843 -> 6.803 ms/step at delta-ppl -0.0021 against a +-0.05 bar. The fp8 path asserts sm_89+, v_groups==1, k_groups in (1,2,4); unset env falls back to f32 where fp8 cannot run, an explicit fp8 request is never downgraded.
+- gnf4.serve.fp8-paged-attn-windows-sinks-scale [measured]: fp8_paged_decode_attention takes window (sliding), sinks (per-head logit in the softmax denominator, the gpt-oss s_aux convention), sm_scale, and k_row_bytes/v_row_bytes stride overrides in all four decode kernels; 35/35 fp8-mode GPU tests on an RTX 5090 (torch 2.8.0+cu128, triton 3.4.0); bytes and arithmetic for window=0, sinks=None unchanged.
+- gnf4.serve.int4-b32-gemv [measured-private] (receipt private): The uniform int4-b32 decode GEMV (int8 activations, exact integer accumulation) reaches 1,044 GB/s dense at M=1 on the 5090, 6.9-7.2x over the NF4 register-LUT GEMV; grouped top-8 cells 3.8-4.3x. The grouped M-tile int4 GEMM runs gate_up 1.947x / down 4.500x over the NF4 grouped kernel at the B=16 census cells.
+- gnf4.serve.gptq-pack-int4-b32 [measured-private] (receipt private): gptq_pack_int4_b32 produces byte-identical format to pack_int4_b32 and chooses grid points against H = 2XX^T; packed on a C4 shard, Qwen3-30B-A3B's attention scores -0.042 ppl on wikitext and -0.115 on out-of-domain C4 against bf16 attention. HessianAccumulator stores off-device (0.23.0) so Mixtral's 128 projections fit.
+- gnf4.serve.decode-glue-kernels [measured-private] (receipt private): Three decode glue kernels (rmsnorm_rows 0.19.0; rmsnorm_resid_rows + rope_norm_heads 0.20.0; router_epilogue 0.21.0) fold the non-GEMM decode step; measured through the consumer, the three rounds compose 8.344 -> 5.270 ms/step at B=1 on the rental class with paired ppl deltas of +0.0136, -0.00105 and -0.01968 over 8192 sha-matched steps.
+- gnf4.flagship.235b-phaseA [confirmed]: Qwen3-235B-A22B with all NF4 experts in ~128 GB pinned host RAM streams at 5.57 tok/s = 102-103% of the measured 44.3 GB/s link's waterfall ceiling on a 13.6 GB working set (synthetic weights, real attention + router); the dequant path on the identical pipeline: 1.81 tok/s.
+- gnf4.flagship.235b-phaseB [confirmed]: The real 438 GB Qwen3-235B checkpoint, stream-quantised to NF4, generates coherent greedy text at 4.3-4.4 tok/s on 15.2 GB VRAM across five pods at 45-55 GB/s links; per-token time follows t ~= c_box + bytes/link with c_box measured 53.5-114.0 ms across seven hosts. A fixed fraction-of-waterfall is NOT the law (retired 2026-07-22).
+- gnf4.flagship.prefetch-closed-negative [confirmed]: Expert prefetch is CLOSED, negative, over four registered arcs: stickiness 0.44 (B2); the pre-attention router predicts the post-attention top-8 at 0.93 but the win does not land (B3); threaded issuance 0.57x (B4); zero-copy speculative gather loses by the (2-H)x bytes law, break-even needs H >~ 0.95 (B5). Recommended copy path is --prefetch-mode gpu (UVA gather), +1.5% on one host.
+- gnf4.nvme.tier-batch-only [measured]: The NVMe tier is a batch tier: at the measured per-box S ~= 3.45 GB/s a fully cold 235B streams ~2.3 s/token and a K3-class model ~7.5 s/token. What it buys is reachability and provenance, not latency.
+- gnf4.mxfp4.serve-tax-deleted [confirmed]: Serving gpt-oss-120b on its exact released MXFP4 bytes scores exact-chunk ppl 26.72 against the shipped-precision reference 26.75, deleting the +9.4% ppl / KL 0.066 NF4-requantisation tax; per-shard provenance sha256(loaded) == sha256(file range) on a 4-tensor spot sample (a spot check, not shard-level coverage).
+- gnf4.mxfp4.train-9.82gb [confirmed]: gpt-oss-120b QLoRA on native MXFP4 bytes trains at 9.82 GB peak VRAM with 144/144 sha256(file) == sha256(loaded) == sha256(post-train): the frozen base is byte-identical after training.
+- gnf4.k3.oracle-exact [measured]: The reference MXFP4 decode reproduces Kimi K3's own declared reference (compressed-tensors 0.17.1, mxfp4-pack-quantized) exactly: 33,030,144 elements across w1/w3/w2, max abs delta 0; an arena round-trip on a byte-verified 1.56 TB store came back 48/48 segments identical with a byte-flip control, row fixed at 17,547,264 B.
+- gnf4.cold-engine.phase0-premise-refuted [measured]: The cold-engine 'free floor' premise (bnb's CPU dequantize_4bit as a ready-made decode arm) is REFUTED on the target NAS box: no AVX-512, bnb falls to its reference path at 0.041 GB/s against a ~12 GB/s DDR ceiling. Design-stage; no registered claims.
 
-(26 active claims listed; retired and superseded claims are omitted on purpose.)
+Open items (no evidence either way):
+
+- gnf4.open.f32-compute-modes-triton34 [open]: OPEN: the f32 compute modes (split, packed) of the fp8 paged decode miss their reference by up to 0.074 (tol 0.02) on 10 of 35 tests on torch 2.8.0+cu128 / triton 3.4.0 (sm_120), on unmodified main; the fp8 modes -- the sm_120 serving default -- pass.
+- gnf4.open.context-budgets-rung-two [open]: OPEN: context-budgets.md's KB/token table is rung-one (A2000) measured; full-depth real-weight confirmation is pending and the K3 row is a declared gap. Its own text forbids promoting pending rows to READMEs.
+- gnf4.open.issues [open]: OPEN issues at 2026-09-03: #319 (f32 paged compute modes on triton 3.4), #87 (gemm_4bit_grouped int32 offset overflow when max(expert_ids) is large -- distinct from the 2 GiB fix in 0.13.2/0.14.0), #73 (K3 fetch host copy ~71% of a layer), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #60 (arena staging blocks ~30% of a training step), #58 (8 requests per layer where 2 would do).
+
+Projections (arithmetic, not runs):
+
+- gnf4.projection.multiarch [projected]: PROJECTED (stamped pre-silicon): the pure-waterfall gen5 row is falsified; the revised gen4 band 2.4-3.0 tok/s is confirmed (L40S 2.60-2.61); the revised gen5 band 4.0-5.0 missed narrowly (H100 PCIe 3.924); unified-memory rows are ceilings only (17-22 tok/s on 128 GB boxes). NF4-vs-bf16 is a 3.56x byte reduction, not 4x.
+
+(22 active claims listed, 3 open, 1 projected; retired and superseded claims are omitted on purpose.)

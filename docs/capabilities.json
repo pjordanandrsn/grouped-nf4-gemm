@@ -36,7 +36,7 @@
       "a serving engine or a vLLM replacement: this is a kernel package driven by experts4bit-qlora",
       "operating systems other than Linux for the kernels (triton is Linux-only); ROCm/XPU are port targets, not supported",
       "models that already fit in bf16 with headroom: the grouped kernel loses at small shapes and to a CUDA-graphed per-expert loop at some decode shapes (claims gnf4.kernel.graphed-baseline-decode-loses)",
-      "silent fallbacks: a kernel call on CPU raises and names the pure-torch reference"
+      "silent fallbacks: nothing falls back silently on CPU — nf4_grouped.gemm_4bit_grouped and dgrad_4bit_grouped refuse CPU tensors with an error that names dequant_ref; gemm_mxfp4_grouped and the int4_b32 kernels carry no device guard and fail inside the Triton launch, and the fp8_kv appends and the paged attention refuse with a CUDA+Triton message that names no reference"
     ]
   },
   "capabilities": [
@@ -289,7 +289,7 @@
           "Linux"
         ],
         "accelerator": [
-          "NVIDIA CUDA GPU, sm_80 or newer (sm_120 is the primary serving target)"
+          "NVIDIA CUDA GPU, sm_89 or newer for the fp8 compute default (sm_120 is the primary serving target); sm_80-sm_88 fall to the f32 path, open under #319 (claim gnf4.open.f32-compute-modes-triton34)"
         ],
         "special_requirements": [
           "triton>=3.4 (Linux-only distribution)",
@@ -331,7 +331,7 @@
         "gnf4.serve.decode-glue-kernels"
       ],
       "limitations": [
-        "The f32 compute modes of the paged kernel fail on triton 3.4 (claim gnf4.open.f32-compute-modes-triton34 records the open item); the fp8 compute modes are the serving default",
+        "The f32 compute modes of the paged kernel fail on triton 3.4 (claim gnf4.open.f32-compute-modes-triton34 records the open item). With GNF4_ATTN_COMPUTE unset, fp8 compute is the default only where it can run (sm_89+, v_groups == 1, head_dim // k_groups >= 32, bf16/fp16 q, ktile >= 32 when supplied); every other call, including all of sm_80-sm_88, takes the open f32 path",
         "The decode glue kernels are measured-private (claim gnf4.serve.decode-glue-kernels)",
         "KV budgets in docs/context-budgets.md are rung-one (A2000) numbers; pending rows must not be promoted"
       ],
@@ -369,12 +369,13 @@
           "Linux"
         ],
         "accelerator": [
-          "NVIDIA CUDA GPU for the serving tiers; the bake and verify are pure torch"
+          "NVIDIA CUDA GPU for the serving tiers and for the default NF4 quantise bake (nvme_bake_nf4.bake_nf4 with quantize_fn=None); the relocation bake and verify (nvme_arena.bake / bake_expert_tensors / verify) need no GPU"
         ],
         "special_requirements": [
           "pinned host RAM sized from measured free memory (capacity_for_bytes)",
           "a local NVMe or fast block device for the arena; O_DIRECT reads",
-          "torch>=2.8"
+          "torch>=2.8",
+          "bitsandbytes and CUDA for the NF4 quantise bake (nvme_bake_nf4.bake_nf4 with the default quantiser); the geometry/manifest path is pure torch when a quantize_fn is injected"
         ]
       },
       "install": [
@@ -451,7 +452,7 @@
         ],
         "special_requirements": [
           "torch>=2.8 (pre-releases accepted)",
-          "macOS/Windows: not validated by CI (the README's older note reports an import failure for the CPU quickstart there; _triton_shim is the mitigation)"
+          "macOS/Windows: the pure-torch surface (pack references, dequant, provenance, arena bake/verify) imports and runs without triton via _triton_shim; the Triton kernels need a CUDA GPU; macOS and Windows are not exercised by CI"
         ]
       },
       "install": [

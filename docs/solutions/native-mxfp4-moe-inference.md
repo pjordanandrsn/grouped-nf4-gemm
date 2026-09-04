@@ -82,7 +82,7 @@ The CPU block completes: the packed shapes are the gpt-oss tensor shapes and the
 
 ## Limitations
 
-- CUDA + Triton only; no ROCm or XPU ([`PORTABILITY.md`](../PORTABILITY.md)). The macOS/Windows CPU import defect on [`nf4-grouped-gemm-without-bf16-materialization.md`](nf4-grouped-gemm-without-bf16-materialization.md) applies.
+- CUDA + Triton only for the kernels; no ROCm or XPU ([`PORTABILITY.md`](../PORTABILITY.md)). `mxfp4_grouped` binds triton through `_triton_shim`, so the pure-torch surface (`mxfp4_pack_ref`, the `mxfp4_loader` hashing, the relocation arena bake/verify) imports and runs without triton; the Triton kernels need a CUDA GPU; macOS and Windows are not exercised by CI.
 - Do not quantize-bake a checkpoint that is already MXFP4 ([README](../../README.md)); relocation keeps the bytes, re-quantizing to NF4 costs a decode per read and breaks provenance.
 - The e8m0 `0xFF` byte decodes as transformers' oracle does (ldexp, no NaN reservation); real checkpoints do not contain it.
 - The reference decode agrees with two independent implementations (transformers' gpt-oss path; compressed-tensors for K3). Agreement rules out a convention mismatch, not a shared misreading of the OCP spec ([`K3-PROVENANCE-CHAIN.md`](../K3-PROVENANCE-CHAIN.md)).

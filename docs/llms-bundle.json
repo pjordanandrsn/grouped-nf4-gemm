@@ -12,6 +12,6 @@
     {"path": "docs/STATUS.md"},
     {"path": "docs/KERNEL_CONTRACT.md"},
     {"path": "AGENTS.md"},
-    {"path": "docs/claims.json", "kind": "claims", "tiers": []}
+    {"path": "docs/claims.json", "kind": "claims"}
   ]
 }

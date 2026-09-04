@@ -59,7 +59,7 @@ Capabilities = "https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs
 Solutions = "https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/SOLUTIONS.md"
 Benchmarks = "https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/claims.json"
 Receipts = "https://github.com/pjordanandrsn/grouped-nf4-gemm/tree/main/kernel"
-"Consumer package (experts4bit-qlora)" = "https://pypi.org/project/experts4bit-qlora/"
+"Consumer: experts4bit-qlora" = "https://pypi.org/project/experts4bit-qlora/"
 
 [tool.pytest.ini_options]
 markers = [

@@ -1,6 +1,6 @@
 # Docs index — what each document is, and whether it is current
 
-Twenty-two documents. This index says what each is *for*, whether it is
+This index says what each document is *for*, whether it is
 the thing to read, and whether it is OpenTimestamps-anchored
 (**anchored** documents are never edited in place).
 

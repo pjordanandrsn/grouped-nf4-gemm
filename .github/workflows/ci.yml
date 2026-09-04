@@ -48,6 +48,10 @@ jobs:
           echo "$out" | grep -q "No CUDA device" || { echo "expected the CPU notice"; exit 1; }
           echo "$out" | grep -q "dequant_ref" || { echo "CPU path must name the checkable oracle"; exit 1; }
           python examples/dequant_tax.py --help > /dev/null
+      - name: solution-page CPU-only python blocks execute (cwd kernel/, CPU torch)
+        # The blocks whose first line is `# CPU-only` promise to run without a
+        # GPU or triton; this holds them to it on the same CPU-torch runner.
+        run: python scripts/check_docs_examples.py --root . --run-cpu-blocks kernel
       - name: still one readable file
         run: |
           n=$(wc -l < examples/dequant_tax.py)
@@ -194,10 +198,10 @@ jobs:
       - name: llms bundle is current
         run: python scripts/build_llms_bundle.py --check
       - name: solution-page code blocks parse (python) and every local link resolves
-        run: python scripts/check_docs_examples.py
+        run: python scripts/check_docs_examples.py --root .
       - name: build sdist + wheel, twine check, METADATA assertions
         run: |
           python -m pip install --quiet --upgrade pip build twine
           python -m build
           python -m twine check dist/*
-          python scripts/check_wheel_metadata.py dist/*.whl --url-labels "Homepage,Documentation,Source,Issues,Changelog,Release Notes,Status,Capabilities,Solutions,Benchmarks,Receipts"
+          python scripts/check_wheel_metadata.py dist/*.whl

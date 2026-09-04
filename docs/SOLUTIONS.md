@@ -41,11 +41,14 @@ package; always install and cite `grouped-nf4-gemm`.
 ## Environment, in one line
 
 Linux; NVIDIA sm_80+ with Triton ≥ 3.4 and torch ≥ 2.8 for the kernels;
-the pack references, `dequant_ref`, the arena bake and the provenance
-hashing are pure torch. CI tests Python 3.11 on Linux only. No macOS or
-Windows for the kernels (the README's older note reports an import failure
-there for the CPU quickstart; `_triton_shim` is the mitigation and CI does
-not validate it); no ROCm or XPU (port targets, see
+the pack references, `dequant_ref`, the relocation arena bake and the
+provenance hashing are pure torch (the NF4 quantise-bake needs bitsandbytes
+and CUDA unless a `quantize_fn` is injected). CI tests Python 3.11 on Linux
+only. No macOS or Windows for the kernels (the Triton kernels need a CUDA
+GPU and triton is Linux-only); the pure-torch surface (pack references,
+dequant, provenance, arena bake/verify) imports and runs without triton via
+`_triton_shim`, but macOS and Windows are not exercised by CI. No ROCm or
+XPU (port targets, see
 [`PORTABILITY.md`](PORTABILITY.md)). The current position, including the
 three limits where the fused path loses and what is measured-private, is
 [`STATUS.md`](STATUS.md).
@@ -53,10 +56,16 @@ three limits where the fused path loses and what is measured-private, is
 ## Limitations that apply to every page
 
 - Linux + NVIDIA sm_80+ with Triton ≥ 3.4 for the kernels; Python 3.11 is
-  what CI tests. The pure-torch surface (references, packers, bake,
-  provenance) has no GPU requirement and is validated by CI on Linux only.
-- Nothing falls back silently: a kernel call on CPU raises and names its
-  pure-torch reference.
+  what CI tests. The pure-torch surface (references, packers, relocation
+  bake/verify, provenance) has no GPU requirement, imports without triton via
+  `_triton_shim`, and is exercised by CI on Linux only; the NF4 quantise-bake
+  needs bitsandbytes and CUDA unless a `quantize_fn` is injected.
+- Nothing falls back silently. `nf4_grouped.gemm_4bit_grouped` and
+  `dgrad_4bit_grouped` refuse CPU tensors with an error that names
+  `dequant_ref`; `gemm_mxfp4_grouped` and the `int4_b32` kernels carry no
+  device guard and fail inside the Triton launch, and the `fp8_kv` appends
+  and the paged attention refuse with a CUDA+Triton message that names no
+  reference.
 - The fused path loses at small shapes and to a CUDA-graphed per-expert
   loop at some decode shapes; the NVMe tier is batch-only; expert prefetch
   closed negative. The register records each of these.

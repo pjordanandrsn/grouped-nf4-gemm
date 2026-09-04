@@ -23,7 +23,7 @@ bitsandbytes stores NF4 as a 16-entry codebook index per weight plus a blockwise
 pip install grouped-nf4-gemm
 ```
 
-Linux, NVIDIA GPU of compute capability sm_80 or newer (sm_120 is the primary serving target), `triton>=3.4` (Linux-only distribution), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. `nf4gemm` and `gnf4` are lookup aliases, not separate packages. Through the consumer:
+Linux, NVIDIA GPU of compute capability sm_80 or newer (sm_120 is the primary serving target), `triton>=3.4` (Linux-only distribution), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. `nf4gemm`, `gnf4` and `grouped-mxfp4-gemm` are lookup aliases, not separate packages. Through the consumer:
 
 ```bash
 pip install "experts4bit-qlora[fast]"
@@ -91,7 +91,7 @@ Both blocks finish without an assertion. The GPU block returns `[T, N]` bf16 in 
 - Shapes under a weight-byte floor lose outright; `nf4_grouped.decode_dispatch(N, K, T, sm_count)` returns `("dequant",)` for them and the caller routes those cells back. The op itself never switches algorithm.
 - `top_k=1` cells are instance-unstable; peak VRAM does not improve, only the forward-to-backward transient shrinks ([`STATUS.md`](../STATUS.md)).
 - The fidelity ordering is a CUDA tensor-core statement; other backends must re-measure. No ROCm or XPU ([`PORTABILITY.md`](../PORTABILITY.md)).
-- CUDA + Triton only. The [README](../../README.md) records that on macOS and Windows the CPU quickstart fails today because `nf4_pack_ref` imports `nf4_grouped`, which imports triton at module level; the tree carries `kernel/_triton_shim.py` against that, but CI runs the CPU blocks only on Linux, so treat non-Linux CPU use as unverified.
+- CUDA + Triton only for the kernel. `nf4_pack_ref` imports `nf4_grouped`, which binds triton through `_triton_shim`, so the pure-torch surface (pack references, `dequant_ref`, provenance, arena bake/verify) imports and runs without triton, and a `gemm_4bit_grouped` call on CPU tensors raises naming `dequant_ref` on a triton-less box too; the Triton kernels need a CUDA GPU; macOS and Windows are not exercised by CI.
 - Open: `#87`, int32 offset overflow at large `max(expert_ids)`.
 
 ## Related
