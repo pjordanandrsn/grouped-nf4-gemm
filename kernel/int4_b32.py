@@ -424,19 +424,28 @@ def rmsnorm_rows(x: torch.Tensor, weight: torch.Tensor, eps: float):
 
 # ----------------------------------------- fused residual + RMSNorm --
 @triton.jit
-def _rmsnorm_resid_rows(x_ptr, res_ptr, w_ptr, out_ptr, nres_ptr, H: tl.constexpr,
-                        HB: tl.constexpr, EPS: tl.constexpr):
+def _rmsnorm_resid_rows(x_ptr, res_ptr, w_ptr, out_ptr, nres_ptr, scale,
+                        H: tl.constexpr, HB: tl.constexpr, EPS: tl.constexpr,
+                        SCALED: tl.constexpr):
     """The decoder layer's ``resid = resid + x; h = rmsnorm(resid)``
     pair as ONE launch: torch runs it as an elementwise add plus the
     3-4 kernel norm chain, twice per layer. The add rounds once to
     bf16 exactly as the upstream bf16 ``+`` does (both operands are
     exact in fp32, so fp32-add-then-round is the same single
     rounding), then the norm reads that rounded value -- upstream
-    semantics, not merely close. Row-parallel; ~4 KB weight pull."""
+    semantics, not merely close. Row-parallel; ~4 KB weight pull.
+
+    ``SCALED``: the GraniteMoe body is ``resid + x * multiplier``. The
+    bf16 product rounds to bf16 BEFORE the add upstream (a bf16 tensor
+    times a Python float is one fp32 multiply and one rounding), so the
+    scaled path reproduces that rounding rather than folding the scale
+    into the fp32 sum -- two roundings, as upstream, not one."""
     r = tl.program_id(0)
     offs = tl.arange(0, HB)
     m = offs < H
     x = tl.load(x_ptr + r * H + offs, mask=m, other=0.0).to(tl.float32)
+    if SCALED:
+        x = (x * scale).to(tl.bfloat16).to(tl.float32)
     s = tl.load(res_ptr + r * H + offs, mask=m, other=0.0).to(tl.float32) + x
     nr = s.to(tl.bfloat16)
     tl.store(nres_ptr + r * H + offs, nr, mask=m)
@@ -448,18 +457,54 @@ def _rmsnorm_resid_rows(x_ptr, res_ptr, w_ptr, out_ptr, nres_ptr, H: tl.constexp
 
 
 def rmsnorm_resid_rows(x: torch.Tensor, resid: torch.Tensor,
-                       weight: torch.Tensor, eps: float):
-    """``(x + resid)`` then RMSNorm, one launch. Returns
-    ``(normed, new_resid)`` both bf16, shapes of ``x``."""
+                       weight: torch.Tensor, eps: float, scale: float = 1.0):
+    """``(resid + x * scale)`` then RMSNorm, one launch. Returns
+    ``(normed, new_resid)`` both bf16, shapes of ``x``. ``scale`` is the
+    residual multiplier of bodies like GraniteMoe's; at its default of
+    1.0 the sum is bitwise the upstream bf16 add, and for any other
+    value the product rounds to bf16 first, as upstream's does."""
     H = x.shape[-1]
     xf = x.reshape(-1, H)
     rf = resid.reshape(-1, H)
     out = torch.empty_like(xf, dtype=torch.bfloat16)
     nres = torch.empty_like(xf, dtype=torch.bfloat16)
+    scale = float(scale)
     _rmsnorm_resid_rows[(xf.shape[0],)](
         xf.contiguous(), rf.contiguous(), weight.contiguous(), out, nres,
-        H=H, HB=triton.next_power_of_2(H), EPS=eps, num_warps=8)
+        scale, H=H, HB=triton.next_power_of_2(H), EPS=eps,
+        SCALED=(scale != 1.0), num_warps=8)
     return out.reshape(x.shape), nres.reshape(x.shape)
+
+
+# --------------------------------------------- scaled residual add --
+@triton.jit
+def _scaled_resid_add_rows(x_ptr, res_ptr, out_ptr, scale, H: tl.constexpr,
+                           HB: tl.constexpr):
+    """``resid + x * scale`` as ONE launch with upstream's two bf16
+    roundings (product, then sum). torch runs the multiply and the add
+    as two kernels; a single ``torch.add(alpha=)`` rounds once and is
+    therefore not the upstream value. Used for the layer tail, where no
+    norm follows within the layer."""
+    r = tl.program_id(0)
+    offs = tl.arange(0, HB)
+    m = offs < H
+    x = tl.load(x_ptr + r * H + offs, mask=m, other=0.0).to(tl.float32)
+    xs = (x * scale).to(tl.bfloat16).to(tl.float32)
+    s = tl.load(res_ptr + r * H + offs, mask=m, other=0.0).to(tl.float32) + xs
+    tl.store(out_ptr + r * H + offs, s.to(tl.bfloat16), mask=m)
+
+
+def scaled_resid_add_rows(x: torch.Tensor, resid: torch.Tensor, scale: float):
+    """``resid + x * scale`` in bf16, one launch, upstream rounding
+    (the product rounds to bf16 before the add). Shape of ``x``."""
+    H = x.shape[-1]
+    xf = x.reshape(-1, H)
+    rf = resid.reshape(-1, H)
+    out = torch.empty_like(xf, dtype=torch.bfloat16)
+    _scaled_resid_add_rows[(xf.shape[0],)](
+        xf.contiguous(), rf.contiguous(), out, float(scale),
+        H=H, HB=triton.next_power_of_2(H), num_warps=8)
+    return out.reshape(x.shape)
 
 
 # ------------------------------------ fused q/k RMSNorm + rotary ------
