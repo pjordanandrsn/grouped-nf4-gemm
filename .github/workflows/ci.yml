@@ -141,7 +141,7 @@ jobs:
         run: cd bench/phase1 && python -m pytest test_plan_modes.py -q
 
       - name: packaging allowlist + test-wiring guard
-        run: cd kernel && python -m pytest test_packaging_covers_kernel.py test_check_readme_links.py -q
+        run: cd kernel && python -m pytest test_packaging_covers_kernel.py test_check_readme_links.py test_check_scripts.py -q
 
   wheel-smoke:
     # Built-artifact gate: the README's promised import surface must equal the
