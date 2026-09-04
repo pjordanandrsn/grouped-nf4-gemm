@@ -334,8 +334,14 @@ def test_rmsnorm_resid_rows_matches_reference(shape, H, scale):
         # whose fp32 rounding differs from its wider rounding lands one
         # ULP away from torch's double-rounded result. Bound it at
         # exactly that: this leg checks the FORMULA, CUDA checks bits.
+        # With a scale the product's own bf16 rounding can also differ
+        # under the interpreter, and on a cancelling sum one ULP of the
+        # PRODUCT is many ULP of the sum -- so the budget carries both.
         d = (nres.float() - ref_res.float()).abs()
-        assert (d <= 2 * _bf16_ulp(ref_res)).all(), \
+        budget_res = 2 * _bf16_ulp(ref_res)
+        if scale != 1.0:
+            budget_res = budget_res + 2 * _bf16_ulp(x.float() * scale)
+        assert (d <= budget_res).all(), \
             "residual sum must stay within a couple of bf16 ULP"
     sf = ref_res.float()
     ref = (sf * torch.rsqrt(sf.pow(2).mean(-1, keepdim=True) + eps)
@@ -347,6 +353,12 @@ def test_rmsnorm_resid_rows_matches_reference(shape, H, scale):
     # deviation compounds -- bound it loosely enough not to sit on the
     # boundary, still orders of magnitude tighter than any logic error.
     budget = _bf16_ulp(ref) * (1 if dev == "cuda" else 4)
+    if dev != "cuda" and scale != 1.0:
+        # the interpreter's residual can differ by a product-ULP (above),
+        # and the norm of a perturbed residual moves every element of
+        # the row: scale the budget by the residual's relative slack
+        rel = (budget_res / ref_res.float().abs().clamp_min(2 ** -126)).max()
+        budget = budget + ref.float().abs() * rel + _bf16_ulp(ref) * 4
     assert ((got.float() - ref.float()).abs() <= budget).all()
 
 
@@ -374,8 +386,11 @@ def test_scaled_resid_add_rows_matches_reference(shape, H, scale):
     if dev == "cuda":
         assert torch.equal(got, ref), "scaled residual add must be bitwise upstream on hardware"
     else:
+        # interpreter: the product's bf16 rounding may differ by an ULP of
+        # the PRODUCT, which on a cancelling sum exceeds any ULP of the
+        # sum -- budget both (the fold test above makes the same allowance)
         d = (got.float() - ref.float()).abs()
-        assert (d <= 2 * _bf16_ulp(ref)).all()
+        assert (d <= 2 * _bf16_ulp(ref) + 2 * _bf16_ulp(x.float() * scale)).all()
     # a single-rounding add is NOT the upstream value in general: the
     # test's own reference must differ from it somewhere, or it proves
     # nothing about which rounding the kernel took. Only a scale whose
