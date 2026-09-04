@@ -8,6 +8,7 @@ Triton half (interp mode or GPU): the GEMV must match an fp32 reference
 of the SAME int4 values within output-rounding of bf16; on the interp
 path the accumulation identity is checked to ~1e-6 in fp32.
 """
+import math
 import os
 
 import pytest
@@ -350,13 +351,17 @@ def test_rmsnorm_resid_rows_matches_reference(shape, H, scale):
 
 
 @pytest.mark.parametrize("shape,H,scale", [((1, 2048), 2048, 0.22),
-                                            ((16, 1536), 1536, 0.5),
+                                            ((16, 1536), 1536, 0.37),
+                                            ((4, 512), 512, 0.5),
                                             ((3, 96), 96, 1.0)])
 def test_scaled_resid_add_rows_matches_reference(shape, H, scale):
     """``resid + x * scale`` in one launch must carry upstream's TWO
     roundings (bf16 product, then bf16 sum): on hardware it is bitwise
     the torch expression; under the interpreter within a couple of ULP
-    (the same allowance the residual fold takes)."""
+    (the same allowance the residual fold takes). A power-of-two scale
+    (0.5) makes the bf16 product exact, so there the two roundings
+    coincide with one -- that case checks the kernel, not the
+    distinguishability of the reference (Bugbot, #328)."""
     pytest.importorskip("triton")
     from int4_b32 import scaled_resid_add_rows
     dev = _gpu()
@@ -373,10 +378,12 @@ def test_scaled_resid_add_rows_matches_reference(shape, H, scale):
         assert (d <= 2 * _bf16_ulp(ref)).all()
     # a single-rounding add is NOT the upstream value in general: the
     # test's own reference must differ from it somewhere, or it proves
-    # nothing about which rounding the kernel took
-    if scale != 1.0:
+    # nothing about which rounding the kernel took. Only a scale whose
+    # bf16 product can round (not 1.0, not a power of two) can show that.
+    mant, _exp = math.frexp(scale)
+    if mant != 0.5:
         single = torch.add(r, x, alpha=scale)
-        assert not torch.equal(single, ref) or shape[0] * H < 256, \
+        assert not torch.equal(single, ref), \
             "reference is indistinguishable from the single-rounding add on this draw"
 
 
