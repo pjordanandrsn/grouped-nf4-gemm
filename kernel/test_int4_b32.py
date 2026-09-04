@@ -431,6 +431,22 @@ def test_rope_norm_heads_matches_reference(R, HEADS, D):
         ref.float().abs().max() * 2 ** -7
 
 
+@pytest.mark.parametrize("T,k,H", [(1, 8, 2048), (16, 4, 2880), (3, 2, 1000)])
+def test_combine_rows_matches_torch(T, k, H):
+    """The fused top-k combine equals the torch chain (fp32 weight-and-sum,
+    bf16 out), including a masked tail."""
+    pytest.importorskip("triton")
+    from int4_b32 import combine_rows
+    dev = _gpu()
+    torch.manual_seed(6)
+    dn = (torch.randn(T * k, H) * 2).to(dev, torch.bfloat16)
+    w = torch.rand(T * k, device=dev)
+    got = combine_rows(dn, w, k)
+    want = (dn.float() * w[:, None]).view(T, k, H).sum(1).to(torch.bfloat16)
+    assert got.shape == (T, H) and got.dtype == torch.bfloat16
+    assert (got.float() - want.float()).abs().max() <= want.float().abs().max() * 2 ** -7
+
+
 @pytest.mark.parametrize("sk,R,N", [(8, 1, 768), (16, 4, 2048), (3, 5, 1000)])
 def test_reduce_partials_matches_torch(sk, R, N):
     """The fused split-K reduce + bf16 cast equals the torch chain it
