@@ -1,4 +1,5 @@
 # How do I verify that the quantized expert bytes I serve or train on are the released checkpoint bytes?
+<!-- summary: file_tensor_sha256, provenance_table and verify_arena_matches hash safetensors byte ranges against the loaded and baked bytes, and verify_provenance re-derives a run's hash table. -->
 
 Hash them at the byte-range level with `grouped-nf4-gemm`'s provenance primitives: `mxfp4_loader.file_tensor_sha256(path, name)` streams sha256 over a tensor's data-section bytes in a safetensors shard without loading it, `mxfp4_loader.tensor_sha256(t)` hashes the tensor actually placed in memory, and `mxfp4_loader.verify_arena_matches(path, loaded)` raises on any mismatch. The `verify_provenance` CLI re-derives a training run's recorded hash table from the public checkpoint; `nvme_arena.verify` closes the chain for a baked arena.
 
@@ -18,6 +19,8 @@ A whole-file hash cannot answer these: a relocation reorders bytes, so `sha256(a
 `grouped-nf4-gemm` owns the hashing primitives, the arena manifests and verifier, and the CLI. [experts4bit-qlora](https://github.com/pjordanandrsn/experts4bit-qlora) ([PyPI](https://pypi.org/project/experts4bit-qlora/)) records the hash table in a run artifact during training and serving. [`SECURITY.md`](../../SECURITY.md) puts a way to make verification report success on mismatched bytes in the highest-severity class; report one privately.
 
 ## Install
+
+Kernel package (the only route this page needs):
 
 ```bash
 pip install grouped-nf4-gemm
