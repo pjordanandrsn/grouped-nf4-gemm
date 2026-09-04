@@ -343,22 +343,21 @@ def test_rmsnorm_resid_rows_matches_reference(shape, H, scale):
             budget_res = budget_res + 2 * _bf16_ulp(x.float() * scale)
         assert (d <= budget_res).all(), \
             "residual sum must stay within a couple of bf16 ULP"
-    sf = ref_res.float()
+    # The norm is checked on the residual the KERNEL produced: on
+    # hardware that is bitwise the reference sum (asserted above), and
+    # under the interpreter it isolates the norm formula from the
+    # product/sum roundings already bounded above -- a residual off by
+    # one ULP moves every element of the normed row, which is not a
+    # property of the norm.
+    sf = (ref_res if dev == "cuda" else nres).float()
     ref = (sf * torch.rsqrt(sf.pow(2).mean(-1, keepdim=True) + eps)
            * w.float()).to(torch.bfloat16)
     assert got.shape == x.shape and nres.shape == x.shape
     # one ULP on hardware, where the fused chain differs from the
-    # reference only by its single final rounding. The interpreter also
-    # feeds the norm a residual that is itself off by a ULP, so its
-    # deviation compounds -- bound it loosely enough not to sit on the
-    # boundary, still orders of magnitude tighter than any logic error.
+    # reference only by its single final rounding; a few under the
+    # interpreter, whose arithmetic is not fp32 -- still orders of
+    # magnitude tighter than any logic error.
     budget = _bf16_ulp(ref) * (1 if dev == "cuda" else 4)
-    if dev != "cuda" and scale != 1.0:
-        # the interpreter's residual can differ by a product-ULP (above),
-        # and the norm of a perturbed residual moves every element of
-        # the row: scale the budget by the residual's relative slack
-        rel = (budget_res / ref_res.float().abs().clamp_min(2 ** -126)).max()
-        budget = budget + ref.float().abs() * rel + _bf16_ulp(ref) * 4
     assert ((got.float() - ref.float()).abs() <= budget).all()
 
 
