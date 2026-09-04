@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Decode-grade MXFP4 expert GEMV
+
+- `gemv_mxfp4_b32(xq, xs, blocks, scales, eids, N, K)`: the int4-b32 decode
+  GEMV structure (split-K over 32-wide groups, KU groups per iteration,
+  fp32 partials, the same sm_120 plan) on the NATIVE MXFP4 store
+  (`[E, N, K//2]` e2m1 nibbles, low nibble first; `[E, N, K//32]` e8m0).
+  The block dot is an exact int32 sum: an e2m1 nibble decodes branchlessly
+  to twice its value as an integer ({0,1,2,3,4,6,8,12}) and the 0.5 folds
+  into the scale. gpt-oss's B=1 lever: its NF4 expert GEMV is 3.50 ms of a
+  7.58 ms step and the v1 MXFP4 GEMV (one program per 64 rows, no split-K)
+  was slower than NF4; this one has the kernel that runs ~1.1 TB/s on int4.
+  Gates: e2m1 decode table (all 16 nibbles), interpreter parity against
+  `mxfp4_pack_ref` on quantised activation rows, GPU gate at K=2880.
+
 ## 0.27.0 — 2026-09-04
 
 Two kernel additions for experts4bit-qlora's throughput-parity build-out (P30): every measured refusal on a non-Qwen family became a change. Consumers: e4b#370 (router kinds) and e4b#371 (GraniteMoe-shaped layer fold); the lane numbers that gate those are on their PRs.
