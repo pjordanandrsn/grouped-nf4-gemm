@@ -2,7 +2,6 @@
 
 ## Unreleased
 
-<<<<<<< HEAD
 ### Residual fold takes a multiplier; one-launch scaled residual add
 
 - `rmsnorm_resid_rows(x, resid, weight, eps, scale=1.0)`: the GraniteMoe
@@ -16,7 +15,6 @@
   add is checked bitwise on hardware and within two ULP under the
   interpreter, and the test asserts its reference differs from the
   single-rounding add so the rounding claim is actually tested.
-=======
 ### Router epilogue: select-on-logits mode with an optional bias
 
 - `router_epilogue(logits, k, norm, *, select_on_logits=False, bias=None)`:
@@ -30,7 +28,6 @@
   flags; the default path is unchanged and bit-identical.
 - Tests: both modes against a torch reference at several (E, k),
   with and without a bias, under the interpreter contract.
->>>>>>> origin/claude/router-epilogue-modes
 
 ## 0.26.0 — 2026-09-04
 
