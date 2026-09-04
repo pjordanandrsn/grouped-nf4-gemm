@@ -3,12 +3,15 @@
 [![CI](https://github.com/pjordanandrsn/grouped-nf4-gemm/actions/workflows/ci.yml/badge.svg)](https://github.com/pjordanandrsn/grouped-nf4-gemm/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/grouped-nf4-gemm)](https://pypi.org/project/grouped-nf4-gemm/)
 
-**The problem in one line:** dequantising every active expert to bf16
-before its matmul is the bottleneck of 4-bit Mixture-of-Experts inference,
-and the bf16 copies cost the VRAM the quantisation was meant to save; this
-package computes the grouped expert GEMM on the packed bytes themselves,
-and ships the decode kernels and host/NVMe primitives a 4-bit MoE serving
-path needs around it. **Canonical package:** `grouped-nf4-gemm` on PyPI
+**The problem in one line:** a 4-bit Mixture-of-Experts runs its experts
+as a per-expert loop, and wherever that loop dequantises each active
+expert to bf16 before its matmul (bitsandbytes before 0.50.0, cells
+outside its packed 2-D inference forward, the conventional 4-bit
+backward) the round trip is the bottleneck and the bf16 copies cost the
+VRAM the quantisation was meant to save; this package computes the grouped
+expert GEMM on the packed bytes themselves, in one launch for all routed
+experts, and ships the decode kernels and host/NVMe primitives a 4-bit
+MoE serving path needs around it. **Canonical package:** `grouped-nf4-gemm` on PyPI
 (flat modules: `nf4_grouped`, `mxfp4_grouped`, `int4_b32`,
 `fp8_paged_attn`, `nvme_arena`, `mxfp4_loader`, …); `nf4gemm`, `gnf4` and
 `grouped-mxfp4-gemm` are lookup aliases. **Two repositories:** this one is the kernel side —
@@ -69,7 +72,11 @@ tiers for models that do not fit.
 
 - The model is dense (no experts): cuBLAS, bitsandbytes' own 4-bit
   matmul or torch are the right tools; nothing here helps a single
-  `nn.Linear`.
+  `nn.Linear`. Since bitsandbytes 0.50.0 (upstream #1949, merged
+  2026-05-21) its supported ordinary 2-D inference cells compute directly
+  from the packed weights (`torch.ops.bitsandbytes.gemm_4bit`); what
+  upstream has no contract for is the grouped routed-MoE GEMM, which is
+  this package.
 - The model already fits in bf16 with headroom, or the shapes are small:
   the grouped kernel loses below its routing threshold and to a
   CUDA-graphed per-expert loop at some decode shapes
@@ -218,7 +225,7 @@ private audit tree, so you cannot check it from this repository.
 
 | | result | tier |
 |---|---|---|
-| Fidelity, fused vs dequantise-to-bf16 | more accurate in every cell ever measured (fp32 accumulate) | confirmed |
+| Fidelity, fused vs the dequantise-to-bf16-then-GEMM comparator | not less accurate in any registered confirmatory cell (fp32 accumulate) | confirmed |
 | Decode, census MoE shapes vs the dequant path (sm_86) | 1.16–2.73× at median | confirmed |
 | Energy, J/token | below baseline in 104 of 112 cells | confirmed |
 | Real OLMoE QLoRA finetune, fused vs per-expert loop, real prose | 4.50× (4090), 4.75× (H100) | confirmed |
@@ -248,6 +255,15 @@ And one about your benchmark: **random token ids understate this kernel
 by ~1.6×.** Prose routes to 98.4% of experts, random ids to 87.5%, and
 fewer hit experts means fewer iterations of the loop this replaces.
 Benchmark on real text.
+
+*Dated note (2026-09-04).* Every "dequant path" comparator in this table
+is this repository's own per-expert loop as each receipt ran it:
+bitsandbytes `dequantize_4bit` per active expert, then a bf16 matmul.
+bitsandbytes 0.50.0 added a packed 4-bit CUDA inference forward for
+supported ordinary 2-D cells; no receipt here times that path, and it has
+no grouped routed-MoE contract. The ratios stay what their receipts
+measured. The version-aware statement is on the
+[NF4 solution page](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md).
 
 ## The receipts
 
@@ -281,10 +297,12 @@ never ran Unsloth's own kernel.
 
 [#319](https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/319) the
 f32 paged compute modes miss their reference on torch 2.8 / triton 3.4
-(the fp8 modes, the sm_120 default, pass);
+(the fp8 modes, the sm_89+ default, pass; the f32 path is the sm_80–sm_88
+default and every explicit f32 request, and `docs/capabilities.json`
+carries it as its own `unsupported` entry until this closes);
 [#87](https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/87) int32
 offset overflow at large `max(expert_ids)`; #73, #60, #58 arena/NVMe
-efficiency; #71 pinned-row factor on cgroup v2. Every non-CUDA row is a
+efficiency; #71 pinned-row factor, conservative on cgroup v1 (v2 unmeasured). Every non-CUDA row is a
 `port target` — `PROJECTIONS-multiarch.md` is stamped arithmetic that
 invites refutation, and `docs/PORTABILITY.md` is the hazard register.
 
