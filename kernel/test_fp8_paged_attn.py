@@ -276,22 +276,32 @@ def test_packed_fp8_falls_back_when_the_tile_overflows_shared_memory():
     OutOfResources from inside the launch (gnf4#324). The call must
     return the split kernel's result and say so once, not raise."""
     import warnings
-    from fp8_paged_attn import _PACKED_FALLBACK_WARNED
+    from fp8_paged_attn import (_PACKED_FALLBACK_WARNED, _PACKED_UNFIT,
+                                compute_counts, reset_compute_counts)
     _PACKED_FALLBACK_WARNED.clear()
+    _PACKED_UNFIT.clear()
+    reset_compute_counts()
     q, kp, vp, tab, lens = _build(1, 16, 8, 256, [64], k_groups=4)
+    args = (q.cuda(), kp.cuda(), vp.cuda(), tab.cuda(), lens.cuda())
+    kw = dict(n_kv_heads=8, head_dim=256, k_groups=4, compute="fp8",
+              pack_heads=True)
     with warnings.catch_warnings(record=True) as rec:
         warnings.simplefilter("always")
-        got = fp8_paged_decode_attention(
-            q.cuda(), kp.cuda(), vp.cuda(), tab.cuda(), lens.cuda(),
-            n_kv_heads=8, head_dim=256, k_groups=4, compute="fp8",
-            pack_heads=True)
+        got = fp8_paged_decode_attention(*args, **kw)
+        got2 = fp8_paged_decode_attention(*args, **kw)
     want = paged_attn_ref(q, kp, vp, tab, lens, n_kv_heads=8, head_dim=256,
                           k_groups=4)
     _close(got.cpu().float(), want.float(), "f8dot")
+    torch.testing.assert_close(got2, got)
     fell_back = [w for w in rec if "falling back to the split fp8 kernel" in str(w.message)]
     # on a card whose shared memory holds the packed tile there is nothing
-    # to fall back from; either way the result is right
+    # to fall back from; either way the result is right, each call tallies
+    # exactly once, and a geometry that overflowed is remembered so the
+    # second call never launches the packed kernel again
     assert len(fell_back) <= 1
+    assert compute_counts()["fp8"] == 2
+    if fell_back:
+        assert (256, 8, 16) in _PACKED_UNFIT
 
 
 @needs_gpu

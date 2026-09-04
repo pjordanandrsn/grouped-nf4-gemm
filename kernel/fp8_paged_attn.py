@@ -965,6 +965,7 @@ def reset_compute_counts() -> None:
 
 
 _PACKED_FALLBACK_WARNED: set = set()
+_PACKED_UNFIT: set = set()   # geometries whose packed tile overflowed: skip the launch
 
 
 def _warn_packed_fallback(head_dim: int, n_kv_heads: int, block_tokens: int,
@@ -1257,6 +1258,11 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
          f"{k_nat}/{v_nat} for H={n_kv_heads} D={head_dim}")
     assert k_pool.numel() % k_row == 0 and v_pool.numel() % v_row == 0
 
+    if pack_heads and (D, n_kv_heads, block_tokens) in _PACKED_UNFIT:
+        # this geometry's packed tile already overflowed shared memory once:
+        # go straight to the split fp8 kernel, no launch attempt, no
+        # exception (Bugbot, #325)
+        pack_heads = False
     if pack_heads:
         # combine expects the packed partial layout at H_KV=1, G=Hq
         assert layout == "tokens", \
@@ -1303,7 +1309,11 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
                 # bytes, same roundings, a different tile -- serves the call.
                 if type(e).__name__ != "OutOfResources":
                     raise
+                _PACKED_UNFIT.add((D, n_kv_heads, block_tokens))
                 _warn_packed_fallback(D, n_kv_heads, block_tokens, e)
+                # the re-entry tallies its own call: undo this one's, so a
+                # decode that fell back counts once (Bugbot, #325)
+                _COMPUTE_COUNTS[compute] -= 1
                 return fp8_paged_decode_attention(
                     q, k_pool, v_pool, block_table, seq_lens,
                     n_kv_heads=n_kv_heads, head_dim=head_dim,
