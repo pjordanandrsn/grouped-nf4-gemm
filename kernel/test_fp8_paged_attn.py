@@ -263,7 +263,7 @@ def test_fp8_modes_across_head_dims_and_group_counts(d, kg, hkv, G, mode, mkw):
     oracle on identical bytes. 16 groups at head_dim 512 is the config
     the Gemma-4 lane measured at 0.017 nats against 0.046 for 4 groups
     (gnf4#324)."""
-    got, want = _run_both(1, G * hkv, hkv, d, [64, 200], k_groups=kg,
+    got, want = _run_both(2, G * hkv, hkv, d, [64, 200], k_groups=kg,
                           v_groups=1, mode_kw=mkw)
     _close(got, want, mode)
 
