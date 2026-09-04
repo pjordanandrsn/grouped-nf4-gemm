@@ -15,7 +15,8 @@ the README's confirmatory section for how the kernel numbers were made.
 - **[`capabilities.json`](capabilities.json)** (+ [`capabilities.schema.json`](capabilities.schema.json)) —
   the machine-readable capability contract; validated in CI by
   `scripts/check_capabilities.py` against pyproject, source and the claims
-  register. Current.
+  register. One status per entry, so the fp8 paged attention is two
+  entries by compute path (fp8 supported; f32 open under #319). Current.
 - **[`discovery-queries.json`](discovery-queries.json)** — the
   discoverability regression corpus (`scripts/check_discovery_contract.py`).
   Current.
@@ -26,7 +27,7 @@ the README's confirmatory section for how the kernel numbers were made.
 |---|---|
 | [`STATUS.md`](STATUS.md) | what the kernel does today, its three limits, what was retired, what is open |
 | [`claims.json`](claims.json) / [`claims-schema.md`](claims-schema.md) | machine-readable register of every claim, with status and evidence path |
-| [`KERNEL_CONTRACT.md`](KERNEL_CONTRACT.md) | the op signature and layout conventions (note: it schedules sm_120 as "Phase 4"; sm_120 shipped in 0.15.0 and is the primary serving target) |
+| [`KERNEL_CONTRACT.md`](KERNEL_CONTRACT.md) | the op signature and layout conventions (note: it schedules sm_120 as "Phase 4"; sm_120 shipped in 0.15.0 and is the primary serving target; its "storage-only asterisk" is the Gate-0 framing — the version-aware bitsandbytes boundary, 0.50.0 packed 2-D inference upstream with the grouped routed-MoE GEMM a separate contract, is on [`solutions/nf4-grouped-gemm-without-bf16-materialization.md`](solutions/nf4-grouped-gemm-without-bf16-materialization.md)) |
 | [`TOLERANCE_CONTRACT.md`](TOLERANCE_CONTRACT.md) | the registered fidelity bound and test spec |
 | [`PORTABILITY.md`](PORTABILITY.md) | pre-port hazard register (captured 2026-07-15; verify before a port session). No claim in it is a port result. |
 | [`nvme-ceilings.md`](nvme-ceilings.md) | the per-box NVMe constant `S ≈ 3.45 GB/s` and what it implies |

@@ -1,4 +1,5 @@
 # How do I run a single-token INT4 decode GEMV over routed MoE experts, and pack calibrated (GPTQ) weights for it?
+<!-- summary: gemv_int4_b32 runs the batch-1 int4-b32 decode GEMV with exact integer accumulation, and gptq_pack_int4_b32 packs calibrated weights onto the same bytes; its numbers are measured-private. -->
 
 Use the int4-b32 lane of `grouped-nf4-gemm`: `int4_pack_ref.pack_int4_b32` packs a weight onto a uniform symmetric int4 grid with one fp16 scale per 32 elements, `int4_b32.gemv_int4_b32` runs the decode GEMV on int8-quantised activations with exact integer accumulation and split-K partials, and `gptq_pack.gptq_pack_int4_b32` chooses grid points against calibration activations while emitting byte-identical format.
 
@@ -19,11 +20,17 @@ NF4 is a non-uniform grid, so a GEMV pays a gather per weight before it can mult
 
 ## Install
 
+Kernel package (the minimum route):
+
 ```bash
 pip install grouped-nf4-gemm
 ```
 
-Linux, NVIDIA GPU sm_80 or newer (the lane was tuned on sm_120, the primary serving target), `triton>=3.4` (Linux-only distribution), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. `int4_pack_ref` and `gptq_pack` are pure torch; `int4_b32` imports triton at module level. Through the consumer: `pip install "experts4bit-qlora[fast]"`.
+Linux, NVIDIA GPU sm_80 or newer (the lane was tuned on sm_120, the primary serving target), `triton>=3.4` (Linux-only distribution), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. `int4_pack_ref` and `gptq_pack` are pure torch; `int4_b32` imports triton at module level. Through the model consumer:
+
+```bash
+pip install "experts4bit-qlora[fast]"
+```
 
 ## Smallest correct example
 

@@ -1,4 +1,5 @@
 # How do I run paged decode attention over an FP8 KV cache for a quantized MoE serving path, with sliding windows, attention sinks and a custom scale?
+<!-- summary: fp8_paged_decode_attention runs paged flash-decode over an E4M3 KV cache with windows, sinks and a custom scale; the fp8 compute path is supported on sm_89+, the f32 path is open under #319. -->
 
 Use `fp8_paged_attn.fp8_paged_decode_attention` from `grouped-nf4-gemm`: a Triton flash-decode kernel over paged E4M3 K/V blocks that dequantizes in registers, takes `window`, `sinks`, `sm_scale` and per-layer row strides, and is checked against the pure-torch `fp8_paged_attn.paged_attn_ref`. The KV quantize/pack primitives live in `fp8_kv`; the decode glue kernels (fused RMSNorm, residual fold, rotary, router epilogue) live in `int4_b32`.
 
@@ -18,11 +19,28 @@ At batch-1 decode nothing is compute-bound; every kernel is a launch plus a read
 
 ## Install
 
+Kernel package (the minimum route):
+
 ```bash
 pip install grouped-nf4-gemm
 ```
 
-Linux, NVIDIA GPU sm_80 or newer, `triton>=3.4` (Linux-only distribution), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. The fp8 compute mode, the sm_120 serving default, needs sm_89 or newer. `fp8_kv` and `paged_attn_ref` are pure torch. Through the consumer: `pip install "experts4bit-qlora[fast]"`.
+Linux, NVIDIA GPU sm_80 or newer, `triton>=3.4` (Linux-only distribution), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. The fp8 compute path needs sm_89 or newer; sm_80–sm_88 take the f32 path, which is open (below). `fp8_kv` and `paged_attn_ref` are pure torch. Through the model consumer:
+
+```bash
+pip install "experts4bit-qlora[fast]"
+```
+
+## Two compute paths, two support states
+
+One kernel, two numerical paths, and [`capabilities.json`](../capabilities.json) carries them as two entries because a single status cannot be true of both.
+
+| path | entry in `capabilities.json` | who takes it | requirements (the predicate is `fp8_paged_attn.fp8_compute_unsupported`; the default selector and the path's own asserts share it) | measured on | status |
+|---|---|---|---|---|---|
+| **fp8 compute** (`compute="fp8"`; the default where it can run) | `fp8-paged-attention-fp8-compute` | sm_89+ with `GNF4_ATTN_COMPUTE` unset and every constraint passing; any explicit fp8 request (never downgraded: the asserts refuse instead) | sm_89 or newer; `v_groups == 1`; `k_groups` in (1, 2, 4, 8, 16); `head_dim // k_groups >= 32`; `q` bf16/fp16; split branch: `ktile >= 32` when supplied; packed branch (`pack_heads=True`): `block_tokens * n_kv_heads >= 32` | RTX 5090 (sm_120) only — sm_89 and sm_90 meet the requirement, no registered cell was run there (claims `gnf4.serve.fp8-paged-attn-windows-sinks-scale`, `gnf4.serve.m3-defaults-on`, both measured) | supported |
+| **f32 compute** (`compute="f32"`, split or packed kernel) | `fp8-paged-attention-f32-compute` | sm_80–sm_88 by default; sm_89+ whenever a constraint above fails with the env unset; every explicit `GNF4_ATTN_COMPUTE=f32` / `compute="f32"` on any card | sm_80 or newer | its reference tests were run on an RTX 5090 with the mode forced; no cell on sm_80–sm_88 | **open** — [#319](https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/319): on torch 2.8.0+cu128 / triton 3.4.0 the split and packed f32 modes miss their reference by up to 0.074 against a 0.02 tolerance on 10 of 35 tests, on unmodified `main` (claim `gnf4.open.f32-compute-modes-triton34`, status open, so it backs no capability); the capability entry is `unsupported` until the issue closes |
+
+A kernel that imports and launches is not thereby numerically supported: the status of each path follows the claim and issue register, not the import. `compute_counts()` records which path actually ran, because an environment variable is a request, not an event.
 
 ## Smallest correct example
 
@@ -94,8 +112,8 @@ The CPU block passes: the packed pool, read back through the reference, reproduc
 
 ## Limitations
 
-- Open: the f32 compute modes miss their reference on torch 2.8 / triton 3.4 on sm_120, on unmodified `main` (`#319`); the fp8 modes pass. Gate a lane there with `-k "f8dot or pf8"` ([`STATUS.md`](../STATUS.md)). On a pre-Ada card the default is f32, so the GPU block above can fail on that torch/triton pair.
-- The fp8 compute path requires sm_89+, `v_groups == 1`, `head_dim // k_groups >= 32` and `ktile >= 32`; it adds one e4m3 rounding on `q` and on `p`, hence its wider tolerance.
+- Open: the f32 compute modes (split, packed) miss their reference on torch 2.8.0+cu128 / triton 3.4.0 on sm_120, on unmodified `main` (`#319`, claim `gnf4.open.f32-compute-modes-triton34`: up to 0.074 against a 0.02 tolerance, 10 of 35 tests); the fp8 modes pass. Gate a lane there with `-k "f8dot or pf8"` ([`STATUS.md`](../STATUS.md)). On a pre-Ada card the default is f32, so the GPU block above can fail on that torch/triton pair; an explicit `compute="f32"` on any card is on the same open path.
+- The fp8 compute path requires sm_89+, `v_groups == 1`, `k_groups` in (1, 2, 4, 8, 16), `head_dim // k_groups >= 32`, bf16/fp16 `q`, `ktile >= 32` when supplied (split branch) and `block_tokens * n_kv_heads >= 32` (packed branch); it adds one e4m3 rounding on `q` and on `p`, hence its wider tolerance. Its registered cells are RTX 5090 only; the sm_89+ requirement is the kernel's precondition, not a measurement on Ada or Hopper.
 - `pack_heads=True` falls back to the split kernel where its shared-memory demand exceeds the card, with a one-time `RuntimeWarning`.
 - Served-path fidelity (Granite, gpt-oss, Gemma-4) is measured in experts4bit-qlora's receipts, which are private; the evidence here is kernel-level parity against `paged_attn_ref`. The glue-kernel composition is measured-private (claim `gnf4.serve.decode-glue-kernels`).
 - Not a serving engine; CUDA + Triton only; `paged_attn_ref` is slow, for test sizes.
@@ -106,4 +124,4 @@ The CPU block passes: the packed pool, read back through the reference, reproduc
 
 ## Evidence
 
-Register: [`claims.json`](../claims.json). Measured: claim `gnf4.serve.fp8-paged-attn-windows-sinks-scale` (windows, sinks, scale and stride overrides; fp8-mode GPU suite on an RTX 5090), claim `gnf4.serve.m3-defaults-on` (both decode knobs on by default, capability-conditional, with a paired perplexity check), claim `gnf4.serve.decode-anchor-5090` (the single-stream anchor for the serving class this kernel sits in). Measured-private, labelled: claim `gnf4.serve.decode-glue-kernels`. Receipts: `kernel/RESULTS-m3-default-on.md`, `kernel/RESULTS-k8-fp8-compute-attn.md`, `kernel/RESULTS-m2-anchor-recert.md`.
+Register: [`claims.json`](../claims.json). Measured, fp8 compute path: claim `gnf4.serve.fp8-paged-attn-windows-sinks-scale` (windows, sinks, scale and stride overrides; fp8-mode GPU suite on an RTX 5090), claim `gnf4.serve.m3-defaults-on` (both decode knobs on by default, capability-conditional, with a paired perplexity check). Open, f32 compute path: claim `gnf4.open.f32-compute-modes-triton34` (backs nothing). Measured-private, labelled: claim `gnf4.serve.decode-glue-kernels` (its own capability entry, `decode-glue-kernels`). The single-stream decode anchor, claim `gnf4.serve.decode-anchor-5090`, is a consumer-measured anchor of the serving class on a knob-off basis, not a measurement of this kernel, and is not cited as its evidence. Receipts: `kernel/RESULTS-m3-default-on.md`, `kernel/RESULTS-k8-fp8-compute-attn.md`, `kernel/RESULTS-m2-anchor-recert.md`.

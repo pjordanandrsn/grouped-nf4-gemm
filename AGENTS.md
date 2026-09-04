@@ -64,6 +64,15 @@ publishing.
 - **Which documents are current: `docs/INDEX.md`.** Anchoring here is a
   sibling `.ots` file (`find . -name '*.ots'` lists them): an anchored
   document is never edited in place; corrections go in a sibling file.
+- **The comparator, named precisely.** Every "dequant path" ratio is
+  against this repository's own per-expert loop (bitsandbytes
+  `dequantize_4bit` per expert, then a bf16 matmul) as its receipt ran
+  it. bitsandbytes 0.50.0 computes supported ordinary 2-D inference cells
+  from the packed weights directly and has no grouped routed-MoE
+  contract; the conventional 4-bit backward still dequantises for dX.
+  Never write "stock 4-bit always dequantises": the version-, workload-
+  and shape-aware statement is on
+  `docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md`.
 
 ## Build and test
 
@@ -78,6 +87,7 @@ python scripts/wheel_smoke.py                      # from outside the tree, agai
 python scripts/check_readme_links.py               # README links are absolute; self-refs = v<version> or main
 python scripts/check_capabilities.py               # docs/capabilities.json vs schema, pyproject, source, claims
 python scripts/check_discovery_contract.py         # docs/discovery-queries.json vs docs/solutions/
+python scripts/check_docs_examples.py --root .     # doc code blocks parse, links resolve; --run-cpu-blocks kernel executes the CPU-only ones
 python scripts/build_llms_bundle.py --check        # llms-full.txt is current
 ```
 
@@ -140,8 +150,12 @@ triton via `_triton_shim` (#78); the Triton kernels need a CUDA GPU; macOS
 and Windows are not exercised by CI, so say "not exercised by CI" rather
 than "supported". `int4_b32` imports triton directly and is not importable
 without it. ROCm/XPU are port targets (`docs/PORTABILITY.md`),
-not supported. The fp8 paged kernel's f32 compute modes fail on triton 3.4
-(`gnf4.open.f32-compute-modes-triton34`).
+not supported. The fp8 paged kernel's f32 compute modes — the sm_80–sm_88
+default and every explicit f32 request — miss their reference on triton
+3.4 (`gnf4.open.f32-compute-modes-triton34`, #319);
+`docs/capabilities.json` carries that path as its own `unsupported` entry
+beside the supported fp8 compute path (sm_89+, measured on the RTX 5090
+only).
 
 ## Release notes
 

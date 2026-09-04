@@ -9,7 +9,7 @@ statement that the page describes a capability without a measurement).
 
 | the problem | page |
 |---|---|
-| Dequantise-then-GEMM is the expert bottleneck; compute on the NF4-packed weights | [nf4-grouped-gemm-without-bf16-materialization.md](solutions/nf4-grouped-gemm-without-bf16-materialization.md) |
+| A per-expert 4-bit loop dequantises each expert to bf16 and re-reads it; compute the grouped GEMM on the NF4-packed weights | [nf4-grouped-gemm-without-bf16-materialization.md](solutions/nf4-grouped-gemm-without-bf16-materialization.md) |
 | Serve MXFP4 experts (gpt-oss, DeepSeek-V4) from the released bytes | [native-mxfp4-moe-inference.md](solutions/native-mxfp4-moe-inference.md) |
 | Single-token int4 expert / attention projections near the memory ceiling | [int4-decode-gemv.md](solutions/int4-decode-gemv.md) |
 | An fp8 paged decode attention and the fused decode glue | [fp8-paged-attention-for-moe-serving.md](solutions/fp8-paged-attention-for-moe-serving.md) |
@@ -69,5 +69,13 @@ three limits where the fused path loses and what is measured-private, is
 - The fused path loses at small shapes and to a CUDA-graphed per-expert
   loop at some decode shapes; the NVMe tier is batch-only; expert prefetch
   closed negative. The register records each of these.
-- Numbers live in [`claims.json`](claims.json) with their status; a page
-  quotes claim IDs, never figures, and a retired claim is never current.
+- Numbers live in [`claims.json`](claims.json), tiered in the public
+  register (confirmed, measured, measured-private, projected, open,
+  superseded, retired); a page quotes a figure only beside the claim ID
+  and tier it comes from, and a retired or superseded claim is never
+  current.
+- The fp8 paged attention is two support states, carried as two entries
+  in [`capabilities.json`](capabilities.json): the fp8 compute path
+  (sm_89+ precondition, measured on the RTX 5090 only) is supported; the
+  f32 compute path (the sm_80–sm_88 default and every explicit f32
+  request) is open under #319 and `unsupported` until it closes.
