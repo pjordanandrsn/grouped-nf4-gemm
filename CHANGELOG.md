@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Residual fold takes a multiplier; one-launch scaled residual add
+
+- `rmsnorm_resid_rows(x, resid, weight, eps, scale=1.0)`: the GraniteMoe
+  body is `resid + x * multiplier`; the fold now takes that multiplier
+  and reproduces upstream's two bf16 roundings (product, then sum). At
+  the default the path is unchanged and bitwise.
+- `scaled_resid_add_rows(x, resid, scale)`: the layer tail's
+  `resid + x * scale` as one launch with the same two roundings (a
+  single-rounding `torch.add(alpha=)` is not the upstream value).
+- Tests: the residual-fold test runs at scale 1.0 and 0.22; the scaled
+  add is checked bitwise on hardware and within two ULP under the
+  interpreter, and the test asserts its reference differs from the
+  single-rounding add so the rounding claim is actually tested.
+
 ## 0.26.0 — 2026-09-04
 
 ### fp8 paged attention: key scale groups up to 16; packed variant falls back instead of failing

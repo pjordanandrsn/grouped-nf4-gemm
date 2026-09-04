@@ -297,13 +297,16 @@ def _bf16_ulp(t):
     return torch.pow(torch.tensor(2.0), e - 7)
 
 
+@pytest.mark.parametrize("scale", [1.0, 0.22])
 @pytest.mark.parametrize("shape,H", [((1, 2048), 2048), ((16, 2048), 2048)])
-def test_rmsnorm_resid_rows_matches_reference(shape, H):
+def test_rmsnorm_resid_rows_matches_reference(shape, H, scale):
     """Fused residual-add + RMSNorm: the add must round once to bf16
     exactly as the upstream bf16 ``+`` (operands exact in fp32, one
     rounding), the norm then reads that rounded value. new_resid is
     BITWISE the bf16 sum; the normed output sits within one rounding
-    of the fp32 chain."""
+    of the fp32 chain. With a residual multiplier (GraniteMoe's body
+    is ``resid + x * m``) the product rounds to bf16 first, exactly as
+    the upstream bf16 tensor-times-float does, then the add rounds."""
     pytest.importorskip("triton")
     from int4_b32 import rmsnorm_resid_rows
     dev = _gpu()
@@ -312,8 +315,14 @@ def test_rmsnorm_resid_rows_matches_reference(shape, H):
     r = (torch.randn(*shape) * 2).to(dev, torch.bfloat16)
     w = (torch.randn(H).abs() + 0.5).to(dev, torch.bfloat16)
     eps = 1e-6
-    got, nres = rmsnorm_resid_rows(x, r, w, eps)
-    ref_res = (x.float() + r.float()).to(torch.bfloat16)
+    if scale == 1.0:
+        got, nres = rmsnorm_resid_rows(x, r, w, eps)
+        ref_res = (x.float() + r.float()).to(torch.bfloat16)
+    else:
+        got, nres = rmsnorm_resid_rows(x, r, w, eps, scale=scale)
+        # upstream: bf16 product (one rounding), then bf16 add
+        ref_res = (r + x * scale)
+        assert ref_res.dtype == torch.bfloat16
     if dev == "cuda":
         # on hardware the add really is fp32, so the double rounding
         # (exact sum -> fp32 -> bf16) matches torch's exactly
@@ -338,6 +347,37 @@ def test_rmsnorm_resid_rows_matches_reference(shape, H):
     # boundary, still orders of magnitude tighter than any logic error.
     budget = _bf16_ulp(ref) * (1 if dev == "cuda" else 4)
     assert ((got.float() - ref.float()).abs() <= budget).all()
+
+
+@pytest.mark.parametrize("shape,H,scale", [((1, 2048), 2048, 0.22),
+                                            ((16, 1536), 1536, 0.5),
+                                            ((3, 96), 96, 1.0)])
+def test_scaled_resid_add_rows_matches_reference(shape, H, scale):
+    """``resid + x * scale`` in one launch must carry upstream's TWO
+    roundings (bf16 product, then bf16 sum): on hardware it is bitwise
+    the torch expression; under the interpreter within a couple of ULP
+    (the same allowance the residual fold takes)."""
+    pytest.importorskip("triton")
+    from int4_b32 import scaled_resid_add_rows
+    dev = _gpu()
+    torch.manual_seed(37)
+    x = (torch.randn(*shape) * 2).to(dev, torch.bfloat16)
+    r = (torch.randn(*shape) * 2).to(dev, torch.bfloat16)
+    got = scaled_resid_add_rows(x, r, scale)
+    ref = r + x * scale
+    assert ref.dtype == torch.bfloat16 and got.shape == x.shape
+    if dev == "cuda":
+        assert torch.equal(got, ref), "scaled residual add must be bitwise upstream on hardware"
+    else:
+        d = (got.float() - ref.float()).abs()
+        assert (d <= 2 * _bf16_ulp(ref)).all()
+    # a single-rounding add is NOT the upstream value in general: the
+    # test's own reference must differ from it somewhere, or it proves
+    # nothing about which rounding the kernel took
+    if scale != 1.0:
+        single = torch.add(r, x, alpha=scale)
+        assert not torch.equal(single, ref) or shape[0] * H < 256, \
+            "reference is indistinguishable from the single-rounding add on this draw"
 
 
 @pytest.mark.parametrize("R,HEADS,D", [(1, 32, 128), (16, 4, 128)])
