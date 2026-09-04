@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.29.0 — 2026-09-04
 
 ### Split-K reduce + cast fused (decode GEMVs)
 
