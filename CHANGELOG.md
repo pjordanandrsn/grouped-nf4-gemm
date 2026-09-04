@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.29.0 — 2026-09-04
+## 0.30.0 — 2026-09-04
 
 ### Top-k weighted combine fused
 
@@ -9,6 +9,25 @@
   consumer's collapsed forward whose torch chain was four dispatches and
   two kernels per layer (Qwen3 B=1 op census). Interpreter test at three
   shapes with a masked tail.
+
+  (This section was filed under 0.29.0 in the changelog after that tag was cut; `combine_rows` ships in 0.30.0.)
+
+### Agent discoverability layer (#336)
+
+- README routing sections (Use this when / Do not use this when / Start here), `docs/SOLUTIONS.md` and six problem-first pages under `docs/solutions/`, `docs/capabilities.json` under a schema, `AGENTS.md`, `llms.txt` and the generated `llms-full.txt`, `docs/discovery-queries.json`, docstrings on eleven kernels and primitives, PyPI metadata (summary, keywords, MIT license expression, labelled project URLs) and a CPU-only CI job that validates all of it. No kernel behaviour changed.
+
+### Documentation accuracy pass (#339)
+
+- The bitsandbytes position is version-, workload- and shape-aware: upstream 5453368 ("[CUDA] New 4bit GEMM kernels for inference", 2026-05-21) is in 0.50.0 and not in 0.49.2, so recent bitsandbytes inference consumes packed 4-bit weights directly for supported ordinary 2-D matrices; routed grouped MoE remains a separate contract and the conventional backward still dequantizes for dX. Historical comparators keep their receipts.
+- FP8 paged attention is split by compute path in `docs/capabilities.json`: the fp8 compute path (sm_89+, measured on sm_120) is supported; the f32 compute path (sm_80–88 default, explicit f32) is unsupported under #319 (`gnf4.open.f32-compute-modes-triton34`); decode glue is measured-private.
+- The NF4 grouped-GEMM solution page carries the comparison table, the dataflow diagram and a measured-boundaries block quoting register claims by ID.
+
+### Packaging
+
+- `build/lib/` and the egg-info are no longer tracked, and every CI wheel proves its modules byte-identical to their sources (#338): a tracked build directory can ship stale copies when a fresh clone gives source and copy the same timestamp.
+- Project-URL labels stay under PyPI's 32-character limit (enforced by `scripts/check_wheel_metadata.py`); Homepage, Documentation, Status and Solutions point at the cerinamroth.com routing pages (#337).
+
+## 0.29.0 — 2026-09-04
 
 ### Split-K reduce + cast fused (decode GEMVs)
 
