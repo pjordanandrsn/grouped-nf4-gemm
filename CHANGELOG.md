@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Split-K reduce + cast fused (decode GEMVs)
+
+- `reduce_partials(part, sk, R, N)`: the fp32 split-K partials of
+  `gemv_int4_b32` / `gemv_mxfp4_b32` are reduced and cast to bf16 in one
+  launch instead of the `reshape().sum(0).to(bf16)` chain (three
+  dispatches, two kernels per projection call). Qwen3-30B's B=1 op
+  census put that chain at the top of the glue list (864 dispatches,
+  ~0.6 ms of an eager step); the graph census had the reduce class at
+  13% of the 5.56 ms step. Same values to bf16 rounding; interpreter test
+  with a masked tail.
+
 ## 0.28.0 — 2026-09-04
 
 ### Decode-grade MXFP4 expert GEMV
