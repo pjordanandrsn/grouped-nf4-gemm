@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.27.0 — 2026-09-04
+
+Two kernel additions for experts4bit-qlora's throughput-parity build-out (P30): every measured refusal on a non-Qwen family became a change. Consumers: e4b#370 (router kinds) and e4b#371 (GraniteMoe-shaped layer fold); the lane numbers that gate those are on their PRs.
 
 ### Residual fold takes a multiplier; one-launch scaled residual add
 

@@ -17,8 +17,8 @@ and its calibrated packer, the **decode glue kernels** (fused RMSNorm,
 residual-fold, rotary, router epilogue), and the host-streaming and NVMe
 tiers for models that do not fit.
 
-**Current position, one page:** [`docs/STATUS.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.26.0/docs/STATUS.md).
-**Every number, with its evidence and tier:** [`docs/claims.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.26.0/docs/claims.json).
+**Current position, one page:** [`docs/STATUS.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.27.0/docs/STATUS.md).
+**Every number, with its evidence and tier:** [`docs/claims.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.27.0/docs/claims.json).
 
 ## See it on your own hardware first
 
@@ -27,7 +27,7 @@ pip install grouped-nf4-gemm bitsandbytes
 python examples/dequant_tax.py          # ~1 min, one GPU, no model download
 ```
 
-[`examples/dequant_tax.py`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.26.0/examples/dequant_tax.py)
+[`examples/dequant_tax.py`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.27.0/examples/dequant_tax.py)
 times the dequantise-then-GEMM round trip against computing on the
 packed bytes at three points on the M axis, prints a **self-pair** beside
 every ratio (a ratio inside the instrument's own spread is not a
@@ -174,15 +174,15 @@ registered, each results doc says what failed, and the sixth passed
 clean. Pre-registrations, amendments, evidence JSONs and reducers are
 committed; `.ots` files anchor the protocols. The Unsloth head-to-head
 has its own stamped protocol. All under
-[`kernel/`](https://github.com/pjordanandrsn/grouped-nf4-gemm/tree/v0.26.0/kernel)
+[`kernel/`](https://github.com/pjordanandrsn/grouped-nf4-gemm/tree/v0.27.0/kernel)
 (`RESULTS-*.md`, `prereg_*.json`). The 235B flagship and the closed
 prefetch programme are under
-[`bench/phase3/flagship/`](https://github.com/pjordanandrsn/grouped-nf4-gemm/tree/v0.26.0/bench/phase3/flagship).
+[`bench/phase3/flagship/`](https://github.com/pjordanandrsn/grouped-nf4-gemm/tree/v0.27.0/bench/phase3/flagship).
 The MXFP4 lane and Kimi K3 provenance chain are under
-[`docs/mxfp4/`](https://github.com/pjordanandrsn/grouped-nf4-gemm/tree/v0.26.0/docs/mxfp4)
-and [`docs/`](https://github.com/pjordanandrsn/grouped-nf4-gemm/tree/v0.26.0/docs).
+[`docs/mxfp4/`](https://github.com/pjordanandrsn/grouped-nf4-gemm/tree/v0.27.0/docs/mxfp4)
+and [`docs/`](https://github.com/pjordanandrsn/grouped-nf4-gemm/tree/v0.27.0/docs).
 What each of the 22 docs is, and whether it is current:
-[`docs/INDEX.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.26.0/docs/INDEX.md).
+[`docs/INDEX.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.27.0/docs/INDEX.md).
 
 ## What was retired
 
@@ -208,7 +208,7 @@ invites refutation, and `docs/PORTABILITY.md` is the hazard register.
 
 ## Reproduce
 
-[`REPRO.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.26.0/REPRO.md):
+[`REPRO.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.27.0/REPRO.md):
 suite, benchmark and verdict reduction are each one command from a
 frozen tree.
 
@@ -231,7 +231,7 @@ ceilings · `router_probe/` — the router-predictability probe.
 
 MIT. Portions developed with Claude Code as an AI assistant under the
 author's direction and review — see
-[ATTRIBUTION.md](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.26.0/ATTRIBUTION.md).
+[ATTRIBUTION.md](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.27.0/ATTRIBUTION.md).
 All claims are the author's responsibility.
 
 ## Contact
