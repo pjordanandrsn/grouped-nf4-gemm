@@ -20,11 +20,11 @@ Historical release notes are not rewritten to this shape.
 
 Example opening:
 
-> **0.29.0.** Decode steps that run the int4-b32 or MXFP4 expert GEMVs spend
-> less on their split-K tail: `int4_b32.reduce_partials` reduces the fp32
-> partials and casts to bf16 in one launch where a multi-dispatch torch chain
-> ran before, and `combine_rows` folds the top-k weighted combine the same
-> way; values are unchanged to bf16 rounding. Affects serving through
+> **0.30.0.** Decode steps that run the int4-b32 or MXFP4 expert GEMVs spend
+> less on their tail: `int4_b32.combine_rows` folds the top-k weighted combine
+> into one launch, beside 0.29.0's `reduce_partials`, which reduces the fp32
+> split-K partials and casts to bf16 in one launch where a multi-dispatch torch
+> chain ran before; values are unchanged to bf16 rounding. Affects serving through
 > experts4bit-qlora's collapsed decode forward on sm_80+ NVIDIA GPUs under
 > Linux; nothing changes for prefill, training or the NF4 grouped GEMM.
 > Upgrade if you serve the decode GEMVs through the consumer; no action

@@ -396,7 +396,7 @@
       ],
       "claim_ids": [],
       "limitations": [
-        "Open, #319 (claim gnf4.open.f32-compute-modes-triton34, status open, so it backs nothing): on torch 2.8.0+cu128 / triton 3.4.It misses its fp32 reference beyond the registered tolerance in a subset of the paged-attention tests on the affected torch/Triton combination; the claim gnf4.open.f32-compute-modes-triton34 carries the numbers and the issue (#319).02 tolerance on, on unmodified main. A kernel that imports and launches is not numerically supported; this entry stays unsupported until the issue closes and the register carries a passing cell",
+        "Open, #319 (claim gnf4.open.f32-compute-modes-triton34, status open, so it backs nothing): on torch 2.8.0+cu128 / triton 3.4.0, on unmodified main, the split and packed f32 modes miss their fp32 reference beyond the registered tolerance in a subset of the paged-attention tests; the claim carries the numbers and the issue. A kernel that imports and launches is not numerically supported; this entry stays unsupported until the issue closes and the register carries a passing cell",
         "A lane on this path cannot be gated with -x on those torch/Triton pairs; gate the fp8 modes with -k \"f8dot or pf8\" (README, docs/STATUS.md)",
         "Explicit GNF4_ATTN_COMPUTE=f32 or compute='f32' selects this path on any card, sm_89+ included: the explicit request is honoured, never downgraded to fp8"
       ],
@@ -467,7 +467,7 @@
       "limitations": [
         "The composition timing and the paired perplexity deltas are measured-private (claim gnf4.serve.decode-glue-kernels): real runs through the consumer on the RTX 5090 whose receipts live in a private audit tree; what is checkable here is each kernel's parity test",
         "int4_b32 imports triton at module level and is not importable without it",
-        "combine_rows and reduce_partials (0.29.0) are inside no registered claim: capability without a published measurement"
+        "reduce_partials (0.29.0) and combine_rows (0.30.0) are inside no registered claim: capability without a published measurement"
       ],
       "status": "measured-private"
     },
