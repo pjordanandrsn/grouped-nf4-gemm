@@ -558,6 +558,43 @@ def rope_norm_heads(x: torch.Tensor, weight: torch.Tensor,
     return out
 
 
+# ------------------------------------------ rotary only (no head norm) --
+@triton.jit
+def _rope_heads(x_ptr, cos_ptr, sin_ptr, out_ptr,
+                HEADS: tl.constexpr, D: tl.constexpr, DB: tl.constexpr):
+    """Rotate-half rotary for all heads of one projection in one launch,
+    for attention WITHOUT a per-head norm (GraniteMoe, Mixtral): the same
+    ``apply_rotary_pos_emb`` chain the norm+rotary fold replaces, minus
+    the norm. fp32 math, bf16 store; halves split at D/2."""
+    r = tl.program_id(0)
+    h = tl.program_id(1)
+    offs = tl.arange(0, DB)
+    m = offs < D
+    base = (r * HEADS + h) * D
+    x = tl.load(x_ptr + base + offs, mask=m, other=0.0).to(tl.float32)
+    half = D // 2
+    lo = offs < half
+    pidx = tl.where(lo, offs + half, offs - half)
+    xp = tl.load(x_ptr + base + pidx, mask=m, other=0.0).to(tl.float32)
+    rot = tl.where(lo, -xp, xp)
+    cos = tl.load(cos_ptr + r * D + offs, mask=m, other=0.0).to(tl.float32)
+    sin = tl.load(sin_ptr + r * D + offs, mask=m, other=0.0).to(tl.float32)
+    tl.store(out_ptr + base + offs, (x * cos + rot * sin).to(tl.bfloat16),
+             mask=m)
+
+
+def rope_heads(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor):
+    """``x [R, HEADS, D]`` -> rotate-half rotary with this row's
+    ``cos/sin [R, D]``; bf16 out, same shape. No norm: the input is the
+    projection output as upstream's ``apply_rotary_pos_emb`` sees it."""
+    R, HEADS, D = x.shape
+    out = torch.empty(R, HEADS, D, dtype=torch.bfloat16, device=x.device)
+    _rope_heads[(R, HEADS)](
+        x.contiguous(), cos.contiguous(), sin.contiguous(), out,
+        HEADS=HEADS, D=D, DB=triton.next_power_of_2(D), num_warps=4)
+    return out
+
+
 # ------------------------------------------- fused router epilogue (T=1) --
 @triton.jit
 def _router_epilogue(logit_ptr, bias_ptr, prob_ptr, wout_ptr, iout_ptr,

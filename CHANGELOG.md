@@ -16,6 +16,15 @@
   Gates: e2m1 decode table (all 16 nibbles), interpreter parity against
   `mxfp4_pack_ref` on quantised activation rows, GPU gate at K=2880.
 
+### Rotary-only fold for attention without a head norm
+
+- `rope_heads(x [R, HEADS, D], cos, sin)`: the rotate-half rotary for all
+  heads of one projection in one launch, without the per-head RMSNorm —
+  GraniteMoe and Mixtral attention has no q/k norm, so the norm+rotary
+  fold could not license them. Same fp32 chain and single rounding as
+  `rope_norm_heads`; tested against the upstream chain at three head
+  geometries under the interpreter contract.
+
 ## 0.27.0 — 2026-09-04
 
 Two kernel additions for experts4bit-qlora's throughput-parity build-out (P30): every measured refusal on a non-Qwen family became a change. Consumers: e4b#370 (router kinds) and e4b#371 (GraniteMoe-shaped layer fold); the lane numbers that gate those are on their PRs.
