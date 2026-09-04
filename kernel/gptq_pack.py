@@ -59,6 +59,10 @@ def gptq_pack_int4_b32(w: torch.Tensor, hessian: torch.Tensor,
       scale from ``amax/7``, and unless a block happens to reach the
       grid edge that rescales every integer and silently discards the
       calibration.
+    Use it instead of ``pack_int4_b32`` when the layer's input Hessian is available
+    (``HessianAccumulator``): same packed byte format, grid points chosen to minimise
+    activation-weighted error. Pure torch (CPU is fine; the Cholesky is seconds). See
+    ``docs/solutions/int4-decode-gemv.md``.
     """
     N, K = w.shape
     if K % BLOCK:

@@ -1,3 +1,4 @@
+numpy
 torch>=2.8.0.dev0
 
 [:platform_system == "Linux"]

@@ -160,7 +160,13 @@ def gemv_int4_b32(xq, xs, packed, scales, eids, N: int, K: int,
     """Grouped decode GEMV: ``R = eids.numel()`` activation rows, row ``e``
     against expert ``eids[e]``. ``packed [E, N, K//2]``, ``scales
     [E, N, K//32]`` (fp16). Returns ``[R, N]`` bf16. ``part`` may be a
-    preallocated ``[SK*R, N]`` fp32 buffer (pass it under capture)."""
+    preallocated ``[SK*R, N]`` fp32 buffer (pass it under capture).
+
+    Use it for single-token (decode) projections on int4-b32 packed weights (``packed [E, N,
+    K//2]`` uint8 + ``scales [E, N, K//32]`` fp16 from ``pack_int4_b32`` or
+    ``gptq_pack_int4_b32``) with ``quant_x_rows`` activations. Returns ``[R, N]`` bf16.
+    Needs a CUDA GPU (sm_80+) and Triton. See ``docs/solutions/int4-decode-gemv.md``.
+    """
     R = eids.numel()
     bn, wp, sk, ku = _plan(N, K)
     if part is None:

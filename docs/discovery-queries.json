@@ -1,0 +1,479 @@
+{
+  "$comment": "Discoverability regression corpus: realistic user queries and the page that must answer each. Checked offline by scripts/check_discovery_contract.py; the optional BM25 report is a local proxy, never evidence of external ranking.",
+  "project": "grouped-nf4-gemm",
+  "minimum_queries": 30,
+  "bm25_corpus": [
+    "docs/solutions/*.md",
+    "docs/SOLUTIONS.md",
+    "README.md"
+  ],
+  "queries": [
+    {
+      "query": "grouped NF4 GEMM",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md",
+      "required_concepts": [
+        [
+          "grouped"
+        ],
+        [
+          "NF4"
+        ],
+        [
+          "GEMM"
+        ]
+      ]
+    },
+    {
+      "query": "compute directly on NF4 packed weights",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md",
+      "required_concepts": [
+        [
+          "packed"
+        ],
+        [
+          "NF4"
+        ],
+        [
+          "dequant"
+        ]
+      ]
+    },
+    {
+      "query": "avoid bf16 expert materialization",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md",
+      "required_concepts": [
+        [
+          "bf16"
+        ],
+        [
+          "materiali"
+        ],
+        [
+          "expert"
+        ]
+      ]
+    },
+    {
+      "query": "dequantize then GEMM is the bottleneck for MoE experts",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md",
+      "required_concepts": [
+        [
+          "dequant"
+        ],
+        [
+          "bottleneck",
+          "dequant tax",
+          "dequantization tax"
+        ]
+      ]
+    },
+    {
+      "query": "Is there a grouped NF4 GEMM that does not materialize bf16 weights?",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md",
+      "required_concepts": [
+        [
+          "NF4"
+        ],
+        [
+          "bf16"
+        ]
+      ]
+    },
+    {
+      "query": "bitsandbytes NF4 GEMM kernel for fused experts",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md",
+      "required_concepts": [
+        [
+          "bitsandbytes"
+        ],
+        [
+          "NF4"
+        ],
+        [
+          "expert"
+        ]
+      ]
+    },
+    {
+      "query": "W4A16 grouped GEMM triton",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md",
+      "required_concepts": [
+        [
+          "W4A16"
+        ],
+        [
+          "Triton",
+          "triton"
+        ]
+      ]
+    },
+    {
+      "query": "MXFP4 expert inference",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/native-mxfp4-moe-inference.md",
+      "required_concepts": [
+        [
+          "MXFP4"
+        ],
+        [
+          "expert"
+        ]
+      ]
+    },
+    {
+      "query": "gpt-oss MXFP4 kernel",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/native-mxfp4-moe-inference.md",
+      "required_concepts": [
+        [
+          "gpt-oss"
+        ],
+        [
+          "MXFP4"
+        ]
+      ]
+    },
+    {
+      "query": "How do I serve MXFP4 experts directly from released checkpoint bytes?",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/native-mxfp4-moe-inference.md",
+      "required_concepts": [
+        [
+          "checkpoint"
+        ],
+        [
+          "bytes"
+        ],
+        [
+          "MXFP4"
+        ]
+      ]
+    },
+    {
+      "query": "e2m1 fp4 grouped gemm e8m0 scales",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/native-mxfp4-moe-inference.md",
+      "required_concepts": [
+        [
+          "e2m1",
+          "E2M1"
+        ],
+        [
+          "e8m0",
+          "E8M0"
+        ]
+      ]
+    },
+    {
+      "query": "INT4 decode GEMV",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/int4-decode-gemv.md",
+      "required_concepts": [
+        [
+          "INT4",
+          "int4"
+        ],
+        [
+          "GEMV"
+        ],
+        [
+          "decode"
+        ]
+      ]
+    },
+    {
+      "query": "single-token int4 expert GEMV split-K",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/int4-decode-gemv.md",
+      "required_concepts": [
+        [
+          "split-K",
+          "split k"
+        ],
+        [
+          "GEMV"
+        ]
+      ]
+    },
+    {
+      "query": "calibrated int4 attention GPTQ packing",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/int4-decode-gemv.md",
+      "required_concepts": [
+        [
+          "GPTQ",
+          "gptq"
+        ],
+        [
+          "pack"
+        ]
+      ]
+    },
+    {
+      "query": "FP8 paged attention MoE",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/fp8-paged-attention-for-moe-serving.md",
+      "required_concepts": [
+        [
+          "FP8",
+          "fp8"
+        ],
+        [
+          "paged"
+        ],
+        [
+          "attention"
+        ]
+      ]
+    },
+    {
+      "query": "fp8 KV cache paged decode kernel triton",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/fp8-paged-attention-for-moe-serving.md",
+      "required_concepts": [
+        [
+          "KV"
+        ],
+        [
+          "paged"
+        ],
+        [
+          "Triton",
+          "triton"
+        ]
+      ]
+    },
+    {
+      "query": "Is there an FP8 paged-attention path for quantized MoE serving?",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/fp8-paged-attention-for-moe-serving.md",
+      "required_concepts": [
+        [
+          "FP8",
+          "fp8"
+        ],
+        [
+          "MoE"
+        ]
+      ]
+    },
+    {
+      "query": "fused rmsnorm rotary router epilogue decode glue kernels",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/fp8-paged-attention-for-moe-serving.md",
+      "required_concepts": [
+        [
+          "rmsnorm",
+          "RMSNorm"
+        ],
+        [
+          "rotary"
+        ],
+        [
+          "router"
+        ]
+      ]
+    },
+    {
+      "query": "stream MoE experts from host memory",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/stream-moe-experts-from-host-or-nvme.md",
+      "required_concepts": [
+        [
+          "host"
+        ],
+        [
+          "stream"
+        ],
+        [
+          "expert"
+        ]
+      ]
+    },
+    {
+      "query": "NVMe expert arena",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/stream-moe-experts-from-host-or-nvme.md",
+      "required_concepts": [
+        [
+          "NVMe"
+        ],
+        [
+          "arena"
+        ]
+      ]
+    },
+    {
+      "query": "bake an NF4 expert arena to disk",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/stream-moe-experts-from-host-or-nvme.md",
+      "required_concepts": [
+        [
+          "bake"
+        ],
+        [
+          "arena"
+        ]
+      ]
+    },
+    {
+      "query": "pinned host memory expert prefetch",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/stream-moe-experts-from-host-or-nvme.md",
+      "required_concepts": [
+        [
+          "pinned"
+        ],
+        [
+          "host"
+        ]
+      ]
+    },
+    {
+      "query": "verify released checkpoint bytes were unchanged",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/verify-quantized-checkpoint-provenance.md",
+      "required_concepts": [
+        [
+          "provenance"
+        ],
+        [
+          "checkpoint"
+        ],
+        [
+          "bytes",
+          "hash"
+        ]
+      ]
+    },
+    {
+      "query": "MXFP4 provenance hash of gpt-oss blocks",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/verify-quantized-checkpoint-provenance.md",
+      "required_concepts": [
+        [
+          "provenance"
+        ],
+        [
+          "MXFP4"
+        ]
+      ]
+    },
+    {
+      "query": "prove a quantized arena matches the checkpoint",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/verify-quantized-checkpoint-provenance.md",
+      "required_concepts": [
+        [
+          "arena"
+        ],
+        [
+          "checkpoint"
+        ]
+      ]
+    },
+    {
+      "query": "CUDA Triton kernel work for quantized MoE serving",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/SOLUTIONS.md",
+      "required_concepts": [
+        [
+          "Triton",
+          "triton"
+        ],
+        [
+          "MoE"
+        ],
+        [
+          "kernel"
+        ]
+      ]
+    },
+    {
+      "query": "does grouped-nf4-gemm run on Windows or macOS",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/SOLUTIONS.md",
+      "required_concepts": [
+        [
+          "Linux"
+        ],
+        [
+          "macOS",
+          "Windows"
+        ]
+      ]
+    },
+    {
+      "query": "grouped-nf4-gemm minimum GPU compute capability",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/SOLUTIONS.md",
+      "required_concepts": [
+        [
+          "sm_80",
+          "compute capability",
+          "Ampere"
+        ]
+      ]
+    },
+    {
+      "query": "QLoRA fused MoE experts",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md",
+      "required_concepts": [
+        [
+          "experts4bit-qlora"
+        ],
+        [
+          "QLoRA"
+        ]
+      ]
+    },
+    {
+      "query": "bitsandbytes MoE still OOM after load_in_4bit",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md",
+      "required_concepts": [
+        [
+          "experts4bit-qlora"
+        ],
+        [
+          "load_in_4bit"
+        ]
+      ]
+    },
+    {
+      "query": "run a MoE larger than VRAM",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/stream-moe-experts-from-host-or-nvme.md",
+      "required_concepts": [
+        [
+          "experts4bit-qlora"
+        ],
+        [
+          "VRAM"
+        ]
+      ]
+    },
+    {
+      "query": "load and quantize fused experts then serve them with the kernels",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/SOLUTIONS.md",
+      "required_concepts": [
+        [
+          "experts4bit-qlora"
+        ],
+        [
+          "[fast]",
+          "fast"
+        ]
+      ]
+    }
+  ]
+}

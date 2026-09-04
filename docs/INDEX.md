@@ -9,6 +9,19 @@ the README's confirmatory section for how the kernel numbers were made.
 
 ## Current — read these
 
+- **[`SOLUTIONS.md`](SOLUTIONS.md)** and **[`solutions/`](solutions/)** —
+  routing/usage: one page per ordinary problem (symptoms, cause, install,
+  smallest example, verification, limits, evidence by claim ID). Current.
+- **[`capabilities.json`](capabilities.json)** (+ [`capabilities.schema.json`](capabilities.schema.json)) —
+  the machine-readable capability contract; validated in CI by
+  `scripts/check_capabilities.py` against pyproject, source and the claims
+  register. Current.
+- **[`discovery-queries.json`](discovery-queries.json)** — the
+  discoverability regression corpus (`scripts/check_discovery_contract.py`).
+  Current.
+- **[`RELEASE_NOTES_GUIDE.md`](RELEASE_NOTES_GUIDE.md)** — how the first
+  paragraph of a release note is written. Current.
+
 | doc | what it is |
 |---|---|
 | [`STATUS.md`](STATUS.md) | what the kernel does today, its three limits, what was retired, what is open |

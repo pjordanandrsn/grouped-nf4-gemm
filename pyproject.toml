@@ -1,13 +1,14 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "grouped-nf4-gemm"
 version = "0.29.0"
-description = "Fused grouped GEMM on bitsandbytes NF4-packed weights with host streaming, on consumer GPUs."
+description = "Triton kernels for 4-bit MoE inference: grouped NF4/MXFP4 GEMM, INT4 GEMV, FP8 paged attention, and CPU/NVMe expert streaming."
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.9"
 authors = [{ name = "Jordan Anderson" }]
 dependencies = [
@@ -36,16 +37,29 @@ dependencies = [
     # task. torch itself marks its own triton dep this way.
     "triton>=3.4; platform_system == 'Linux'",
 ]
+keywords = [
+    "mixture-of-experts", "moe", "bitsandbytes", "nf4", "mxfp4", "w4a16", "int4", "fp8",
+    "grouped-gemm", "triton", "cuda", "pytorch", "gpu-kernels", "quantization",
+    "paged-attention", "gpu-offload", "nvme", "llm-inference", "model-serving", "nvidia-gpu",
+]
 classifiers = [
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
 [project.urls]
 Homepage = "https://cerinamroth.com/ml/grouped-nf4-gemm/"
+Documentation = "https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/README.md"
 Source = "https://github.com/pjordanandrsn/grouped-nf4-gemm"
+Issues = "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues"
+Changelog = "https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/CHANGELOG.md"
+"Release Notes" = "https://github.com/pjordanandrsn/grouped-nf4-gemm/releases/latest"
+Status = "https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/STATUS.md"
+Capabilities = "https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/capabilities.json"
+Solutions = "https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/SOLUTIONS.md"
+Benchmarks = "https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/claims.json"
 Receipts = "https://github.com/pjordanandrsn/grouped-nf4-gemm/tree/main/kernel"
+"Consumer package (experts4bit-qlora)" = "https://pypi.org/project/experts4bit-qlora/"
 
 [tool.pytest.ini_options]
 markers = [

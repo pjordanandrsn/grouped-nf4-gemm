@@ -1,0 +1,42 @@
+# grouped-nf4-gemm
+
+> Triton kernels for 4-bit MoE inference: grouped NF4/MXFP4 GEMM, INT4 GEMV, FP8 paged attention, and CPU/NVMe expert streaming. Canonical PyPI package `grouped-nf4-gemm` (flat modules `nf4_grouped`, `mxfp4_grouped`, `int4_b32`, `fp8_paged_attn`, `nvme_arena`, `mxfp4_loader`, …); `nf4gemm` and `gnf4` are lookup aliases only.
+
+Read `docs/STATUS.md` before quoting a position and `docs/claims.json` before quoting a number: `status` is the vocabulary, and retired or superseded claims are not current. Division of responsibility: this project owns the packed-expert kernels (grouped NF4 and native MXFP4 GEMMs), the decode kernels (int4-b32 GEMV, FP8 paged attention, decode glue), the packing and reference operations, and the host/NVMe primitives; experts4bit-qlora owns model loading, quantization orchestration, adapters, training, residency integration and serving, and installs this package through its `[fast]` extra. Every kernel is asserted against a pure-torch reference; a kernel call on CPU raises and names it. Environment: Linux, NVIDIA sm_80+ with Triton ≥ 3.4 for the kernels; Python 3.11 tested.
+
+## Start here
+
+- [README](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/README.md): the problem, the mechanism, install, the CPU quickstart, the entry-point table, what is measured and what was retired
+- [Solutions index](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/SOLUTIONS.md): one page per ordinary problem — symptoms, cause, install, smallest example, verification, limits, evidence
+- [Capabilities (machine-readable)](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/capabilities.json): entry points, layouts, environments, limitations and claim IDs per capability; schema in [capabilities.schema.json](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/capabilities.schema.json)
+- [Status](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/STATUS.md): the current position, including the three limits where the fused path loses
+- [Claims register](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/claims.json): every number with hardware, status and evidence path ([schema](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/claims-schema.md))
+- [Documentation index](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/INDEX.md): what each document is, and which are anchored research records
+
+## Solutions
+
+- [Grouped NF4 GEMM without bf16 materialization](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md): gemm_4bit_grouped on the bitsandbytes gemm_4bit layout, dequant_ref as the oracle, dgrad for training
+- [Native MXFP4 MoE inference](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/native-mxfp4-moe-inference.md): gemm_mxfp4_grouped and gemv_mxfp4_b32 on released e2m1/e8m0 bytes
+- [INT4 decode GEMV](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/int4-decode-gemv.md): gemv_int4_b32, quant_x_rows, pack_int4_b32 and the GPTQ-style calibrated packer
+- [FP8 paged attention for MoE serving](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/fp8-paged-attention-for-moe-serving.md): fp8_paged_decode_attention, fp8_kv, and the decode glue kernels
+- [Stream experts from host RAM or NVMe](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/stream-moe-experts-from-host-or-nvme.md): nvme_arena bake, ArenaReader, ColdTier, RowPool, MXFP4 arenas
+- [Verify quantized checkpoint provenance](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/verify-quantized-checkpoint-provenance.md): file_tensor_sha256, provenance_table, verify_arena_matches, the verify_provenance CLI
+
+## API and architecture
+
+- [Kernel contract](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/KERNEL_CONTRACT.md): op signatures and tensor layouts (NF4, MXFP4, int4-b32)
+- [Tolerance contract](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/TOLERANCE_CONTRACT.md): the registered fidelity bound and its test
+- [Portability](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/PORTABILITY.md): the pre-port hazard register for non-CUDA backends (port targets, not support)
+- [AGENTS.md](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/AGENTS.md): operational rules for coding agents — sources of truth, build/test commands, what to update when
+
+## Related
+
+- [experts4bit-qlora](https://github.com/pjordanandrsn/experts4bit-qlora): the consumer package that drives these kernels ([PyPI](https://pypi.org/project/experts4bit-qlora/))
+- [grouped-nf4-gemm on PyPI](https://pypi.org/project/grouped-nf4-gemm/): the canonical distribution
+- [Changelog](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/CHANGELOG.md) and [releases](https://github.com/pjordanandrsn/grouped-nf4-gemm/releases)
+
+## Optional
+
+- [llms-full.txt](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/llms-full.txt): a project-generated convenience bundle of the documents above (not part of the llms.txt proposal); regenerated by scripts/build_llms_bundle.py
+- [examples/dequant_tax.py](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/examples/dequant_tax.py): the one-GPU, no-download demonstration with a self-pair beside every ratio
+- [Reproduce](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/REPRO.md), [contributing](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/CONTRIBUTING.md), [security policy](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/SECURITY.md), [attribution](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/ATTRIBUTION.md)

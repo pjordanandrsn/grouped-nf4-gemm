@@ -1,42 +1,25 @@
-<!-- Keep what applies, delete what doesn't. A one-line typo fix does not need
-     the measurement section — say so and move on. -->
+<!-- Keep what applies; delete what does not. The claims register, not this text, decides whether a number is current. -->
 
-## What this changes
+## What changed and why
 
-<!-- One or two sentences. If it fixes an issue, link it so the issue closes on
-     merge: "Closes #123". -->
+## Checks
 
-## Why
+- [ ] **Public API changed?** If yes: docstrings updated (when to use, layout expected, return/success assertion, refusal conditions), `docs/capabilities.json` entry points updated, `AGENTS.md` API list updated.
+- [ ] **Solution pages** (`docs/solutions/*.md`, `docs/SOLUTIONS.md`) still answer their H1 for this change; new capability → new or updated page.
+- [ ] **Capabilities** (`docs/capabilities.json`) updated; `python scripts/check_capabilities.py` passes.
+- [ ] **Claims**: every number in new prose links an ACTIVE claim ID in `docs/claims.json`; no retired or superseded claim is repeated as current; `docs/STATUS.md` updated if the position moved.
+- [ ] **llms bundle** regenerated (`python scripts/build_llms_bundle.py`; `--check` passes) when README opening, SOLUTIONS, STATUS, capabilities or the listed docs changed.
+- [ ] **Discovery contract**: `python scripts/check_discovery_contract.py` passes (queries still route to pages that carry their concepts, canonical install route and limitations).
+- [ ] **PyPI metadata**: `pyproject.toml` description/keywords/urls/extras still accurate; if an extra or dependency floor changed, README install section, `docs/capabilities.json` install commands and `AGENTS.md` say so.
+- [ ] **README routing** (Use this when / Do not use this when / Start here) still accurate.
+- [ ] **Examples** in new docs are executed in CI, executed in a hardware lane, or explicitly marked as needing GPU / network / model download / large storage. No example silently falls back.
+- [ ] **Related repository** updated (or an issue filed there) if the kernel/consumer contract changed.
+- [ ] **Anchored docs untouched**: nothing under `docs/` with an `ots-attestation-footer` was edited (`grep -l ots-attestation-footer docs/*.md`).
 
-<!-- The reasoning, not the diff. What was wrong, or what could not be done
-     before. -->
+## Evidence
 
----
+<!-- Lane / box / receipt paths for any measured number; "capability only, no performance claim" otherwise. -->
 
-### If this PR makes a performance or comparative claim
+## Release note draft (if this ships in a release)
 
-The one rule in [CONTRIBUTING.md](../CONTRIBUTING.md) is that claims carry
-receipts. A number in a PR description with no committed evidence behind it
-cannot be reviewed, only believed.
-
-- [ ] The claim cites a **committed receipt** (results doc + its evidence JSONs), or is marked "measuring now"
-- [ ] A **self-pair** ships with it — the same arm timed against itself. A ratio inside the instrument's own spread is not a measurement
-- [ ] **Two devices**, or the claim names the single architecture it holds for. Results in this repo have reversed between devices before
-- [ ] The **cells that lose** are reported, not only the ones that win
-- [ ] If a pre-registered protocol governs it, the prereg was **stamped before the data** and is linked
-
-### If this PR touches the README
-
-- [ ] Links are **absolute** (`https://github.com/...`), never relative — the README renders on PyPI, where relative paths are dead
-- [ ] Self-repo `blob`/`tree` refs pin the **current `project.version` tag** or `main`
-- [ ] Any new documented call has a **runnable CPU block**, so `test_readme_cpu_block.py` keeps the docs from drifting from the API
-
-### Always
-
-- [ ] `python -m pytest test_readme_cpu_block.py test_cpu_refusal.py -q` passes (CPU-only)
-- [ ] No private-lane paths or markers (the pre-push guard and `private-marker-guard.yml` scan for these; do not `guard-allow` your way past one without saying why)
-- [ ] Commit messages say **why**, and correct anything they supersede rather than quietly dropping it
-- [ ] **`Cursor Bugbot` reads `pass`, not `skipping`** — on this repo `skipping` means Bugbot found something and is withholding the green, not that it declined to run. Neither state shows as a failure in `gh pr checks`, so "nothing is red" is not the same as clean; read the Bugbot line itself before merging
-
-<!-- If work was drafted with an AI assistant, keep the Co-Authored-By and
-     AI-disclosure trailers. That is this project's default, not an apology. -->
+<!-- First paragraph, in ordinary language: which problem changed, which users / model families / environments are affected, and whether they should upgrade. Mechanism, measurements, receipts, corrections and caveats follow. -->

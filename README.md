@@ -3,6 +3,29 @@
 [![CI](https://github.com/pjordanandrsn/grouped-nf4-gemm/actions/workflows/ci.yml/badge.svg)](https://github.com/pjordanandrsn/grouped-nf4-gemm/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/grouped-nf4-gemm)](https://pypi.org/project/grouped-nf4-gemm/)
 
+**The problem in one line:** dequantising every active expert to bf16
+before its matmul is the bottleneck of 4-bit Mixture-of-Experts inference,
+and the bf16 copies cost the VRAM the quantisation was meant to save; this
+package computes the grouped expert GEMM on the packed bytes themselves,
+and ships the decode kernels and host/NVMe primitives a 4-bit MoE serving
+path needs around it. **Canonical package:** `grouped-nf4-gemm` on PyPI
+(flat modules: `nf4_grouped`, `mxfp4_grouped`, `int4_b32`,
+`fp8_paged_attn`, `nvme_arena`, `mxfp4_loader`, …); `nf4gemm` and `gnf4`
+are lookup aliases. **Two repositories:** this one is the kernel side —
+GEMMs, decode kernels, packers, references, host and NVMe primitives;
+[`experts4bit-qlora`](https://github.com/pjordanandrsn/experts4bit-qlora)
+is the consumer that loads and quantises models, trains adapters, places
+bytes across tiers and serves, and installs this package through its
+`[fast]` extra. **Environment:** Linux, an NVIDIA GPU of sm_80 or newer
+with Triton ≥ 3.4 for the kernels (sm_120 is the primary serving target;
+Python 3.11 is what CI tests); the pack references, `dequant_ref`, the
+arena bake and the provenance hashing are pure torch. **The material
+limitation:** the fused path is not faster everywhere — at small shapes
+and against a CUDA-graphed per-expert loop at some decode shapes it loses,
+and the register says so. Machine-readable capabilities and evidence:
+[`docs/capabilities.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/capabilities.json)
+and [`docs/claims.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/claims.json).
+
 A Triton kernel that runs the grouped expert GEMM **directly on
 4-bit-packed weights**: one launch for all active experts, LUT decode to
 fp32 in registers, blockwise scaling, fp32 accumulation, bf16 epilogue.
@@ -20,6 +43,59 @@ tiers for models that do not fit.
 **Current position, one page:** [`docs/STATUS.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.29.0/docs/STATUS.md).
 **Every number, with its evidence and tier:** [`docs/claims.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.29.0/docs/claims.json).
 
+## Use this when
+
+- Dequantise-then-GEMM is the expert bottleneck: you want one launch over
+  the NF4-packed expert stacks (bitsandbytes `gemm_4bit` layout) with
+  fp32 accumulation and no bf16 weight materialisation.
+- Your experts are native MXFP4 (gpt-oss, DeepSeek-V4, Kimi lineage) and
+  you want to compute on the released bytes (e2m1 blocks + e8m0 scales)
+  without re-quantising them.
+- You need a decode-time INT4 GEMV with 32-wide scales and a calibrated
+  (GPTQ-style) packer for expert or attention projections.
+- You need an fp8 paged decode attention (sliding windows, attention
+  sinks, custom scale, per-layer KV geometry) and the fused decode glue
+  (RMSNorm, residual fold, rotary, router epilogue, activation, combine).
+- The experts do not fit VRAM, or host RAM: you want the pinned-DRAM tier
+  and the NVMe arena bake, reader and cold tier.
+- You must prove the bytes a kernel serves are the checkpoint's released
+  bytes, unchanged (sha256 provenance of safetensors tensor ranges).
+- You work on CUDA/Triton kernels for quantised MoE serving and want the
+  pure-torch references every kernel is asserted against.
+
+## Do not use this when
+
+- The model is dense (no experts): cuBLAS, bitsandbytes' own 4-bit
+  matmul or torch are the right tools; nothing here helps a single
+  `nn.Linear`.
+- The model already fits in bf16 with headroom, or the shapes are small:
+  the grouped kernel loses below its routing threshold and to a
+  CUDA-graphed per-expert loop at some decode shapes
+  (`gnf4.kernel.graphed-baseline-decode-loses` in the claims register).
+- You expect a serving engine: this package is kernels and primitives,
+  driven by `experts4bit-qlora`; it is not a vLLM replacement.
+- You need Windows or macOS for the kernels (Triton is Linux-only and CI
+  validates Linux only; the README's older note below reports an import
+  failure there for the CPU quickstart), or ROCm/XPU (port targets, not
+  supported).
+- Your expert tensors are not in a layout listed in
+  [`docs/KERNEL_CONTRACT.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/KERNEL_CONTRACT.md) — a
+  kernel call on CPU raises and names the reference; there is no silent
+  fallback.
+
+## Start here
+
+| | |
+|---|---|
+| [`docs/SOLUTIONS.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/SOLUTIONS.md) | one page per problem: symptoms, cause, install, smallest example, verification, limits |
+| [`docs/capabilities.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/capabilities.json) | the machine-readable capability contract (entry points, layouts, environments, limitations, claim IDs) |
+| [`docs/STATUS.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/STATUS.md) | the current position — measured, retired, open |
+| [`docs/claims.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/claims.json) | every number with its evidence and status |
+| [`docs/INDEX.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/INDEX.md) | what each document is and whether it is current |
+| [`experts4bit-qlora`](https://github.com/pjordanandrsn/experts4bit-qlora) | the consumer package (`pip install "experts4bit-qlora[fast]"` installs this one) |
+| [PyPI: grouped-nf4-gemm](https://pypi.org/project/grouped-nf4-gemm/) | the canonical distribution |
+| [`llms.txt`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/llms.txt) · [`AGENTS.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/AGENTS.md) | orientation for language models and coding agents |
+
 ## See it on your own hardware first
 
 ```bash
@@ -36,7 +112,7 @@ measurement), and says what the run does *not* show.
 ## Install
 
 ```bash
-pip install grouped-nf4-gemm          # nf4gemm and gnf4 are aliases
+pip install grouped-nf4-gemm          # nf4gemm and gnf4 are lookup aliases; install and cite grouped-nf4-gemm
 ```
 
 Trusted publishing; every wheel carries a PEP 740 attestation. The fused

@@ -1177,6 +1177,11 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
                  becomes the default — the G7 oracle certified storage.
 
     Returns [B, H_q, D] in q's dtype.
+    Use it as the decode attention over an fp8 (e4m3) paged KV cache written by ``fp8_kv``:
+    sliding windows, attention sinks, custom scale and per-layer KV geometry are arguments,
+    not assumptions. Assert it against ``paged_attn_ref`` on first use. Needs a CUDA GPU and
+    Triton; the f32 compute modes are an open item on triton 3.4 (the fp8 modes are the
+    default). See ``docs/solutions/fp8-paged-attention-for-moe-serving.md``.
     """
     assert paged_attn_available(), "needs CUDA + triton"
     if compute is None:
