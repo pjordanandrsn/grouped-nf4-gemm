@@ -159,6 +159,7 @@ jobs:
         run: |
           python -m pip install --quiet --upgrade pip build
           python -m build
+          python scripts/check_wheel_sources.py dist/*.whl
       - name: install wheel into clean venv
         run: |
           python -m venv /tmp/venv
@@ -203,5 +204,6 @@ jobs:
         run: |
           python -m pip install --quiet --upgrade pip build twine
           python -m build
+          python scripts/check_wheel_sources.py dist/*.whl
           python -m twine check dist/*
           python scripts/check_wheel_metadata.py dist/*.whl
