@@ -515,9 +515,10 @@ def rope_norm_heads(x: torch.Tensor, weight: torch.Tensor,
 
 # ------------------------------------------- fused router epilogue (T=1) --
 @triton.jit
-def _router_epilogue(logit_ptr, prob_ptr, wout_ptr, iout_ptr,
+def _router_epilogue(logit_ptr, bias_ptr, prob_ptr, wout_ptr, iout_ptr,
                      E: tl.constexpr, EB: tl.constexpr, K: tl.constexpr,
-                     KB: tl.constexpr, NORM: tl.constexpr):
+                     KB: tl.constexpr, NORM: tl.constexpr,
+                     HAS_BIAS: tl.constexpr, SELECT_ON_LOGITS: tl.constexpr):
     """softmax over all experts, top-K select, optional renormalise --
     the five-launch chain torch runs per layer (softmax, gatherTopK, its
     bitonic sort, the sum, the divide) as one launch on ONE row.
@@ -538,13 +539,23 @@ def _router_epilogue(logit_ptr, prob_ptr, wout_ptr, iout_ptr,
     m = offs < E
     x = tl.load(logit_ptr + r * E + offs, mask=m,
                 other=-float("inf")).to(tl.float32)
-    ex = tl.exp(x - tl.max(x, axis=0))
-    ex = tl.where(m, ex, 0.0)
-    p = ex / tl.sum(ex, axis=0)
-    tl.store(prob_ptr + r * E + offs, p, mask=m)
-    # -1.0 is below every softmax probability, so masked and already
-    # selected lanes can never win a later round
-    sel = tl.where(m, p, -1.0)
+    if HAS_BIAS:
+        x = x + tl.load(bias_ptr + offs, mask=m, other=0.0).to(tl.float32)
+    if SELECT_ON_LOGITS:
+        # gpt-oss / GraniteMoe: the module returns the (biased) logits as
+        # its first output, selects top-k ON THE LOGITS, and softmaxes
+        # over the k it selected (below). Masked and already-selected
+        # lanes sit at -inf so they can never win a later round.
+        tl.store(prob_ptr + r * E + offs, x, mask=m)
+        sel = tl.where(m, x, -float("inf"))
+    else:
+        ex = tl.exp(x - tl.max(x, axis=0))
+        ex = tl.where(m, ex, 0.0)
+        p = ex / tl.sum(ex, axis=0)
+        tl.store(prob_ptr + r * E + offs, p, mask=m)
+        # -1.0 is below every softmax probability, so masked and already
+        # selected lanes can never win a later round
+        sel = tl.where(m, p, -1.0)
     kk = tl.arange(0, KB)
     kmask = kk < K
     vals = tl.zeros((KB,), dtype=tl.float32)
@@ -554,23 +565,47 @@ def _router_epilogue(logit_ptr, prob_ptr, wout_ptr, iout_ptr,
         i = tl.argmax(sel, axis=0).to(tl.int32)
         vals = tl.where(kk == j, v, vals)
         idxs = tl.where(kk == j, i, idxs)
-        sel = tl.where(offs == i, -1.0, sel)
-    if NORM:
+        if SELECT_ON_LOGITS:
+            sel = tl.where(offs == i, -float("inf"), sel)
+        else:
+            sel = tl.where(offs == i, -1.0, sel)
+    if SELECT_ON_LOGITS:
+        # softmax over the k selected logits (fp32), padded lanes excluded
+        mx = tl.max(tl.where(kmask, vals, -float("inf")), axis=0)
+        ev = tl.where(kmask, tl.exp(vals - mx), 0.0)
+        vals = ev / tl.sum(ev, axis=0)
+    elif NORM:
         vals = vals / tl.sum(tl.where(kmask, vals, 0.0), axis=0)
     tl.store(wout_ptr + r * K + kk, vals, mask=kmask)
     tl.store(iout_ptr + r * K + kk, idxs.to(tl.int64), mask=kmask)
 
 
-def router_epilogue(logits: torch.Tensor, k: int, norm: bool):
-    """``logits [R, E]`` -> ``(probs [R, E] fp32, weights [R, k] fp32,
-    indices [R, k] int64)``, upstream semantics: fp32 softmax over ALL
-    experts, then top-k, then the optional renormalisation."""
+def router_epilogue(logits: torch.Tensor, k: int, norm: bool, *,
+                    select_on_logits: bool = False,
+                    bias: torch.Tensor | None = None):
+    """``logits [R, E]`` -> ``(first [R, E] fp32, weights [R, k] fp32,
+    indices [R, k] int64)``.
+
+    Default (``select_on_logits=False``): the Qwen3-MoE / OLMoE /
+    Mixtral epilogue -- fp32 softmax over ALL experts, then top-k, then
+    the optional renormalisation; ``first`` is the probabilities.
+
+    ``select_on_logits=True``: the gpt-oss / GraniteMoe epilogue -- top-k
+    ON THE LOGITS (plus ``bias`` when the router carries one), then a
+    softmax over the k selected logits; ``first`` is the (biased) logits,
+    which is what those modules return. ``norm`` is ignored in this mode
+    (the k-softmax already sums to one)."""
     R, E = logits.shape
-    probs = torch.empty(R, E, dtype=torch.float32, device=logits.device)
+    first = torch.empty(R, E, dtype=torch.float32, device=logits.device)
     w = torch.empty(R, k, dtype=torch.float32, device=logits.device)
     idx = torch.empty(R, k, dtype=torch.int64, device=logits.device)
+    has_bias = bias is not None
+    if has_bias and tuple(bias.shape) != (E,):
+        raise ValueError(f"router bias must be [E={E}], got {tuple(bias.shape)}")
+    b = bias.contiguous().to(torch.float32) if has_bias else first  # inert ptr when unused
     _router_epilogue[(R,)](
-        logits.contiguous(), probs, w, idx, E=E,
+        logits.contiguous(), b, first, w, idx, E=E,
         EB=triton.next_power_of_2(E), K=k, KB=triton.next_power_of_2(k),
-        NORM=bool(norm), num_warps=4)
-    return probs, w, idx
+        NORM=bool(norm), HAS_BIAS=has_bias,
+        SELECT_ON_LOGITS=bool(select_on_logits), num_warps=4)
+    return first, w, idx

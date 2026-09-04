@@ -422,3 +422,33 @@ def test_router_epilogue_breaks_ties_to_the_lower_index():
     logits = torch.zeros(1, 8, dtype=torch.float32, device=dev)
     _, _, idx = router_epilogue(logits, 3, False)
     assert idx.flatten().tolist() == [0, 1, 2]
+
+
+@needs_gpu
+@pytest.mark.parametrize("E,K,with_bias", [(32, 4, True), (32, 4, False), (64, 8, True), (40, 6, False)])
+def test_router_epilogue_select_on_logits_matches_gpt_oss_and_granite(E, K, with_bias):
+    """gpt-oss (biased) and GraniteMoe (unbiased) select top-k on the raw
+    logits and softmax over the k selected; the first output is the
+    logits themselves. Distinct random logits, so torch.topk's tie order
+    cannot differ from the kernel's."""
+    from int4_b32 import router_epilogue
+    g = torch.Generator(device="cpu").manual_seed(7)
+    logits = torch.randn(13, E, generator=g).cuda()
+    bias = (torch.randn(E, generator=g) * 0.5).cuda() if with_bias else None
+    first, w, idx = router_epilogue(logits, K, False, select_on_logits=True, bias=bias)
+    ref_logits = logits.float() + (bias.float() if with_bias else 0)
+    ref_top, ref_idx = torch.topk(ref_logits, K, dim=-1)
+    ref_w = torch.softmax(ref_top, dim=-1)
+    assert torch.equal(idx.cpu(), ref_idx.cpu())
+    torch.testing.assert_close(w, ref_w, rtol=1e-5, atol=1e-6)
+    torch.testing.assert_close(first, ref_logits, rtol=1e-6, atol=1e-6)
+    assert torch.allclose(w.sum(-1), torch.ones(13, device="cuda"), atol=1e-5)
+
+
+@needs_gpu
+def test_router_epilogue_bias_shape_is_checked():
+    from int4_b32 import router_epilogue
+    logits = torch.randn(2, 16).cuda()
+    with pytest.raises(ValueError, match="router bias"):
+        router_epilogue(logits, 2, False, select_on_logits=True, bias=torch.zeros(8).cuda())
+
