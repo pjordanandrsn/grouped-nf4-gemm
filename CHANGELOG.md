@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Top-k weighted combine fused
+
+- `combine_rows(dn [T*k, H], w [T*k], k)`: the MoE combine (fp32
+  weight-and-sum over the top-k slots, bf16 out) in one launch, for the
+  consumer's collapsed forward whose torch chain was four dispatches and
+  two kernels per layer (Qwen3 B=1 op census). Interpreter test at three
+  shapes with a masked tail.
+
 ### Split-K reduce + cast fused (decode GEMVs)
 
 - `reduce_partials(part, sk, R, N)`: the fp32 split-K partials of
