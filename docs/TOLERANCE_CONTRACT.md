@@ -12,6 +12,13 @@ the same property our own gemm_4bit-routing commit documented (§9a of METHODOLO
 bit-exactness only because both paths there shared one reduction; a fused MMA mainloop does
 not). Floating-point addition is not associative; different orders → different last bits.
 
+*Dated note (2026-09-04).* "The dequant path" here is the registered comparator as the
+confirmatories ran it: bitsandbytes `dequantize_4bit` per expert, then a bf16 GEMM
+(`bench/phase1/harness.py`, `bk_dequant_grouped`). Since bitsandbytes 0.50.0 its supported
+ordinary 2-D inference cells compute from the packed weights directly; that path is not this
+comparator and has not been measured here, and the grouped routed-MoE GEMM is a separate
+contract. The ordering registered below is against the comparator named here.
+
 ## The registered fidelity ORDERING (falsifiable, and the stronger claim)
 
 The dequant path rounds every weight to **bf16 in global memory** before the GEMM. The fused

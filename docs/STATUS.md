@@ -19,9 +19,10 @@ marked. Treat them as you would any unverifiable number.
 
 **The kernel.** One Triton launch runs the grouped expert GEMM directly
 on 4-bit-packed weights — NF4 on the bitsandbytes layout, and native
-MXFP4 (OCP e2m1 + e8m0) on a checkpoint's exact released bytes. fp32
-accumulation makes it *more accurate* than dequantise-to-bf16-then-GEMM,
-in every confirmatory cell ever measured.
+MXFP4 (OCP e2m1 + e8m0) on a checkpoint's exact released bytes. With fp32
+accumulation it has never measured *less* accurate than the
+dequantise-to-bf16-then-GEMM comparator in any registered confirmatory
+cell (`gnf4.kernel.fused-more-accurate-than-dequant-bf16`).
 
 | | measured | tier |
 |---|---|---|
@@ -49,8 +50,14 @@ footnote:**
    path by a dispatch floor.
 
 **Serving (sm_120).** Both decode knobs ship ON, capability-conditional:
-an unset env takes fp8 where fp8 can run and the certified f32 path
-otherwise, and an explicit request is never silently downgraded. The
+an unset env takes fp8 where fp8 can run and the f32 path otherwise, and
+an explicit request is never silently downgraded. The paged attention is
+therefore two support states, and `capabilities.json` carries it as two
+entries: the **fp8 compute path** (sm_89+ precondition; measured on the
+RTX 5090 only) is supported; the **f32 compute path** — the sm_80–sm_88
+default, the fallback where an fp8 constraint fails, and every explicit
+f32 request on any card — is open under #319 and carried as
+`unsupported` until it closes. The
 certified single-stream anchor for Qwen3-30B-A3B on the RTX 5090 class
 is **7.37 ms/step ±4.2% (≈130–142 tok/s)** — the class carries 8.5%
 inter-box dispersion while each box repeats itself to 0.16%, so quote
@@ -116,9 +123,10 @@ was wrong.
 
 - **#319 — the f32 paged-decode compute modes miss their reference** on
   torch 2.8.0+cu128 / triton 3.4.0 (10 of 35 tests, up to 0.074 against
-  a 0.02 tolerance), on unmodified `main`. The fp8 modes — the sm_120
-  serving default — pass, so serving is unaffected; the Ampere/Hopper
-  compute path is not.
+  a 0.02 tolerance), on unmodified `main`. The fp8 modes — the default
+  on sm_89+ where the constraints pass, sm_120 serving included — pass,
+  so that serving path is unaffected; the sm_80–sm_88 default path and
+  every explicit f32 request (on any card, Hopper included) are not.
 - **#87** — `gemm_4bit_grouped` int32 offset overflow at large
   `max(expert_ids)`, distinct from the 2 GiB stride fix in 0.13.2/0.14.0.
 - **#73, #60, #58** — arena/NVMe efficiency: host copy is ~71% of a K3
@@ -148,7 +156,14 @@ was wrong.
 - **Quote the baseline.** Almost every ratio here is against
   *this project's own* per-expert loop or the dequant path — not against
   a third party's implementation, except the one head-to-head that says
-  so.
+  so. The dequant path is bitsandbytes `dequantize_4bit` per active
+  expert followed by a bf16 matmul, as each receipt ran it. Since
+  bitsandbytes 0.50.0 (upstream #1949, merged 2026-05-21) its supported
+  ordinary 2-D inference cells compute from the packed weights directly;
+  no receipt here times that path, the grouped routed-MoE GEMM is a
+  separate contract upstream does not have, and the conventional 4-bit
+  backward still dequantises for dX. The ratios stay what their receipts
+  measured (noted 2026-09-04).
 - **A benchmark on random token ids understates this kernel by ~1.6×**,
   because prose routes to 98.4% of experts and random ids to 87.5%.
   Benchmark on real text.

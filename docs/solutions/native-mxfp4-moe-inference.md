@@ -1,4 +1,5 @@
 # How do I run MoE expert inference natively on MXFP4 (e2m1 + e8m0) weights, straight from the released checkpoint bytes?
+<!-- summary: gemm_mxfp4_grouped multiplies gpt-oss and Kimi-class experts on their released e2m1 blocks and e8m0 scales, with no requantization to NF4 and no bf16 materialization. -->
 
 Use `mxfp4_grouped.gemm_mxfp4_grouped` from `grouped-nf4-gemm`: the grouped expert GEMM runs on the checkpoint's own MXFP4 blocks and e8m0 scales, so a gpt-oss or Kimi-K3-class expert is multiplied as shipped, with no requantization to NF4 and no bf16 materialization. `mxfp4_pack_ref.dequant_mxfp4` is the pure-torch reference the kernel is gated against.
 
@@ -18,11 +19,17 @@ MXFP4 (OCP MX v1.0) is a different codebook from NF4: sixteen e2m1 values, ±{0,
 
 ## Install
 
+Kernel package (the minimum route):
+
 ```bash
 pip install grouped-nf4-gemm
 ```
 
-Linux, NVIDIA GPU sm_80 or newer (sm_120 is the primary serving target), `triton>=3.4` (Linux-only distribution), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. The pack/decode reference and loader hashing are pure torch. Through the consumer: `pip install "experts4bit-qlora[fast]"`.
+Linux, NVIDIA GPU sm_80 or newer (sm_120 is the primary serving target), `triton>=3.4` (Linux-only distribution), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. The pack/decode reference and loader hashing are pure torch. Through the model consumer:
+
+```bash
+pip install "experts4bit-qlora[fast]"
+```
 
 ## Smallest correct example
 

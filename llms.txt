@@ -15,11 +15,11 @@ Read `docs/STATUS.md` before quoting a position and `docs/claims.json` before qu
 
 ## Solutions
 
-- [Grouped NF4 GEMM without bf16 materialization](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md): gemm_4bit_grouped on the bitsandbytes gemm_4bit layout, dequant_ref as the oracle, dgrad for training
+- [Grouped NF4 GEMM without bf16 materialization](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md): gemm_4bit_grouped on the bitsandbytes gemm_4bit layout, dequant_ref as the oracle, dgrad for training; the bitsandbytes 0.50.0 boundary (packed 2-D inference upstream, no grouped routed-MoE contract, the backward still dequantizes for dX) and the measured boundaries by claim ID and tier
 - [Native MXFP4 MoE inference](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/native-mxfp4-moe-inference.md): gemm_mxfp4_grouped and gemv_mxfp4_b32 on released e2m1/e8m0 bytes
 - [INT4 decode GEMV](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/int4-decode-gemv.md): gemv_int4_b32, quant_x_rows, pack_int4_b32 and the GPTQ-style calibrated packer
-- [FP8 paged attention for MoE serving](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/fp8-paged-attention-for-moe-serving.md): fp8_paged_decode_attention, fp8_kv, and the decode glue kernels
-- [Stream experts from host RAM or NVMe](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/stream-moe-experts-from-host-or-nvme.md): nvme_arena bake, ArenaReader, ColdTier, RowPool, MXFP4 arenas
+- [FP8 paged attention for MoE serving](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/fp8-paged-attention-for-moe-serving.md): fp8_paged_decode_attention, fp8_kv, and the decode glue kernels; two compute paths with two support states (fp8 supported on sm_89+, f32 open under #319)
+- [Stream experts from host RAM or NVMe](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/stream-moe-experts-from-host-or-nvme.md): nvme_arena bake, ArenaReader, ColdTier, RowPool, MXFP4 arenas — the kernel/storage primitives; the decision and model-level integration pages are experts4bit-qlora's
 - [Verify quantized checkpoint provenance](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/verify-quantized-checkpoint-provenance.md): file_tensor_sha256, provenance_table, verify_arena_matches, the verify_provenance CLI
 
 ## API and architecture

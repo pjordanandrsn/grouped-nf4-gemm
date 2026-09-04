@@ -12,12 +12,15 @@ Each section below starts with `## Source:` and the canonical URL of the file it
 [![CI](https://github.com/pjordanandrsn/grouped-nf4-gemm/actions/workflows/ci.yml/badge.svg)](https://github.com/pjordanandrsn/grouped-nf4-gemm/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/grouped-nf4-gemm)](https://pypi.org/project/grouped-nf4-gemm/)
 
-**The problem in one line:** dequantising every active expert to bf16
-before its matmul is the bottleneck of 4-bit Mixture-of-Experts inference,
-and the bf16 copies cost the VRAM the quantisation was meant to save; this
-package computes the grouped expert GEMM on the packed bytes themselves,
-and ships the decode kernels and host/NVMe primitives a 4-bit MoE serving
-path needs around it. **Canonical package:** `grouped-nf4-gemm` on PyPI
+**The problem in one line:** a 4-bit Mixture-of-Experts runs its experts
+as a per-expert loop, and wherever that loop dequantises each active
+expert to bf16 before its matmul (bitsandbytes before 0.50.0, cells
+outside its packed 2-D inference forward, the conventional 4-bit
+backward) the round trip is the bottleneck and the bf16 copies cost the
+VRAM the quantisation was meant to save; this package computes the grouped
+expert GEMM on the packed bytes themselves, in one launch for all routed
+experts, and ships the decode kernels and host/NVMe primitives a 4-bit
+MoE serving path needs around it. **Canonical package:** `grouped-nf4-gemm` on PyPI
 (flat modules: `nf4_grouped`, `mxfp4_grouped`, `int4_b32`,
 `fp8_paged_attn`, `nvme_arena`, `mxfp4_loader`, …); `nf4gemm`, `gnf4` and
 `grouped-mxfp4-gemm` are lookup aliases. **Two repositories:** this one is the kernel side —
@@ -78,7 +81,11 @@ tiers for models that do not fit.
 
 - The model is dense (no experts): cuBLAS, bitsandbytes' own 4-bit
   matmul or torch are the right tools; nothing here helps a single
-  `nn.Linear`.
+  `nn.Linear`. Since bitsandbytes 0.50.0 (upstream #1949, merged
+  2026-05-21) its supported ordinary 2-D inference cells compute directly
+  from the packed weights (`torch.ops.bitsandbytes.gemm_4bit`); what
+  upstream has no contract for is the grouped routed-MoE GEMM, which is
+  this package.
 - The model already fits in bf16 with headroom, or the shapes are small:
   the grouped kernel loses below its routing threshold and to a
   CUDA-graphed per-expert loop at some decode shapes
@@ -232,7 +239,7 @@ statement that the page describes a capability without a measurement).
 
 | the problem | page |
 |---|---|
-| Dequantise-then-GEMM is the expert bottleneck; compute on the NF4-packed weights | [nf4-grouped-gemm-without-bf16-materialization.md](solutions/nf4-grouped-gemm-without-bf16-materialization.md) |
+| A per-expert 4-bit loop dequantises each expert to bf16 and re-reads it; compute the grouped GEMM on the NF4-packed weights | [nf4-grouped-gemm-without-bf16-materialization.md](solutions/nf4-grouped-gemm-without-bf16-materialization.md) |
 | Serve MXFP4 experts (gpt-oss, DeepSeek-V4) from the released bytes | [native-mxfp4-moe-inference.md](solutions/native-mxfp4-moe-inference.md) |
 | Single-token int4 expert / attention projections near the memory ceiling | [int4-decode-gemv.md](solutions/int4-decode-gemv.md) |
 | An fp8 paged decode attention and the fused decode glue | [fp8-paged-attention-for-moe-serving.md](solutions/fp8-paged-attention-for-moe-serving.md) |
@@ -292,12 +299,21 @@ three limits where the fused path loses and what is measured-private, is
 - The fused path loses at small shapes and to a CUDA-graphed per-expert
   loop at some decode shapes; the NVMe tier is batch-only; expert prefetch
   closed negative. The register records each of these.
-- Numbers live in [`claims.json`](claims.json) with their status; a page
-  quotes claim IDs, never figures, and a retired claim is never current.
+- Numbers live in [`claims.json`](claims.json), tiered in the public
+  register (confirmed, measured, measured-private, projected, open,
+  superseded, retired); a page quotes a figure only beside the claim ID
+  and tier it comes from, and a retired or superseded claim is never
+  current.
+- The fp8 paged attention is two support states, carried as two entries
+  in [`capabilities.json`](capabilities.json): the fp8 compute path
+  (sm_89+ precondition, measured on the RTX 5090 only) is supported; the
+  f32 compute path (the sm_80–sm_88 default and every explicit f32
+  request) is open under #319 and `unsupported` until it closes.
 
 ## Source: docs/solutions/fp8-paged-attention-for-moe-serving.md (https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/fp8-paged-attention-for-moe-serving.md)
 
 # How do I run paged decode attention over an FP8 KV cache for a quantized MoE serving path, with sliding windows, attention sinks and a custom scale?
+<!-- summary: fp8_paged_decode_attention runs paged flash-decode over an E4M3 KV cache with windows, sinks and a custom scale; the fp8 compute path is supported on sm_89+, the f32 path is open under #319. -->
 
 Use `fp8_paged_attn.fp8_paged_decode_attention` from `grouped-nf4-gemm`: a Triton flash-decode kernel over paged E4M3 K/V blocks that dequantizes in registers, takes `window`, `sinks`, `sm_scale` and per-layer row strides, and is checked against the pure-torch `fp8_paged_attn.paged_attn_ref`. The KV quantize/pack primitives live in `fp8_kv`; the decode glue kernels (fused RMSNorm, residual fold, rotary, router epilogue) live in `int4_b32`.
 
@@ -317,11 +333,28 @@ At batch-1 decode nothing is compute-bound; every kernel is a launch plus a read
 
 ## Install
 
+Kernel package (the minimum route):
+
 ```bash
 pip install grouped-nf4-gemm
 ```
 
-Linux, NVIDIA GPU sm_80 or newer, `triton>=3.4` (Linux-only distribution), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. The fp8 compute mode, the sm_120 serving default, needs sm_89 or newer. `fp8_kv` and `paged_attn_ref` are pure torch. Through the consumer: `pip install "experts4bit-qlora[fast]"`.
+Linux, NVIDIA GPU sm_80 or newer, `triton>=3.4` (Linux-only distribution), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. The fp8 compute path needs sm_89 or newer; sm_80–sm_88 take the f32 path, which is open (below). `fp8_kv` and `paged_attn_ref` are pure torch. Through the model consumer:
+
+```bash
+pip install "experts4bit-qlora[fast]"
+```
+
+## Two compute paths, two support states
+
+One kernel, two numerical paths, and [`capabilities.json`](../capabilities.json) carries them as two entries because a single status cannot be true of both.
+
+| path | entry in `capabilities.json` | who takes it | requirements (the predicate is `fp8_paged_attn.fp8_compute_unsupported`; the default selector and the path's own asserts share it) | measured on | status |
+|---|---|---|---|---|---|
+| **fp8 compute** (`compute="fp8"`; the default where it can run) | `fp8-paged-attention-fp8-compute` | sm_89+ with `GNF4_ATTN_COMPUTE` unset and every constraint passing; any explicit fp8 request (never downgraded: the asserts refuse instead) | sm_89 or newer; `v_groups == 1`; `k_groups` in (1, 2, 4, 8, 16); `head_dim // k_groups >= 32`; `q` bf16/fp16; split branch: `ktile >= 32` when supplied; packed branch (`pack_heads=True`): `block_tokens * n_kv_heads >= 32` | RTX 5090 (sm_120) only — sm_89 and sm_90 meet the requirement, no registered cell was run there (claims `gnf4.serve.fp8-paged-attn-windows-sinks-scale`, `gnf4.serve.m3-defaults-on`, both measured) | supported |
+| **f32 compute** (`compute="f32"`, split or packed kernel) | `fp8-paged-attention-f32-compute` | sm_80–sm_88 by default; sm_89+ whenever a constraint above fails with the env unset; every explicit `GNF4_ATTN_COMPUTE=f32` / `compute="f32"` on any card | sm_80 or newer | its reference tests were run on an RTX 5090 with the mode forced; no cell on sm_80–sm_88 | **open** — [#319](https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/319): on torch 2.8.0+cu128 / triton 3.4.0 the split and packed f32 modes miss their reference by up to 0.074 against a 0.02 tolerance on 10 of 35 tests, on unmodified `main` (claim `gnf4.open.f32-compute-modes-triton34`, status open, so it backs no capability); the capability entry is `unsupported` until the issue closes |
+
+A kernel that imports and launches is not thereby numerically supported: the status of each path follows the claim and issue register, not the import. `compute_counts()` records which path actually ran, because an environment variable is a request, not an event.
 
 ## Smallest correct example
 
@@ -393,8 +426,8 @@ The CPU block passes: the packed pool, read back through the reference, reproduc
 
 ## Limitations
 
-- Open: the f32 compute modes miss their reference on torch 2.8 / triton 3.4 on sm_120, on unmodified `main` (`#319`); the fp8 modes pass. Gate a lane there with `-k "f8dot or pf8"` ([`STATUS.md`](../STATUS.md)). On a pre-Ada card the default is f32, so the GPU block above can fail on that torch/triton pair.
-- The fp8 compute path requires sm_89+, `v_groups == 1`, `head_dim // k_groups >= 32` and `ktile >= 32`; it adds one e4m3 rounding on `q` and on `p`, hence its wider tolerance.
+- Open: the f32 compute modes (split, packed) miss their reference on torch 2.8.0+cu128 / triton 3.4.0 on sm_120, on unmodified `main` (`#319`, claim `gnf4.open.f32-compute-modes-triton34`: up to 0.074 against a 0.02 tolerance, 10 of 35 tests); the fp8 modes pass. Gate a lane there with `-k "f8dot or pf8"` ([`STATUS.md`](../STATUS.md)). On a pre-Ada card the default is f32, so the GPU block above can fail on that torch/triton pair; an explicit `compute="f32"` on any card is on the same open path.
+- The fp8 compute path requires sm_89+, `v_groups == 1`, `k_groups` in (1, 2, 4, 8, 16), `head_dim // k_groups >= 32`, bf16/fp16 `q`, `ktile >= 32` when supplied (split branch) and `block_tokens * n_kv_heads >= 32` (packed branch); it adds one e4m3 rounding on `q` and on `p`, hence its wider tolerance. Its registered cells are RTX 5090 only; the sm_89+ requirement is the kernel's precondition, not a measurement on Ada or Hopper.
 - `pack_heads=True` falls back to the split kernel where its shared-memory demand exceeds the card, with a one-time `RuntimeWarning`.
 - Served-path fidelity (Granite, gpt-oss, Gemma-4) is measured in experts4bit-qlora's receipts, which are private; the evidence here is kernel-level parity against `paged_attn_ref`. The glue-kernel composition is measured-private (claim `gnf4.serve.decode-glue-kernels`).
 - Not a serving engine; CUDA + Triton only; `paged_attn_ref` is slow, for test sizes.
@@ -405,11 +438,12 @@ The CPU block passes: the packed pool, read back through the reference, reproduc
 
 ## Evidence
 
-Register: [`claims.json`](../claims.json). Measured: claim `gnf4.serve.fp8-paged-attn-windows-sinks-scale` (windows, sinks, scale and stride overrides; fp8-mode GPU suite on an RTX 5090), claim `gnf4.serve.m3-defaults-on` (both decode knobs on by default, capability-conditional, with a paired perplexity check), claim `gnf4.serve.decode-anchor-5090` (the single-stream anchor for the serving class this kernel sits in). Measured-private, labelled: claim `gnf4.serve.decode-glue-kernels`. Receipts: `kernel/RESULTS-m3-default-on.md`, `kernel/RESULTS-k8-fp8-compute-attn.md`, `kernel/RESULTS-m2-anchor-recert.md`.
+Register: [`claims.json`](../claims.json). Measured, fp8 compute path: claim `gnf4.serve.fp8-paged-attn-windows-sinks-scale` (windows, sinks, scale and stride overrides; fp8-mode GPU suite on an RTX 5090), claim `gnf4.serve.m3-defaults-on` (both decode knobs on by default, capability-conditional, with a paired perplexity check). Open, f32 compute path: claim `gnf4.open.f32-compute-modes-triton34` (backs nothing). Measured-private, labelled: claim `gnf4.serve.decode-glue-kernels` (its own capability entry, `decode-glue-kernels`). The single-stream decode anchor, claim `gnf4.serve.decode-anchor-5090`, is a consumer-measured anchor of the serving class on a knob-off basis, not a measurement of this kernel, and is not cited as its evidence. Receipts: `kernel/RESULTS-m3-default-on.md`, `kernel/RESULTS-k8-fp8-compute-attn.md`, `kernel/RESULTS-m2-anchor-recert.md`.
 
 ## Source: docs/solutions/int4-decode-gemv.md (https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/int4-decode-gemv.md)
 
 # How do I run a single-token INT4 decode GEMV over routed MoE experts, and pack calibrated (GPTQ) weights for it?
+<!-- summary: gemv_int4_b32 runs the batch-1 int4-b32 decode GEMV with exact integer accumulation, and gptq_pack_int4_b32 packs calibrated weights onto the same bytes; its numbers are measured-private. -->
 
 Use the int4-b32 lane of `grouped-nf4-gemm`: `int4_pack_ref.pack_int4_b32` packs a weight onto a uniform symmetric int4 grid with one fp16 scale per 32 elements, `int4_b32.gemv_int4_b32` runs the decode GEMV on int8-quantised activations with exact integer accumulation and split-K partials, and `gptq_pack.gptq_pack_int4_b32` chooses grid points against calibration activations while emitting byte-identical format.
 
@@ -430,11 +464,17 @@ NF4 is a non-uniform grid, so a GEMV pays a gather per weight before it can mult
 
 ## Install
 
+Kernel package (the minimum route):
+
 ```bash
 pip install grouped-nf4-gemm
 ```
 
-Linux, NVIDIA GPU sm_80 or newer (the lane was tuned on sm_120, the primary serving target), `triton>=3.4` (Linux-only distribution), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. `int4_pack_ref` and `gptq_pack` are pure torch; `int4_b32` imports triton at module level. Through the consumer: `pip install "experts4bit-qlora[fast]"`.
+Linux, NVIDIA GPU sm_80 or newer (the lane was tuned on sm_120, the primary serving target), `triton>=3.4` (Linux-only distribution), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. `int4_pack_ref` and `gptq_pack` are pure torch; `int4_b32` imports triton at module level. Through the model consumer:
+
+```bash
+pip install "experts4bit-qlora[fast]"
+```
 
 ## Smallest correct example
 
@@ -524,6 +564,7 @@ Register: [`claims.json`](../claims.json). Measured-private, labelled as such: c
 ## Source: docs/solutions/native-mxfp4-moe-inference.md (https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/native-mxfp4-moe-inference.md)
 
 # How do I run MoE expert inference natively on MXFP4 (e2m1 + e8m0) weights, straight from the released checkpoint bytes?
+<!-- summary: gemm_mxfp4_grouped multiplies gpt-oss and Kimi-class experts on their released e2m1 blocks and e8m0 scales, with no requantization to NF4 and no bf16 materialization. -->
 
 Use `mxfp4_grouped.gemm_mxfp4_grouped` from `grouped-nf4-gemm`: the grouped expert GEMM runs on the checkpoint's own MXFP4 blocks and e8m0 scales, so a gpt-oss or Kimi-K3-class expert is multiplied as shipped, with no requantization to NF4 and no bf16 materialization. `mxfp4_pack_ref.dequant_mxfp4` is the pure-torch reference the kernel is gated against.
 
@@ -543,11 +584,17 @@ MXFP4 (OCP MX v1.0) is a different codebook from NF4: sixteen e2m1 values, ±{0,
 
 ## Install
 
+Kernel package (the minimum route):
+
 ```bash
 pip install grouped-nf4-gemm
 ```
 
-Linux, NVIDIA GPU sm_80 or newer (sm_120 is the primary serving target), `triton>=3.4` (Linux-only distribution), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. The pack/decode reference and loader hashing are pure torch. Through the consumer: `pip install "experts4bit-qlora[fast]"`.
+Linux, NVIDIA GPU sm_80 or newer (sm_120 is the primary serving target), `triton>=3.4` (Linux-only distribution), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. The pack/decode reference and loader hashing are pure torch. Through the model consumer:
+
+```bash
+pip install "experts4bit-qlora[fast]"
+```
 
 ## Smallest correct example
 
@@ -624,19 +671,69 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.serve-ta
 ## Source: docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md (https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md)
 
 # How do I run a grouped GEMM directly on NF4 packed MoE expert weights, without dequantizing to bf16 first?
+<!-- summary: gemm_4bit_grouped runs the routed MoE expert GEMM on bitsandbytes NF4 packed weights in one Triton launch, decoding nibbles in registers with fp32 accumulation and no bf16 expert tensor. -->
 
 Use `nf4_grouped.gemm_4bit_grouped` from `grouped-nf4-gemm`: one Triton launch computes the routed expert GEMM on the bitsandbytes `gemm_4bit` NF4 layout, decoding nibbles to fp32 in registers and accumulating in fp32, so no bf16 copy of any expert is written to memory. The pure-torch `nf4_grouped.dequant_ref` is the oracle the kernel is asserted against, and it runs on CPU.
 
+## Measured boundaries
+
+Every figure here is quoted from [`claims.json`](../claims.json) under the named ID with its tier, and each row carries the cells that lose beside the cells that win.
+
+| what was measured | result | claim ID | tier |
+|---|---|---|---|
+| Batch-1 decode on sm_86, census MoE shapes (OLMoE, Qwen3-30B, Gemma-4, gpt-oss-120b) vs the registered dequant comparator | 1.16–2.73× at median; **loses:** `top_k=1` cells (instance-unstable) and tiny shapes under about 5 M weight elements | `gnf4.kernel.decode-speed-census` | confirmed |
+| A real OLMoE QLoRA finetune on prose, fused vs the per-expert loop | 4.50× (RTX 4090), 4.75× (H100) | `gnf4.kernel.e2e-training-real-prose` | confirmed |
+| Head-to-head against Unsloth's own kernel, 4-bit-storage regime, decode | 1.70× (H100), 2.79× (RTX 4090); **loses:** Unsloth is 2.6–5.3× faster at prefill in its own bf16-resident H100 regime | `gnf4.kernel.h2h-unsloth` | confirmed |
+| Fidelity vs the dequantize-to-bf16-then-GEMM comparator | has not measured less accurate in any registered confirmatory cell (fp32 accumulation, bf16 epilogue); a CUDA tensor-core statement, not a universal proof | `gnf4.kernel.fused-more-accurate-than-dequant-bf16` | confirmed |
+
+The other registered loser, a CUDA-graphed per-expert baseline at the decode band, is carried by ID under Limitations (`gnf4.kernel.graphed-baseline-decode-loses`). The comparator in the first and last rows is this repository's own per-expert dequantize-then-GEMM loop as each receipt ran it; the dated note under "Why it happens" says what that does and does not say about current bitsandbytes.
+
 ## Symptoms
 
-- A 4-bit MoE (bitsandbytes NF4, `load_in_4bit`) spends its expert step in dequantize-then-GEMM: every active expert is decoded to a bf16 `[N, K]` tensor, multiplied, and discarded.
+- A 4-bit MoE (bitsandbytes NF4, `load_in_4bit`) runs its experts as a per-expert loop, one launch per active expert per projection, and wherever that loop dequantizes (bitsandbytes releases before 0.50.0, cells outside its packed `gemm_4bit` inference forward, the conventional 4-bit backward) every active expert is decoded to a bf16 `[N, K]` tensor, multiplied, and discarded.
 - Transient memory is dominated by bf16 expert materialization, not by the packed weights.
 - The expert loop is a per-expert `dequantize_4bit` + `bmm` pair, and top-k routing over many experts makes launch count the bottleneck.
 - You want a W4A16 grouped GEMM that takes NF4 packed weights as stored.
 
 ## Why it happens
 
-bitsandbytes stores NF4 as a 16-entry codebook index per weight plus a blockwise fp32 absmax, and its matmul path is storage-only: it materializes the bf16 weight and hands it to cuBLAS. For a fused-expert MoE that is one round trip per active expert per layer; writing and re-reading those bf16 weights is the dequant tax. [`KERNEL_CONTRACT.md`](../KERNEL_CONTRACT.md) names the fix: fuse the decode into the GEMM mainloop so the packed bytes are the only weight bytes read.
+bitsandbytes stores NF4 as a 16-entry codebook index per weight plus a blockwise fp32 absmax. What its forward does with those bytes depends on the release, the workload and the shape:
+
+- **Ordinary 2-D inference, bitsandbytes 0.50.0 and later.** Recent bitsandbytes CUDA inference paths can compute directly from packed 4-bit weights for supported ordinary 2-D matrices: upstream commit `5453368bed15d19cbcfba4426ed118de33dc3d94` ("[CUDA] New 4bit GEMM kernels for inference (#1949)", committed 2026-05-21T14:05:48Z; 75 commits after tag 0.49.2 and 44 before tag 0.50.0) added `torch.ops.bitsandbytes.gemm_4bit`, so 0.50.0 is the first stable release containing the direct packed 4-bit CUDA inference forward. Full bf16 materialization is no longer inherent to every `Linear4bit` forward.
+- **Older releases and unsupported cells.** Releases before 0.50.0, and cells the packed kernel does not cover (unsupported shapes, devices or configurations), may still dequantize: the bf16 weight is materialized and the GEMM runs on that copy. That round trip is the dequant tax this page's comparators measured.
+- **Fused MoE execution is a different contract.** Routed tokens address many expert matrices with different group sizes: a few rows for one expert, hundreds for another, most experts idle. Upstream has no grouped routed-MoE contract, so a naive implementation is a sequence of per-expert operations, one launch per active expert per projection per layer, whether or not each of those operations dequantizes.
+- **Training also needs dX.** The conventional 4-bit backward dequantizes the weight to compute the input gradient, so a QLoRA step over fused experts pays the bf16 round trip in the backward even where the forward does not.
+
+`grouped-nf4-gemm` keeps the expert-major NF4 stack packed, groups the routed work, decodes nibbles inside the kernel, accumulates in fp32, and writes no bf16 expert tensor; `dgrad_4bit_grouped` does the same for dX. [`KERNEL_CONTRACT.md`](../KERNEL_CONTRACT.md) is the op contract.
+
+| Path | Workload | Packed forward | Grouped routing | Training dgrad |
+|---|---|---|---|---|
+| bitsandbytes ≥ 0.50 supported CUDA path (`torch.ops.bitsandbytes.gemm_4bit`) | ordinary 2-D inference matrix, on supported shapes/devices/configs, inference (no-grad) | yes | no | backward dequantizes |
+| naive fused-MoE loop | per-expert operations, one per active expert | path-dependent (release and cell) | no | path-dependent |
+| grouped-nf4-gemm (`gemm_4bit_grouped`) | expert-major stack + routed groups | yes | yes | one-launch path available (`dgrad_4bit_grouped`) |
+
+Dataflow, per layer per projection:
+
+```text
+per-expert materializing loop                grouped packed path (this package)
+-----------------------------                ----------------------------------
+for each active expert e:                    packed B [E, N, K/2] u8 + absmax [E, N, K/64] f32
+    W_e = dequant(B[e]) -> bf16 [N, K]       routed groups: a_cat [T, K] sorted by expert,
+    out_e = a_e @ W_e.T                      sizes + expert_ids
+    (write W_e, read W_e, discard)                   |
+                                                     v
+                                             one grouped kernel dispatch:
+                                               nibble -> LUT decode in registers,
+                                               absmax scale, fp32 accumulate,
+                                               bf16 epilogue
+                                                     |
+                                                     v
+                                             output [T, N] in group order
+```
+
+Sorting tokens by expert and scattering the output back remain outside the kernel, as for every grouped GEMM.
+
+*Dated note (2026-09-04).* Every comparator called "the dequant path" or "dequantize-to-bf16-then-GEMM" in this repository's receipts is the per-expert loop as each receipt ran it: bitsandbytes `dequantize_4bit` per active expert followed by a bf16 matmul (`bench/phase1/harness.py`, `bk_dequant_grouped`; [`examples/dequant_tax.py`](../../examples/dequant_tax.py) labels which decode arm it ran). Those numbers stay what they measured; they are not a statement that current bitsandbytes dequantizes on every `Linear4bit` forward, and no registered cell times bitsandbytes' own packed 2-D inference forward.
 
 ## Which project solves it
 
@@ -644,11 +741,13 @@ bitsandbytes stores NF4 as a 16-entry codebook index per weight plus a blockwise
 
 ## Install
 
+Kernel package (the minimum route):
+
 ```bash
 pip install grouped-nf4-gemm
 ```
 
-Linux, NVIDIA GPU of compute capability sm_80 or newer (sm_120 is the primary serving target), `triton>=3.4` (Linux-only distribution), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. `nf4gemm`, `gnf4` and `grouped-mxfp4-gemm` are lookup aliases, not separate packages. Through the consumer:
+Linux, NVIDIA GPU of compute capability sm_80 or newer (sm_120 is the primary serving target), `triton>=3.4` (Linux-only distribution), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. `nf4gemm`, `gnf4` and `grouped-mxfp4-gemm` are lookup aliases, not separate packages. Through the model consumer:
 
 ```bash
 pip install "experts4bit-qlora[fast]"
@@ -713,6 +812,7 @@ Both blocks finish without an assertion. The GPU block returns `[T, N]` bf16 in 
 ## Limitations
 
 - Against a CUDA-graphed per-expert baseline the fused path loses at the decode band; the memory-traffic win survives at training shape on bandwidth-limited cards (claim `gnf4.kernel.graphed-baseline-decode-loses`). Read [`STATUS.md`](../STATUS.md) before quoting a decode win.
+- Every speed figure is per card: the census is sm_86, the head-to-head and the real finetune are RTX 4090 / H100, the `torch._grouped_mm` cell is RTX 5090 (claim `gnf4.kernel.sm120-census-vs-grouped-mm`). None is an architecture-wide statement, and no cell here is a measurement of bitsandbytes' own packed 2-D inference forward.
 - Shapes under a weight-byte floor lose outright; `nf4_grouped.decode_dispatch(N, K, T, sm_count)` returns `("dequant",)` for them and the caller routes those cells back. The op itself never switches algorithm.
 - `top_k=1` cells are instance-unstable; peak VRAM does not improve, only the forward-to-backward transient shrinks ([`STATUS.md`](../STATUS.md)).
 - The fidelity ordering is a CUDA tensor-core statement; other backends must re-measure. No ROCm or XPU ([`PORTABILITY.md`](../PORTABILITY.md)).
@@ -725,11 +825,19 @@ Both blocks finish without an assertion. The GPU block returns `[T, N]` bf16 in 
 
 ## Evidence
 
-Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.kernel.fused-more-accurate-than-dequant-bf16`, claim `gnf4.kernel.decode-speed-census`, claim `gnf4.kernel.energy-104-of-112`, claim `gnf4.kernel.e2e-training-real-prose`, claim `gnf4.kernel.h2h-unsloth` (4-bit-storage regime; Unsloth wins its own bf16-resident regime), claim `gnf4.kernel.graphed-baseline-decode-loses`. Measured: claim `gnf4.kernel.sm120-census-vs-grouped-mm`, claim `gnf4.kernel.dgrad`. Receipts under `kernel/RESULTS-*.md` with their `prereg_*.json`; property suite `kernel/test_nf4_grouped.py`.
+Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.kernel.fused-more-accurate-than-dequant-bf16` (has not measured less accurate than the dequantize-to-bf16-then-GEMM comparator in any registered confirmatory cell), claim `gnf4.kernel.decode-speed-census`, claim `gnf4.kernel.energy-104-of-112`, claim `gnf4.kernel.e2e-training-real-prose`, claim `gnf4.kernel.h2h-unsloth` (4-bit-storage regime; Unsloth wins its own bf16-resident regime), claim `gnf4.kernel.graphed-baseline-decode-loses`. Measured: claim `gnf4.kernel.sm120-census-vs-grouped-mm`, claim `gnf4.kernel.dgrad`. Receipts under `kernel/RESULTS-*.md` with their `prereg_*.json`; property suite `kernel/test_nf4_grouped.py`.
 
 ## Source: docs/solutions/stream-moe-experts-from-host-or-nvme.md (https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/stream-moe-experts-from-host-or-nvme.md)
 
 # How do I run a MoE whose experts do not fit in VRAM, streaming them from pinned host RAM or an NVMe arena?
+<!-- summary: The kernel-side storage primitives for experts that do not fit VRAM: the NVMe arena bake and O_DIRECT reader, the pinned-DRAM row tier and low-level residency, and the GPU-driven host gather. -->
+
+**Role of this page: kernel/storage primitives.** The arena bake and verifier, the O_DIRECT reader, the pinned-DRAM row tier and the low-level residency engines. It is not the decision page and not the model-level integration; those live in the consumer.
+
+**Use this page when…** you are building or debugging the storage layer itself: baking an expert-major arena, sizing a pinned row tier, reading rows with `ArenaReader`, or wiring `ColdTier` / `ArenaExpertSource` under your own forward. Start in [experts4bit-qlora](https://github.com/pjordanandrsn/experts4bit-qlora) instead when the question starts from a model:
+
+- **Should this MoE stream at all, and from where?** — the decision/router page, [run-moe-larger-than-vram.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/solutions/run-moe-larger-than-vram.md).
+- **Offload a loaded model's experts to CPU RAM or NVMe and serve or train it** — the model-level integration page, [offload-moe-experts-to-cpu-or-nvme.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/solutions/offload-moe-experts-to-cpu-or-nvme.md).
 
 `grouped-nf4-gemm` ships the tiers under a fused-expert forward: a GPU-driven gather from pinned host memory over UVA (`host_gather.gather_expert_rows`), an expert-major on-disk arena you bake once (`nvme_arena`, `nvme_bake_nf4`), an O_DIRECT reader (`nvme_reader.ArenaReader`), a pinned-DRAM residency tier over that arena (`nvme_residency.ColdTier`), and the MXFP4 engines that consume them (`mxfp4_pipelined.Mxfp4PipelinedGptOss`, `mxfp4_residency.Mxfp4NvmeResidency`). Which bytes live where is the consumer's decision.
 
@@ -750,11 +858,17 @@ Top-k routing touches a small fraction of expert bytes per token, so residency, 
 
 ## Install
 
+Kernel package (the minimum route):
+
 ```bash
 pip install grouped-nf4-gemm
 ```
 
-The relocation bake and verifier are stdlib plus the byte-range hasher and run on any host; the reader and `ColdTier(pinned=False)` are CPU-only. Pinned buffers, the gather and the engines need Linux with an NVIDIA GPU (sm_80+), `triton>=3.4` (Linux-only), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. `nvme_bake_nf4` needs bitsandbytes and CUDA to quantize. Through the consumer: `pip install "experts4bit-qlora[fast]"`.
+The relocation bake and verifier are stdlib plus the byte-range hasher and run on any host; the reader and `ColdTier(pinned=False)` are CPU-only. Pinned buffers, the gather and the engines need Linux with an NVIDIA GPU (sm_80+), `triton>=3.4` (Linux-only), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. `nvme_bake_nf4` needs bitsandbytes and CUDA to quantize. Through the model consumer:
+
+```bash
+pip install "experts4bit-qlora[fast]"
+```
 
 ## Smallest correct example
 
@@ -834,7 +948,7 @@ The CPU block bakes, verifies the full chain (source range hash, manifest, arena
 - `Mxfp4NvmeResidency` is not CUDA-graph capturable: a miss is a host-side disk read.
 - Do not quantize-bake a checkpoint that already ships MXFP4 ([README](../../README.md)); relocate it.
 - The cold-engine premise (bitsandbytes' CPU dequant as a free decode arm) is refuted on a box without AVX-512 (claim `gnf4.cold-engine.phase0-premise-refuted`).
-- Open issues on arena efficiency and the pinned-row factor under cgroup v2 are listed in [`STATUS.md`](../STATUS.md). No ROCm or XPU.
+- Open issues on arena efficiency (#73, #60, #58) and the pinned-row factor (#71: `PINNED_ROW_FACTOR` is conservative on cgroup v1; cgroup v2 is unmeasured) are listed in [`STATUS.md`](../STATUS.md). No ROCm or XPU.
 
 ## Related
 
@@ -847,6 +961,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.flagship.235b-
 ## Source: docs/solutions/verify-quantized-checkpoint-provenance.md (https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/verify-quantized-checkpoint-provenance.md)
 
 # How do I verify that the quantized expert bytes I serve or train on are the released checkpoint bytes?
+<!-- summary: file_tensor_sha256, provenance_table and verify_arena_matches hash safetensors byte ranges against the loaded and baked bytes, and verify_provenance re-derives a run's hash table. -->
 
 Hash them at the byte-range level with `grouped-nf4-gemm`'s provenance primitives: `mxfp4_loader.file_tensor_sha256(path, name)` streams sha256 over a tensor's data-section bytes in a safetensors shard without loading it, `mxfp4_loader.tensor_sha256(t)` hashes the tensor actually placed in memory, and `mxfp4_loader.verify_arena_matches(path, loaded)` raises on any mismatch. The `verify_provenance` CLI re-derives a training run's recorded hash table from the public checkpoint; `nvme_arena.verify` closes the chain for a baked arena.
 
@@ -866,6 +981,8 @@ A whole-file hash cannot answer these: a relocation reorders bytes, so `sha256(a
 `grouped-nf4-gemm` owns the hashing primitives, the arena manifests and verifier, and the CLI. [experts4bit-qlora](https://github.com/pjordanandrsn/experts4bit-qlora) ([PyPI](https://pypi.org/project/experts4bit-qlora/)) records the hash table in a run artifact during training and serving. [`SECURITY.md`](../../SECURITY.md) puts a way to make verification report success on mismatched bytes in the highest-severity class; report one privately.
 
 ## Install
+
+Kernel package (the only route this page needs):
 
 ```bash
 pip install grouped-nf4-gemm
@@ -995,7 +1112,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
     "claims_file": "docs/claims.json",
     "status_file": "docs/STATUS.md",
     "non_goals": [
-      "dense (non-MoE) GEMMs: use cuBLAS / bitsandbytes",
+      "dense (non-MoE) GEMMs: use cuBLAS, torch, or bitsandbytes' own 4-bit path -- since 0.50.0 its supported ordinary 2-D inference cells compute from the packed weights directly (torch.ops.bitsandbytes.gemm_4bit); there is no grouped routed-MoE contract upstream, which is what this package is",
       "a serving engine or a vLLM replacement: this is a kernel package driven by experts4bit-qlora",
       "operating systems other than Linux for the kernels (triton is Linux-only); ROCm/XPU are port targets, not supported",
       "models that already fit in bf16 with headroom: the grouped kernel loses at small shapes and to a CUDA-graphed per-expert loop at some decode shapes (claims gnf4.kernel.graphed-baseline-decode-loses)",
@@ -1005,13 +1122,15 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
   "capabilities": [
     {
       "id": "grouped-nf4-gemm",
-      "problem": "Dequantising every active expert to bf16 before its matmul is the bottleneck of 4-bit MoE inference; compute the grouped expert GEMM directly on the NF4-packed weights instead.",
+      "problem": "A per-expert 4-bit MoE loop pays a launch per active expert per projection, and wherever that loop dequantises (bitsandbytes releases before 0.50.0, cells outside its packed gemm_4bit inference forward, the conventional 4-bit backward) it also writes and re-reads a bf16 copy of each expert; compute the grouped expert GEMM directly on the NF4-packed weights in one launch instead.",
       "symptoms": [
         "dequantize-then-GEMM dominates the expert step",
         "bf16 expert materialization",
         "per-expert dequant + bmm loop",
         "grouped GEMM over bitsandbytes NF4 packed weights",
-        "W4A16 MoE kernel"
+        "W4A16 MoE kernel",
+        "bitsandbytes gemm_4bit has no grouped routed MoE path",
+        "QLoRA backward dequantizes 4-bit experts for dX"
       ],
       "solution": "gemm_4bit_grouped runs one Triton launch for all active experts over the bitsandbytes gemm_4bit NF4 layout (LUT decode to fp32 in registers, blockwise absmax scaling, fp32 accumulation, bf16 epilogue); dequant_ref is the pure-torch oracle it is asserted against; dgrad_4bit_grouped is the one-launch training backward.",
       "modes": [
@@ -1040,11 +1159,11 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
       },
       "install": [
         {
-          "purpose": "the kernel package",
+          "purpose": "kernel package",
           "command": "pip install grouped-nf4-gemm"
         },
         {
-          "purpose": "through the consumer package",
+          "purpose": "through the model consumer",
           "command": "pip install \"experts4bit-qlora[fast]\""
         }
       ],
@@ -1078,7 +1197,8 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
       "limitations": [
         "Loses to a CUDA-graphed per-expert baseline at some decode shapes (claim gnf4.kernel.graphed-baseline-decode-loses); shapes below the routing threshold go back to the reference path (docs/STATUS.md)",
         "CUDA + Triton only; calling the kernel on CPU raises and names dequant_ref",
-        "The fidelity claim is measured against fp32 accumulation on NVIDIA tensor cores; other backends must re-measure (docs/PORTABILITY.md)"
+        "The fidelity claim is measured against fp32 accumulation on NVIDIA tensor cores; other backends must re-measure (docs/PORTABILITY.md)",
+        "Every speed figure is per card -- the census is sm_86, the head-to-head and the real-finetune cells are RTX 4090 / H100, the torch._grouped_mm cell is RTX 5090 -- and none is an architecture-wide statement; the registered comparator is this repository's own per-expert dequantize-then-GEMM loop, and no registered cell times bitsandbytes' own packed 2-D inference forward (0.50.0 and later)"
       ],
       "status": "supported"
     },
@@ -1120,11 +1240,11 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
       },
       "install": [
         {
-          "purpose": "the kernel package",
+          "purpose": "kernel package",
           "command": "pip install grouped-nf4-gemm"
         },
         {
-          "purpose": "through the consumer package",
+          "purpose": "through the model consumer",
           "command": "pip install \"experts4bit-qlora[fast]\""
         }
       ],
@@ -1150,7 +1270,8 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
       "limitations": [
         "A uniform int4 grid cannot represent e2m1 levels: do not quantise-bake an already-MXFP4 checkpoint to NF4 or int4 (README)",
         "gemv_mxfp4_b32 re-streams weights per row: it is a decode lever for a handful of rows; batched rows use the grouped GEMM or the consumer's NF4 path",
-        "No ROCm/XPU"
+        "No ROCm/XPU",
+        "The claims here are fidelity and provenance results from single runs per card (a rented H200 pod for serving, an L40S and an A2000 for training, the K3 oracle on CPU); the MXFP4 GEMM has no speed census of its own and gemv_mxfp4_b32 is inside no registered claim"
       ],
       "status": "supported"
     },
@@ -1191,11 +1312,11 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
       },
       "install": [
         {
-          "purpose": "the kernel package",
+          "purpose": "kernel package",
           "command": "pip install grouped-nf4-gemm"
         },
         {
-          "purpose": "through the consumer package",
+          "purpose": "through the model consumer",
           "command": "pip install \"experts4bit-qlora[fast]\""
         }
       ],
@@ -1214,27 +1335,27 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
         "docs/STATUS.md"
       ],
       "claim_ids": [
-        "gnf4.serve.decode-anchor-5090",
         "gnf4.serve.int4-b32-gemv",
         "gnf4.serve.gptq-pack-int4-b32"
       ],
       "limitations": [
         "The int4-b32 GEMV and the calibrated packer are measured-private (claims gnf4.serve.int4-b32-gemv, gnf4.serve.gptq-pack-int4-b32): the receipts live in the consumer's private audit tree",
         "Split-K on the decode GEMV was refuted once and ships dormant (claim gnf4.retired.splitk-gemv records the refutation); the shipped plan is the measured one",
-        "Whether int4 experts pass a quality gate is the consumer's per-family question (experts4bit-qlora docs/STATUS.md): small-active-parameter models fail it with round-to-nearest packing"
+        "Whether int4 experts pass a quality gate is the consumer's per-family question (experts4bit-qlora docs/STATUS.md): small-active-parameter models fail it with round-to-nearest packing",
+        "The single-stream decode anchor (claim gnf4.serve.decode-anchor-5090) is a consumer-measured anchor of the serving class on a knob-off basis, not a measurement of this lane, and is not cited here as its evidence"
       ],
       "status": "measured-private"
     },
     {
-      "id": "fp8-paged-attention-and-decode-glue",
-      "problem": "A 4-bit MoE serving path needs a paged decode attention over an fp8 KV cache and the small fused kernels around the expert GEMM (norms, rotary, router epilogue, activation, combine).",
+      "id": "fp8-paged-attention-fp8-compute",
+      "problem": "A 4-bit MoE serving path needs a paged decode attention over an fp8 KV cache -- sliding windows, attention sinks, a custom scale, per-layer KV geometry -- computed with fp8 tensor-core dots on the cards that have them.",
       "symptoms": [
         "FP8 paged attention for MoE serving",
         "fp8 KV cache decode kernel",
         "sliding window and attention sinks in paged decode",
-        "fused RMSNorm rotary router epilogue at batch 1"
+        "fp8 compute mode paged attention sm_89 sm_120"
       ],
-      "solution": "fp8_kv quantises and appends KV blocks in e4m3 with per-(token, head) or grouped scales; fp8_paged_decode_attention is the paged decode kernel with sliding windows, sinks, custom scale and per-layer KV geometry, asserted against paged_attn_ref; int4_b32 carries the decode glue (rmsnorm_rows, rmsnorm_resid_rows, scaled_resid_add_rows, rope_norm_heads, rope_heads, router_epilogue, swiglu_rows, combine_rows).",
+      "solution": "fp8_kv quantises and appends KV blocks in e4m3 with per-(token, head) or grouped scales; fp8_paged_decode_attention is the paged decode kernel with sliding windows, sinks, custom scale and per-layer KV geometry, asserted against paged_attn_ref. With GNF4_ATTN_COMPUTE unset it selects the fp8 compute path wherever fp8_compute_unsupported returns None, an explicit request is never downgraded, and compute_counts records which path ran.",
       "modes": [
         "serving",
         "inference"
@@ -1252,20 +1373,21 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
           "Linux"
         ],
         "accelerator": [
-          "NVIDIA CUDA GPU, sm_89 or newer for the fp8 compute default (sm_120 is the primary serving target); sm_80-sm_88 fall to the f32 path, open under #319 (claim gnf4.open.f32-compute-modes-triton34)"
+          "NVIDIA CUDA GPU, sm_89 or newer (the fp8 tensor-core dot); measured on the RTX 5090 (sm_120) only -- sm_89 and sm_90 meet the requirement but no registered cell was run there"
         ],
         "special_requirements": [
           "triton>=3.4 (Linux-only distribution)",
-          "torch>=2.8 (pre-releases accepted)"
+          "torch>=2.8 (pre-releases accepted)",
+          "shape constraints, all from fp8_paged_attn.fp8_compute_unsupported (the single predicate the default selector and the path's own asserts share): v_groups == 1; k_groups in (1, 2, 4, 8, 16); head_dim // k_groups >= 32; q in bf16 or fp16; split branch: ktile >= 32 when the caller supplies it; packed branch (pack_heads=True): block_tokens * n_kv_heads >= 32. A call that fails any of these with GNF4_ATTN_COMPUTE unset takes the f32 path (its own entry)"
         ]
       },
       "install": [
         {
-          "purpose": "the kernel package",
+          "purpose": "kernel package",
           "command": "pip install grouped-nf4-gemm"
         },
         {
-          "purpose": "through the consumer package",
+          "purpose": "through the model consumer",
           "command": "pip install \"experts4bit-qlora[fast]\""
         }
       ],
@@ -1275,13 +1397,9 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
         "fp8_paged_attn:fp8_paged_decode_attention",
         "fp8_paged_attn:paged_attn_ref",
         "fp8_paged_attn:paged_attn_available",
-        "int4_b32:rmsnorm_rows",
-        "int4_b32:rmsnorm_resid_rows",
-        "int4_b32:rope_norm_heads",
-        "int4_b32:rope_heads",
-        "int4_b32:router_epilogue",
-        "int4_b32:swiglu_rows",
-        "int4_b32:combine_rows"
+        "fp8_paged_attn:fp8_compute_unsupported",
+        "fp8_paged_attn:compute_counts",
+        "flag:GNF4_ATTN_COMPUTE"
       ],
       "documentation": [
         "docs/solutions/fp8-paged-attention-for-moe-serving.md",
@@ -1290,15 +1408,148 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
       ],
       "claim_ids": [
         "gnf4.serve.fp8-paged-attn-windows-sinks-scale",
-        "gnf4.serve.m3-defaults-on",
-        "gnf4.serve.decode-glue-kernels"
+        "gnf4.serve.m3-defaults-on"
       ],
       "limitations": [
-        "The f32 compute modes of the paged kernel fail on triton 3.4 (claim gnf4.open.f32-compute-modes-triton34 records the open item). With GNF4_ATTN_COMPUTE unset, fp8 compute is the default only where it can run (sm_89+, v_groups == 1, head_dim // k_groups >= 32, bf16/fp16 q, ktile >= 32 when supplied); every other call, including all of sm_80-sm_88, takes the open f32 path",
-        "The decode glue kernels are measured-private (claim gnf4.serve.decode-glue-kernels)",
+        "One card class measured: both claims were run on the RTX 5090 (sm_120). The sm_89+ requirement is the kernel's precondition, not a measured statement about Ada or Hopper parts",
+        "Adds one e4m3 rounding on q and one on p, so its test bound is wider than the f32 path's (kernel/test_fp8_paged_attn.py)",
+        "pack_heads=True falls back to the split fp8 kernel with a one-time RuntimeWarning where the packed tile exceeds the card's shared memory",
+        "Served-path parity (Granite, gpt-oss, Gemma-4) is measured in experts4bit-qlora's private receipts; the evidence here is kernel-level parity against paged_attn_ref",
         "KV budgets in docs/context-budgets.md are rung-one (A2000) numbers; pending rows must not be promoted"
       ],
       "status": "supported"
+    },
+    {
+      "id": "fp8-paged-attention-f32-compute",
+      "problem": "The same paged decode attention over the fp8 KV cache computed with f32 dots: the default on sm_80-sm_88 (no fp8 tensor-core dot), the fallback wherever the fp8 constraints fail with GNF4_ATTN_COMPUTE unset, and every explicit f32 request.",
+      "symptoms": [
+        "fp8 paged attention on Ampere sm_80 sm_86",
+        "GNF4_ATTN_COMPUTE=f32",
+        "paged decode f32 compute mode misses reference on triton 3.4",
+        "grouped-nf4-gemm issue 319"
+      ],
+      "solution": "fp8_paged_decode_attention with compute='f32' (or selected by the capability-conditional default) runs the split kernel, or the packed kernel with pack_heads=True, dequantising e4m3 in registers and accumulating in f32; it imports and launches on any sm_80+ card and is asserted against the same paged_attn_ref.",
+      "modes": [
+        "serving",
+        "inference"
+      ],
+      "formats": [
+        "fp8",
+        "bf16"
+      ],
+      "model_families": [
+        "driven by experts4bit-qlora's paged engine for Qwen3-MoE, OLMoE, GraniteMoe, gpt-oss, Gemma-4, Mixtral"
+      ],
+      "environment": {
+        "python": ">=3.11 tested in CI (pyproject says >=3.9; 3.9/3.10 are not tested)",
+        "os": [
+          "Linux"
+        ],
+        "accelerator": [
+          "NVIDIA CUDA GPU, sm_80 or newer; this is the path sm_80-sm_88 take by default. Its reference tests were run on an RTX 5090 (sm_120) with the mode forced; no registered cell exists on sm_80-sm_88"
+        ],
+        "special_requirements": [
+          "triton>=3.4 (Linux-only distribution)",
+          "torch>=2.8 (pre-releases accepted)",
+          "the open item is on torch 2.8.0+cu128 / triton 3.4.0 -- the package floor -- so no torch/Triton pair inside the supported range is registered as passing this path's reference tests"
+        ]
+      },
+      "install": [
+        {
+          "purpose": "kernel package",
+          "command": "pip install grouped-nf4-gemm"
+        },
+        {
+          "purpose": "through the model consumer",
+          "command": "pip install \"experts4bit-qlora[fast]\""
+        }
+      ],
+      "entrypoints": [
+        "fp8_paged_attn:fp8_paged_decode_attention",
+        "fp8_paged_attn:paged_attn_ref",
+        "fp8_paged_attn:compute_counts",
+        "flag:GNF4_ATTN_COMPUTE"
+      ],
+      "documentation": [
+        "docs/solutions/fp8-paged-attention-for-moe-serving.md",
+        "docs/STATUS.md"
+      ],
+      "claim_ids": [],
+      "limitations": [
+        "Open, #319 (claim gnf4.open.f32-compute-modes-triton34, status open, so it backs nothing): on torch 2.8.0+cu128 / triton 3.4.It misses its fp32 reference beyond the registered tolerance in a subset of the paged-attention tests on the affected torch/Triton combination; the claim gnf4.open.f32-compute-modes-triton34 carries the numbers and the issue (#319).02 tolerance on, on unmodified main. A kernel that imports and launches is not numerically supported; this entry stays unsupported until the issue closes and the register carries a passing cell",
+        "A lane on this path cannot be gated with -x on those torch/Triton pairs; gate the fp8 modes with -k \"f8dot or pf8\" (README, docs/STATUS.md)",
+        "Explicit GNF4_ATTN_COMPUTE=f32 or compute='f32' selects this path on any card, sm_89+ included: the explicit request is honoured, never downgraded to fp8"
+      ],
+      "status": "unsupported"
+    },
+    {
+      "id": "decode-glue-kernels",
+      "problem": "The non-GEMM part of a batch-1 decode step is a tail of small launches (RMSNorm, residual add, rotary, router softmax and top-k, activation, top-k combine, split-K reduce); fold each into one launch.",
+      "symptoms": [
+        "fused RMSNorm rotary router epilogue at batch 1",
+        "decode glue kernels",
+        "fused top-k combine for MoE decode",
+        "split-K reduce and bf16 cast in one launch"
+      ],
+      "solution": "int4_b32 carries the decode glue: rmsnorm_rows, rmsnorm_resid_rows, scaled_resid_add_rows, rope_norm_heads, rope_heads, router_epilogue (softmax-then-top-k, or top-k on logits with an optional bias), swiglu_rows, combine_rows and reduce_partials; each has an in-tree parity test against a torch reference.",
+      "modes": [
+        "serving",
+        "inference"
+      ],
+      "formats": [
+        "bf16"
+      ],
+      "model_families": [
+        "driven by experts4bit-qlora's paged engine for Qwen3-MoE, OLMoE, GraniteMoe, gpt-oss, Gemma-4, Mixtral"
+      ],
+      "environment": {
+        "python": ">=3.11 tested in CI (pyproject says >=3.9; 3.9/3.10 are not tested)",
+        "os": [
+          "Linux"
+        ],
+        "accelerator": [
+          "NVIDIA CUDA GPU, sm_80 or newer (the composition was measured on the RTX 5090, sm_120)"
+        ],
+        "special_requirements": [
+          "triton>=3.4 (Linux-only distribution)",
+          "torch>=2.8 (pre-releases accepted)"
+        ]
+      },
+      "install": [
+        {
+          "purpose": "kernel package",
+          "command": "pip install grouped-nf4-gemm"
+        },
+        {
+          "purpose": "through the model consumer",
+          "command": "pip install \"experts4bit-qlora[fast]\""
+        }
+      ],
+      "entrypoints": [
+        "int4_b32:rmsnorm_rows",
+        "int4_b32:rmsnorm_resid_rows",
+        "int4_b32:scaled_resid_add_rows",
+        "int4_b32:rope_norm_heads",
+        "int4_b32:rope_heads",
+        "int4_b32:router_epilogue",
+        "int4_b32:swiglu_rows",
+        "int4_b32:combine_rows",
+        "int4_b32:reduce_partials"
+      ],
+      "documentation": [
+        "docs/solutions/fp8-paged-attention-for-moe-serving.md",
+        "docs/solutions/int4-decode-gemv.md",
+        "docs/STATUS.md"
+      ],
+      "claim_ids": [
+        "gnf4.serve.decode-glue-kernels"
+      ],
+      "limitations": [
+        "The composition timing and the paired perplexity deltas are measured-private (claim gnf4.serve.decode-glue-kernels): real runs through the consumer on the RTX 5090 whose receipts live in a private audit tree; what is checkable here is each kernel's parity test",
+        "int4_b32 imports triton at module level and is not importable without it",
+        "combine_rows and reduce_partials (0.29.0) are inside no registered claim: capability without a published measurement"
+      ],
+      "status": "measured-private"
     },
     {
       "id": "stream-experts-from-host-or-nvme",
@@ -1343,11 +1594,11 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
       },
       "install": [
         {
-          "purpose": "the kernel package",
+          "purpose": "kernel package",
           "command": "pip install grouped-nf4-gemm"
         },
         {
-          "purpose": "through the consumer package",
+          "purpose": "through the model consumer",
           "command": "pip install \"experts4bit-qlora[fast]\""
         }
       ],
@@ -1380,7 +1631,8 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
       "limitations": [
         "NVMe is a batch tier: per-token latency is bounded by the device link (claim gnf4.nvme.tier-batch-only)",
         "Expert prefetch closed negative over four arcs (claim gnf4.flagship.prefetch-closed-negative)",
-        "The cold-engine 'free floor' premise was refuted (claim gnf4.cold-engine.phase0-premise-refuted); read docs/INDEX.md before quoting any cold-engine number"
+        "The cold-engine 'free floor' premise was refuted (claim gnf4.cold-engine.phase0-premise-refuted); read docs/INDEX.md before quoting any cold-engine number",
+        "This entry is the primitive layer (arena, reader, row tier, low-level residency); which bytes live where and the end-to-end run of a MoE larger than VRAM are experts4bit-qlora's pages run-moe-larger-than-vram (decision/router) and offload-moe-experts-to-cpu-or-nvme (model-level integration)"
       ],
       "status": "supported"
     },
@@ -1420,7 +1672,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
       },
       "install": [
         {
-          "purpose": "the kernel package",
+          "purpose": "kernel package",
           "command": "pip install grouped-nf4-gemm"
         }
       ],
@@ -1474,9 +1726,10 @@ marked. Treat them as you would any unverifiable number.
 
 **The kernel.** One Triton launch runs the grouped expert GEMM directly
 on 4-bit-packed weights — NF4 on the bitsandbytes layout, and native
-MXFP4 (OCP e2m1 + e8m0) on a checkpoint's exact released bytes. fp32
-accumulation makes it *more accurate* than dequantise-to-bf16-then-GEMM,
-in every confirmatory cell ever measured.
+MXFP4 (OCP e2m1 + e8m0) on a checkpoint's exact released bytes. With fp32
+accumulation it has never measured *less* accurate than the
+dequantise-to-bf16-then-GEMM comparator in any registered confirmatory
+cell (`gnf4.kernel.fused-more-accurate-than-dequant-bf16`).
 
 | | measured | tier |
 |---|---|---|
@@ -1504,8 +1757,14 @@ footnote:**
    path by a dispatch floor.
 
 **Serving (sm_120).** Both decode knobs ship ON, capability-conditional:
-an unset env takes fp8 where fp8 can run and the certified f32 path
-otherwise, and an explicit request is never silently downgraded. The
+an unset env takes fp8 where fp8 can run and the f32 path otherwise, and
+an explicit request is never silently downgraded. The paged attention is
+therefore two support states, and `capabilities.json` carries it as two
+entries: the **fp8 compute path** (sm_89+ precondition; measured on the
+RTX 5090 only) is supported; the **f32 compute path** — the sm_80–sm_88
+default, the fallback where an fp8 constraint fails, and every explicit
+f32 request on any card — is open under #319 and carried as
+`unsupported` until it closes. The
 certified single-stream anchor for Qwen3-30B-A3B on the RTX 5090 class
 is **7.37 ms/step ±4.2% (≈130–142 tok/s)** — the class carries 8.5%
 inter-box dispersion while each box repeats itself to 0.16%, so quote
@@ -1571,9 +1830,10 @@ was wrong.
 
 - **#319 — the f32 paged-decode compute modes miss their reference** on
   torch 2.8.0+cu128 / triton 3.4.0 (10 of 35 tests, up to 0.074 against
-  a 0.02 tolerance), on unmodified `main`. The fp8 modes — the sm_120
-  serving default — pass, so serving is unaffected; the Ampere/Hopper
-  compute path is not.
+  a 0.02 tolerance), on unmodified `main`. The fp8 modes — the default
+  on sm_89+ where the constraints pass, sm_120 serving included — pass,
+  so that serving path is unaffected; the sm_80–sm_88 default path and
+  every explicit f32 request (on any card, Hopper included) are not.
 - **#87** — `gemm_4bit_grouped` int32 offset overflow at large
   `max(expert_ids)`, distinct from the 2 GiB stride fix in 0.13.2/0.14.0.
 - **#73, #60, #58** — arena/NVMe efficiency: host copy is ~71% of a K3
@@ -1603,7 +1863,14 @@ was wrong.
 - **Quote the baseline.** Almost every ratio here is against
   *this project's own* per-expert loop or the dequant path — not against
   a third party's implementation, except the one head-to-head that says
-  so.
+  so. The dequant path is bitsandbytes `dequantize_4bit` per active
+  expert followed by a bf16 matmul, as each receipt ran it. Since
+  bitsandbytes 0.50.0 (upstream #1949, merged 2026-05-21) its supported
+  ordinary 2-D inference cells compute from the packed weights directly;
+  no receipt here times that path, the grouped routed-MoE GEMM is a
+  separate contract upstream does not have, and the conventional 4-bit
+  backward still dequantises for dX. The ratios stay what their receipts
+  measured (noted 2026-09-04).
 - **A benchmark on random token ids understates this kernel by ~1.6×**,
   because prose routes to 98.4% of experts and random ids to 87.5%.
   Benchmark on real text.
@@ -1777,6 +2044,15 @@ publishing.
 - **Which documents are current: `docs/INDEX.md`.** Anchoring here is a
   sibling `.ots` file (`find . -name '*.ots'` lists them): an anchored
   document is never edited in place; corrections go in a sibling file.
+- **The comparator, named precisely.** Every "dequant path" ratio is
+  against this repository's own per-expert loop (bitsandbytes
+  `dequantize_4bit` per expert, then a bf16 matmul) as its receipt ran
+  it. bitsandbytes 0.50.0 computes supported ordinary 2-D inference cells
+  from the packed weights directly and has no grouped routed-MoE
+  contract; the conventional 4-bit backward still dequantises for dX.
+  Never write "stock 4-bit always dequantises": the version-, workload-
+  and shape-aware statement is on
+  `docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md`.
 
 ## Build and test
 
@@ -1791,6 +2067,7 @@ python scripts/wheel_smoke.py                      # from outside the tree, agai
 python scripts/check_readme_links.py               # README links are absolute; self-refs = v<version> or main
 python scripts/check_capabilities.py               # docs/capabilities.json vs schema, pyproject, source, claims
 python scripts/check_discovery_contract.py         # docs/discovery-queries.json vs docs/solutions/
+python scripts/check_docs_examples.py --root .     # doc code blocks parse, links resolve; --run-cpu-blocks kernel executes the CPU-only ones
 python scripts/build_llms_bundle.py --check        # llms-full.txt is current
 ```
 
@@ -1853,8 +2130,12 @@ triton via `_triton_shim` (#78); the Triton kernels need a CUDA GPU; macOS
 and Windows are not exercised by CI, so say "not exercised by CI" rather
 than "supported". `int4_b32` imports triton directly and is not importable
 without it. ROCm/XPU are port targets (`docs/PORTABILITY.md`),
-not supported. The fp8 paged kernel's f32 compute modes fail on triton 3.4
-(`gnf4.open.f32-compute-modes-triton34`).
+not supported. The fp8 paged kernel's f32 compute modes — the sm_80–sm_88
+default and every explicit f32 request — miss their reference on triton
+3.4 (`gnf4.open.f32-compute-modes-triton34`, #319);
+`docs/capabilities.json` carries that path as its own `unsupported` entry
+beside the supported fp8 compute path (sm_89+, measured on the RTX 5090
+only).
 
 ## Release notes
 

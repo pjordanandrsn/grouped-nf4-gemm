@@ -1,6 +1,6 @@
 {
   "package": "grouped-nf4-gemm",
-  "generated": "2026-09-03",
+  "generated": "2026-09-04",
   "schema": "docs/claims-schema.md",
   "status_vocabulary": {
     "confirmed": "pre-registered, OpenTimestamps-stamped blind confirmatory run; protocol and pass/fail fixed before data",
@@ -182,7 +182,7 @@
       "evidence": [
         "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/319"
       ],
-      "notes": "Serving on sm_120 is unaffected; the f32 path is the Ampere/Hopper compute path and its tests cannot gate a lane on these boxes with -x."
+      "notes": "Serving on sm_120 with GNF4_ATTN_COMPUTE unset is unaffected. The f32 path is the sm_80-sm_88 default (sm_89+, Hopper included, defaults to fp8 where fp8_compute_unsupported passes), the fallback wherever an fp8 constraint fails, and every explicit f32 request on any card; its tests cannot gate a lane on these boxes with -x. docs/capabilities.json carries it as fp8-paged-attention-f32-compute, status unsupported, until this closes."
     },
     {
       "id": "gnf4.serve.int4-b32-gemv",
@@ -287,9 +287,9 @@
       "status": "confirmed",
       "evidence": [
         "bench/phase3/flagship/RESULTS-flagship-phaseB2.md",
-        "RESULTS-flagship-phaseB3.md",
-        "RESULTS-flagship-phaseB4.md",
-        "RESULTS-flagship-phaseB5.md"
+        "bench/phase3/flagship/RESULTS-flagship-phaseB3.md",
+        "bench/phase3/flagship/RESULTS-flagship-phaseB4.md",
+        "bench/phase3/flagship/RESULTS-flagship-phaseB5.md"
       ]
     },
     {

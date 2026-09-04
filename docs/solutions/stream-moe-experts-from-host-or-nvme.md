@@ -1,4 +1,12 @@
 # How do I run a MoE whose experts do not fit in VRAM, streaming them from pinned host RAM or an NVMe arena?
+<!-- summary: The kernel-side storage primitives for experts that do not fit VRAM: the NVMe arena bake and O_DIRECT reader, the pinned-DRAM row tier and low-level residency, and the GPU-driven host gather. -->
+
+**Role of this page: kernel/storage primitives.** The arena bake and verifier, the O_DIRECT reader, the pinned-DRAM row tier and the low-level residency engines. It is not the decision page and not the model-level integration; those live in the consumer.
+
+**Use this page when…** you are building or debugging the storage layer itself: baking an expert-major arena, sizing a pinned row tier, reading rows with `ArenaReader`, or wiring `ColdTier` / `ArenaExpertSource` under your own forward. Start in [experts4bit-qlora](https://github.com/pjordanandrsn/experts4bit-qlora) instead when the question starts from a model:
+
+- **Should this MoE stream at all, and from where?** — the decision/router page, [run-moe-larger-than-vram.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/solutions/run-moe-larger-than-vram.md).
+- **Offload a loaded model's experts to CPU RAM or NVMe and serve or train it** — the model-level integration page, [offload-moe-experts-to-cpu-or-nvme.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/solutions/offload-moe-experts-to-cpu-or-nvme.md).
 
 `grouped-nf4-gemm` ships the tiers under a fused-expert forward: a GPU-driven gather from pinned host memory over UVA (`host_gather.gather_expert_rows`), an expert-major on-disk arena you bake once (`nvme_arena`, `nvme_bake_nf4`), an O_DIRECT reader (`nvme_reader.ArenaReader`), a pinned-DRAM residency tier over that arena (`nvme_residency.ColdTier`), and the MXFP4 engines that consume them (`mxfp4_pipelined.Mxfp4PipelinedGptOss`, `mxfp4_residency.Mxfp4NvmeResidency`). Which bytes live where is the consumer's decision.
 
@@ -19,11 +27,17 @@ Top-k routing touches a small fraction of expert bytes per token, so residency, 
 
 ## Install
 
+Kernel package (the minimum route):
+
 ```bash
 pip install grouped-nf4-gemm
 ```
 
-The relocation bake and verifier are stdlib plus the byte-range hasher and run on any host; the reader and `ColdTier(pinned=False)` are CPU-only. Pinned buffers, the gather and the engines need Linux with an NVIDIA GPU (sm_80+), `triton>=3.4` (Linux-only), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. `nvme_bake_nf4` needs bitsandbytes and CUDA to quantize. Through the consumer: `pip install "experts4bit-qlora[fast]"`.
+The relocation bake and verifier are stdlib plus the byte-range hasher and run on any host; the reader and `ColdTier(pinned=False)` are CPU-only. Pinned buffers, the gather and the engines need Linux with an NVIDIA GPU (sm_80+), `triton>=3.4` (Linux-only), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. `nvme_bake_nf4` needs bitsandbytes and CUDA to quantize. Through the model consumer:
+
+```bash
+pip install "experts4bit-qlora[fast]"
+```
 
 ## Smallest correct example
 
@@ -103,7 +117,7 @@ The CPU block bakes, verifies the full chain (source range hash, manifest, arena
 - `Mxfp4NvmeResidency` is not CUDA-graph capturable: a miss is a host-side disk read.
 - Do not quantize-bake a checkpoint that already ships MXFP4 ([README](../../README.md)); relocate it.
 - The cold-engine premise (bitsandbytes' CPU dequant as a free decode arm) is refuted on a box without AVX-512 (claim `gnf4.cold-engine.phase0-premise-refuted`).
-- Open issues on arena efficiency and the pinned-row factor under cgroup v2 are listed in [`STATUS.md`](../STATUS.md). No ROCm or XPU.
+- Open issues on arena efficiency (#73, #60, #58) and the pinned-row factor (#71: `PINNED_ROW_FACTOR` is conservative on cgroup v1; cgroup v2 is unmeasured) are listed in [`STATUS.md`](../STATUS.md). No ROCm or XPU.
 
 ## Related
 

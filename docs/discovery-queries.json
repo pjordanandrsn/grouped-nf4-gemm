@@ -475,6 +475,70 @@
           "fast"
         ]
       ]
+    },
+    {
+      "query": "does bitsandbytes 0.50 gemm_4bit still dequantize NF4 to bf16",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md",
+      "required_concepts": [
+        [
+          "bitsandbytes"
+        ],
+        [
+          "gemm_4bit"
+        ],
+        [
+          "0.50.0",
+          "0.50"
+        ]
+      ]
+    },
+    {
+      "query": "4-bit QLoRA backward dequantizes experts for dX grouped dgrad",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md",
+      "required_concepts": [
+        [
+          "dgrad_4bit_grouped",
+          "dgrad"
+        ],
+        [
+          "backward"
+        ],
+        [
+          "dX"
+        ]
+      ]
+    },
+    {
+      "query": "fp8 paged attention f32 compute mode on Ampere sm_80 issue 319",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/fp8-paged-attention-for-moe-serving.md",
+      "required_concepts": [
+        [
+          "f32"
+        ],
+        [
+          "sm_80",
+          "Ampere"
+        ],
+        [
+          "319"
+        ]
+      ]
+    },
+    {
+      "query": "which page decides whether my MoE should stream experts from host RAM",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/stream-moe-experts-from-host-or-nvme.md",
+      "required_concepts": [
+        [
+          "experts4bit-qlora"
+        ],
+        [
+          "run-moe-larger-than-vram"
+        ]
+      ]
     }
   ]
 }
