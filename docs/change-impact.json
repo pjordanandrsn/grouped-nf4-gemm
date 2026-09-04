@@ -1,0 +1,84 @@
+{
+  "$comment": "Change-impact contract for grouped-nf4-gemm: which companion changes a class of change requires before it is complete. scripts/check_change_impact.py --base <git ref> detects the triggers it can see in a diff and reports the missing companions (FAIL or WARN as listed); the steps a script cannot see are the human checklist. docs/system-manifest.json names the invariants this contract serves (kernel-first, claims-own-numbers, status-owns-position). Human-readable summary: AGENTS.md section 8.",
+  "schema_version": "1.0",
+  "checked_by": "scripts/check_change_impact.py --base <git ref> (CI runs it on pull requests against the PR base)",
+  "classes": [
+    {
+      "id": "new-kernel-capability",
+      "description": "A new kernel or primitive that a consumer can call: a new module in pyproject py-modules, or a new @triton.jit kernel in a shipped module.",
+      "detected_triggers": [
+        "a module added to [tool.setuptools] py-modules in pyproject.toml",
+        "a new @triton.jit-decorated function in a module pyproject ships",
+        "a module-level layout constant (BLOCK / GROUP / STRIDE / ALIGN / LAYOUT / NIBBLE / PACK / ROW / TILE / WIDTH / BYTES) added or changed in a shipped module"
+      ],
+      "companions": {
+        "fail_if_missing": ["docs/capabilities.json", "CHANGELOG.md"],
+        "warn_if_missing": ["docs/KERNEL_CONTRACT.md (only when a layout constant changed)"]
+      },
+      "steps": [
+        {"step": 1, "what": "kernel implementation and its pure-torch reference", "where": "kernel/<module>.py: the kernel, and a reference the tests assert it against", "repository": "grouped-nf4-gemm"},
+        {"step": 2, "what": "kernel contract / layout documentation", "where": "docs/KERNEL_CONTRACT.md (layouts at a glance; the op contract) and the module docstring", "repository": "grouped-nf4-gemm"},
+        {"step": 3, "what": "capability entry", "where": "docs/capabilities.json: an entry (or an entrypoint on an existing entry) with status, limitations and claim_ids; scripts/check_capabilities.py validates it", "repository": "grouped-nf4-gemm"},
+        {"step": 4, "what": "kernel tests wired into CI", "where": "kernel/test_<module>.py named in .github/workflows/ci.yml (kernel/test_packaging_covers_kernel.py enforces it); interpreter-mode files registered in kernel/conftest.py _INTERP_FILES", "repository": "grouped-nf4-gemm"},
+        {"step": 5, "what": "consumer integration", "where": "experts4bit-qlora: the enable_* path that calls the kernel and returns a count or handle (no silent fallback)", "repository": "experts4bit-qlora"},
+        {"step": 6, "what": "consumer floor, if the consumer requires the new kernel", "where": "after the kernel release is tagged: experts4bit-qlora pyproject `fast` extra and a new compatibility record in docs/system-manifest.json, byte-identical in both repositories (kernel-first invariant; scripts/check_system_manifest.py)", "repository": "experts4bit-qlora"},
+        {"step": 7, "what": "model-level measurement", "where": "experts4bit-qlora receipts (kernel-level cells stay here under kernel/ or bench/)", "repository": "experts4bit-qlora"},
+        {"step": 8, "what": "quality gate", "where": "the registered gate in its own units, verdict recorded as PASS or FAIL beside a measured noise floor; a failed gate stays failed", "repository": "experts4bit-qlora"},
+        {"step": 9, "what": "claim registration", "where": "docs/claims.json in the repository that owns the number (kernel-level here, model-level in the consumer); docs/STATUS.md in the same change; prose quotes the claim ID", "repository": "both"},
+        {"step": 10, "what": "release documentation", "where": "CHANGELOG.md under the release that ships it (first paragraph per docs/RELEASE_NOTES_GUIDE.md); llms-full.txt regenerated (scripts/build_llms_bundle.py)", "repository": "grouped-nf4-gemm"}
+      ]
+    },
+    {
+      "id": "public-api-change",
+      "description": "A public kernel, reference or primitive changes signature, layout or return, or an entry point is added to or removed from the capability contract.",
+      "detected_triggers": [
+        "the set of entrypoints in docs/capabilities.json changes"
+      ],
+      "companions": {
+        "fail_if_missing": ["CHANGELOG.md"],
+        "warn_if_missing": ["README.md (the entry-point table)", "docs/KERNEL_CONTRACT.md (when a layout moved)"]
+      },
+      "steps": [
+        {"step": 1, "what": "module docstring and docs/KERNEL_CONTRACT.md if a layout moved", "repository": "grouped-nf4-gemm"},
+        {"step": 2, "what": "README entry-point table, docs/capabilities.json entrypoints, the affected docs/solutions/*.md", "repository": "grouped-nf4-gemm"},
+        {"step": 3, "what": "CHANGELOG.md under ## Unreleased", "repository": "grouped-nf4-gemm"},
+        {"step": 4, "what": "the consumer-side change or issue in experts4bit-qlora", "repository": "experts4bit-qlora"}
+      ]
+    },
+    {
+      "id": "measured-result",
+      "description": "A number changes or appears: a receipt, then the claim, then the position, then prose that quotes the claim ID. docs/claims.json wins for numbers; docs/STATUS.md wins for position.",
+      "detected_triggers": [
+        "a claim added to docs/claims.json, or an existing claim's status, value or unit changed"
+      ],
+      "companions": {
+        "fail_if_missing": ["docs/STATUS.md (unless --allow-claims-only)"],
+        "warn_if_missing": []
+      },
+      "steps": [
+        {"step": 1, "what": "receipt committed (public path under evidence) or labelled measured-private with evidence_private", "repository": "grouped-nf4-gemm"},
+        {"step": 2, "what": "claim entry in docs/claims.json with status from the evidence vocabulary; a superseded or retired claim keeps its entry and names its successor or reason", "repository": "grouped-nf4-gemm"},
+        {"step": 3, "what": "docs/STATUS.md states the new position (what it does today / what changed / what is open)", "repository": "grouped-nf4-gemm"},
+        {"step": 4, "what": "prose quotes the claim ID and tier (README, solution pages, capabilities.json limitations); numbers with units never enter docs/capabilities.json", "repository": "grouped-nf4-gemm"},
+        {"step": 5, "what": "llms-full.txt regenerated", "repository": "grouped-nf4-gemm"}
+      ]
+    },
+    {
+      "id": "dependency-floor",
+      "description": "The package version, a dependency floor (torch, triton, numpy) or the consumer's floor on this package changes.",
+      "detected_triggers": [
+        "the pyproject version changes",
+        "the pyproject dependencies list changes"
+      ],
+      "companions": {
+        "fail_if_missing": ["CHANGELOG.md (on a version bump)"],
+        "warn_if_missing": ["README.md and docs/capabilities.json environments (on a dependency-floor change)"]
+      },
+      "steps": [
+        {"step": 1, "what": "version bump: CHANGELOG.md carries the release heading; the tag is cut by the maintainer after merge (publish.yml refuses a tag that disagrees with pyproject)", "repository": "grouped-nf4-gemm"},
+        {"step": 2, "what": "dependency floor: the pyproject comment records why; README install note and docs/capabilities.json environments follow; scripts/check_dependency_floor.py validates the hand-copied floors", "repository": "grouped-nf4-gemm"},
+        {"step": 3, "what": "consumer floor: only after the kernel release exists -- a new compatibility record in docs/system-manifest.json in BOTH repositories and the consumer's `fast` extra; scripts/check_system_manifest.py --sibling checks the pair", "repository": "both"}
+      ]
+    }
+  ]
+}
