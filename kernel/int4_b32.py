@@ -418,6 +418,41 @@ def swiglu_rows(gu: torch.Tensor):
     return h
 
 
+# ------------------------------------------ top-k weighted combine --
+@triton.jit
+def _combine_rows(dn_ptr, w_ptr, out_ptr, K: tl.constexpr, H,
+                  BLOCK: tl.constexpr):
+    """``out[t, :] = bf16(sum_j fp32(dn[t*K + j, :]) * w[t*K + j])`` --
+    the MoE combine (weight, sum over the top-k, cast) in one launch. The
+    torch chain it replaces was four dispatches per layer (to_copy,
+    mul, sum, to_copy) and two kernels; the Qwen3 B=1 op census put
+    them at the top of the collapsed forward's glue."""
+    t = tl.program_id(0)
+    pid = tl.program_id(1)
+    offs = pid * BLOCK + tl.arange(0, BLOCK)
+    m = offs < H
+    acc = tl.zeros((BLOCK,), dtype=tl.float32)
+    for j in tl.static_range(K):
+        w = tl.load(w_ptr + t * K + j).to(tl.float32)
+        acc += tl.load(dn_ptr + (t * K + j) * H + offs, mask=m,
+                       other=0.0).to(tl.float32) * w
+    tl.store(out_ptr + t * H + offs, acc.to(tl.bfloat16), mask=m)
+
+
+def combine_rows(dn: torch.Tensor, w: torch.Tensor, k: int):
+    """``dn [T*k, H]`` (bf16 expert outputs, token-major, k slots per
+    token) and ``w [T*k]`` (routing weights) -> ``[T, H]`` bf16, one
+    launch. Summation is fp32 in slot order, as the torch chain's is."""
+    TK, H = dn.shape
+    T = TK // k
+    out = torch.empty(T, H, dtype=torch.bfloat16, device=dn.device)
+    block = min(1024, triton.next_power_of_2(H))
+    _combine_rows[(T, triton.cdiv(H, block))](
+        dn.contiguous(), w.contiguous(), out, K=k, H=H, BLOCK=block,
+        num_warps=4)
+    return out
+
+
 # --------------------------------------------------- fused T=1 RMSNorm --
 @triton.jit
 def _rmsnorm_rows(x_ptr, w_ptr, out_ptr, R, H: tl.constexpr,
