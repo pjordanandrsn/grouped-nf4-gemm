@@ -49,14 +49,14 @@ classifiers = [
 
 [project.urls]
 Homepage = "https://cerinamroth.com/ml/grouped-nf4-gemm/"
-Documentation = "https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/README.md"
+Documentation = "https://cerinamroth.com/ml/grouped-nf4-gemm/"
 Source = "https://github.com/pjordanandrsn/grouped-nf4-gemm"
 Issues = "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues"
 Changelog = "https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/CHANGELOG.md"
 "Release Notes" = "https://github.com/pjordanandrsn/grouped-nf4-gemm/releases/latest"
-Status = "https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/STATUS.md"
+Status = "https://cerinamroth.com/ml/status/"
 Capabilities = "https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/capabilities.json"
-Solutions = "https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/SOLUTIONS.md"
+Solutions = "https://cerinamroth.com/ml/solutions/"
 Benchmarks = "https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/claims.json"
 Receipts = "https://github.com/pjordanandrsn/grouped-nf4-gemm/tree/main/kernel"
 "Consumer: experts4bit-qlora" = "https://pypi.org/project/experts4bit-qlora/"
