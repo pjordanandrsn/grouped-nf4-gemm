@@ -134,13 +134,19 @@ def latest_tag(root: Path) -> tuple[int, ...] | None:
         out = subprocess.run(["git", "-C", str(root), "tag", "-l", "v*"], capture_output=True, text=True, check=True).stdout
     except (OSError, subprocess.CalledProcessError):
         return None
-    tags = []
-    for t in out.split():
-        try:
-            tags.append(release_tuple(t))
-        except ValueError:
-            continue
+    tags = [tt for tt in (final_release_tag(t) for t in out.split()) if tt is not None]
     return max(tags) if tags else None
+
+
+_FINAL_TAG = re.compile(r"^v(\d+(?:\.\d+)*)$")
+
+
+def final_release_tag(tag: str) -> tuple[int, ...] | None:
+    """``v0.30.0`` -> (0, 30, 0); a pre-release, post or dev tag (``v0.31.0rc1``,
+    ``v0.31.0.dev2``) -> None. Only a final release satisfies the kernel-first
+    invariant: a consumer floor must name a version that actually shipped."""
+    m = _FINAL_TAG.match(tag.strip())
+    return tuple(int(x) for x in m.group(1).split(".")) if m else None
 
 
 def _norm_url(u: str) -> str:

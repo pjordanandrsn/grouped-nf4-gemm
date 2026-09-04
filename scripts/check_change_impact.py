@@ -41,7 +41,9 @@ from pathlib import Path
 
 LAYOUT_WORDS = re.compile(r"(BLOCK|GROUP|STRIDE|ALIGN|LAYOUT|NIBBLE|PACK|ROW|TILE|WIDTH|BYTES)")
 CONSTANT = re.compile(r"^([A-Z][A-Z0-9_]*)\s*(?::\s*[^=]+)?=\s*(.+?)\s*(?:#.*)?$", re.M)
-JIT_KERNEL = re.compile(r"^@triton\.jit(?:\([^)]*\))?\s*\n(?:^@[^\n]*\n)*^def\s+(\w+)", re.M)
+# Indented too: this tree defines kernels inside functions/classes (kernel/fp8_kv.py,
+# kernel/fp8_paged_attn.py), and a nested kernel is still a new kernel.
+JIT_KERNEL = re.compile(r"^[ \t]*@triton\.jit(?:\([^)]*\))?[ \t]*\n(?:^[ \t]*@[^\n]*\n)*^[ \t]*def\s+(\w+)", re.M)
 
 
 class GitError(Exception):
