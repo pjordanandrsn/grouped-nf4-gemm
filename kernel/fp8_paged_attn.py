@@ -1164,9 +1164,12 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
     pack_heads   one CTA per (sequence, split) consuming ALL kv heads —
                  whole-line reads, tensor-core block-diagonal scores; the
                  tile is one BT-token block and ``ktile`` is ignored.
-    compute      None (default): resolved from ``GNF4_ATTN_COMPUTE``
-                 (PREREG-k8), which is "f32" unless exported — an
-                 explicit argument always wins.
+    compute      None (default): resolved by ``_compute_default``. An
+                 exported ``GNF4_ATTN_COMPUTE`` ("f32" | "fp8") is taken
+                 as-is, never downgraded, and any other value raises;
+                 unset, the default is "fp8" wherever
+                 ``fp8_compute_unsupported`` returns None for this call
+                 and "f32" otherwise. An explicit argument always wins.
                  "f32": E4M3 decoded in registers, tf32 dots —
                  the bit-exact-est serving path. "fp8": payload bytes are
                  BITCAST into fp8 tensor-core dots, scales folded onto the
@@ -1177,6 +1180,16 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
                  becomes the default — the G7 oracle certified storage.
 
     Returns [B, H_q, D] in q's dtype.
+    Use it as the decode attention over an fp8 (e4m3) paged KV cache written by ``fp8_kv``:
+    sliding windows, attention sinks, custom scale and per-layer KV geometry are arguments,
+    not assumptions. Assert it against ``paged_attn_ref`` on first use. Needs a CUDA GPU and
+    Triton. With ``GNF4_ATTN_COMPUTE`` unset, fp8 compute is the default where it can run
+    (sm_89+, ``v_groups == 1``, ``k_groups`` in (1, 2, 4, 8, 16) with
+    ``head_dim // k_groups >= 32``, bf16/fp16 ``q``, and a supplied ``ktile >= 32`` on the
+    split path or ``block_tokens * n_kv_heads >= 32`` on the packed path); otherwise the
+    call takes the f32 path, which is open under #319 on triton 3.4 (claim
+    ``gnf4.open.f32-compute-modes-triton34``). See
+    ``docs/solutions/fp8-paged-attention-for-moe-serving.md``.
     """
     assert paged_attn_available(), "needs CUDA + triton"
     if compute is None:

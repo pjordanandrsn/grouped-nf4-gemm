@@ -1153,7 +1153,17 @@ def gemm_4bit_grouped(
     than variant 1 everywhere in the v6 matrix; see RESULTS-phase2-v1.1 and
     bench/phase2/v6_prefill_matrix.py). ``prefill_groups``: quant groups
     per K-step (2 = BLOCK_K 128: dead on sm_86 — SMEM blowout; kept for
-    ablation only)."""
+    ablation only).
+
+    Use it when the per-expert dequantise-then-matmul loop is the bottleneck: one launch for
+    every active expert over the bitsandbytes ``gemm_4bit`` NF4 layout (``B [E, N, K//2]``
+    uint8, ``absmax [E, N, K//64]`` fp32). Returns ``[T, N]`` bf16 in the group-sorted row
+    order of ``a_cat``; assert it on first use against the per-group oracle
+    ``a_g @ dequant_ref(B[e], absmax[e], N, K).t()`` (``a_g`` the group's rows of ``a_cat``,
+    ``e`` its expert id). Refuses a
+    CPU tensor with an error that names ``dequant_ref``. Needs a CUDA GPU (sm_80+) and Triton
+    (Linux). See ``docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md``.
+    """
     E, N, _ = B.shape
     T, K = a_cat.shape
     assert sum(sizes) == T, (sum(sizes), T)
@@ -1402,6 +1412,9 @@ def dequant_ref(packed_row_major: torch.Tensor, absmax: torch.Tensor, N: int, K:
         >>> from nf4_grouped import dequant_ref
         >>> packed, absmax = quantize_pack_nf4(torch.randn(128, 256))
         >>> w = dequant_ref(packed, absmax, 128, 256)      # [128, 256] fp32
+    Use it as the pure-torch oracle (any device, no Triton): it is what every NF4 kernel is
+    asserted against and is bit-equal to bitsandbytes' ``dequantize_4bit`` on the same bytes.
+    See ``docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md``.
     """
     lut = _lut(packed_row_major.device)
     flat = packed_row_major.reshape(-1).to(torch.int32)

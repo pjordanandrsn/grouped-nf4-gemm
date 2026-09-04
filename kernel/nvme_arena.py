@@ -134,7 +134,12 @@ def bake(snapshot: str, out: str, *, layers=None, prefix="model.layers",
          log=print) -> dict:
     """Walk the checkpoint expert-major; emit `<out>` (arena) plus
     `<out>.index.json` (geometry + row offsets, readable without the arena)
-    and `<out>.manifest.json` (per-segment source provenance)."""
+    and `<out>.manifest.json` (per-segment source provenance).
+
+    Use it to relocate a checkpoint's expert tensors into a page-aligned arena on NVMe (plus
+    ``<out>.index.json`` and ``<out>.manifest.json``); ``verify`` checks the arena against its
+    source. Pure torch, no GPU. See ``docs/solutions/stream-moe-experts-from-host-or-nvme.md``.
+    """
     weight_map, _files = resolve_weight_map(snapshot)
     src = _Src(snapshot, weight_map)
     if layers is None:

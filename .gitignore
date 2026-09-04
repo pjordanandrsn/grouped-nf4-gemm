@@ -1,4 +1,7 @@
 __pycache__/
 *.pyc
+dist/
+build/
+*.egg-info/
 kernel/fixtures/gguf/
 *.ots.bak

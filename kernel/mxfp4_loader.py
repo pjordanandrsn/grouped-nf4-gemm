@@ -55,6 +55,9 @@ def file_tensor_sha256(path: str, name: str, chunk: int = 1 << 22) -> str:
         >>> from mxfp4_loader import file_tensor_sha256, tensor_sha256
         >>> file_tensor_sha256("model.safetensors", "model.layers.0.mlp.experts.gate_up_proj_blocks")
         '9f2c…'   # == tensor_sha256(loaded_tensor); a flipped byte changes it
+    Use it to hash a safetensors tensor's data-section bytes without loading or dequantising
+    them -- the primitive behind the provenance table and the CLI. See
+    ``docs/solutions/verify-quantized-checkpoint-provenance.md``.
     """
     hdr, data_start = _read_st_header(path)
     if name not in hdr:
@@ -131,7 +134,12 @@ def verify_arena_matches(path: str, loaded: dict, *,
     """`loaded` maps tensor-name -> the uint8 tensor placed in the arena. Assert
     each equals the file's data-section bytes. Returns a per-tensor
     match report; raises on any mismatch (a provenance failure is not a
-    tolerance)."""
+    tolerance).
+
+    Use it before quoting any result from an arena: it raises on the first tensor whose
+    bytes differ from the checkpoint's (a provenance failure is not a tolerance). Pure torch.
+    See ``docs/solutions/verify-quantized-checkpoint-provenance.md``.
+    """
     report = {}
     for name, t in loaded.items():
         want = file_tensor_sha256(

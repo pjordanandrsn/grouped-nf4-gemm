@@ -147,7 +147,14 @@ def gemm_mxfp4_grouped(a_cat, blocks, scales, sizes, expert_ids,
     ``blocks [E, N, K//2]`` uint8 (native gpt-oss blocks flattened);
     ``scales [E, N, K//32]`` uint8 (e8m0); ``sizes`` per-group token counts
     (all > 0); ``expert_ids [G]`` int32/list/device-tensor. Returns ``[T, N]``
-    bf16, same group order. Decode (all sizes==1) uses the GEMV reduction."""
+    bf16, same group order. Decode (all sizes==1) uses the GEMV reduction.
+
+    Use it when the experts are released as MXFP4 (gpt-oss, DeepSeek-V4, Kimi lineage) and
+    must be computed on the checkpoint's own bytes: ``blocks [E, N, K//2]`` uint8 (e2m1,
+    low nibble first) and ``scales [E, N, K//32]`` uint8 (e8m0), as ``mxfp4_loader.to_kernel_shapes``
+    views them. Returns ``[T, N]`` bf16 in group order. Needs a CUDA GPU (sm_80+) and Triton.
+    See ``docs/solutions/native-mxfp4-moe-inference.md``.
+    """
     E, N, _ = blocks.shape
     T, K = a_cat.shape
     assert sum(sizes) == T, (sum(sizes), T)
@@ -251,7 +258,13 @@ def gemv_mxfp4_b32(xq, xs, blocks, scales, eids, N: int, K: int,
     ``e`` against expert ``eids[e]``. ``blocks [E, N, K//2]`` uint8,
     ``scales [E, N, K//32]`` uint8 (e8m0). Returns ``[R, N]`` bf16;
     ``part`` may be a preallocated ``[SK*R, N]`` fp32 buffer (pass it
-    under capture). Plan shared with ``gemv_int4_b32``."""
+    under capture). Plan shared with ``gemv_int4_b32``.
+
+    Use it for decode rows (a handful per call) on the same MXFP4 store: the int4-b32 split-K
+    GEMV structure with an exact int32 e2m1 dot over ``quant_x_rows`` activations. Above a
+    handful of rows it re-streams the weights per row and loses to the grouped GEMM or the
+    consumer's NF4 path. See ``docs/solutions/native-mxfp4-moe-inference.md``.
+    """
     from int4_b32 import _plan
     R = eids.numel()
     assert blocks.dtype == torch.uint8 and scales.dtype == torch.uint8

@@ -376,6 +376,12 @@ def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
     self-describing but *older consumers are not*: a reader that predates bf16
     absmax refuses the segment outright, so flipping the default would break
     them on a library upgrade alone.
+    Use it to quantise a bf16 checkpoint's experts to NF4 at bake time into an arena the
+    NF4 residency tiers serve; the manifest's ``bake_mode`` records that the bytes are the
+    quantiser's output, not a bf16 release. The geometry/manifest path is pure torch when
+    a ``quantize_fn`` is injected; with ``quantize_fn=None`` the default quantiser
+    (:func:`default_quantize_expert`) needs bitsandbytes and a CUDA device. See
+    ``docs/solutions/stream-moe-experts-from-host-or-nvme.md``.
     """
     am_store = resolve_absmax_dtype(absmax_dtype, source)
     if source not in ("bf16", "mxfp4", "fp8"):
