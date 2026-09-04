@@ -15,6 +15,19 @@
   add is checked bitwise on hardware and within two ULP under the
   interpreter, and the test asserts its reference differs from the
   single-rounding add so the rounding claim is actually tested.
+### Router epilogue: select-on-logits mode with an optional bias
+
+- `router_epilogue(logits, k, norm, *, select_on_logits=False, bias=None)`:
+  the existing kind is softmax over all experts, then top-k, optional
+  renormalisation (Qwen3-MoE, OLMoE, Mixtral). The new mode takes the
+  top-k on the LOGITS (plus a per-expert `bias` when given, gpt-oss's
+  router; GraniteMoe's has none) and the softmax over the selected k —
+  a different function, not a reordering, when the k are not
+  renormalised. The first output in that mode is the (biased) logits.
+- The kernel carries `HAS_BIAS` / `SELECT_ON_LOGITS` as compile-time
+  flags; the default path is unchanged and bit-identical.
+- Tests: both modes against a torch reference at several (E, k),
+  with and without a bias, under the interpreter contract.
 
 ## 0.26.0 — 2026-09-04
 
