@@ -262,4 +262,5 @@ def gemv_mxfp4_b32(xq, xs, blocks, scales, eids, N: int, K: int,
     _gemv_mxfp4_b32[(triton.cdiv(N, bn), R, sk)](
         xq, xs, blocks, scales, eids, part,
         N, K=K, R=R, BLOCK_N=bn, SK=sk, KU=ku, num_warps=wp)
-    return part.reshape(sk, R, N).sum(0).to(torch.bfloat16)
+    from int4_b32 import reduce_partials
+    return reduce_partials(part, sk, R, N)

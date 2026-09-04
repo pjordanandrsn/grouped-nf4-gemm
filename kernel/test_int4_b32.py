@@ -431,6 +431,23 @@ def test_rope_norm_heads_matches_reference(R, HEADS, D):
         ref.float().abs().max() * 2 ** -7
 
 
+@pytest.mark.parametrize("sk,R,N", [(8, 1, 768), (16, 4, 2048), (3, 5, 1000)])
+def test_reduce_partials_matches_torch(sk, R, N):
+    """The fused split-K reduce + bf16 cast equals the torch chain it
+    replaces, including a masked tail (R*N not a multiple of the block)."""
+    pytest.importorskip("triton")
+    from int4_b32 import reduce_partials
+    dev = _gpu()
+    torch.manual_seed(5)
+    part = torch.randn(sk * R, N, device=dev) * 3
+    got = reduce_partials(part, sk, R, N)
+    want = part.reshape(sk, R, N).sum(0).to(torch.bfloat16)
+    assert got.shape == (R, N) and got.dtype == torch.bfloat16
+    # the fp32 sum order differs (static loop vs torch's reduction tree):
+    # bf16 output rounding is the only visible difference, 1 ULP at most
+    assert (got.float() - want.float()).abs().max() <= want.float().abs().max() * 2 ** -7
+
+
 @pytest.mark.parametrize("R,HEADS,D", [(1, 32, 64), (16, 8, 128), (3, 4, 96)])
 def test_rope_heads_matches_reference(R, HEADS, D):
     """Rotary-only fold (attention without a head norm): the exact

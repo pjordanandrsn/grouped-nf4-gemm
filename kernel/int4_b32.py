@@ -124,6 +124,37 @@ def _plan(N: int, K: int):
     return 128, 4, sk, ku                     # BLOCK_N, warps, SK, KU
 
 
+@triton.jit
+def _reduce_partials(part_ptr, out_ptr, SK: tl.constexpr, RN,
+                     BLOCK: tl.constexpr):
+    """``out[i] = bf16(sum_sk part[sk, i])`` over the flattened ``[R, N]``
+    -- the split-K reduction and the bf16 cast in ONE launch. The
+    ``part.reshape(sk, R, N).sum(0).to(bf16)`` it replaces was three
+    dispatches (view, sum, copy) and two kernels per projection call --
+    the largest glue site in Qwen3's B=1 op census (bo3p: 596 us of an
+    eager step, 864 dispatches, all from this line)."""
+    pid = tl.program_id(0)
+    offs = pid * BLOCK + tl.arange(0, BLOCK)
+    m = offs < RN
+    acc = tl.zeros((BLOCK,), dtype=tl.float32)
+    for sk in tl.static_range(SK):
+        acc += tl.load(part_ptr + sk * RN + offs, mask=m, other=0.0)
+    tl.store(out_ptr + offs, acc.to(tl.bfloat16), mask=m)
+
+
+def reduce_partials(part: torch.Tensor, sk: int, R: int, N: int,
+                    out: torch.Tensor | None = None):
+    """fp32 ``part [sk*R, N]`` -> bf16 ``[R, N]``, one launch. ``out`` may be
+    preallocated (pass it under capture)."""
+    if out is None:
+        out = torch.empty(R, N, dtype=torch.bfloat16, device=part.device)
+    rn = R * N
+    block = 1024
+    _reduce_partials[(triton.cdiv(rn, block),)](
+        part, out, SK=sk, RN=rn, BLOCK=block, num_warps=4)
+    return out
+
+
 def gemv_int4_b32(xq, xs, packed, scales, eids, N: int, K: int,
                   part: torch.Tensor | None = None):
     """Grouped decode GEMV: ``R = eids.numel()`` activation rows, row ``e``
@@ -137,7 +168,7 @@ def gemv_int4_b32(xq, xs, packed, scales, eids, N: int, K: int,
     _gemv_int4_b32[(triton.cdiv(N, bn), R, sk)](
         xq, xs, packed, scales, eids, part,
         N, K=K, R=R, BLOCK_N=bn, SK=sk, KU=ku, num_warps=wp)
-    return part.reshape(sk, R, N).sum(0).to(torch.bfloat16)
+    return reduce_partials(part, sk, R, N)
 
 
 # ------------------------------------------------- grouped M-tile GEMM --
