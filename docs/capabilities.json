@@ -17,8 +17,16 @@
       "mxfp4_grouped",
       "int4_b32",
       "fp8_paged_attn",
+      "fp8_kv",
       "nvme_arena",
-      "mxfp4_loader"
+      "nvme_reader",
+      "nvme_residency",
+      "nvme_bake_nf4",
+      "mxfp4_loader",
+      "gptq_pack",
+      "nf4_pack_ref",
+      "mxfp4_pack_ref",
+      "verify_provenance"
     ],
     "related_projects": [
       {

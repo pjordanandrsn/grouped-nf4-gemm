@@ -48,6 +48,10 @@ footnote:**
 2. **Unsloth wins its own regime.** Against their bf16-resident kernel
    they run 2.6–5.3× faster at prefill on an H100. The advantage above
    is the 4-bit-storage regime specifically (`gnf4.kernel.h2h-unsloth`).
+   The model-level, training-axis end-to-end comparison is a separate
+   claim in experts4bit-qlora's register
+   (`e4b.train.h2h.unsloth.qwen3.5090.2026-09-05`); it does not supersede
+   this kernel-level one.
 3. **Known losers:** `top_k=1` cells are instance-unstable in both
    directions; shapes under about 5 M weight elements lose outright
    (0.24–0.35× speed, 4–7× energy) and are routed back to the dequant

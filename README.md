@@ -256,6 +256,10 @@ superseded is no longer current whatever this table says.
    (`gnf4.kernel.graphed-baseline-decode-loses`).
 2. **Unsloth wins its own regime.** Against their bf16-resident kernel
    they run 2.6–5.3× faster at prefill on an H100 (`gnf4.kernel.h2h-unsloth`).
+   The model-level, training-axis end-to-end comparison is a separate
+   claim in experts4bit-qlora's register
+   (`e4b.train.h2h.unsloth.qwen3.5090.2026-09-05`); it does not supersede
+   this kernel-level one.
 3. **Known losers:** `top_k=1` cells are instance-unstable in both
    directions; shapes under ~5 M weight elements lose outright and are
    routed back to the dequant path (`gnf4.kernel.decode-speed-census`).
