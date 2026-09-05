@@ -37,7 +37,11 @@ Design decisions, each anchored to a measured fact:
   scattered sibling-quarter reads mostly hit L2 anyway, while packing
   pays 4x tensor-core work and one heavyweight CTA's register pressure.
   Kept behind ``pack_heads=`` (same format, launch-time choice) for
-  cards where the L2-to-pool ratio inverts the trade.
+  cards where the L2-to-pool ratio inverts the trade; where its one-block
+  tile exceeds the card's shared memory the wrapper dispatches to the
+  split kernel before launching (``packed_unsupported``, gnf4#324), and
+  a split geometry no config can stage is refused as
+  ``UnsupportedShapeError`` with the numbers, never a raw Triton error.
 
 Block layout is the Phase-6/7 contract: 16-token rows, tokens-major
 ``[16, H_kv, D]`` E4M3 payload followed by fp32 scales — per (token,
@@ -63,6 +67,11 @@ try:  # torch ships triton on CUDA installs; keep import-safe elsewhere
     _TRITON = True
 except Exception:  # pragma: no cover
     _TRITON = False
+
+# The typed shape refusal and the once-per-device shared-memory query are
+# shared with nf4_grouped through the shim (gnf4#324); both import without
+# triton, so this module stays importable for its pure-torch oracle.
+from _triton_shim import UnsupportedShapeError, device_shared_mem_limit  # noqa: E402,F401
 
 
 def paged_attn_available() -> bool:
@@ -144,8 +153,12 @@ if _TRITON:
         for start in range(t_lo, t_hi, KTILE):
             tok = start + offs_t
             t_mask = (tok < t_hi) & (tok >= w_lo)
+            # int64 BEFORE the row-stride product: blk * k_row_bytes is the
+            # pool byte offset of a 16-token row and wraps in int32 once the
+            # pool passes 2^31 bytes (the writer, fp8_kv, already widens;
+            # gnf4#87 pattern, docs/KERNEL_CONTRACT.md Boundaries).
             blk = tl.load(table_ptr + b * stride_tb + tok // BT,
-                          mask=t_mask, other=0)
+                          mask=t_mask, other=0).to(tl.int64)
 
             k_base = blk * k_row_bytes
             ku = tl.load(kpool_u8 + k_base[:, None] + pay_off,
@@ -301,7 +314,8 @@ if _TRITON:
         acc = tl.zeros([BLOCK_Q, D], tl.float32)
 
         for blk_i in range(blk_lo, blk_hi):
-            blk = tl.load(table_ptr + b * stride_tb + blk_i)
+            # int64 before the row-stride product (see the split kernel)
+            blk = tl.load(table_ptr + b * stride_tb + blk_i).to(tl.int64)
             t0 = blk_i * BT
             t_mask_c = ((t0 + c_tok) < t_len) & ((t0 + c_tok) >= w_lo)
 
@@ -515,8 +529,12 @@ if _TRITON:
         for start in range(t_lo, t_hi, KTILE):
             tok = start + offs_t
             t_mask = (tok < t_hi) & (tok >= w_lo)
+            # int64 BEFORE the row-stride product: blk * k_row_bytes is the
+            # pool byte offset of a 16-token row and wraps in int32 once the
+            # pool passes 2^31 bytes (the writer, fp8_kv, already widens;
+            # gnf4#87 pattern, docs/KERNEL_CONTRACT.md Boundaries).
             blk = tl.load(table_ptr + b * stride_tb + tok // BT,
-                          mask=t_mask, other=0)
+                          mask=t_mask, other=0).to(tl.int64)
 
             k_base = blk * k_row_bytes
             if LAYOUT_HEADS:
@@ -774,7 +792,8 @@ if _TRITON:
         c_prev = 1.0
 
         for blk_i in range(blk_lo, blk_hi):
-            blk = tl.load(table_ptr + b * stride_tb + blk_i)
+            # int64 before the row-stride product (see the split kernel)
+            blk = tl.load(table_ptr + b * stride_tb + blk_i).to(tl.int64)
             t_mask_c = ((blk_i * BT + c_tok) < t_len) & ((blk_i * BT + c_tok) >= w_lo)
 
             k_base = blk * k_row_bytes
@@ -969,19 +988,87 @@ _PACKED_UNFIT: set = set()   # geometries whose packed tile overflowed: skip the
 
 
 def _warn_packed_fallback(head_dim: int, n_kv_heads: int, block_tokens: int,
-                          err: Exception) -> None:
-    """Once per geometry: the packed fp8 tile did not fit shared memory and
-    the split fp8 kernel ran instead (same result, different tile)."""
+                          why, compute: str = "fp8") -> None:
+    """Once per geometry: the packed tile does not fit shared memory and the
+    split kernel of the same compute mode runs instead (same bytes, same
+    roundings, a different tile)."""
     import warnings
     key = (head_dim, n_kv_heads, block_tokens)
     if key in _PACKED_FALLBACK_WARNED:
         return
     _PACKED_FALLBACK_WARNED.add(key)
     warnings.warn(
-        f"packed fp8 paged attention does not fit shared memory at head_dim "
+        f"packed {compute} paged attention does not fit shared memory at head_dim "
         f"{head_dim}, {n_kv_heads} kv heads, {block_tokens} tokens/block "
-        f"({str(err)[:80]}); falling back to the split fp8 kernel",
-        RuntimeWarning, stacklevel=3)
+        f"({str(why)[:120]}); falling back to the split {compute} kernel",
+        RuntimeWarning, stacklevel=4)
+
+
+def packed_tile_smem_bytes(head_dim: int, n_kv_heads: int,
+                           block_tokens: int = 16, k_groups: int = 1,
+                           num_stages: int = 3) -> int:
+    """Shared-memory need of the packed fp8 kernel
+    (``_fp8_paged_decode_packed_f8``) at a geometry, in bytes.
+
+    The tile is one block: ``num_stages - 1`` in-flight buffers, each
+    holding the K and V payload lines (``BT * H_KV * D`` bytes each), the
+    transposed key sub-dot operand of one scale group (``payload //
+    k_groups``) and the per-column V scales (``BT * H_KV * 4``). Calibrated
+    against the one Triton report on record -- 148480 bytes at head_dim
+    256, 8 kv heads, 16 tokens/block, 4 key groups, 3 stages (gnf4#324) --
+    which it reproduces exactly, and it admits every packed geometry the
+    shape suite runs on the 101376-byte card (head_dim 64-128 at 4-8 heads,
+    512 at 2). A model, not the compiler's allocation: the launch keeps its
+    ``OutOfResources`` catch for whatever the model misses.
+    """
+    payload = block_tokens * n_kv_heads * head_dim
+    buffers = max(1, num_stages - 1)
+    return buffers * (2 * payload + payload // max(1, k_groups)
+                      + block_tokens * n_kv_heads * 4)
+
+
+def packed_unsupported(head_dim: int, n_kv_heads: int, block_tokens: int = 16,
+                       k_groups: int = 1, num_stages: int = 3, *,
+                       compute: str = "fp8", smem_limit: int | None = None,
+                       device=None) -> str | None:
+    """Why the head-PACKED variant cannot run at this geometry on this
+    device, or None if it can -- decided BEFORE the launch.
+
+    The selection rule (gnf4#324): with a known device limit (``smem_limit``,
+    else ``device_shared_mem_limit(device)``; 0 = unqueryable, never
+    refuses) and fp8 compute, ``packed_tile_smem_bytes`` above the limit
+    means the packed kernel would raise ``OutOfResources`` from inside the
+    launch, so the caller dispatches to the split kernel of the same
+    compute mode instead. The f32 packed kernel has no calibrated model
+    (its bf16 operand staging was never measured against a limit), so it
+    is not pre-refused here; its launch converts an overflow into the same
+    fallback. Pure Python: the CPU unit test drives it with mocked limits.
+    """
+    if smem_limit is None:
+        smem_limit = device_shared_mem_limit(device)
+    if compute != "fp8" or not smem_limit:
+        return None
+    need = packed_tile_smem_bytes(head_dim, n_kv_heads, block_tokens,
+                                  k_groups, num_stages)
+    if need > smem_limit:
+        return (f"packed fp8 tile needs {need} bytes of shared memory "
+                f"(BT {block_tokens} x H_kv {n_kv_heads} x D {head_dim}, "
+                f"{k_groups} key groups, {num_stages} stages) against the "
+                f"device limit of {smem_limit}")
+    return None
+
+
+def _refuse_out_of_resources(err: BaseException, kernel: str, shape: dict,
+                             hint: str) -> None:
+    """Convert Triton's launch-time ``OutOfResources`` into the typed
+    :class:`UnsupportedShapeError` carrying the geometry and the numbers;
+    re-raise anything else unchanged. Nothing has run on the device when
+    Triton raises this -- it is refused at kernel load, before the launch."""
+    if type(err).__name__ != "OutOfResources":
+        raise err
+    raise UnsupportedShapeError(
+        kernel, shape, getattr(err, "required", 0), getattr(err, "limit", 0),
+        hint=hint) from err
 
 
 def fp8_compute_unsupported(q, head_dim: int, k_groups: int,
@@ -1163,7 +1250,12 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
                  was its 40x problem).
     pack_heads   one CTA per (sequence, split) consuming ALL kv heads —
                  whole-line reads, tensor-core block-diagonal scores; the
-                 tile is one BT-token block and ``ktile`` is ignored.
+                 tile is one BT-token block and ``ktile`` is ignored. Where
+                 the packed tile does not fit the device's shared memory
+                 (``packed_unsupported``: the calibrated model for fp8,
+                 the launch's own overflow for f32) the split kernel of
+                 the same compute mode runs instead, with one
+                 ``RuntimeWarning`` per geometry (gnf4#324).
     compute      None (default): resolved by ``_compute_default``. An
                  exported ``GNF4_ATTN_COMPUTE`` ("f32" | "fp8") is taken
                  as-is, never downgraded, and any other value raises;
@@ -1231,6 +1323,24 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
         sink_t = sinks.detach().to(device=q.device, dtype=torch.float32).contiguous()
     else:
         sink_t = seq_lens          # inert placeholder, never read
+    if pack_heads and (D, n_kv_heads, block_tokens) in _PACKED_UNFIT:
+        # this geometry's packed tile already overflowed shared memory once:
+        # go straight to the split kernel, no launch attempt, no exception
+        # (Bugbot, #325); decided here so n_split below is the split grid's
+        pack_heads = False
+    if pack_heads:
+        _why_packed = packed_unsupported(
+            D, n_kv_heads, block_tokens, k_groups, num_stages,
+            compute=compute, device=q.device)
+        if _why_packed is not None:
+            # pre-launch: the calibrated tile model says the packed tile
+            # does not fit this device, so the split kernel of the same
+            # compute mode serves the call (gnf4#324); one warning per
+            # geometry, and the geometry is remembered
+            _PACKED_UNFIT.add((D, n_kv_heads, block_tokens))
+            _warn_packed_fallback(D, n_kv_heads, block_tokens, _why_packed,
+                                  compute)
+            pack_heads = False
     if n_split is None:
         # f32 decode: ~8 CTAs/SM (the sweep plateau — fewer starves the
         # serial tile loop, the B=1..8 latency pedestal; 2x more pays
@@ -1271,11 +1381,6 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
          f"{k_nat}/{v_nat} for H={n_kv_heads} D={head_dim}")
     assert k_pool.numel() % k_row == 0 and v_pool.numel() % v_row == 0
 
-    if pack_heads and (D, n_kv_heads, block_tokens) in _PACKED_UNFIT:
-        # this geometry's packed tile already overflowed shared memory once:
-        # go straight to the split fp8 kernel, no launch attempt, no
-        # exception (Bugbot, #325)
-        pack_heads = False
     if pack_heads:
         # combine expects the packed partial layout at H_KV=1, G=Hq
         assert layout == "tokens", \
@@ -1288,6 +1393,34 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
         acc_buf = torch.empty(part * D, dtype=torch.float32,
                               device=q.device)
         o = torch.empty_like(q)
+
+        def _packed_overflowed(e):
+            # The packed tile reduces over BT*H_kv columns of D bytes in
+            # shared memory; at head_dim 256 with 8 kv heads it asks for
+            # 148 KB against a 101 KB card and Triton raises OutOfResources
+            # from inside the launch (gnf4#324). The model above refuses
+            # that pre-launch for fp8; this catch is for what the model
+            # misses and for the f32 packed kernel, which has no model.
+            # Nothing has been written yet, so the split kernel of the same
+            # compute mode -- same bytes, same roundings, a different tile
+            # -- serves the call.
+            if type(e).__name__ != "OutOfResources":
+                raise e
+            _PACKED_UNFIT.add((D, n_kv_heads, block_tokens))
+            _warn_packed_fallback(D, n_kv_heads, block_tokens, e, compute)
+            # the re-entry tallies its own call: undo this one's, so a
+            # decode that fell back counts once (Bugbot, #325)
+            _COMPUTE_COUNTS[compute] -= 1
+            return fp8_paged_decode_attention(
+                q, k_pool, v_pool, block_table, seq_lens,
+                n_kv_heads=n_kv_heads, head_dim=head_dim,
+                block_tokens=block_tokens, k_groups=k_groups,
+                v_groups=v_groups, sm_scale=sm_scale,
+                num_stages=num_stages, pack_heads=False, compute=compute,
+                fuse_combine=fuse_combine, layout=layout, window=window,
+                sinks=sinks, k_row_bytes=k_row_bytes,
+                v_row_bytes=v_row_bytes)
+
         if compute == "fp8":
             # same predicate as the split branch and the default
             # selector -- one definition, three call sites
@@ -1314,28 +1447,7 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
                     num_warps=num_warps, num_stages=num_stages,
                 )
             except Exception as e:  # noqa: BLE001 -- only the resource class is caught
-                # The packed tile reduces over BT*H_kv columns of D bytes in
-                # shared memory; at head_dim 256 with 8 kv heads it asks for
-                # 148 KB against a 101 KB card and Triton raises
-                # OutOfResources from inside the launch (gnf4#324). Nothing
-                # has been written yet, so the split fp8 kernel -- same
-                # bytes, same roundings, a different tile -- serves the call.
-                if type(e).__name__ != "OutOfResources":
-                    raise
-                _PACKED_UNFIT.add((D, n_kv_heads, block_tokens))
-                _warn_packed_fallback(D, n_kv_heads, block_tokens, e)
-                # the re-entry tallies its own call: undo this one's, so a
-                # decode that fell back counts once (Bugbot, #325)
-                _COMPUTE_COUNTS[compute] -= 1
-                return fp8_paged_decode_attention(
-                    q, k_pool, v_pool, block_table, seq_lens,
-                    n_kv_heads=n_kv_heads, head_dim=head_dim,
-                    block_tokens=block_tokens, k_groups=k_groups,
-                    v_groups=v_groups, sm_scale=sm_scale,
-                    num_stages=num_stages, pack_heads=False, compute="fp8",
-                    fuse_combine=fuse_combine, layout=layout, window=window,
-                    sinks=sinks, k_row_bytes=k_row_bytes,
-                    v_row_bytes=v_row_bytes)
+                return _packed_overflowed(e)
             if fuse_combine:
                 return o
             _fp8_combine[(B,)](
@@ -1345,18 +1457,21 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
                 HAS_SINK=has_sink, num_warps=4,
             )
             return o
-        _fp8_paged_decode_packed[(B * n_split,)](
-            q, k_pool, v_pool,
-            k_pool.view(torch.float32), v_pool.view(torch.float32),
-            block_table, seq_lens.to(torch.int32),
-            m_buf, l_buf, acc_buf,
-            q.stride(0), q.stride(1), block_table.stride(0),
-            k_row, v_row, sm_scale, n_split, win, sink_t,
-            H_KV=n_kv_heads, G=G, D=D, BT=block_tokens,
-            NG_K=k_groups, NG_V=v_groups, BLOCK_Q=block_q,
-            HAS_SINK=has_sink,
-            num_warps=num_warps, num_stages=num_stages,
-        )
+        try:
+            _fp8_paged_decode_packed[(B * n_split,)](
+                q, k_pool, v_pool,
+                k_pool.view(torch.float32), v_pool.view(torch.float32),
+                block_table, seq_lens.to(torch.int32),
+                m_buf, l_buf, acc_buf,
+                q.stride(0), q.stride(1), block_table.stride(0),
+                k_row, v_row, sm_scale, n_split, win, sink_t,
+                H_KV=n_kv_heads, G=G, D=D, BT=block_tokens,
+                NG_K=k_groups, NG_V=v_groups, BLOCK_Q=block_q,
+                HAS_SINK=has_sink,
+                num_warps=num_warps, num_stages=num_stages,
+            )
+        except Exception as e:  # noqa: BLE001 -- only the resource class is caught
+            return _packed_overflowed(e)
         _fp8_combine[(B,)](
             m_buf, l_buf, acc_buf, o,
             o.stride(0), o.stride(1), n_split, sink_t,
@@ -1385,22 +1500,33 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
         assert layout in ("tokens", "heads")
         counters = _fuse_counters(B * n_kv_heads, q.device) \
             if fuse_combine else m_buf
-        _fp8_paged_decode_split_f8dot[(B * n_kv_heads * n_split,)](
-            q, k_pool, v_pool,
-            k_pool.view(torch.float32), v_pool.view(torch.float32),
-            block_table, seq_lens.to(torch.int32),
-            m_buf, l_buf, acc_buf,
-            o, counters,
-            q.stride(0), q.stride(1), block_table.stride(0),
-            o.stride(0), o.stride(1),
-            k_row, v_row, sm_scale, n_split, win, sink_t,
-            H_KV=n_kv_heads, G=G, D=D, BT=block_tokens, KTILE=ktile,
-            NG_K=k_groups, BLOCK_G=block_g,
-            FUSE_COMBINE=fuse_combine,
-            LAYOUT_HEADS=(layout == "heads"),
-            HAS_SINK=has_sink,
-            num_warps=num_warps, num_stages=num_stages,
-        )
+        try:
+            _fp8_paged_decode_split_f8dot[(B * n_kv_heads * n_split,)](
+                q, k_pool, v_pool,
+                k_pool.view(torch.float32), v_pool.view(torch.float32),
+                block_table, seq_lens.to(torch.int32),
+                m_buf, l_buf, acc_buf,
+                o, counters,
+                q.stride(0), q.stride(1), block_table.stride(0),
+                o.stride(0), o.stride(1),
+                k_row, v_row, sm_scale, n_split, win, sink_t,
+                H_KV=n_kv_heads, G=G, D=D, BT=block_tokens, KTILE=ktile,
+                NG_K=k_groups, BLOCK_G=block_g,
+                FUSE_COMBINE=fuse_combine,
+                LAYOUT_HEADS=(layout == "heads"),
+                HAS_SINK=has_sink,
+                num_warps=num_warps, num_stages=num_stages,
+            )
+        except Exception as e:  # noqa: BLE001 -- only the resource class is converted
+            # the split tile is KTILE x head_dim bytes per K and per V; a
+            # geometry no split config can stage is a typed refusal with the
+            # numbers, never a raw Triton failure (gnf4#324)
+            _refuse_out_of_resources(
+                e, "fp8_paged_attn._fp8_paged_decode_split_f8dot",
+                {"head_dim": D, "n_kv_heads": n_kv_heads, "ktile": ktile,
+                 "k_groups": k_groups, "block_g": block_g,
+                 "num_warps": num_warps, "num_stages": num_stages},
+                "pass a smaller ktile (>= 32) or num_stages")
         if fuse_combine:
             return o
     else:
@@ -1410,21 +1536,30 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
             "the fp8 compute path, where the memory system is the wall)"
         counters = _fuse_counters(B * n_kv_heads, q.device) \
             if fuse_combine else m_buf  # inert placeholder when off
-        _fp8_paged_decode_split[(B * n_kv_heads * n_split,)](
-            q, k_pool, v_pool,
-            k_pool.view(torch.float32), v_pool.view(torch.float32),
-            block_table, seq_lens.to(torch.int32),
-            m_buf, l_buf, acc_buf,
-            o, counters,
-            q.stride(0), q.stride(1), block_table.stride(0),
-            o.stride(0), o.stride(1),
-            k_row, v_row, sm_scale, n_split, win, sink_t,
-            H_KV=n_kv_heads, G=G, D=D, BT=block_tokens, KTILE=ktile,
-            NG_K=k_groups, NG_V=v_groups, BLOCK_G=block_g,
-            FUSE_COMBINE=fuse_combine,
-            HAS_SINK=has_sink,
-            num_warps=num_warps, num_stages=num_stages,
-        )
+        try:
+            _fp8_paged_decode_split[(B * n_kv_heads * n_split,)](
+                q, k_pool, v_pool,
+                k_pool.view(torch.float32), v_pool.view(torch.float32),
+                block_table, seq_lens.to(torch.int32),
+                m_buf, l_buf, acc_buf,
+                o, counters,
+                q.stride(0), q.stride(1), block_table.stride(0),
+                o.stride(0), o.stride(1),
+                k_row, v_row, sm_scale, n_split, win, sink_t,
+                H_KV=n_kv_heads, G=G, D=D, BT=block_tokens, KTILE=ktile,
+                NG_K=k_groups, NG_V=v_groups, BLOCK_G=block_g,
+                FUSE_COMBINE=fuse_combine,
+                HAS_SINK=has_sink,
+                num_warps=num_warps, num_stages=num_stages,
+            )
+        except Exception as e:  # noqa: BLE001 -- only the resource class is converted
+            _refuse_out_of_resources(
+                e, "fp8_paged_attn._fp8_paged_decode_split",
+                {"head_dim": D, "n_kv_heads": n_kv_heads, "ktile": ktile,
+                 "k_groups": k_groups, "v_groups": v_groups,
+                 "block_g": block_g, "num_warps": num_warps,
+                 "num_stages": num_stages},
+                "pass a smaller ktile or num_stages")
         if fuse_combine:
             return o
     _fp8_combine[(B * n_kv_heads,)](

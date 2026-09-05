@@ -1,5 +1,65 @@
 # Changelog
 
+## Unreleased
+
+**Two kernel boundaries stop being run-time surprises.** Expert stacks and
+fp8 KV pools past 2 GiB are addressed in int64 in every kernel that scales an
+expert or block-table index by a stride, so the reader can no longer wrap
+where the writer already did not; and a tile that will not fit the card's
+shared memory is refused or re-dispatched before the launch with the numbers,
+instead of surfacing Triton's `OutOfResources`. Affects anyone serving large
+fused expert stacks or long paged contexts on NVIDIA GPUs under Linux, and
+anyone on a small-LDS device (CDNA3 class) or calling the packed fp8
+attention variant at Gemma-4's sliding geometry; nothing changes numerically
+for stacks and pools under 2 GiB, and no measured number moves. Upgrade if
+your expert stacks, KV pools or packed-attention geometries reach either
+boundary; no action otherwise.
+
+### Correctness — the 2^31 offset boundary (#87)
+
+- The four `fp8_paged_attn` decode kernels (split and packed, f32 and fp8
+  compute) widen the block-table row to int64 before the `k_row_bytes` /
+  `v_row_bytes` product; the `fp8_kv` appenders already did, so a pool past
+  2^31 bytes was written correctly and read from a wrapped offset.
+- The M-tile kernels (`_gemm_nf4_grouped`, `_dgrad_nf4_grouped`,
+  `_gemm_mxfp4_grouped`) widen the tile's `row0`, closing the sibling
+  boundary at `T * max(K, N) >= 2^31` activation elements
+  (`_gemm_int4_b32_grouped` already did).
+- Every carrier of the expert-base pattern is now verified, not inspected:
+  `kernel/test_expert_offset_boundary.py` samples the experts (or pool rows)
+  whose base offsets sit just below and just above 2^31 for the NF4 decode
+  GEMV in its scalar, split-K, wide-load and dot-pad forms, the NF4 M-tile
+  and dgrad, the MXFP4 GEMM / GEMV / `gemv_mxfp4_b32`, the int4-b32 GEMV and
+  M-tile, and the fp8 paged decode kernels, against the pure-torch references,
+  each above-boundary case in its own subprocess. The expert-id cast the
+  issue asked for shipped in 0.13.2 (NF4) and 0.14.0 (MXFP4); the split-K
+  and dgrad kernels it flagged by inspection, and the int4-b32 and attention
+  carriers it did not name, had never been exercised above the boundary.
+- `docs/KERNEL_CONTRACT.md` carries the rule under "Boundaries".
+
+### Shared-memory feasibility before the launch (#324)
+
+- `_triton_shim.UnsupportedShapeError` (a `ValueError` with `kernel`,
+  `shape`, `need_bytes`, `limit_bytes`) and
+  `_triton_shim.device_shared_mem_limit` (one query per device through
+  Triton's driver; 0 when unqueryable, which never refuses).
+- `fp8_paged_attn.packed_unsupported` decides pre-launch, from
+  `packed_tile_smem_bytes` — calibrated to reproduce the 148 480 B Triton
+  reported at head_dim 256 with 8 kv heads — whether the packed fp8 tile
+  fits; where it does not, the split fp8 kernel serves the call with one
+  `RuntimeWarning` per geometry, and the packed grid's `n_split` is no
+  longer inherited by the fallback. The packed f32 kernel, which has no
+  calibrated model, falls back the same way from the launch's own overflow
+  (previously a raw `OutOfResources`); a split kernel that overflows raises
+  `UnsupportedShapeError` with the geometry and the numbers.
+- `nf4_grouped.prefill_fit` is the M-tile fit-down as a function: the same
+  stages-then-`BLOCK_M`-then-stages descent the wrapper ran inline, now
+  raising `UnsupportedShapeError` when even the smallest configuration
+  overflows. No NVIDIA configuration moves.
+- `kernel/test_shape_feasibility.py`: the selection rules under mocked
+  limits on CPU, and the fit-down against `dequant_ref` under
+  `TRITON_INTERPRET=1`.
+
 ## 0.30.0 — 2026-09-04
 
 ### Top-k weighted combine fused
