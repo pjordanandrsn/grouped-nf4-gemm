@@ -1,6 +1,6 @@
 {
   "package": "grouped-nf4-gemm",
-  "generated": "2026-09-04",
+  "generated": "2026-09-05",
   "schema": "docs/claims-schema.md",
   "status_vocabulary": {
     "confirmed": "pre-registered, OpenTimestamps-stamped blind confirmatory run; protocol and pass/fail fixed before data",
@@ -130,6 +130,31 @@
         "kernel/RESULTS-*.md (0.7.0)",
         "experts4bit-qlora bench/dgrad-gate/RESULTS-dgrad-gate.md"
       ]
+    },
+    {
+      "id": "gnf4.kernel.expert-offset-boundary.5090.2026-09-05",
+      "area": "kernel",
+      "claim": "Every kernel that scales an expert id or a block-table row by a stride computes the base offset in int64: the 10 boundary cases of kernel/test_expert_offset_boundary.py -- five below-boundary controls in-process and five above-boundary cases in fresh processes, for the NF4 decode GEMV (scalar, split-K, wide-load, dot-pad), the NF4 M-tile and dgrad, the MXFP4 GEMM / GEMV / gemv_mxfp4_b32, the int4-b32 GEMV and M-tile, and the fp8 paged decode kernels -- pass against the pure-torch references on an RTX 5090, closing #87 by observation (PR #342).",
+      "value": 10,
+      "unit": "boundary cases passed, above 2^31 in fresh processes",
+      "status": "measured",
+      "hardware": "RTX 5090 (sm_120), torch 2.8.0+cu128 / triton 3.4.0, rented host",
+      "conditions": "N=256, K=1024 (2^17 B per expert; experts 16383 | 16384; E=16386, 2.00 GiB packed + scales); dot-pad at its census shape N=1536, K=2048 (experts 1365 | 1366; E=1368); fp8 paged attention head_dim 128, 8 kv heads, 16 tokens/block, K rows padded to a 1 MiB stride (rows 2047 | 2048; 2050 rows, 2.00 GiB K pool); about 2.3 GiB of device memory per case, skipped below 4 GiB free",
+      "measured_on": "2026-09-05",
+      "evidence": [
+        "kernel/test_expert_offset_boundary.py",
+        "CHANGELOG.md"
+      ],
+      "evidence_private": [
+        "INT4B16/gnf4-87/gpu-logs/boundary.log"
+      ],
+      "quoted_in": [
+        "docs/STATUS.md",
+        "README.md",
+        "docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md",
+        "CHANGELOG.md 0.30.1"
+      ],
+      "notes": "The public evidence is the test and the 0.30.1 changelog entry; the GPU log (10 passed in 29.07 s) is in the private receipt tree, so the run itself cannot be checked from this repository -- rerun the file on any CUDA device with >= 4 GiB free. Same release, #324: an infeasible tile is refused or re-dispatched before the launch (_triton_shim.UnsupportedShapeError, fp8_paged_attn.packed_unsupported, nf4_grouped.prefill_fit) instead of surfacing Triton's OutOfResources; no NVIDIA configuration moves and no registered number changes, so it carries no entry of its own. On the same 5090 run kernel/test_shape_feasibility.py passed compiled and under the interpreter (28 each) and the fp8 paged modes passed (47; the 37 f32 modes stay deselected under #319), with the packed-tile fallback firing at head_dim 256 / 8 kv heads."
     },
     {
       "id": "gnf4.serve.decode-anchor-5090",
@@ -380,11 +405,12 @@
     {
       "id": "gnf4.open.issues",
       "area": "kernel",
-      "claim": "OPEN issues at 2026-09-03: #319 (f32 paged compute modes on triton 3.4), #87 (gemm_4bit_grouped int32 offset overflow when max(expert_ids) is large -- distinct from the 2 GiB fix in 0.13.2/0.14.0), #73 (K3 fetch host copy ~71% of a layer), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #60 (arena staging blocks ~30% of a training step), #58 (8 requests per layer where 2 would do).",
+      "claim": "OPEN issues at 2026-09-05: #319 (f32 paged compute modes on triton 3.4), #73 (K3 fetch host copy ~71% of a layer), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #60 (arena staging blocks ~30% of a training step), #58 (8 requests per layer where 2 would do).",
       "status": "open",
       "evidence": [
         "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues"
-      ]
+      ],
+      "notes": "#87 (gemm_4bit_grouped int32 offset overflow when max(expert_ids) is large) was listed here until 0.30.1 as 'distinct from the 2 GiB fix in 0.13.2/0.14.0'; that reading was not supported by the issue text. Closed 2026-09-05 by observation in every carrier: PR #342, kernel/test_expert_offset_boundary.py, claim gnf4.kernel.expert-offset-boundary.5090.2026-09-05."
     }
   ]
 }

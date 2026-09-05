@@ -145,7 +145,7 @@ Both blocks finish without an assertion. The GPU block returns `[T, N]` bf16 in 
 - `top_k=1` cells are instance-unstable; peak VRAM does not improve, only the forward-to-backward transient shrinks ([`STATUS.md`](../STATUS.md)).
 - The fidelity ordering is a CUDA tensor-core statement; other backends must re-measure. No ROCm or XPU ([`PORTABILITY.md`](../PORTABILITY.md)).
 - CUDA + Triton only for the kernel. `nf4_pack_ref` imports `nf4_grouped`, which binds triton through `_triton_shim`, so the pure-torch surface (pack references, `dequant_ref`, provenance, arena bake/verify) imports and runs without triton, and a `gemm_4bit_grouped` call on CPU tensors raises naming `dequant_ref` on a triton-less box too; the Triton kernels need a CUDA GPU; macOS and Windows are not exercised by CI.
-- Open: `#87`, int32 offset overflow at large `max(expert_ids)`.
+- Expert stacks past 2 GiB: every base offset is int64 — `#87` (int32 offset overflow at large `max(expert_ids)`) is closed by observation in every carrier (PR #342; boundary test `kernel/test_expert_offset_boundary.py`; GPU run on an RTX 5090 2026-09-05: 10 passed; claim `gnf4.kernel.expert-offset-boundary.5090.2026-09-05`). The rule and the carrier list are under "Boundaries" in [`KERNEL_CONTRACT.md`](../KERNEL_CONTRACT.md).
 
 ## Related
 
@@ -153,4 +153,4 @@ Both blocks finish without an assertion. The GPU block returns `[T, N]` bf16 in 
 
 ## Evidence
 
-Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.kernel.fused-more-accurate-than-dequant-bf16` (has not measured less accurate than the dequantize-to-bf16-then-GEMM comparator in any registered confirmatory cell), claim `gnf4.kernel.decode-speed-census`, claim `gnf4.kernel.energy-104-of-112`, claim `gnf4.kernel.e2e-training-real-prose`, claim `gnf4.kernel.h2h-unsloth` (4-bit-storage regime; Unsloth wins its own bf16-resident regime), claim `gnf4.kernel.graphed-baseline-decode-loses`. Measured: claim `gnf4.kernel.sm120-census-vs-grouped-mm`, claim `gnf4.kernel.dgrad`. Receipts under `kernel/RESULTS-*.md` with their `prereg_*.json`; property suite `kernel/test_nf4_grouped.py`.
+Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.kernel.fused-more-accurate-than-dequant-bf16` (has not measured less accurate than the dequantize-to-bf16-then-GEMM comparator in any registered confirmatory cell), claim `gnf4.kernel.decode-speed-census`, claim `gnf4.kernel.energy-104-of-112`, claim `gnf4.kernel.e2e-training-real-prose`, claim `gnf4.kernel.h2h-unsloth` (4-bit-storage regime; Unsloth wins its own bf16-resident regime), claim `gnf4.kernel.graphed-baseline-decode-loses`. Measured: claim `gnf4.kernel.sm120-census-vs-grouped-mm`, claim `gnf4.kernel.dgrad`, claim `gnf4.kernel.expert-offset-boundary.5090.2026-09-05` (the 2^31 offset boundary, every carrier). Receipts under `kernel/RESULTS-*.md` with their `prereg_*.json`; property suite `kernel/test_nf4_grouped.py`.

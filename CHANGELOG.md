@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.30.1 — 2026-09-05
 
 **Two kernel boundaries stop being run-time surprises.** Expert stacks and
 fp8 KV pools past 2 GiB are addressed in int64 in every kernel that scales an
@@ -13,7 +13,9 @@ anyone on a small-LDS device (CDNA3 class) or calling the packed fp8
 attention variant at Gemma-4's sliding geometry; nothing changes numerically
 for stacks and pools under 2 GiB, and no measured number moves. Upgrade if
 your expert stacks, KV pools or packed-attention geometries reach either
-boundary; no action otherwise.
+boundary; no action otherwise. A patch release: no API change, and the
+consumer floor does not move — experts4bit-qlora's `[fast]` extra stays at
+`grouped-nf4-gemm>=0.30.0`.
 
 ### Correctness — the 2^31 offset boundary (#87)
 
@@ -36,6 +38,18 @@ boundary; no action otherwise.
   and dgrad kernels it flagged by inspection, and the int4-b32 and attention
   carriers it did not name, had never been exercised above the boundary.
 - `docs/KERNEL_CONTRACT.md` carries the rule under "Boundaries".
+- **#87 is closed by observation in every carrier.** On an RTX 5090
+  (2026-09-05, torch 2.8.0+cu128 / triton 3.4.0) the boundary file's ten
+  cases pass — five below-boundary controls in-process, five above-boundary
+  cases in fresh processes — beside `test_offsets_2gib.py` +
+  `test_int4_b32.py` (63 passed). Registered as
+  `gnf4.kernel.expert-offset-boundary.5090.2026-09-05` (measured; the test
+  and this entry are the public evidence, the GPU log is in the private
+  receipt tree). The `docs/STATUS.md` line that called #87 "distinct from
+  the 2 GiB stride fix in 0.13.2/0.14.0" was not supported by the issue
+  text — the issue asked for the expert-id cast those releases shipped and
+  flagged the remaining carriers by inspection — and is withdrawn; the
+  position is the one above.
 
 ### Shared-memory feasibility before the launch (#324)
 
@@ -59,6 +73,11 @@ boundary; no action otherwise.
 - `kernel/test_shape_feasibility.py`: the selection rules under mocked
   limits on CPU, and the fit-down against `dequant_ref` under
   `TRITON_INTERPRET=1`.
+- On the same 5090 run `test_shape_feasibility.py` passes compiled and under
+  the interpreter (28 each) and the fp8 paged modes pass (47; the 37 f32
+  modes stay deselected under #319), with the packed-tile fallback firing at
+  head_dim 256 / 8 kv heads. No registered number moves, so #324 carries no
+  claim entry of its own; it is noted on the #87 entry.
 
 ## 0.30.0 — 2026-09-04
 
