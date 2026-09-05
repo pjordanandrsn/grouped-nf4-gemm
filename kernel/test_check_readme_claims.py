@@ -202,5 +202,6 @@ def test_an_inactive_id_needs_the_word_in_the_prose_not_in_its_own_name():
 
 
 def test_the_contract_error_is_the_one_load_claims_raises():
-    dc = _load("discovery_common")
-    assert crc.ContractError is dc.ContractError
+    # the class the script catches must be the one load_claims raises (a local shadow class would pass the name test)
+    assert crc.ContractError is crc.load_claims.__globals__["ContractError"]
+    assert "class ContractError" not in (ROOT / "scripts" / "check_readme_claims.py").read_text()

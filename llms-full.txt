@@ -1853,7 +1853,7 @@ was wrong.
   `gnf4.kernel.h2h-unsloth`).
 - **Split-K on the decode GEMV is refuted** (flat at `gate_up`, ~14%
   worse at `down`). The kernel ships dormant *as the evidence*
-  (`gnf4.retired.splitk-gemv`).
+  (the retired claim `gnf4.retired.splitk-gemv`).
 - **A fixed fraction-of-waterfall is retired as a law** (two 0.77
   readings were a two-host coincidence).
 - **The cold-engine "free floor" premise is refuted** on its target box:
@@ -1887,7 +1887,7 @@ was wrong.
   [`claims-schema.md`](claims-schema.md)); every measured, measured-private
   and confirmed row carries an ISO `measured_on` taken from its receipt or,
   where the receipt states no run date, the receipt's first commit;
-  `gnf4.retired.splitk-gemv` carries its `retired_reason`; and
+  the retired `gnf4.retired.splitk-gemv` carries its `retired_reason`; and
   `scripts/check_claims_register.py` + `scripts/check_readme_claims.py`
   hold the register and this page to it in CI. No number, gate or verdict
   moves.
