@@ -183,3 +183,24 @@ def test_the_repository_documents_pass():
     findings, n_docs, n_tables = crc.check(ROOT)
     assert findings == [], findings
     assert n_docs >= 8 and n_tables >= 2
+
+
+# ------------------------------------------------ the prose rule (Bugbot, PR #344) --
+
+def _retired_register():
+    return {"gnf4.retired.old-thing": {"status": "retired", "retired_reason": "x"},
+            "gnf4.kernel.live": {"status": "measured"}}
+
+
+def test_an_inactive_id_needs_the_word_in_the_prose_not_in_its_own_name():
+    claims = _retired_register(); pat = crc.id_pattern(claims)
+    bad = crc.check_ids("README.md", "see `gnf4.retired.old-thing` for the number", claims, pat)
+    assert bad and "does not say so" in bad[0], bad   # the id's own `retired` segment must not satisfy the rule
+    ok = crc.check_ids("README.md", "`gnf4.retired.old-thing` was retired on 2026-08-01", claims, pat)
+    assert ok == []
+    assert crc.check_ids("README.md", "`gnf4.kernel.live` is the position", claims, pat) == []
+
+
+def test_the_contract_error_is_the_one_load_claims_raises():
+    dc = _load("discovery_common")
+    assert crc.ContractError is dc.ContractError

@@ -41,7 +41,7 @@ from decimal import ROUND_HALF_EVEN, ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from discovery_common import KNOWN_STATUSES, load_claims, read_text  # noqa: E402
+from discovery_common import ContractError, KNOWN_STATUSES, load_claims, read_text  # noqa: E402
 
 CLAIMS = "docs/claims.json"
 #: Results tables are read here; the id rules apply to every document.
@@ -62,10 +62,6 @@ _STATUS_WORD = re.compile(r"measured-private|measured|verified|confirmed|project
 _LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _NUMBER = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?")
-
-
-class ContractError(Exception):
-    """The check cannot run (malformed input); exit 2, never a green pass."""
 
 
 def id_pattern(claims: dict[str, dict]) -> re.Pattern:
@@ -356,10 +352,10 @@ def check_ids(doc: str, text: str, claims: dict[str, dict], pat: re.Pattern) -> 
             found, missing = resolve_ids([ref], claims)
             if missing:
                 findings.append(f"{doc}:{ln}: `{ref}` is not in {CLAIMS}")
-            low = line.lower()
+            prose = re.sub(r"`[^`]*`", " ", line).lower()   # the words must come from the prose, not from an id like gnf4.retired.x
             for cid, c in found.items():
                 st = c.get("status")
-                if st in INACTIVE and not any(w in low for w in INACTIVE_WORDS):
+                if st in INACTIVE and not any(w in prose for w in INACTIVE_WORDS):
                     findings.append(f"{doc}:{ln}: `{cid}` is {st} and the line does not say so")
     return findings
 
