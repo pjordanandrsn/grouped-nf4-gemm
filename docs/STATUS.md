@@ -1,6 +1,6 @@
 # Status — what this kernel does, what changed, what is open
 
-**As of 2026-09-05, `grouped-nf4-gemm` version 0.30.1.** One page. The README argues; this
+**As of 2026-09-05, `grouped-nf4-gemm` version 0.30.2.** One page. The README argues; this
 page states. Every line here has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
 here that does not.
@@ -146,6 +146,20 @@ was wrong.
   test file and the changelog entry are the public evidence, the GPU log
   is in the private receipt tree). #324's pre-launch shape refusal ships
   in the same release and moves no registered number.
+- **Register bookkeeping corrected (0.30.2).** `gnf4.serve.m3-defaults-on`'s
+  sentence described the fp8 predicate as `k_groups in (1,2,4)` — the
+  predicate as it stood at the 2026-08-27 run; `fp8_compute_unsupported`
+  has admitted `(1, 2, 4, 8, 16)` since 0.26.0 and the sentence now says
+  so, with the measurement unchanged. Every `evidence` entry in
+  `claims.json` is now a path that resolves at HEAD (structured forms for
+  changelog sections, globs and cross-repository receipts:
+  [`claims-schema.md`](claims-schema.md)); every measured, measured-private
+  and confirmed row carries an ISO `measured_on` taken from its receipt or,
+  where the receipt states no run date, the receipt's first commit;
+  `gnf4.retired.splitk-gemv` carries its `retired_reason`; and
+  `scripts/check_claims_register.py` + `scripts/check_readme_claims.py`
+  hold the register and this page to it in CI. No number, gate or verdict
+  moves.
 
 ---
 

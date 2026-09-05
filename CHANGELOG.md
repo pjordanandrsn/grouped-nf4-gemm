@@ -1,5 +1,110 @@
 # Changelog
 
+## 0.30.2 — 2026-09-05 — documentation and register hygiene (no API change; consumer floor unchanged)
+
+**The claims register and the prose that quotes it are now held to their own
+bookkeeping by CI.** A read-only audit of the 0.30.1 surfaces (2026-09-05)
+found nothing wrong with a number, a gate or a verdict, and several things
+wrong with the fields around them: receipt paths in `docs/claims.json` that
+no file matched, a `measured_on` that was a month, a `retired` row without
+its reason, a `quoted_in` pointing at a README section that no longer exists,
+a claim sentence describing a predicate the code had since widened, and two
+different "public import surface" lists for the same package. None of it was
+visible to a check, because every check keyed on `status` and on version
+strings. This release fixes each item and adds the two checks that would have
+caught them. Affects readers of the register, the site that renders it, and
+anyone adding a claim; nothing in the kernels, the wheel's contents or its
+dependency floors changes. A documentation patch: no API change, no measured
+number moves, and the consumer floor does not move — experts4bit-qlora's
+`[fast]` extra stays at `grouped-nf4-gemm>=0.30.0`. No action needed.
+
+### Register corrections (`docs/claims.json`)
+
+- `gnf4.serve.m3-defaults-on`: the sentence said the fp8 path asserts
+  `k_groups in (1,2,4)` — the predicate as it stood at the 2026-08-27 run.
+  `fp8_paged_attn.fp8_compute_unsupported` has admitted `(1, 2, 4, 8, 16)`
+  since 0.26.0 (Gemma-4's per-layer key-scale groups; `docs/capabilities.json`
+  already said so); the sentence now describes the shipped predicate and the
+  notes record the correction. The measurement (7.843 → 6.803 ms/step at
+  Δppl −0.0021) is untouched. Its `receipts-m3/` evidence entry is now
+  `kernel/receipts-m3/`, where the receipts are.
+- `gnf4.kernel.sm120-census-vs-grouped-mm`: `measured_on` was `"2026-08"`, not
+  a date. It is `2026-08-29`, the receipt's commit date (PR #299); the receipt
+  states no run date and ran on `main` 4f1db333 (2026-08-28), so the run falls
+  on 2026-08-28/29 — the notes say so.
+- `gnf4.retired.splitk-gemv` carries `retired_reason` (the K7 round-2
+  measurement the sentence already quoted).
+- `gnf4.retired.sm120-parked`: `quoted_in` pointed at `README.md#Status /
+  roadmap`, a section the README no longer has; it points at
+  `README.md#What was retired` and `docs/STATUS.md#What changed`, where the
+  line lives.
+- Every `evidence[]` entry is a path that resolves at HEAD. The annotated
+  strings became the structured forms `docs/claims-schema.md` now documents:
+  `{"path": "CHANGELOG.md", "section": "<version>"}` for a changelog entry
+  (`gnf4.serve.fp8-paged-attn-windows-sinks-scale`,
+  `gnf4.kernel.expert-offset-boundary.5090.2026-09-05`, and
+  `gnf4.kernel.dgrad`, whose A2000 cells are recorded in the 0.7.0 entry —
+  no `kernel/RESULTS-*.md` carries them, which the old glob implied);
+  `{"repository": "experts4bit-qlora", "path": …}` for the cross-repository
+  dgrad-gate receipt; the explicit `kernel/test_int4_b32.py` where
+  `gnf4.serve.decode-glue-kernels` said `kernel/test_*.py for each kernel`.
+  `quoted_in` entries that named changelog versions use the
+  `CHANGELOG.md#<version>` heading form.
+- `measured_on` (ISO) added to every measured, measured-private and confirmed
+  row that lacked one, taken from the receipt's own stated run date or, where
+  the receipt states none, from the receipt's first commit — the row's notes
+  say which. Bookkeeping only; no value changes.
+- `gnf4.kernel.h2h-unsloth` notes: the model-level, training-axis end-to-end
+  head-to-head is registered in experts4bit-qlora as
+  `e4b.train.h2h.unsloth.qwen3.5090.2026-09-05` (2026-09-05, one RTX 5090,
+  Qwen3-30B-A3B: experts4bit-qlora 1.522 s/step vs Unsloth 2.151, ratio
+  1.413; held-out loss comparable at N=60, lower for Unsloth at N=200, 0.2713
+  vs 0.2881); a different level and regime, so the kernel-level claim is not
+  superseded. `README.md` and `docs/STATUS.md` point at it beside "Unsloth
+  wins its own regime".
+- `gnf4.cold-engine.phase0-premise-refuted` notes state the receipt's own
+  declared gap (its roofline pipe term is unmeasured) instead of the
+  placeholder word "pending"; same fact.
+
+### Contract surfaces
+
+- `docs/capabilities.json` `project.import_names` equals the system
+  manifest's `packages.kernels.import_names` (14 modules; it listed six and
+  the two surfaces disagreed). Every one is a `py-modules` entry of the wheel;
+  `int4_b32` imports triton at module level and so imports only where triton
+  is installed (Linux), as its capability entry already says.
+  `scripts/check_system_manifest.py` asserts the two lists are equal, the
+  assertion the consumer's copy already made for its side. The manifest
+  itself is unchanged (byte-identical in both repositories).
+- `docs/claims-schema.md` documents the evidence and `quoted_in` forms, the
+  `measured_on` rule and the bookkeeping fields the new check enforces.
+
+### Checks (CI `discoverability` job; tests in the `interp-contract` job)
+
+- `scripts/check_claims_register.py` (new): every `evidence[]` entry resolves
+  at HEAD (bare path, `path`+`section`, `glob`, `repository`+`path`, or an
+  issue URL under this repository); measured / measured-private / confirmed
+  rows carry an ISO `measured_on` and a public (or private) receipt;
+  `superseded` ⇒ `superseded_by` resolves to an active claim that names it
+  back; `retired` ⇒ `retired_reason`; `quoted_in` entries resolve; no
+  `pending` / `TBD` / `TODO` in the notes of an active row. `--sibling DIR`
+  resolves the cross-repository paths. Tests:
+  `kernel/test_check_claims_register.py`.
+- `scripts/check_readme_claims.py` (new; ported from experts4bit-qlora to
+  this repository's tables and wider document set): every backticked
+  `gnf4.…` id in `README.md`, `docs/STATUS.md` and `docs/solutions/*.md`
+  exists, a superseded or retired id appears only on a line that says so, and
+  the results tables of `README.md` and `docs/STATUS.md` quote each named
+  claim's current value at the document's precision with the weakest status
+  in the row. Tests: `kernel/test_check_readme_claims.py`.
+- `scripts/check_wheel_metadata.py` runs with explicit `--requires`
+  assertions for the wheel's own floors (`numpy`, `torch>=2.8.0.dev0`,
+  `triton>=3.4; platform_system == "Linux"`) beside the structural extras
+  check; the consumer floor in the manifest's current record (`>=0.30.0`) is
+  the consumer's metadata and is asserted in its CI, not in this wheel.
+- Version 0.30.2 in `pyproject.toml`, the README's tag pins and the STATUS
+  header; `llms-full.txt` regenerated.
+
 ## 0.30.1 — 2026-09-05
 
 **Two kernel boundaries stop being run-time surprises.** Expert stacks and
