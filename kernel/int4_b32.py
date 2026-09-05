@@ -108,15 +108,30 @@ def _gemv_int4_b32(xq_ptr, xs_ptr, w_ptr, ws_ptr, eid_ptr, out_ptr,
     tl.store(out_ptr + (sk * R + e) * N + offs_n, acc, mask=n_mask)
 
 
-def _plan(N: int, K: int):
+# Row-count-aware overrides, measured at R=128 (B=16 x top-8) on sm_120
+# under graph replay (receipts INT4B16/P20-H2H-FAIR, bench/b16_gemv_sweep):
+# at R=1 split-K is what fills the grid, at R=128 the row axis already
+# does and SK=16 only multiplies fp32 partial traffic. Exact cells only:
+# every other shape keeps the R=1 plan, so preallocated ``part`` buffers
+# sized at R<=8 (the B=1 stores) stay valid.
+#   cell (N, K)        shipped R=1 plan       R>=64 winner      gain
+#   gate_up 1536x2048  bn128/w4/sk16/ku4      bn64/w8/sk2/ku4   x1.12
+#   down    2048x768   bn128/w4/sk6/ku4       bn256/w4/sk4/ku4  x1.16
+_PLAN_R64 = {(1536, 2048): (64, 8, 2, 4), (2048, 768): (256, 4, 4, 4)}
+_PLAN_R_MIN = 64
+
+
+def _plan(N: int, K: int, R: int = 1):
     """Config from the graph-metric sweep on sm_120 (receipts int4port):
     bn128/w4-8/sk8 class won every census cell; sk fills the grid to
     2+ waves. KU (k-blocks per loop iteration) MUST divide K//32: the
     kernel guards only the first block of each fat iteration, so a
     non-dividing KU reads past the row tail -- caught by the checkout
     parity gate at K=64/96 (garbage-scale errors), invisible on census
-    shapes where 4 | K//32. Kept simple until a second box class is
-    measured."""
+    shapes where 4 | K//32. ``R`` (activation rows) selects the batched
+    overrides above; the default is the R=1 plan."""
+    if R >= _PLAN_R_MIN and (N, K) in _PLAN_R64:
+        return _PLAN_R64[(N, K)]
     kb = K // 32
     ku = 4 if kb % 4 == 0 else (2 if kb % 2 == 0 else 1)
     sk = 8 if (triton.cdiv(N, 128) * 8) >= 256 else 16
@@ -168,9 +183,14 @@ def gemv_int4_b32(xq, xs, packed, scales, eids, N: int, K: int,
     Needs a CUDA GPU (sm_80+) and Triton. See ``docs/solutions/int4-decode-gemv.md``.
     """
     R = eids.numel()
-    bn, wp, sk, ku = _plan(N, K)
+    bn, wp, sk, ku = _plan(N, K, R)
     if part is None:
         part = torch.empty(sk * R, N, dtype=torch.float32, device=xq.device)
+    elif tuple(part.shape) != (sk * R, N):
+        raise ValueError(
+            f"gemv_int4_b32: part {tuple(part.shape)} does not match the "
+            f"plan for N={N} K={K} R={R} (needs {(sk * R, N)}); size it "
+            "with _plan(N, K, R) for the row count it will serve")
     _gemv_int4_b32[(triton.cdiv(N, bn), R, sk)](
         xq, xs, packed, scales, eids, part,
         N, K=K, R=R, BLOCK_N=bn, SK=sk, KU=ku, num_warps=wp)
