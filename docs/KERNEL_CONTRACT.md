@@ -26,7 +26,7 @@ and the **merged** #1949 `gemm_4bit` kernel family (bnb main, milestone v0.50.0,
 
 ## Boundaries (2026-09-05)
 
-A limit every shipped kernel now states rather than discovers at run time.
+Two limits every shipped kernel now states rather than discovers at run time.
 
 **Offset arithmetic is int64 for every expert base.** A Triton kernel that
 loads an expert id (or a block-table row) from an int32 tensor and multiplies
@@ -58,6 +58,27 @@ pool rows) whose base offsets sit just below and just above 2^31 are compared
 with the pure-torch reference, every above-boundary case in its own process
 (an illegal access poisons the CUDA context). `kernel/test_offsets_2gib.py`
 keeps the original 258 x 8 MiB reproduction.
+
+**Shared-memory feasibility is decided before the launch.** A tile
+configuration whose shared-memory need exceeds the device's limit is refused
+or re-dispatched *before* the launch, never surfaced as Triton's
+`OutOfResources` (#324). The limit is queried once per device
+(`_triton_shim.device_shared_mem_limit`; 0 when unqueryable — no triton, no
+device, interpreter mode — and 0 never refuses). Rules by kernel:
+
+| kernel | tile term that scales | rule |
+|---|---|---|
+| NF4 M-tile (`_gemm_nf4_grouped`) | `stages * (BLOCK_M*BLOCK_K*2 + B tile)` | `nf4_grouped.prefill_fit` steps stages, then `BLOCK_M`, then stages again to the largest configuration that fits under the limit minus `PREFILL_SMEM_HEADROOM`; the smallest configuration still over the limit raises `UnsupportedShapeError` (an explicit `prefill_config=` is launched as given) |
+| fp8 paged decode, packed fp8 (`_fp8_paged_decode_packed_f8`) | `(stages-1) * (2*BT*H_kv*D + BT*H_kv*D/k_groups + BT*H_kv*4)` | `fp8_paged_attn.packed_unsupported`: above the limit, the split fp8 kernel serves the call with one `RuntimeWarning` per geometry; the model reproduces the one measured overflow (148 480 B at D=256, 8 kv heads) and admits every packed geometry the suite runs on a 101 376 B card; the launch keeps its overflow catch for what the model misses |
+| fp8 paged decode, packed f32 | no calibrated model | an overflow at the launch falls back to the split f32 kernel the same way |
+| fp8 paged decode, split (f32 and fp8) | `KTILE * D` per K and V | an overflow at the launch is raised as `UnsupportedShapeError` naming the geometry, Triton's required bytes and the limit (reduce `ktile` or `num_stages`) |
+| MXFP4 M-tile / GEMV, int4-b32 GEMV / M-tile, NF4 decode GEMVs | fixed tiles (`BLOCK_K` 32 or 64, `BLOCK_N` ≤ 128) | no runtime dimension scales the tile; every configuration fits a 64 KB LDS |
+
+`UnsupportedShapeError` is a `ValueError` carrying `kernel`, `shape`,
+`need_bytes`, `limit_bytes`; the CPU unit test
+(`kernel/test_shape_feasibility.py`) drives every selection rule with mocked
+limits and, under `TRITON_INTERPRET=1`, checks that a fit-down still matches
+`dequant_ref`.
 
 ## What the kernel computes
 

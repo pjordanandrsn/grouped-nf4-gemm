@@ -2,14 +2,18 @@
 
 ## Unreleased
 
-**Expert stacks and fp8 KV pools past 2 GiB stop being a run-time surprise.**
-Every kernel that scales an expert or block-table index by a stride now does
-the product in int64, so the fp8 paged-decode reader can no longer wrap where
-its writer already did not, and the M-tile kernels' activation rows cannot
-wrap either. Affects anyone serving large fused expert stacks or long paged
-contexts on NVIDIA GPUs under Linux; nothing changes numerically for stacks
-and pools under 2 GiB, and no measured number moves. Upgrade if your expert
-stacks or KV pools reach 2 GiB; no action otherwise.
+**Two kernel boundaries stop being run-time surprises.** Expert stacks and
+fp8 KV pools past 2 GiB are addressed in int64 in every kernel that scales an
+expert or block-table index by a stride, so the reader can no longer wrap
+where the writer already did not; and a tile that will not fit the card's
+shared memory is refused or re-dispatched before the launch with the numbers,
+instead of surfacing Triton's `OutOfResources`. Affects anyone serving large
+fused expert stacks or long paged contexts on NVIDIA GPUs under Linux, and
+anyone on a small-LDS device (CDNA3 class) or calling the packed fp8
+attention variant at Gemma-4's sliding geometry; nothing changes numerically
+for stacks and pools under 2 GiB, and no measured number moves. Upgrade if
+your expert stacks, KV pools or packed-attention geometries reach either
+boundary; no action otherwise.
 
 ### Correctness — the 2^31 offset boundary (#87)
 
@@ -32,6 +36,29 @@ stacks or KV pools reach 2 GiB; no action otherwise.
   and dgrad kernels it flagged by inspection, and the int4-b32 and attention
   carriers it did not name, had never been exercised above the boundary.
 - `docs/KERNEL_CONTRACT.md` carries the rule under "Boundaries".
+
+### Shared-memory feasibility before the launch (#324)
+
+- `_triton_shim.UnsupportedShapeError` (a `ValueError` with `kernel`,
+  `shape`, `need_bytes`, `limit_bytes`) and
+  `_triton_shim.device_shared_mem_limit` (one query per device through
+  Triton's driver; 0 when unqueryable, which never refuses).
+- `fp8_paged_attn.packed_unsupported` decides pre-launch, from
+  `packed_tile_smem_bytes` — calibrated to reproduce the 148 480 B Triton
+  reported at head_dim 256 with 8 kv heads — whether the packed fp8 tile
+  fits; where it does not, the split fp8 kernel serves the call with one
+  `RuntimeWarning` per geometry, and the packed grid's `n_split` is no
+  longer inherited by the fallback. The packed f32 kernel, which has no
+  calibrated model, falls back the same way from the launch's own overflow
+  (previously a raw `OutOfResources`); a split kernel that overflows raises
+  `UnsupportedShapeError` with the geometry and the numbers.
+- `nf4_grouped.prefill_fit` is the M-tile fit-down as a function: the same
+  stages-then-`BLOCK_M`-then-stages descent the wrapper ran inline, now
+  raising `UnsupportedShapeError` when even the smallest configuration
+  overflows. No NVIDIA configuration moves.
+- `kernel/test_shape_feasibility.py`: the selection rules under mocked
+  limits on CPU, and the fit-down against `dequant_ref` under
+  `TRITON_INTERPRET=1`.
 
 ## 0.30.0 — 2026-09-04
 

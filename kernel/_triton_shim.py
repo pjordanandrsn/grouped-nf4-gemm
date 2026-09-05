@@ -46,7 +46,7 @@ from __future__ import annotations
 
 import functools
 
-__all__ = ["HAS_TRITON", "tl", "triton"]
+__all__ = ["HAS_TRITON", "UnsupportedShapeError", "device_shared_mem_limit", "tl", "triton"]
 
 _NO_TRITON = (
     "triton is not installed, so this fused kernel cannot run. triton is a "
@@ -71,6 +71,10 @@ _CPU_PATH = {
         "This primitive has no CPU equivalent: it is a device-side gather "
         "reading pinned host memory over UVA, so the fallback is to not "
         "prefetch rather than to compute the same thing differently.",
+    "fp8_paged_attn":
+        "For a CPU-checkable decode attention over the same fp8 KV bytes, "
+        "use fp8_paged_attn.paged_attn_ref(...) — the pure-torch oracle the "
+        "shape suite pins every kernel variant against.",
 }
 
 #: A consumer added later without an entry gets a message that is vague but
@@ -141,3 +145,65 @@ except ModuleNotFoundError:  # no triton wheel for this platform (e.g. macOS)
     HAS_TRITON = False
     triton = _MissingModule("triton")
     tl = _MissingModule("triton.language")
+
+
+class UnsupportedShapeError(ValueError):
+    """A launch geometry a kernel cannot run on this device, refused BEFORE
+    the launch (or converted from Triton's launch-time ``OutOfResources``),
+    with the numbers a caller can act on.
+
+    Raised where a tile configuration's shared-memory need exceeds the
+    device's limit and no smaller supported configuration exists, so a
+    known-unsupported shape surfaces as a typed error naming the shape and
+    the limit rather than as a Triton runtime failure (gnf4#324). A
+    ``ValueError`` so the existing "bad argument" handling of callers still
+    catches it; the attributes carry what the message says.
+    """
+
+    def __init__(self, kernel: str, shape: dict, need_bytes: int,
+                 limit_bytes: int, hint: str = ""):
+        self.kernel = kernel
+        self.shape = dict(shape)
+        self.need_bytes = int(need_bytes)
+        self.limit_bytes = int(limit_bytes)
+        self.hint = hint
+        geom = ", ".join(f"{k}={v}" for k, v in self.shape.items())
+        msg = (f"{kernel}: geometry ({geom}) needs {self.need_bytes} bytes of "
+               f"shared memory against this device's limit of "
+               f"{self.limit_bytes} bytes")
+        if hint:
+            msg += f"; {hint}"
+        super().__init__(msg)
+
+
+_SHARED_MEM_LIMIT: dict = {}
+
+
+def device_shared_mem_limit(device=None) -> int:
+    """Per-device shared-memory (LDS) limit in bytes, queried ONCE per device
+    through triton's driver and cached; 0 when unqueryable.
+
+    NVIDIA SMs expose 100-228 KB; CDNA3 (MI300X, gfx942) exposes 64 KB.
+    0 means "no answer" -- no triton, no CUDA/HIP device, interpreter mode,
+    or a driver that does not expose ``max_shared_mem`` -- and every
+    feasibility check treats 0 as "do not pre-refuse": the CPU and
+    ``TRITON_INTERPRET`` paths are never perturbed, and a launch that then
+    overflows is still caught at the launch and reported as
+    :class:`UnsupportedShapeError` or a fallback by the calling wrapper.
+    Any failure -> 0.
+    """
+    if not HAS_TRITON:
+        return 0
+    try:
+        import torch
+        idx = getattr(device, "index", None)
+        if idx is None:
+            if not torch.cuda.is_available():
+                return 0
+            idx = torch.cuda.current_device()
+        if idx not in _SHARED_MEM_LIMIT:
+            props = triton.runtime.driver.active.utils.get_device_properties(idx)
+            _SHARED_MEM_LIMIT[idx] = int(props["max_shared_mem"])
+        return _SHARED_MEM_LIMIT[idx]
+    except Exception:
+        return 0
