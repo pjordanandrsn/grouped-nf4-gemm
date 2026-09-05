@@ -57,8 +57,8 @@ and its calibrated packer, the **decode glue kernels** (fused RMSNorm,
 residual-fold, rotary, router epilogue), and the host-streaming and NVMe
 tiers for models that do not fit.
 
-**Current position, one page:** [`docs/STATUS.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.30.0/docs/STATUS.md).
-**Every number, with its evidence and tier:** [`docs/claims.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.30.0/docs/claims.json).
+**Current position, one page:** [`docs/STATUS.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.30.1/docs/STATUS.md).
+**Every number, with its evidence and tier:** [`docs/claims.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.30.1/docs/claims.json).
 
 ## Use this when
 
@@ -131,7 +131,7 @@ pip install grouped-nf4-gemm bitsandbytes
 python examples/dequant_tax.py          # ~1 min, one GPU, no model download
 ```
 
-[`examples/dequant_tax.py`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.30.0/examples/dequant_tax.py)
+[`examples/dequant_tax.py`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.30.1/examples/dequant_tax.py)
 times the dequantise-then-GEMM round trip against computing on the
 packed bytes at three points on the M axis, prints a **self-pair** beside
 every ratio (a ratio inside the instrument's own spread is not a
@@ -833,7 +833,7 @@ Both blocks finish without an assertion. The GPU block returns `[T, N]` bf16 in 
 - `top_k=1` cells are instance-unstable; peak VRAM does not improve, only the forward-to-backward transient shrinks ([`STATUS.md`](../STATUS.md)).
 - The fidelity ordering is a CUDA tensor-core statement; other backends must re-measure. No ROCm or XPU ([`PORTABILITY.md`](../PORTABILITY.md)).
 - CUDA + Triton only for the kernel. `nf4_pack_ref` imports `nf4_grouped`, which binds triton through `_triton_shim`, so the pure-torch surface (pack references, `dequant_ref`, provenance, arena bake/verify) imports and runs without triton, and a `gemm_4bit_grouped` call on CPU tensors raises naming `dequant_ref` on a triton-less box too; the Triton kernels need a CUDA GPU; macOS and Windows are not exercised by CI.
-- Open: `#87`, int32 offset overflow at large `max(expert_ids)`.
+- Expert stacks past 2 GiB: every base offset is int64 — `#87` (int32 offset overflow at large `max(expert_ids)`) is closed by observation in every carrier (PR #342; boundary test `kernel/test_expert_offset_boundary.py`; GPU run on an RTX 5090 2026-09-05: 10 passed; claim `gnf4.kernel.expert-offset-boundary.5090.2026-09-05`). The rule and the carrier list are under "Boundaries" in [`KERNEL_CONTRACT.md`](../KERNEL_CONTRACT.md).
 
 ## Related
 
@@ -841,7 +841,7 @@ Both blocks finish without an assertion. The GPU block returns `[T, N]` bf16 in 
 
 ## Evidence
 
-Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.kernel.fused-more-accurate-than-dequant-bf16` (has not measured less accurate than the dequantize-to-bf16-then-GEMM comparator in any registered confirmatory cell), claim `gnf4.kernel.decode-speed-census`, claim `gnf4.kernel.energy-104-of-112`, claim `gnf4.kernel.e2e-training-real-prose`, claim `gnf4.kernel.h2h-unsloth` (4-bit-storage regime; Unsloth wins its own bf16-resident regime), claim `gnf4.kernel.graphed-baseline-decode-loses`. Measured: claim `gnf4.kernel.sm120-census-vs-grouped-mm`, claim `gnf4.kernel.dgrad`. Receipts under `kernel/RESULTS-*.md` with their `prereg_*.json`; property suite `kernel/test_nf4_grouped.py`.
+Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.kernel.fused-more-accurate-than-dequant-bf16` (has not measured less accurate than the dequantize-to-bf16-then-GEMM comparator in any registered confirmatory cell), claim `gnf4.kernel.decode-speed-census`, claim `gnf4.kernel.energy-104-of-112`, claim `gnf4.kernel.e2e-training-real-prose`, claim `gnf4.kernel.h2h-unsloth` (4-bit-storage regime; Unsloth wins its own bf16-resident regime), claim `gnf4.kernel.graphed-baseline-decode-loses`. Measured: claim `gnf4.kernel.sm120-census-vs-grouped-mm`, claim `gnf4.kernel.dgrad`, claim `gnf4.kernel.expert-offset-boundary.5090.2026-09-05` (the 2^31 offset boundary, every carrier). Receipts under `kernel/RESULTS-*.md` with their `prereg_*.json`; property suite `kernel/test_nf4_grouped.py`.
 
 ## Source: docs/solutions/stream-moe-experts-from-host-or-nvme.md (https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/stream-moe-experts-from-host-or-nvme.md)
 
@@ -1723,7 +1723,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
 
 # Status — what this kernel does, what changed, what is open
 
-**As of 2026-09-04, `grouped-nf4-gemm` version 0.30.0.** One page. The README argues; this
+**As of 2026-09-05, `grouped-nf4-gemm` version 0.30.1.** One page. The README argues; this
 page states. Every line here has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
 here that does not.
@@ -1851,6 +1851,20 @@ was wrong.
   Speculation moves (2−H)× the bytes and break-even needs H ≳ 0.95,
   above this model's 0.93 predictor ceiling
   (`gnf4.flagship.prefetch-closed-negative`).
+- **#87 is closed by observation in every carrier** (PR #342; boundary
+  test `kernel/test_expert_offset_boundary.py`; GPU run on an RTX 5090
+  2026-09-05: 10 passed). The line this page carried until 0.30.1 —
+  "`gemm_4bit_grouped` int32 offset overflow at large `max(expert_ids)`,
+  distinct from the 2 GiB stride fix in 0.13.2/0.14.0" — was not
+  supported by the issue text: the expert-id cast the issue asked for
+  shipped in 0.13.2 (NF4) and 0.14.0 (MXFP4), and the carriers it flagged
+  by inspection (split-K, dgrad) plus the ones it did not name (int4-b32,
+  the fp8 paged readers) had never been exercised above the boundary.
+  Now they are, each above-boundary case in its own process
+  (`gnf4.kernel.expert-offset-boundary.5090.2026-09-05`, measured; the
+  test file and the changelog entry are the public evidence, the GPU log
+  is in the private receipt tree). #324's pre-launch shape refusal ships
+  in the same release and moves no registered number.
 
 ---
 
@@ -1863,14 +1877,12 @@ was wrong.
   so that serving path is unaffected; the sm_80–sm_88 default path and
   every explicit f32 request (on any card, Hopper included) are not
   (`gnf4.open.f32-compute-modes-triton34`).
-- **#87** — `gemm_4bit_grouped` int32 offset overflow at large
-  `max(expert_ids)`, distinct from the 2 GiB stride fix in 0.13.2/0.14.0.
 - **#73, #60, #58** — arena/NVMe efficiency: host copy is ~71% of a K3
   layer; staging blocks ~30% of a training step; 8 requests issued per
   layer where 2 would do.
 - **#71** — `PINNED_ROW_FACTOR` is ~2× conservative on cgroup v1; v2
-  needs a box the rented pods cannot give. (#87, #73, #60, #58 and #71
-  are `gnf4.open.issues`.)
+  needs a box the rented pods cannot give. (#73, #60, #58 and #71 are
+  `gnf4.open.issues`.)
 - **`docs/context-budgets.md` is rung-one only** (A2000-measured
   KB/token); full-depth real-weight confirmation is pending and the K3
   row is a declared gap. Its own text forbids promoting pending rows to
@@ -2272,6 +2284,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - gnf4.kernel.graphed-baseline-decode-loses [confirmed]: Against a CUDA-graphed per-expert baseline at the decode band (T=32) the fused path LOSES on both 4090 and H100 (0.949x, 0.858x); the memory-traffic win survives only at training shape on bandwidth-limited cards (1.489x on the 4090, parity 1.059x on the H100).
 - gnf4.kernel.e2e-training-real-prose [confirmed]: Inside a real OLMoE QLoRA finetune, fused vs the per-expert loop runs 4.50x on a 4090 and 4.75x on an H100 on real prose; random token ids understate it at 2.75x / 2.81x because prose routes to 98.4% of experts (cv 0.687) where random ids hit 87.5% (cv 1.463).
 - gnf4.kernel.dgrad [measured]: dgrad_4bit_grouped is the training backward in one launch: gate_up E=256 5.92 ms vs 61.78 ms for the per-expert loop, down 3.28 vs 85.12 ms (A2000, T_cat=4096); one training step at E=256 goes 403.7 to 26.5 ms. On by default since 0.9.1; gradient lands ~2.9e-3 from the exact loop, inside the bf16 budget.
+- gnf4.kernel.expert-offset-boundary.5090.2026-09-05 [measured]: Every kernel that scales an expert id or a block-table row by a stride computes the base offset in int64: the 10 boundary cases of kernel/test_expert_offset_boundary.py -- five below-boundary controls in-process and five above-boundary cases in fresh processes, for the NF4 decode GEMV (scalar, split-K, wide-load, dot-pad), the NF4 M-tile and dgrad, the MXFP4 GEMM / GEMV / gemv_mxfp4_b32, the int4-b32 GEMV and M-tile, and the fp8 paged decode kernels -- pass against the pure-torch references on an RTX 5090, closing #87 by observation (PR #342).
 - gnf4.serve.decode-anchor-5090 [measured]: The certified single-stream decode anchor for Qwen3-30B-A3B on the RTX 5090 class is 7.37 ms/step +-4.2%, about 130-142 tok/s, with the class carrying 8.5% inter-box dispersion while each box repeats to 0.16%.
 - gnf4.serve.m3-defaults-on [measured]: GNF4_GEMV_DOTPAD and GNF4_ATTN_COMPUTE=fp8 ship ON by default (capability-conditional): 8192 teacher-forced tokens through the paged decode path, both knobs 7.843 -> 6.803 ms/step at delta-ppl -0.0021 against a +-0.05 bar. The fp8 path asserts sm_89+, v_groups==1, k_groups in (1,2,4); unset env falls back to f32 where fp8 cannot run, an explicit fp8 request is never downgraded.
 - gnf4.serve.fp8-paged-attn-windows-sinks-scale [measured]: fp8_paged_decode_attention takes window (sliding), sinks (per-head logit in the softmax denominator, the gpt-oss s_aux convention), sm_scale, and k_row_bytes/v_row_bytes stride overrides in all four decode kernels; 35/35 fp8-mode GPU tests on an RTX 5090 (torch 2.8.0+cu128, triton 3.4.0); bytes and arithmetic for window=0, sinks=None unchanged.
@@ -2291,10 +2304,10 @@ Open items (no evidence either way):
 
 - gnf4.open.f32-compute-modes-triton34 [open]: OPEN: the f32 compute modes (split, packed) of the fp8 paged decode miss their reference by up to 0.074 (tol 0.02) on 10 of 35 tests on torch 2.8.0+cu128 / triton 3.4.0 (sm_120), on unmodified main; the fp8 modes -- the sm_120 serving default -- pass.
 - gnf4.open.context-budgets-rung-two [open]: OPEN: context-budgets.md's KB/token table is rung-one (A2000) measured; full-depth real-weight confirmation is pending and the K3 row is a declared gap. Its own text forbids promoting pending rows to READMEs.
-- gnf4.open.issues [open]: OPEN issues at 2026-09-03: #319 (f32 paged compute modes on triton 3.4), #87 (gemm_4bit_grouped int32 offset overflow when max(expert_ids) is large -- distinct from the 2 GiB fix in 0.13.2/0.14.0), #73 (K3 fetch host copy ~71% of a layer), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #60 (arena staging blocks ~30% of a training step), #58 (8 requests per layer where 2 would do).
+- gnf4.open.issues [open]: OPEN issues at 2026-09-05: #319 (f32 paged compute modes on triton 3.4), #73 (K3 fetch host copy ~71% of a layer), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #60 (arena staging blocks ~30% of a training step), #58 (8 requests per layer where 2 would do).
 
 Projections (arithmetic, not runs):
 
 - gnf4.projection.multiarch [projected]: PROJECTED (stamped pre-silicon): the pure-waterfall gen5 row is falsified; the revised gen4 band 2.4-3.0 tok/s is confirmed (L40S 2.60-2.61); the revised gen5 band 4.0-5.0 missed narrowly (H100 PCIe 3.924); unified-memory rows are ceilings only (17-22 tok/s on 128 GB boxes). NF4-vs-bf16 is a 3.56x byte reduction, not 4x.
 
-(22 active claims listed, 3 open, 1 projected; retired and superseded claims are omitted on purpose.)
+(23 active claims listed, 3 open, 1 projected; retired and superseded claims are omitted on purpose.)

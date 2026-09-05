@@ -1,6 +1,6 @@
 # Status — what this kernel does, what changed, what is open
 
-**As of 2026-09-04, `grouped-nf4-gemm` version 0.30.0.** One page. The README argues; this
+**As of 2026-09-05, `grouped-nf4-gemm` version 0.30.1.** One page. The README argues; this
 page states. Every line here has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
 here that does not.
@@ -128,6 +128,20 @@ was wrong.
   Speculation moves (2−H)× the bytes and break-even needs H ≳ 0.95,
   above this model's 0.93 predictor ceiling
   (`gnf4.flagship.prefetch-closed-negative`).
+- **#87 is closed by observation in every carrier** (PR #342; boundary
+  test `kernel/test_expert_offset_boundary.py`; GPU run on an RTX 5090
+  2026-09-05: 10 passed). The line this page carried until 0.30.1 —
+  "`gemm_4bit_grouped` int32 offset overflow at large `max(expert_ids)`,
+  distinct from the 2 GiB stride fix in 0.13.2/0.14.0" — was not
+  supported by the issue text: the expert-id cast the issue asked for
+  shipped in 0.13.2 (NF4) and 0.14.0 (MXFP4), and the carriers it flagged
+  by inspection (split-K, dgrad) plus the ones it did not name (int4-b32,
+  the fp8 paged readers) had never been exercised above the boundary.
+  Now they are, each above-boundary case in its own process
+  (`gnf4.kernel.expert-offset-boundary.5090.2026-09-05`, measured; the
+  test file and the changelog entry are the public evidence, the GPU log
+  is in the private receipt tree). #324's pre-launch shape refusal ships
+  in the same release and moves no registered number.
 
 ---
 
@@ -140,14 +154,12 @@ was wrong.
   so that serving path is unaffected; the sm_80–sm_88 default path and
   every explicit f32 request (on any card, Hopper included) are not
   (`gnf4.open.f32-compute-modes-triton34`).
-- **#87** — `gemm_4bit_grouped` int32 offset overflow at large
-  `max(expert_ids)`, distinct from the 2 GiB stride fix in 0.13.2/0.14.0.
 - **#73, #60, #58** — arena/NVMe efficiency: host copy is ~71% of a K3
   layer; staging blocks ~30% of a training step; 8 requests issued per
   layer where 2 would do.
 - **#71** — `PINNED_ROW_FACTOR` is ~2× conservative on cgroup v1; v2
-  needs a box the rented pods cannot give. (#87, #73, #60, #58 and #71
-  are `gnf4.open.issues`.)
+  needs a box the rented pods cannot give. (#73, #60, #58 and #71 are
+  `gnf4.open.issues`.)
 - **`docs/context-budgets.md` is rung-one only** (A2000-measured
   KB/token); full-depth real-weight confirmation is pending and the K3
   row is a declared gap. Its own text forbids promoting pending rows to
