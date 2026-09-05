@@ -90,6 +90,8 @@ python scripts/check_system_manifest.py            # docs/system-manifest.json v
 python scripts/check_dependency_floor.py           # version statements in current docs vs pyproject and the manifest
 python scripts/check_change_impact.py --base origin/main   # docs/change-impact.json: the companions a diff is missing
 python scripts/check_capabilities.py               # docs/capabilities.json vs schema, pyproject, source, claims
+python scripts/check_claims_register.py            # docs/claims.json bookkeeping: evidence resolves at HEAD, ISO measured_on, superseded/retired fields, quoted_in, no placeholder notes
+python scripts/check_readme_claims.py              # README, STATUS and solution pages quote the register: ids exist, inactive ids say so, README/STATUS tables hold current values
 python scripts/check_discovery_contract.py --bm25 --bm25-min-top1 33   # docs/discovery-queries.json vs the pages; BM25 floor = baseline 35/44 minus two
 python scripts/check_docs_examples.py --root .     # doc code blocks parse, links resolve; --run-cpu-blocks kernel executes the CPU-only ones
 python scripts/build_llms_bundle.py --check        # llms-full.txt is current

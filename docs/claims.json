@@ -18,6 +18,7 @@
       "claim": "The fused NF4 grouped GEMM (fp32 accumulate, bf16 epilogue) has never measured less accurate than the dequantize-to-bf16-then-GEMM baseline, in every confirmatory cell.",
       "status": "confirmed",
       "hardware": "sm_86 (A2000, 3090), sm_89, sm_90",
+      "measured_on": "2026-07-14",
       "evidence": [
         "kernel/RESULTS-v6-confirmatory.md",
         "kernel/RESULTS-v3-confirmatory.md",
@@ -33,6 +34,7 @@
       "unit": "of 112 cells",
       "status": "confirmed",
       "hardware": "sm_86, two devices, n=3 fresh-process reps",
+      "measured_on": "2026-07-13",
       "evidence": [
         "kernel/RESULTS-v3-confirmatory.md",
         "kernel/RESULTS-v2-confirmatory.md"
@@ -46,11 +48,12 @@
       "unit": "x at median",
       "status": "confirmed",
       "hardware": "sm_86",
+      "measured_on": "2026-07-14",
       "evidence": [
         "kernel/RESULTS-v6-confirmatory.md",
         "kernel/RESULTS-v3-confirmatory.md"
       ],
-      "notes": "gpt-oss `down` 2880x2880 is instance-sensitive (0.7-2.0x across five instances)."
+      "notes": "gpt-oss `down` 2880x2880 is instance-sensitive (0.7-2.0x across five instances). measured_on is the last confirmatory run the entry cites (v6, 2026-07-14); the 1.16-2.73x band is stated in the v3 receipt (2026-07-13)."
     },
     {
       "id": "gnf4.kernel.h2h-unsloth",
@@ -60,6 +63,7 @@
       "unit": "x decode, H100",
       "status": "confirmed",
       "hardware": "H100 80GB HBM3 (sm_90); RTX 4090 (sm_89)",
+      "measured_on": "2026-08-12",
       "evidence": [
         "kernel/RESULTS-unsloth-head-to-head.md",
         "kernel/prereg_unsloth_head_to_head.json"
@@ -67,7 +71,7 @@
       "supersedes": [
         "gnf4.kernel.comparators-v6-execution-class"
       ],
-      "notes": "Forward pass only; the training-axis leg is exploratory and licenses no claim."
+      "notes": "Forward pass only; the training-axis leg is exploratory and licenses no claim. The model-level, training-axis end-to-end head-to-head is registered in experts4bit-qlora as e4b.train.h2h.unsloth.qwen3.5090.2026-09-05 (2026-09-05, one RTX 5090, Qwen3-30B-A3B: experts4bit-qlora 1.522 s/step vs Unsloth 2.151, ratio 1.413; held-out loss comparable at N=60; at N=200 Unsloth's held-out loss is lower, 0.2713 vs 0.2881). That is a different level and regime, so it does not supersede this kernel-level claim. measured_on is the receipt's publication commit (2026-08-12; the receipt states no run date, and amendment 2 of the protocol was registered 2026-08-12T23:20Z)."
     },
     {
       "id": "gnf4.kernel.comparators-v6-execution-class",
@@ -88,10 +92,11 @@
       "unit": "x vs torch._grouped_mm",
       "status": "measured",
       "hardware": "RTX 5090 (sm_120), two rented boxes",
+      "measured_on": "2026-08-29",
       "evidence": [
         "bench/sm120-census/RESULTS-sm120-grouped-census.md"
       ],
-      "measured_on": "2026-08"
+      "notes": "measured_on is the receipt's commit date (PR #299, 2026-08-29); the receipt states no run date and ran on main 4f1db333 (2026-08-28), so the run falls on 2026-08-28/29. Recorded as '2026-08' until 0.30.2."
     },
     {
       "id": "gnf4.kernel.graphed-baseline-decode-loses",
@@ -99,11 +104,12 @@
       "claim": "Against a CUDA-graphed per-expert baseline at the decode band (T=32) the fused path LOSES on both 4090 and H100 (0.949x, 0.858x); the memory-traffic win survives only at training shape on bandwidth-limited cards (1.489x on the 4090, parity 1.059x on the H100).",
       "status": "confirmed",
       "hardware": "RTX 4090 (sm_89), H100 (sm_90)",
+      "measured_on": "2026-08-13",
       "evidence": [
         "bench/phase1/results/dequant_forward/RESULTS-leg4-routed.md",
         "bench/phase1/results/dequant_forward/RESULTS-graphed-buckets.md"
       ],
-      "notes": "The README states this. Any 'fused wins at decode' reading that ignores graphing is wrong."
+      "notes": "The README states this. Any 'fused wins at decode' reading that ignores graphing is wrong. measured_on is the first commit of the leg-4 receipt that carries all four numbers (2026-08-13; it states no run date); the graphed-buckets receipt is the later 2026-08-15 re-race and supplies none of them."
     },
     {
       "id": "gnf4.kernel.e2e-training-real-prose",
@@ -113,6 +119,7 @@
       "unit": "x, 4090, prose",
       "status": "confirmed",
       "hardware": "RTX 4090, H100",
+      "measured_on": "2026-08-13",
       "evidence": [
         "bench/phase1/results/dequant_forward/RESULTS-e2e-training.md"
       ],
@@ -126,10 +133,19 @@
       "unit": "ms per step, E=256",
       "status": "measured",
       "hardware": "A2000 (sm_86)",
+      "measured_on": "2026-08-06",
       "evidence": [
-        "kernel/RESULTS-*.md (0.7.0)",
-        "experts4bit-qlora bench/dgrad-gate/RESULTS-dgrad-gate.md"
-      ]
+        {
+          "path": "CHANGELOG.md",
+          "section": "0.7.0",
+          "note": "the A2000 cells (gate_up 5.92 vs 61.78 ms, down 3.28 vs 85.12 ms, the composed step 403.7 -> 26.5 ms) are recorded in the 0.7.0 release entry; no kernel/RESULTS-*.md carries them, which the earlier glob implied"
+        },
+        {
+          "repository": "experts4bit-qlora",
+          "path": "bench/dgrad-gate/RESULTS-dgrad-gate.md"
+        }
+      ],
+      "notes": "measured_on is the date of the 0.7.0 entry that records the A2000 cells, and the run date the dgrad-gate receipt states."
     },
     {
       "id": "gnf4.kernel.expert-offset-boundary.5090.2026-09-05",
@@ -143,7 +159,10 @@
       "measured_on": "2026-09-05",
       "evidence": [
         "kernel/test_expert_offset_boundary.py",
-        "CHANGELOG.md"
+        {
+          "path": "CHANGELOG.md",
+          "section": "0.30.1"
+        }
       ],
       "evidence_private": [
         "INT4B16/gnf4-87/gpu-logs/boundary.log"
@@ -152,7 +171,7 @@
         "docs/STATUS.md",
         "README.md",
         "docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md",
-        "CHANGELOG.md 0.30.1"
+        "CHANGELOG.md#0.30.1"
       ],
       "notes": "The public evidence is the test and the 0.30.1 changelog entry; the GPU log (10 passed in 29.07 s) is in the private receipt tree, so the run itself cannot be checked from this repository -- rerun the file on any CUDA device with >= 4 GiB free. Same release, #324: an infeasible tile is refused or re-dispatched before the launch (_triton_shim.UnsupportedShapeError, fp8_paged_attn.packed_unsupported, nf4_grouped.prefill_fit) instead of surfacing Triton's OutOfResources; no NVIDIA configuration moves and no registered number changes, so it carries no entry of its own. On the same 5090 run kernel/test_shape_feasibility.py passed compiled and under the interpreter (28 each) and the fp8 paged modes passed (47; the 37 f32 modes stay deselected under #319), with the packed-tile fallback firing at head_dim 256 / 8 kv heads."
     },
@@ -173,17 +192,17 @@
     {
       "id": "gnf4.serve.m3-defaults-on",
       "area": "serve",
-      "claim": "GNF4_GEMV_DOTPAD and GNF4_ATTN_COMPUTE=fp8 ship ON by default (capability-conditional): 8192 teacher-forced tokens through the paged decode path, both knobs 7.843 -> 6.803 ms/step at delta-ppl -0.0021 against a +-0.05 bar. The fp8 path asserts sm_89+, v_groups==1, k_groups in (1,2,4); unset env falls back to f32 where fp8 cannot run, an explicit fp8 request is never downgraded.",
+      "claim": "GNF4_GEMV_DOTPAD and GNF4_ATTN_COMPUTE=fp8 ship ON by default (capability-conditional): 8192 teacher-forced tokens through the paged decode path, both knobs 7.843 -> 6.803 ms/step at delta-ppl -0.0021 against a +-0.05 bar. The fp8 path asserts sm_89+, v_groups==1, k_groups in (1, 2, 4, 8, 16); unset env falls back to f32 where fp8 cannot run, an explicit fp8 request is never downgraded.",
       "value": 6.803,
       "unit": "ms/step",
       "status": "measured",
       "hardware": "RTX 5090, one box",
       "evidence": [
         "kernel/RESULTS-m3-default-on.md",
-        "receipts-m3/"
+        "kernel/receipts-m3/"
       ],
       "measured_on": "2026-08-27",
-      "notes": "Read the ppl deltas as zero, not gains. Dispatch receipts (dispatch_counts, compute_counts) exist because an env var is a request, not an event."
+      "notes": "Read the ppl deltas as zero, not gains. Dispatch receipts (dispatch_counts, compute_counts) exist because an env var is a request, not an event. Correction (0.30.2, 2026-09-05): the sentence said `k_groups in (1,2,4)`, the predicate as it stood at the 2026-08-27 run; fp8_paged_attn.fp8_compute_unsupported has admitted (1, 2, 4, 8, 16) since 0.26.0 (Gemma-4's per-layer key-scale groups) and the sentence now describes the shipped predicate. The measurement and its numbers are unchanged."
     },
     {
       "id": "gnf4.serve.fp8-paged-attn-windows-sinks-scale",
@@ -194,7 +213,10 @@
       "measured_on": "2026-09-03",
       "evidence": [
         "kernel/test_fp8_paged_attn.py",
-        "CHANGELOG.md 0.24.0"
+        {
+          "path": "CHANGELOG.md",
+          "section": "0.24.0"
+        }
       ],
       "notes": "End-to-end parity of the SERVING path built on these (Granite, gpt-oss, Gemma-4) is measured in experts4bit-qlora's receipts, which are private -- see e4b's register."
     },
@@ -217,15 +239,16 @@
       "unit": "GB/s dense M=1",
       "status": "measured-private",
       "hardware": "RTX 5090",
+      "measured_on": "2026-08-31",
       "evidence": [],
       "evidence_private": [
         "INT4B16/P1",
         "INT4B16/P15-B16"
       ],
       "quoted_in": [
-        "CHANGELOG.md 0.18.0"
+        "CHANGELOG.md#0.18.0"
       ],
-      "notes": "Measured refusals kept: the format stays OFF the lm_head (+0.18 ppl) and dense attention shapes lose to bf16 in both the GEMV and M=16 GEMM regimes."
+      "notes": "Measured refusals kept: the format stays OFF the lm_head (+0.18 ppl) and dense attention shapes lose to bf16 in both the GEMV and M=16 GEMM regimes. measured_on is the date of the 0.18.0 entry that first quotes these cells -- an upper bound, since the run dates are in the private receipts (INT4B16/P1, P15-B16), not stated publicly."
     },
     {
       "id": "gnf4.serve.gptq-pack-int4-b32",
@@ -233,6 +256,7 @@
       "claim": "gptq_pack_int4_b32 produces byte-identical format to pack_int4_b32 and chooses grid points against H = 2XX^T; packed on a C4 shard, Qwen3-30B-A3B's attention scores -0.042 ppl on wikitext and -0.115 on out-of-domain C4 against bf16 attention. HessianAccumulator stores off-device (0.23.0) so Mixtral's 128 projections fit.",
       "status": "measured-private",
       "hardware": "RTX 5090",
+      "measured_on": "2026-09-03",
       "evidence": [
         "kernel/test_gptq_pack.py"
       ],
@@ -240,7 +264,7 @@
         "INT4B16/P21-CALIBINT4",
         "INT4B16/P22-CALIBINT4-C4"
       ],
-      "notes": "A Qwen3-30B-A3B win, not a general lever: refused on Mixtral (+0.09) and OLMoE (+0.60) by the consumer's gate."
+      "notes": "A Qwen3-30B-A3B win, not a general lever: refused on Mixtral (+0.09) and OLMoE (+0.60) by the consumer's gate. measured_on is the date of the 0.22.0 entry that first quotes these numbers -- an upper bound, since the run dates are in the private receipts (INT4B16/P21, P22), not stated publicly."
     },
     {
       "id": "gnf4.serve.decode-glue-kernels",
@@ -250,22 +274,27 @@
       "unit": "ms/step B=1 after round 3",
       "status": "measured-private",
       "hardware": "RTX 5090",
+      "measured_on": "2026-09-02",
       "evidence": [
-        "kernel/test_*.py for each kernel"
+        "kernel/test_int4_b32.py"
       ],
       "evidence_private": [
         "INT4B16/P16-GLUER2",
         "INT4B16/P18-GLUER3"
       ],
       "quoted_in": [
-        "CHANGELOG.md 0.19.0, 0.20.0, 0.21.0"
-      ]
+        "CHANGELOG.md#0.19.0",
+        "CHANGELOG.md#0.20.0",
+        "CHANGELOG.md#0.21.0"
+      ],
+      "notes": "measured_on is the date of the 0.21.0 entry (round 3, the composed number) -- an upper bound, since the run dates are in the private receipts (INT4B16/P16, P18), not stated publicly."
     },
     {
       "id": "gnf4.retired.splitk-gemv",
       "area": "serve",
       "claim": "REFUTED (K7): split-K on the decode GEMV -- flat at gate_up, ~14% worse at down for every split. GNF4_GEMV_SPLITK ships dormant as the evidence.",
       "status": "retired",
+      "retired_reason": "K7 round 2 (kernel/RESULTS-k7-gemv-round2.md) measured split-K on the decode GEMV flat at gate_up and about 14% worse at down for every split; the plan ships dormant behind GNF4_GEMV_SPLITK as the evidence.",
       "evidence": [
         "kernel/RESULTS-k7-gemv-round2.md"
       ]
@@ -277,7 +306,8 @@
       "status": "retired",
       "retired_reason": "sm_120 became the primary serving target in 0.15.0-0.24.0: M=1 configs retuned for it, the sm_120 census, the decode anchor, M3 defaults, the int4 lanes and the fp8 paged attention were all measured on rented RTX 5090s.",
       "quoted_in": [
-        "README.md#Status / roadmap"
+        "README.md#What was retired",
+        "docs/STATUS.md#What changed"
       ]
     },
     {
@@ -288,6 +318,7 @@
       "unit": "tok/s",
       "status": "confirmed",
       "hardware": "datacenter PCIe link 44.3 GB/s",
+      "measured_on": "2026-07-14",
       "evidence": [
         "bench/phase3/flagship/RESULTS-flagship-offload.md"
       ]
@@ -300,16 +331,19 @@
       "unit": "tok/s",
       "status": "confirmed",
       "hardware": "five rented pods; gen4 desktop L40S 2.6 tok/s; gen5 bare-metal H100 PCIe 3.9",
+      "measured_on": "2026-07-22",
       "evidence": [
         "bench/phase3/flagship/RESULTS-flagship-phaseB.md",
         "bench/phase3/flagship/RESULTS-flagship-gen5-metal.md"
-      ]
+      ],
+      "notes": "measured_on is the gen5 bare-metal leg that supplies the seven-host c_box band (receipts-gen5-20260722; the run log starts 2026-07-23T00:06Z, 2026-07-22 local); the five-pod Phase B receipt is 2026-07-14."
     },
     {
       "id": "gnf4.flagship.prefetch-closed-negative",
       "area": "offload",
       "claim": "Expert prefetch is CLOSED, negative, over four registered arcs: stickiness 0.44 (B2); the pre-attention router predicts the post-attention top-8 at 0.93 but the win does not land (B3); threaded issuance 0.57x (B4); zero-copy speculative gather loses by the (2-H)x bytes law, break-even needs H >~ 0.95 (B5). Recommended copy path is --prefetch-mode gpu (UVA gather), +1.5% on one host.",
       "status": "confirmed",
+      "measured_on": "2026-07-14",
       "evidence": [
         "bench/phase3/flagship/RESULTS-flagship-phaseB2.md",
         "bench/phase3/flagship/RESULTS-flagship-phaseB3.md",
@@ -325,10 +359,12 @@
       "unit": "GB/s sustained read at 13-50 MiB requests, QD>=4",
       "status": "measured",
       "hardware": "QNAP Xeon W-1250, FireCuda 530 on PCIe Gen3 x4",
+      "measured_on": "2026-07-27",
       "evidence": [
         "docs/nvme-ceilings.md",
         "docs/RESULTS-nvme-determinism.md"
-      ]
+      ],
+      "notes": "measured_on is the S curve run (docs/nvme-ceilings.md, 2026-07-27 evening); the concurrent-with-PCIe leg and the determinism receipt followed on 2026-07-28."
     },
     {
       "id": "gnf4.mxfp4.serve-tax-deleted",
@@ -338,6 +374,7 @@
       "unit": "ppl",
       "status": "confirmed",
       "hardware": "DO H200 pod",
+      "measured_on": "2026-07-19",
       "evidence": [
         "docs/mxfp4/RESULTS-mxfp4-serve.md",
         "docs/mxfp4/PREREG-mxfp4-serve.md"
@@ -352,17 +389,20 @@
       "unit": "GB peak VRAM",
       "status": "confirmed",
       "hardware": "RunPod L40S (Run B); A2000 (Run A, 20b)",
+      "measured_on": "2026-07-20",
       "evidence": [
         "docs/mxfp4/RESULTS-mxfp4-train.md",
         "docs/mxfp4/PREREG-mxfp4-train.md",
         "docs/provenance/gptoss20b_expert_bytes.md"
-      ]
+      ],
+      "notes": "measured_on is the receipt's first commit (2026-07-20); the training receipts carry wall-clock offsets, not a calendar date, and the pre-registration records the operator GO on 2026-07-19."
     },
     {
       "id": "gnf4.k3.oracle-exact",
       "area": "provenance",
       "claim": "The reference MXFP4 decode reproduces Kimi K3's own declared reference (compressed-tensors 0.17.1, mxfp4-pack-quantized) exactly: 33,030,144 elements across w1/w3/w2, max abs delta 0; an arena round-trip on a byte-verified 1.56 TB store came back 48/48 segments identical with a byte-flip control, row fixed at 17,547,264 B.",
       "status": "measured",
+      "measured_on": "2026-07-30",
       "evidence": [
         "docs/RESULTS-k3-phase1-oracle.md",
         "docs/RESULTS-k3-slice-roundtrip.md",
@@ -388,10 +428,11 @@
       "claim": "The cold-engine 'free floor' premise (bnb's CPU dequantize_4bit as a ready-made decode arm) is REFUTED on the target NAS box: no AVX-512, bnb falls to its reference path at 0.041 GB/s against a ~12 GB/s DDR ceiling. Design-stage; no registered claims.",
       "status": "measured",
       "hardware": "QNAP Xeon W-1250 (AVX2 only)",
+      "measured_on": "2026-07-19",
       "evidence": [
         "docs/cold-engine/PHASE0-premise.md"
       ],
-      "notes": "PHASE0-premise self-declares as incomplete (roofline pipe term pending). STAGE3-SYNTHESIS carries one correction still outstanding (gate 1 read counts must not be quoted until re-run)."
+      "notes": "PHASE0-premise self-declares as incomplete (its roofline pipe term is unmeasured). STAGE3-SYNTHESIS carries one correction still outstanding (gate 1 read counts must not be quoted until re-run)."
     },
     {
       "id": "gnf4.open.context-budgets-rung-two",

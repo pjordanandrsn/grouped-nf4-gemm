@@ -160,8 +160,8 @@ jobs:
       - name: harness unit tests
         run: cd bench/phase1 && python -m pytest test_plan_modes.py -q
 
-      - name: packaging allowlist + test-wiring guard
-        run: cd kernel && python -m pytest test_packaging_covers_kernel.py test_check_readme_links.py test_check_scripts.py -q
+      - name: packaging allowlist + test-wiring guard + the register/prose checkers' own tests
+        run: cd kernel && python -m pytest test_packaging_covers_kernel.py test_check_readme_links.py test_check_scripts.py test_check_claims_register.py test_check_readme_claims.py -q
 
   wheel-smoke:
     # Built-artifact gate: the README's promised import surface must equal the
@@ -219,7 +219,11 @@ jobs:
           python-version: "3.11"
       - name: capability contract (schema, pyproject, source symbols, claims, install routes)
         run: python scripts/check_capabilities.py
-      - name: system manifest (names, kernel-first floors vs pyproject and tags, evidence vocabulary, capability ownership)
+      - name: claims register bookkeeping (every evidence entry resolves at HEAD, ISO measured_on on measured rows, superseded/retired fields, quoted_in resolves, no placeholder notes on an active row)
+        run: python scripts/check_claims_register.py
+      - name: prose quotes the register (README, STATUS, solution pages -- every backticked id exists, a superseded/retired id only on a line that says so, README/STATUS results tables hold the register's current values)
+        run: python scripts/check_readme_claims.py
+      - name: system manifest (names, import surface == capabilities.json, kernel-first floors vs pyproject and tags, evidence vocabulary, capability ownership)
         run: python scripts/check_system_manifest.py
       - name: version statements in the current docs agree with pyproject and the manifest's current record
         run: python scripts/check_dependency_floor.py
@@ -243,4 +247,12 @@ jobs:
           python -m build
           python scripts/check_wheel_sources.py dist/*.whl
           python -m twine check dist/*
-          python scripts/check_wheel_metadata.py dist/*.whl
+          # --requires asserts the wheel's OWN declared floors (pyproject
+          # dependencies), which the structural extras check does not read.
+          # The consumer floor in the manifest's current record
+          # (experts4bit-qlora[fast] -> grouped-nf4-gemm>=0.30.0) is the
+          # consumer's metadata, asserted in its CI, never in this wheel.
+          python scripts/check_wheel_metadata.py dist/*.whl \
+            --requires 'numpy' \
+            --requires 'torch>=2.8.0.dev0' \
+            --requires 'triton>=3.4; platform_system == "Linux"'

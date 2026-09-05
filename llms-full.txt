@@ -57,8 +57,8 @@ and its calibrated packer, the **decode glue kernels** (fused RMSNorm,
 residual-fold, rotary, router epilogue), and the host-streaming and NVMe
 tiers for models that do not fit.
 
-**Current position, one page:** [`docs/STATUS.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.30.1/docs/STATUS.md).
-**Every number, with its evidence and tier:** [`docs/claims.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.30.1/docs/claims.json).
+**Current position, one page:** [`docs/STATUS.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.30.2/docs/STATUS.md).
+**Every number, with its evidence and tier:** [`docs/claims.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.30.2/docs/claims.json).
 
 ## Use this when
 
@@ -131,7 +131,7 @@ pip install grouped-nf4-gemm bitsandbytes
 python examples/dequant_tax.py          # ~1 min, one GPU, no model download
 ```
 
-[`examples/dequant_tax.py`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.30.1/examples/dequant_tax.py)
+[`examples/dequant_tax.py`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.30.2/examples/dequant_tax.py)
 times the dequantise-then-GEMM round trip against computing on the
 packed bytes at three points on the M axis, prints a **self-pair** beside
 every ratio (a ratio inside the instrument's own spread is not a
@@ -1113,8 +1113,16 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
       "mxfp4_grouped",
       "int4_b32",
       "fp8_paged_attn",
+      "fp8_kv",
       "nvme_arena",
-      "mxfp4_loader"
+      "nvme_reader",
+      "nvme_residency",
+      "nvme_bake_nf4",
+      "mxfp4_loader",
+      "gptq_pack",
+      "nf4_pack_ref",
+      "mxfp4_pack_ref",
+      "verify_provenance"
     ],
     "related_projects": [
       {
@@ -1723,7 +1731,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
 
 # Status — what this kernel does, what changed, what is open
 
-**As of 2026-09-05, `grouped-nf4-gemm` version 0.30.1.** One page. The README argues; this
+**As of 2026-09-05, `grouped-nf4-gemm` version 0.30.2.** One page. The README argues; this
 page states. Every line here has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
 here that does not.
@@ -1771,6 +1779,10 @@ footnote:**
 2. **Unsloth wins its own regime.** Against their bf16-resident kernel
    they run 2.6–5.3× faster at prefill on an H100. The advantage above
    is the 4-bit-storage regime specifically (`gnf4.kernel.h2h-unsloth`).
+   The model-level, training-axis end-to-end comparison is a separate
+   claim in experts4bit-qlora's register
+   (`e4b.train.h2h.unsloth.qwen3.5090.2026-09-05`); it does not supersede
+   this kernel-level one.
 3. **Known losers:** `top_k=1` cells are instance-unstable in both
    directions; shapes under about 5 M weight elements lose outright
    (0.24–0.35× speed, 4–7× energy) and are routed back to the dequant
@@ -1841,7 +1853,7 @@ was wrong.
   `gnf4.kernel.h2h-unsloth`).
 - **Split-K on the decode GEMV is refuted** (flat at `gate_up`, ~14%
   worse at `down`). The kernel ships dormant *as the evidence*
-  (`gnf4.retired.splitk-gemv`).
+  (the retired claim `gnf4.retired.splitk-gemv`).
 - **A fixed fraction-of-waterfall is retired as a law** (two 0.77
   readings were a two-host coincidence).
 - **The cold-engine "free floor" premise is refuted** on its target box:
@@ -1865,6 +1877,20 @@ was wrong.
   test file and the changelog entry are the public evidence, the GPU log
   is in the private receipt tree). #324's pre-launch shape refusal ships
   in the same release and moves no registered number.
+- **Register bookkeeping corrected (0.30.2).** `gnf4.serve.m3-defaults-on`'s
+  sentence described the fp8 predicate as `k_groups in (1,2,4)` — the
+  predicate as it stood at the 2026-08-27 run; `fp8_compute_unsupported`
+  has admitted `(1, 2, 4, 8, 16)` since 0.26.0 and the sentence now says
+  so, with the measurement unchanged. Every `evidence` entry in
+  `claims.json` is now a path that resolves at HEAD (structured forms for
+  changelog sections, globs and cross-repository receipts:
+  [`claims-schema.md`](claims-schema.md)); every measured, measured-private
+  and confirmed row carries an ISO `measured_on` taken from its receipt or,
+  where the receipt states no run date, the receipt's first commit;
+  the retired `gnf4.retired.splitk-gemv` carries its `retired_reason`; and
+  `scripts/check_claims_register.py` + `scripts/check_readme_claims.py`
+  hold the register and this page to it in CI. No number, gate or verdict
+  moves.
 
 ---
 
@@ -2195,6 +2221,8 @@ python scripts/check_system_manifest.py            # docs/system-manifest.json v
 python scripts/check_dependency_floor.py           # version statements in current docs vs pyproject and the manifest
 python scripts/check_change_impact.py --base origin/main   # docs/change-impact.json: the companions a diff is missing
 python scripts/check_capabilities.py               # docs/capabilities.json vs schema, pyproject, source, claims
+python scripts/check_claims_register.py            # docs/claims.json bookkeeping: evidence resolves at HEAD, ISO measured_on, superseded/retired fields, quoted_in, no placeholder notes
+python scripts/check_readme_claims.py              # README, STATUS and solution pages quote the register: ids exist, inactive ids say so, README/STATUS tables hold current values
 python scripts/check_discovery_contract.py --bm25 --bm25-min-top1 33   # docs/discovery-queries.json vs the pages; BM25 floor = baseline 35/44 minus two
 python scripts/check_docs_examples.py --root .     # doc code blocks parse, links resolve; --run-cpu-blocks kernel executes the CPU-only ones
 python scripts/build_llms_bundle.py --check        # llms-full.txt is current
@@ -2286,7 +2314,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - gnf4.kernel.dgrad [measured]: dgrad_4bit_grouped is the training backward in one launch: gate_up E=256 5.92 ms vs 61.78 ms for the per-expert loop, down 3.28 vs 85.12 ms (A2000, T_cat=4096); one training step at E=256 goes 403.7 to 26.5 ms. On by default since 0.9.1; gradient lands ~2.9e-3 from the exact loop, inside the bf16 budget.
 - gnf4.kernel.expert-offset-boundary.5090.2026-09-05 [measured]: Every kernel that scales an expert id or a block-table row by a stride computes the base offset in int64: the 10 boundary cases of kernel/test_expert_offset_boundary.py -- five below-boundary controls in-process and five above-boundary cases in fresh processes, for the NF4 decode GEMV (scalar, split-K, wide-load, dot-pad), the NF4 M-tile and dgrad, the MXFP4 GEMM / GEMV / gemv_mxfp4_b32, the int4-b32 GEMV and M-tile, and the fp8 paged decode kernels -- pass against the pure-torch references on an RTX 5090, closing #87 by observation (PR #342).
 - gnf4.serve.decode-anchor-5090 [measured]: The certified single-stream decode anchor for Qwen3-30B-A3B on the RTX 5090 class is 7.37 ms/step +-4.2%, about 130-142 tok/s, with the class carrying 8.5% inter-box dispersion while each box repeats to 0.16%.
-- gnf4.serve.m3-defaults-on [measured]: GNF4_GEMV_DOTPAD and GNF4_ATTN_COMPUTE=fp8 ship ON by default (capability-conditional): 8192 teacher-forced tokens through the paged decode path, both knobs 7.843 -> 6.803 ms/step at delta-ppl -0.0021 against a +-0.05 bar. The fp8 path asserts sm_89+, v_groups==1, k_groups in (1,2,4); unset env falls back to f32 where fp8 cannot run, an explicit fp8 request is never downgraded.
+- gnf4.serve.m3-defaults-on [measured]: GNF4_GEMV_DOTPAD and GNF4_ATTN_COMPUTE=fp8 ship ON by default (capability-conditional): 8192 teacher-forced tokens through the paged decode path, both knobs 7.843 -> 6.803 ms/step at delta-ppl -0.0021 against a +-0.05 bar. The fp8 path asserts sm_89+, v_groups==1, k_groups in (1, 2, 4, 8, 16); unset env falls back to f32 where fp8 cannot run, an explicit fp8 request is never downgraded.
 - gnf4.serve.fp8-paged-attn-windows-sinks-scale [measured]: fp8_paged_decode_attention takes window (sliding), sinks (per-head logit in the softmax denominator, the gpt-oss s_aux convention), sm_scale, and k_row_bytes/v_row_bytes stride overrides in all four decode kernels; 35/35 fp8-mode GPU tests on an RTX 5090 (torch 2.8.0+cu128, triton 3.4.0); bytes and arithmetic for window=0, sinks=None unchanged.
 - gnf4.serve.int4-b32-gemv [measured-private] (receipt private): The uniform int4-b32 decode GEMV (int8 activations, exact integer accumulation) reaches 1,044 GB/s dense at M=1 on the 5090, 6.9-7.2x over the NF4 register-LUT GEMV; grouped top-8 cells 3.8-4.3x. The grouped M-tile int4 GEMM runs gate_up 1.947x / down 4.500x over the NF4 grouped kernel at the B=16 census cells.
 - gnf4.serve.gptq-pack-int4-b32 [measured-private] (receipt private): gptq_pack_int4_b32 produces byte-identical format to pack_int4_b32 and chooses grid points against H = 2XX^T; packed on a C4 shard, Qwen3-30B-A3B's attention scores -0.042 ppl on wikitext and -0.115 on out-of-domain C4 against bf16 attention. HessianAccumulator stores off-device (0.23.0) so Mixtral's 128 projections fit.

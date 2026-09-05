@@ -1,6 +1,6 @@
 # Status — what this kernel does, what changed, what is open
 
-**As of 2026-09-05, `grouped-nf4-gemm` version 0.30.1.** One page. The README argues; this
+**As of 2026-09-05, `grouped-nf4-gemm` version 0.30.2.** One page. The README argues; this
 page states. Every line here has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
 here that does not.
@@ -48,6 +48,10 @@ footnote:**
 2. **Unsloth wins its own regime.** Against their bf16-resident kernel
    they run 2.6–5.3× faster at prefill on an H100. The advantage above
    is the 4-bit-storage regime specifically (`gnf4.kernel.h2h-unsloth`).
+   The model-level, training-axis end-to-end comparison is a separate
+   claim in experts4bit-qlora's register
+   (`e4b.train.h2h.unsloth.qwen3.5090.2026-09-05`); it does not supersede
+   this kernel-level one.
 3. **Known losers:** `top_k=1` cells are instance-unstable in both
    directions; shapes under about 5 M weight elements lose outright
    (0.24–0.35× speed, 4–7× energy) and are routed back to the dequant
@@ -118,7 +122,7 @@ was wrong.
   `gnf4.kernel.h2h-unsloth`).
 - **Split-K on the decode GEMV is refuted** (flat at `gate_up`, ~14%
   worse at `down`). The kernel ships dormant *as the evidence*
-  (`gnf4.retired.splitk-gemv`).
+  (the retired claim `gnf4.retired.splitk-gemv`).
 - **A fixed fraction-of-waterfall is retired as a law** (two 0.77
   readings were a two-host coincidence).
 - **The cold-engine "free floor" premise is refuted** on its target box:
@@ -142,6 +146,20 @@ was wrong.
   test file and the changelog entry are the public evidence, the GPU log
   is in the private receipt tree). #324's pre-launch shape refusal ships
   in the same release and moves no registered number.
+- **Register bookkeeping corrected (0.30.2).** `gnf4.serve.m3-defaults-on`'s
+  sentence described the fp8 predicate as `k_groups in (1,2,4)` — the
+  predicate as it stood at the 2026-08-27 run; `fp8_compute_unsupported`
+  has admitted `(1, 2, 4, 8, 16)` since 0.26.0 and the sentence now says
+  so, with the measurement unchanged. Every `evidence` entry in
+  `claims.json` is now a path that resolves at HEAD (structured forms for
+  changelog sections, globs and cross-repository receipts:
+  [`claims-schema.md`](claims-schema.md)); every measured, measured-private
+  and confirmed row carries an ISO `measured_on` taken from its receipt or,
+  where the receipt states no run date, the receipt's first commit;
+  the retired `gnf4.retired.splitk-gemv` carries its `retired_reason`; and
+  `scripts/check_claims_register.py` + `scripts/check_readme_claims.py`
+  hold the register and this page to it in CI. No number, gate or verdict
+  moves.
 
 ---
 
