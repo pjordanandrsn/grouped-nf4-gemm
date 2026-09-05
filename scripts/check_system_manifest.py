@@ -19,6 +19,8 @@ manifest. Checks:
   * evidence_vocabulary keys are a superset of docs/claims.json
     status_vocabulary keys;
   * capability_ownership.kernels equals the set of ids in docs/capabilities.json;
+  * packages.kernels.import_names equals docs/capabilities.json
+    project.import_names (one public import surface, same order);
   * every invariant has id / statement / checked_by, ids unique;
   * the router carries its five entries.
 
@@ -270,6 +272,18 @@ def main() -> int:
     overlap = want & set(m["capability_ownership"].get("runtime", []))
     if overlap:
         fail.append(f"capability ids owned by both packages: {sorted(overlap)}")
+    # One public import surface, not two: the manifest's list is what the site
+    # and packages.json publish, capabilities.json's is what this repository
+    # publishes; the consumer asserts the same equality on its side.
+    man_imports = list(kernels.get("import_names", []))
+    cap_imports = list((caps.get("project") or {}).get("import_names") or [])
+    if man_imports != cap_imports:
+        detail = (" (same names, different order)" if set(man_imports) == set(cap_imports) else
+                  f": manifest-only {sorted(set(man_imports) - set(cap_imports))}, "
+                  f"capabilities-only {sorted(set(cap_imports) - set(man_imports))}")
+        fail.append(f"packages.kernels.import_names != docs/capabilities.json project.import_names{detail}")
+    else:
+        ok.append(f"packages.kernels.import_names == docs/capabilities.json project.import_names ({len(man_imports)})")
 
     # -- invariants, router -------------------------------------------------------
     ids = []
