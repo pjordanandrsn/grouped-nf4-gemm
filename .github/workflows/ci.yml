@@ -134,6 +134,17 @@ jobs:
       - name: GPU-labelled files, for the CPU-reachable tests inside them
         run: cd kernel && python -m pytest test_arena_equivalence.py test_arena_experts.py test_mxfp4_qlora.py test_mxfp4_residency.py test_nf4_qlora_grad.py test_nvme_residency.py test_cold_reclaimable.py test_cold_cpu_view.py test_cold_cpu_view_direct.py test_cold_deadline.py test_reuse_profile.py test_vram_slots.py test_dev_row_cache.py test_row_pool.py test_segmented_pool.py test_fp8_kv.py test_fp8_kv_append.py test_fp8_paged_attn.py test_nf4_grouped.py test_mxfp4_grouped.py test_mxfp4_pipelined.py test_eids_forms.py test_arena_capture_semantics.py test_offsets_2gib.py test_instrument_gate.py test_dispatch_counts.py test_k12_census.py test_m3_defaults.py -q
 
+      # The 2^31 expert-offset boundary (gnf4#87): every kernel that scales an
+      # expert or block-table index by a stride, sampled just below and just
+      # above the boundary against the pure-torch references. Needs a CUDA
+      # device with >= 4 GiB free, so on this runner every test skips with
+      # that reason (legibly -- a skip here is never silent). Each
+      # above-boundary case runs in its own subprocess because an illegal
+      # access poisons the CUDA context, which is why the file runs alone
+      # rather than inside the GPU-labelled list above.
+      - name: expert-offset boundary (skips legibly without a GPU)
+        run: cd kernel && python -m pytest test_expert_offset_boundary.py -q
+
       # Harness schedule logic (bench/phase1) — pure functions, no GPU. The
       # e2e driver's burn-in plan is the registered remedy for the ten-run
       # first-mode drift; this keeps a refactor from silently dropping it.

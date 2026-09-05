@@ -59,7 +59,10 @@ def _gemm_mxfp4_grouped(
 ):
     pid_m = tl.program_id(0)
     pid_n = tl.program_id(1)
-    row0 = tl.load(t_row0_ptr + pid_m)
+    # int64 row base: (row0 + offs_m) * K / * N index the activation and
+    # output rows and wrap once T * max(K, N) reaches 2^31 elements; the cast
+    # is one scalar per program (docs/KERNEL_CONTRACT.md, Boundaries).
+    row0 = tl.load(t_row0_ptr + pid_m).to(tl.int64)
     rows = tl.load(t_rows_ptr + pid_m)
     grp = tl.load(t_group_ptr + pid_m)
     eid = tl.load(expert_ids_ptr + grp)

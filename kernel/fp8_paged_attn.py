@@ -144,8 +144,12 @@ if _TRITON:
         for start in range(t_lo, t_hi, KTILE):
             tok = start + offs_t
             t_mask = (tok < t_hi) & (tok >= w_lo)
+            # int64 BEFORE the row-stride product: blk * k_row_bytes is the
+            # pool byte offset of a 16-token row and wraps in int32 once the
+            # pool passes 2^31 bytes (the writer, fp8_kv, already widens;
+            # gnf4#87 pattern, docs/KERNEL_CONTRACT.md Boundaries).
             blk = tl.load(table_ptr + b * stride_tb + tok // BT,
-                          mask=t_mask, other=0)
+                          mask=t_mask, other=0).to(tl.int64)
 
             k_base = blk * k_row_bytes
             ku = tl.load(kpool_u8 + k_base[:, None] + pay_off,
@@ -301,7 +305,8 @@ if _TRITON:
         acc = tl.zeros([BLOCK_Q, D], tl.float32)
 
         for blk_i in range(blk_lo, blk_hi):
-            blk = tl.load(table_ptr + b * stride_tb + blk_i)
+            # int64 before the row-stride product (see the split kernel)
+            blk = tl.load(table_ptr + b * stride_tb + blk_i).to(tl.int64)
             t0 = blk_i * BT
             t_mask_c = ((t0 + c_tok) < t_len) & ((t0 + c_tok) >= w_lo)
 
@@ -515,8 +520,12 @@ if _TRITON:
         for start in range(t_lo, t_hi, KTILE):
             tok = start + offs_t
             t_mask = (tok < t_hi) & (tok >= w_lo)
+            # int64 BEFORE the row-stride product: blk * k_row_bytes is the
+            # pool byte offset of a 16-token row and wraps in int32 once the
+            # pool passes 2^31 bytes (the writer, fp8_kv, already widens;
+            # gnf4#87 pattern, docs/KERNEL_CONTRACT.md Boundaries).
             blk = tl.load(table_ptr + b * stride_tb + tok // BT,
-                          mask=t_mask, other=0)
+                          mask=t_mask, other=0).to(tl.int64)
 
             k_base = blk * k_row_bytes
             if LAYOUT_HEADS:
@@ -774,7 +783,8 @@ if _TRITON:
         c_prev = 1.0
 
         for blk_i in range(blk_lo, blk_hi):
-            blk = tl.load(table_ptr + b * stride_tb + blk_i)
+            # int64 before the row-stride product (see the split kernel)
+            blk = tl.load(table_ptr + b * stride_tb + blk_i).to(tl.int64)
             t_mask_c = ((blk_i * BT + c_tok) < t_len) & ((blk_i * BT + c_tok) >= w_lo)
 
             k_base = blk * k_row_bytes
