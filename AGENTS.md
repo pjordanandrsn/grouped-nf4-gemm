@@ -195,4 +195,9 @@ posted there is also written on the issue.
 - The sections above bind every agent equally; documents that carry an
   OpenTimestamps footer are never edited in place (a sibling file with errata,
   never the original).
+- Nothing is filed upstream without the maintainer's explicit say-so: no issues,
+  pull requests, discussions or bug reports on any repository outside
+  `pjordanandrsn/*` (Triton, PyTorch, transformers, bitsandbytes, vLLM, Unsloth,
+  ...). Findings about other projects stay as notes in this repository's receipts
+  and issues until the maintainer decides.
 
