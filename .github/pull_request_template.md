@@ -18,7 +18,6 @@
 - [ ] **README links are absolute** (`python scripts/check_readme_links.py` passes): PyPI renders the README, so a relative path is a dead link there.
 - [ ] **A runnable CPU block for any new documented call**: `kernel/test_readme_cpu_block.py` and `kernel/test_cpu_refusal.py` pass.
 - [ ] **No private-lane paths or markers** in committed text (the `private-marker-guard` workflow passes).
-- [ ] **Cursor Bugbot** reads *pass*, not *skipping* — skipping means it FOUND something.
 - [ ] **Measured numbers** cite a committed receipt with a self-pair, two devices or the named architecture, and the cells that lose.
 
 ## Evidence
