@@ -64,3 +64,13 @@ TVS-h1688X
 PhxTec
 10\.0\.0\.[0-9]{1,3}
 192\.168\.[0-9]{1,3}\.[0-9]{1,3}
+# --- control-plane markers (added with the 2026-09-06 boundary directive) ---
+# The organisational record — Slack coordination, seats, the control-plane and
+# corpus repositories — is private. These are the expressions the guard lacked
+# when a Slack permalink validator, a workspace channel id, a private
+# repository URL and the runtime's own dot-directory reached the public tree.
+cerin-amroth\.slack\.com
+C0BV5028SGM
+pjordanandrsn/adertha-
+pjordanandrsn/org-corpus
+\.adertha/
