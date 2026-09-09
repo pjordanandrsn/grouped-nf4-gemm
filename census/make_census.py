@@ -15,8 +15,28 @@ import json
 import math
 from pathlib import Path
 
+# The date these shapes were read from each repo's config.json. It is DATA, not
+# a comment, because the census drives which shapes ~20 bench harnesses and the
+# roofline model sweep (gnf4#353): a family absent here is a family nothing
+# exercises, and a date that only a human reads cannot be checked.
+FETCHED = "2026-07-10"
+
+# What this census does and does not claim, stated so a reader does not have to
+# infer it from the length of MODELS (gnf4#353).
+#
+# It is the set of shapes the published sweeps were run over -- NOT the set of
+# shapes the kernels accept. An (N, K) absent from here still runs: _decode_plan
+# hands it the universal constant (64, 2), which dense 2-device sweeps put at
+# median regret 1.000 on both grids, so the fallback is a measured default and
+# not a guess. What an absent family loses is coverage in the bench matrix, not
+# the ability to execute.
+COVERAGE = (
+    "shapes the published sweeps cover; absent (N, K) still execute on the "
+    "universal-constant decode plan (median regret 1.000, bench/phase2/sweeps/)"
+)
+
 # (model, hidden H, moe intermediate I, experts E, top-k, layers L)
-# From config.json of each repo (text_config where applicable), fetched 2026-07-10:
+# From config.json of each repo (text_config where applicable), fetched FETCHED:
 #   OLMoE-1B-7B-0924: hidden 2048, inter 1024, E 64, k 8, L 16
 #   Qwen3-30B-A3B:    hidden 2048, moe_inter 768, E 128, k 8, L 48
 #   gemma-4-26B-A4B:  hidden 2816, moe_inter 704, E 128, top_k_experts 8, L 30
@@ -98,7 +118,13 @@ def census():
 
 
 if __name__ == "__main__":
-    data = {"generated_by": "census/make_census.py", "prefill_s": PREFILL_S, "models": census()}
+    data = {
+        "generated_by": "census/make_census.py",
+        "fetched": FETCHED,
+        "coverage": COVERAGE,
+        "prefill_s": PREFILL_S,
+        "models": census(),
+    }
     p = Path(__file__).parent / "shape_census.json"
     p.write_text(json.dumps(data, indent=2) + "\n")
     print(f"wrote {p}")
