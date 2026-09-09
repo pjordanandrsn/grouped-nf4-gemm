@@ -1,5 +1,7 @@
 {
   "generated_by": "census/make_census.py",
+  "fetched": "2026-07-10",
+  "coverage": "shapes the published sweeps cover; absent (N, K) still execute on the universal-constant decode plan (median regret 1.000, bench/phase2/sweeps/)",
   "prefill_s": 2048,
   "models": [
     {
