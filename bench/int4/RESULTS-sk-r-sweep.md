@@ -187,3 +187,21 @@ Two disclosures that belong here: the sweep still runs one shape per process
 (cheap, and it keeps any future fault attributable), and the A2000 was shared
 with other containers holding ~8.9 GB of VRAM at 0 % utilisation throughout —
 no SM contention, but the card was not empty.
+
+
+## P39 box 1 — the constant does not transfer to sm_120 (2026-09-10)
+
+The step-level measurement this document declined to claim was run as lane P39
+(experts4bit-qlora#533): one RTX 5090 (128 SMs), one artifact-pinned licensed Qwen3-30B-A3B
+pack, e4b `ef6d532`, gnf4 `f8f6405` (N-only) vs `00bf78e` (R-aware) alternated ABAB with a
+per-arm kernel tripwire. **B=16 `step_ms_clean` NEW/OLD = 1.0064, 1.0063 (12.70 vs 12.62 ms;
+self-pair spread 0.0005). B=1 0.9998** (the floor holds). So on this class the R-aware plan
+gives no step-level gain and a real 0.6 % regression: at R=128 on 128 SMs the rule computes
+`want = 1` and drops sk from 16 to 1, and there the split-K parallelism was worth more than the
+reduce it saved.
+
+The mechanism is not what failed; **`SPLITK_TARGET_BLOCKS_PER_SM` was measured on sm_86 and
+does not carry to sm_120**, as the caveat above said it might. The R term is now gated to
+`sm_count <= SPLITK_R_TERM_MAX_SMS` (64): the measured class keeps the win in these receipts,
+larger parts keep the N-only plan until the same harness is run on that class and sets its own
+target. Receipts: the private record, `receipts/experts4bit-qlora/2026-09-10/p39-box1-3/`.

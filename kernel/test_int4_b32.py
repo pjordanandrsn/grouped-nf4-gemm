@@ -657,7 +657,7 @@ def test_plan_sk_never_exceeds_the_n_only_rule(N, K, sm):
 
 
 @pytest.mark.parametrize("N,K", _PLAN_SHAPES)
-@pytest.mark.parametrize("sm", [26, 84, 128, 132])
+@pytest.mark.parametrize("sm", [26, 48, 64])   # the measured SM class; above it the N-only plan holds (P39)
 def test_plan_stops_splitting_once_the_grid_is_full(N, K, sm):
     """Enough rows to fill the target on their own => sk == 1, i.e. no
     partials and no reduce launch at all. This is where the measured
@@ -748,3 +748,20 @@ def test_plan_beats_the_n_only_rule_on_the_swept_cells():
         n_only += t[_plan_n_only(r["N"], r["K"])]
         r_aware += t[_plan(r["N"], r["K"], r["R"], sm)[2]]
     assert n_only / r_aware >= 1.10, f"only {n_only / r_aware:.3f}x over the N-only rule"
+
+
+@pytest.mark.parametrize("N,K", _PLAN_SHAPES)
+@pytest.mark.parametrize("sm", [84, 128, 132, 170])
+def test_plan_keeps_the_n_only_rule_above_the_measured_sm_class(N, K, sm):
+    """P39 box 1 (RTX 5090, 128 SMs): the R-aware plan read 0.6% SLOWER at B=16 on a
+    pack-pinned A/B -- the sm_86 constant does not transfer. Above
+    SPLITK_R_TERM_MAX_SMS every R returns the N-only plan until that class has its
+    own sweep; at or below it the R term acts exactly as the receipts say."""
+    pytest.importorskip("triton")
+    from int4_b32 import SPLITK_R_FLOOR, SPLITK_R_TERM_MAX_SMS, _plan
+    assert sm > SPLITK_R_TERM_MAX_SMS
+    want = _plan_n_only(N, K)
+    for R in (1, SPLITK_R_FLOOR, 32, 128, 1024):
+        assert _plan(N, K, R, sm)[2] == want, (N, K, R, sm)
+    # and the measured class still acts above the floor (the receipt tests pin the values)
+    assert _plan(1536, 2048, 128, 26)[2] == 1

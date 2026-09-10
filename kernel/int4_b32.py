@@ -122,6 +122,15 @@ SPLITK_TARGET_BLOCKS_PER_SM = 8
 # this term is for. See _plan.
 SPLITK_R_FLOOR = 16
 
+# The R term is applied only on parts within the SM class it was measured on. P39 box 1
+# (RTX 5090, 128 SMs, sm_120) ran the R-aware plan against the N-only one on a single
+# artifact-pinned pack at B=16 and read NEW/OLD = 1.0064 / 1.0063 (self-pair spread 0.0005):
+# no step-level gain and a small real regression -- on 128 SMs the rule collapses sk to 1 at
+# R=128 where the old sk=16 was worth more than the reduce it saved. The mechanism stands; the
+# CONSTANT above does not transfer across SM classes. Until a sweep on that class sets its own
+# target, parts with more SMs than this keep the N-only plan at every R.
+SPLITK_R_TERM_MAX_SMS = 64
+
 _SM_CACHE: dict[str, int] = {}
 
 
@@ -187,14 +196,18 @@ def _plan(N: int, K: int, R: int = 1, sm_count: int = 128):
     existing bargain, not a new one -- but it is a bargain, and anything
     asserting bitwise equality ACROSS boxes must pin sk rather than
     plan it. Within a box the plan is a pure function of (N, K, R).
-    SPLITK_TARGET_BLOCKS_PER_SM is measured on sm_86 only; a second box
-    class should re-measure it (bench/int4/sk_sweep.py)."""
+    SPLITK_TARGET_BLOCKS_PER_SM is measured on sm_86 only, and P39 showed
+    it does NOT transfer to sm_120 (128 SMs: B=16 step 0.6% slower); the
+    term is therefore gated to sm_count <= SPLITK_R_TERM_MAX_SMS until a
+    sweep on the larger class sets its own target
+    (bench/int4/sk_sweep.py; P39 receipts in experts4bit-qlora#533)."""
     kb = K // 32
     ku = 4 if kb % 4 == 0 else (2 if kb % 2 == 0 else 1)
     sk = 8 if (triton.cdiv(N, 128) * 8) >= 256 else 16
-    if R >= SPLITK_R_FLOOR:
+    if R >= SPLITK_R_FLOOR and sm_count <= SPLITK_R_TERM_MAX_SMS:
         # blocks already resident without splitting; when they alone
-        # cover the target, want == 1 and sk collapses to no reduce
+        # cover the target, want == 1 and sk collapses to no reduce.
+        # Parts above SPLITK_R_TERM_MAX_SMS keep the N-only plan (P39).
         programs = triton.cdiv(N, 128) * R
         want = triton.cdiv(SPLITK_TARGET_BLOCKS_PER_SM * sm_count, programs)
         capped, sk = sk, 1
