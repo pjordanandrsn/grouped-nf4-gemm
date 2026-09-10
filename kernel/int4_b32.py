@@ -114,6 +114,14 @@ def _gemv_int4_b32(xq_ptr, xs_ptr, w_ptr, ws_ptr, eid_ptr, out_ptr,
 # as wide, and 8 * sm_count is what measured best here -- see _plan.
 SPLITK_TARGET_BLOCKS_PER_SM = 8
 
+# Row count below which the planner does not touch sk at all. B=1 decode
+# calls the grouped GEMV with R = top_k -- 4 to 8 for every MoE shipped
+# here, never 16 -- and that config is the licensed serve config. The
+# measured win below R=16 is <=1.05x, which is not worth moving it. At
+# R >= 16 the caller is batched decode (B*top_k rows), which is what
+# this term is for. See _plan.
+SPLITK_R_FLOOR = 16
+
 _SM_CACHE: dict[str, int] = {}
 
 
@@ -143,24 +151,34 @@ def _plan(N: int, K: int, R: int = 1, sm_count: int = 128):
     ``R`` is the number of activation rows (active expert-rows this
     call). The launch grid is ``(cdiv(N, BLOCK_N), R, sk)``, so R is a
     factor of the very block count sk exists to top up -- but the sk
-    rule above keys only on N, so at R > 1 every projection ran a config
-    chosen for a batch it was not in, AND paid the partials reduce to do
-    it. The sibling NF4 decode planner has always taken its row count
-    (``_decode_plan(N, K, T, sm_count)``); this is that term, restored.
+    rule above keys only on N, so at large R every projection ran a
+    config chosen for a batch it was not in, AND paid the partials
+    reduce to do it. The sibling NF4 decode planner has always taken
+    its row count (``_decode_plan(N, K, T, sm_count)``); this is that
+    term, restored.
 
-    ``R <= 1`` returns exactly what the N-only rule returned, so every
-    decode (M=1) cell -- which is every census cell, and the licensed
-    serve config -- is untouched by construction.
+    ``R < SPLITK_R_FLOOR`` returns exactly what the N-only rule
+    returned. That floor is the whole safety argument and it is not
+    cosmetic: B=1 decode does NOT call this at R = 1. It calls it at
+    R = top_k -- 4 or 8 -- once per projection, so an R term with no
+    floor would have moved the licensed serve config on real shapes
+    (olmoe gate_up 16 -> 8, qwen3_5_moe 16 -> 8 and 8 -> 4, on a
+    128-SM part). No MoE here routes to 16 experts per token, so the
+    floor leaves every B=1 cell untouched on every box, by
+    construction rather than by arithmetic that happens to agree.
+    R >= 16 means batched decode (B*top_k rows), which is the regime
+    this term is for.
 
     Measured (A2000, sm_86, 26 SMs, graph replay, 48 cells over the
     qwen3_moe/granitemoe/olmoe gate_up+down shapes, R = 1..128, full
     cost including the reduce -- bench/int4/RESULTS-sk-r-sweep.md): the
-    N-only rule costs 1.136x the per-cell optimum and up to 1.482x;
-    with R threaded it costs 1.008x and at worst 1.078x. The win rises
-    with R -- nothing at R = 1, 1.102x at R = 16, 1.145x at R = 128
-    summed over the six shapes, and up to 1.305x on a single shape
-    (qwen3_moe down at R = 128), where sk collapses to 1 and the
-    partials reduce is not launched at all.
+    N-only rule costs 1.136x the per-cell optimum; with R threaded and
+    the floor applied, 1.011x, and it is never SLOWER than the N-only
+    rule on any of the 48 cells. The win rises with R -- nothing below
+    the floor, 1.102x at R = 16, 1.145x at R = 128 summed over the six
+    shapes, and up to 1.305x on a single shape (qwen3_moe down at
+    R = 128) where sk collapses to 1 and the reduce is not launched at
+    all.
 
     CAVEAT, and it is the reason the constant is named rather than
     inlined: sm_count enters the config, so two boxes with different SM
@@ -174,7 +192,7 @@ def _plan(N: int, K: int, R: int = 1, sm_count: int = 128):
     kb = K // 32
     ku = 4 if kb % 4 == 0 else (2 if kb % 2 == 0 else 1)
     sk = 8 if (triton.cdiv(N, 128) * 8) >= 256 else 16
-    if R > 1:
+    if R >= SPLITK_R_FLOOR:
         # blocks already resident without splitting; when they alone
         # cover the target, want == 1 and sk collapses to no reduce
         programs = triton.cdiv(N, 128) * R

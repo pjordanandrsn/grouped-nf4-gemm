@@ -593,7 +593,7 @@ def _plan_n_only(N, K):
 # the census/serve shapes (gate_up and down for each family) plus two
 # wide-N cells that take the other side of the N-only rule's branch
 # the bound the sweep receipt documents; see bench/int4/RESULTS-sk-r-sweep.md
-SK_R_BOUND = 1.08
+SK_R_BOUND = 1.07
 
 _PLAN_SHAPES = [(1536, 2048), (2048, 768), (1024, 1536), (1536, 512),
                 (2048, 2048), (2048, 1024), (5120, 8192), (4096, 4096)]
@@ -608,13 +608,30 @@ def test_plan_decode_is_unchanged_by_the_r_term(N, K, sm):
     the R term is only allowed to act above it. This is the property
     that makes the change safe to land without re-licensing anything."""
     pytest.importorskip("triton")
-    from int4_b32 import _plan
+    from int4_b32 import SPLITK_R_FLOOR, _plan
     want = _plan_n_only(N, K)
-    for R in (0, 1):
+    # every row count below the floor, which is every B=1 decode call:
+    # the grouped GEMV is called with R = top_k there, NOT R = 1, and
+    # top_k is 4-8 for every MoE here. Without the floor this test
+    # fails on olmoe gate_up and qwen3_5_moe at R = 8.
+    for R in range(0, SPLITK_R_FLOOR):
         assert _plan(N, K, R, sm)[2] == want, (N, K, R, sm)
     # and the no-R call signature -- what mxfp4_grouped still uses --
     # must keep meaning "decode"
     assert _plan(N, K)[2] == want
+
+
+def test_the_floor_clears_every_shipped_top_k():
+    """B=1 decode calls the GEMV once per projection with R = top_k, so
+    the floor is only a safety argument while it sits above every top_k
+    this repo serves. If a model with top_k >= 16 is added, this fails
+    and the floor has to be re-justified rather than silently breached."""
+    pytest.importorskip("triton")
+    from int4_b32 import SPLITK_R_FLOOR
+    shipped_top_k = {"qwen3_moe": 8, "qwen3_5_moe": 8, "olmoe": 8,
+                     "granitemoe": 8, "gpt_oss": 4, "gemma4": 4,
+                     "deepseek_v3": 8, "kimi_k2": 8}
+    assert max(shipped_top_k.values()) < SPLITK_R_FLOOR, shipped_top_k
 
 
 @pytest.mark.parametrize("N,K", _PLAN_SHAPES)
@@ -668,34 +685,55 @@ def test_plan_ku_still_divides_the_k_blocks(N, K):
         assert sk <= max(1, kb // ku), (N, K, R, sk, ku)
 
 
-def test_plan_choice_is_within_the_measured_bound_on_every_swept_cell():
-    """The rule's pick must cost no more than SK_R_BOUND x the best sk
-    MEASURED for that cell, on all 48 swept cells.
-
-    This is the only test here that can fail for a real reason rather
-    than an arithmetic one: the times are receipts, not derived from
-    the code, so retuning SPLITK_TARGET_BLOCKS_PER_SM has to keep
-    earning its keep against them. Follows test_decode_anchor's rule --
-    read the receipt, assert hard, never skip past a missing one."""
-    pytest.importorskip("triton")
+def _receipt_cells():
+    """Every swept cell as (row, {sk: ms}, sm_count). Hard-asserts the
+    receipts are present -- test_decode_anchor's rule: read the
+    receipt, never skip past a missing one."""
     import json
-    from int4_b32 import _plan
     rows_dir = pathlib.Path(__file__).resolve().parents[1] / "bench" / "int4" / "rows"
     files = sorted(rows_dir.glob("sk_*.json"))
     assert files, f"sk-sweep receipts missing from {rows_dir}"
-    cells = worst = 0
-    worst_at = None
+    out = []
     for f in files:
         doc = json.load(f.open())
         for r in doc["rows"]:
-            t = {int(k): v for k, v in r["ms"].items()}
-            sk = _plan(r["N"], r["K"], r["R"], doc["sms"])[2]
-            assert sk in t, (f.name, r["R"], sk, sorted(t))
-            ratio = t[sk] / min(t.values())
-            cells += 1
-            if ratio > worst:
-                worst, worst_at = ratio, (r["family"], r["proj"], r["R"], sk)
-    assert cells == 48, f"expected 48 swept cells, receipts carry {cells}"
+            out.append((r, {int(k): v for k, v in r["ms"].items()}, doc["sms"]))
+    assert len(out) == 48, f"expected 48 swept cells, receipts carry {len(out)}"
+    return out
+
+
+def test_plan_is_never_slower_than_the_n_only_rule_on_a_swept_cell():
+    """The property the floor buys, and the reason this change is safe:
+    on every measured cell the R-aware pick is at least as fast as the
+    N-only one. Not 'faster on average' -- never worse, anywhere."""
+    pytest.importorskip("triton")
+    from int4_b32 import _plan
+    for r, t, sm in _receipt_cells():
+        sk = _plan(r["N"], r["K"], r["R"], sm)[2]
+        assert sk in t, (r["family"], r["proj"], r["R"], sk, sorted(t))
+        assert t[sk] <= t[_plan_n_only(r["N"], r["K"])] * 1.0 + 1e-12, (
+            f"{r['family']}/{r['proj']} R={r['R']}: sk{sk} is slower than "
+            f"the N-only sk{_plan_n_only(r['N'], r['K'])}")
+
+
+def test_plan_choice_is_within_the_measured_bound_where_it_acts():
+    """Above the floor -- where the rule actually chooses -- the pick
+    must cost no more than SK_R_BOUND x the best sk MEASURED for that
+    cell. The times are receipts, not derived from the code, so
+    retuning SPLITK_TARGET_BLOCKS_PER_SM has to keep earning its keep
+    against measurements rather than against arithmetic."""
+    pytest.importorskip("triton")
+    from int4_b32 import SPLITK_R_FLOOR, _plan
+    acted = worst = 0
+    worst_at = None
+    for r, t, sm in _receipt_cells():
+        if r["R"] < SPLITK_R_FLOOR:
+            continue
+        acted += 1
+        ratio = t[_plan(r["N"], r["K"], r["R"], sm)[2]] / min(t.values())
+        if ratio > worst:
+            worst, worst_at = ratio, (r["family"], r["proj"], r["R"])
+    assert acted == 24, f"expected 24 cells above the floor, found {acted}"
     assert worst <= SK_R_BOUND, f"{worst:.3f}x at {worst_at} exceeds {SK_R_BOUND}"
 
 
@@ -704,16 +742,9 @@ def test_plan_beats_the_n_only_rule_on_the_swept_cells():
     R-aware pick must be faster than the N-only one. Guards against a
     retune that improves the worst case by giving up the win."""
     pytest.importorskip("triton")
-    import json
     from int4_b32 import _plan
-    rows_dir = pathlib.Path(__file__).resolve().parents[1] / "bench" / "int4" / "rows"
-    files = sorted(rows_dir.glob("sk_*.json"))
-    assert files, f"sk-sweep receipts missing from {rows_dir}"
     n_only = r_aware = 0.0
-    for f in files:
-        doc = json.load(f.open())
-        for r in doc["rows"]:
-            t = {int(k): v for k, v in r["ms"].items()}
-            n_only += t[_plan_n_only(r["N"], r["K"])]
-            r_aware += t[_plan(r["N"], r["K"], r["R"], doc["sms"])[2]]
+    for r, t, sm in _receipt_cells():
+        n_only += t[_plan_n_only(r["N"], r["K"])]
+        r_aware += t[_plan(r["N"], r["K"], r["R"], sm)[2]]
     assert n_only / r_aware >= 1.10, f"only {n_only / r_aware:.3f}x over the N-only rule"

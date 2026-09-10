@@ -31,34 +31,62 @@ kernel-only number would have flattered the split arms.
 
 Harness: `bench/int4/sk_sweep.py`. Receipts: `bench/int4/rows/sk_*.json`.
 
+## The floor: B=1 decode does not call this at R=1
+
+This nearly went wrong. B=1 decode does **not** reach the grouped GEMV with
+one row — `hot_residency`'s singleton branch calls it once per projection with
+`R = top_k`, so 4 or 8. An R term with no floor therefore moves the *licensed
+serve config* on real shapes even on a 128-SM part: olmoe gate_up 16 → 8,
+qwen3_5_moe gate_up 16 → 8 and down 8 → 4. Split-K changes the grouping of the
+fp32 partial sums, so that is a numerics change on the licensed path, arriving
+as a side effect of a batch optimisation.
+
+`SPLITK_R_FLOOR = 16` closes it. No MoE served here routes to 16 experts per
+token, so every B=1 cell is untouched **by construction**, on every box, rather
+than by arithmetic that happens to agree on the shapes anyone checked. `R ≥ 16`
+is batched decode (`B*top_k` rows via `_int4_gemv_decode`), which is the regime
+the term is for. The floor costs 1.127× → 1.124× overall — the win below R=16
+was ≤1.05× — and buys a much stronger property (next section).
+
+`test_the_floor_clears_every_shipped_top_k` fails if a model with `top_k ≥ 16`
+is added, so the floor has to be re-justified rather than silently breached.
+
 ## Result
 
 Against a per-cell oracle (the best `sk` measured for that cell):
 
-| rule | total vs oracle | worst cell | cells worse than the N-only rule |
+| rule | total vs oracle | worst cell where it acts | cells slower than the N-only rule |
 |---|---|---|---|
-| N-only (before) | 1.136× | 1.482× | — |
-| **R-aware, `8 × sm_count`** | **1.008×** | **1.078×** | **2** |
+| N-only (before) | 1.136× | — | — |
+| **R-aware + floor** | **1.011×** | **1.064×** | **0 of 48** |
+
+**Never slower than the incumbent on any measured cell** — that is the property
+the floor buys, and it is what makes this safe to land rather than merely
+favourable on average.
 
 Summed over all six shapes, by row count:
 
-| R | N-only | R-aware | gain |
+| R | N-only | R-aware + floor | gain |
 |---:|---:|---:|---:|
-| 1 | 61.1 µs | 61.1 µs | **1.000× (unchanged by construction)** |
-| 2 | 96.9 | 95.3 | 1.017× |
-| 4 | 170.4 | 162.4 | 1.050× |
-| 8 | 324.0 | 311.8 | 1.039× |
-| 16 | 658.9 | 598.1 | 1.102× |
-| 32 | 1302.4 | 1163.9 | 1.119× |
-| 64 | 2595.0 | 2298.2 | 1.129× |
-| 128 | 5116.1 | 4469.3 | 1.145× |
+| 1 | 61.1 µs | 61.1 µs | 1.000× — below the floor, untouched |
+| 2 | 96.9 | 96.9 | 1.000× — below the floor |
+| 4 | 170.4 | 170.4 | 1.000× — below the floor |
+| 8 | 324.0 | 324.0 | 1.000× — below the floor (this is B=1 top-8) |
+| 16 | 658.9 | 598.1 | **1.102×** |
+| 32 | 1302.4 | 1163.9 | **1.119×** |
+| 64 | 2595.0 | 2298.2 | **1.129×** |
+| 128 | 5116.1 | 4469.3 | **1.145×** |
+
+Over the 24 cells above the floor — the ones the rule actually acts on —
+**1.134×**; over all 48, 1.124×.
 
 Per shape at R=128, where the rule picks `sk=1` and the reduce is not launched
 at all: qwen3_moe/down **1.305×**, olmoe/down 1.241×, granitemoe/down 1.240×,
 granitemoe/gate_up 1.111×, qwen3_moe/gate_up 1.101×, olmoe/gate_up 1.080×.
 
-`SK_R_BOUND = 1.08` in `kernel/test_int4_b32.py` is the worst-cell figure
-above; the test re-derives it from these receipts on every run.
+`SK_R_BOUND = 1.07` in `kernel/test_int4_b32.py` bounds the worst acted cell
+(measured 1.064×, granitemoe/down at R=16); the test re-derives it from these
+receipts on every run.
 
 ## Choice of constant
 
@@ -80,10 +108,11 @@ sweep is the evidence, not the arithmetic.
 
 ## Scope, and what this does NOT claim
 
-- **Decode is untouched.** `R <= 1` returns exactly the old N-only value, on
+- **Decode is untouched.** `R < 16` returns exactly the old N-only value, on
   every SM count — pinned by `test_plan_decode_is_unchanged_by_the_r_term`
-  against a verbatim copy of the old rule. Every census cell and the licensed
-  serve config are M=1, so none of them move.
+  against a verbatim copy of the old rule, across *every* row count below the
+  floor rather than just R=1. See the floor section: "M=1" does not mean
+  "R=1" at this call site, and reading it that way is what the floor fixes.
 - **sm_86 only.** The target is measured on one box class. sm_120 is where the
   census licensed this kernel and it is not re-measured here. The constant is
   named, not inlined, for that reason.
