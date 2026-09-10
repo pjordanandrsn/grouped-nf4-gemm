@@ -10,6 +10,7 @@ path the accumulation identity is checked to ~1e-6 in fp32.
 """
 import math
 import os
+import pathlib
 
 import pytest
 
@@ -571,3 +572,179 @@ def test_router_epilogue_bias_shape_is_checked():
     with pytest.raises(ValueError, match="router bias"):
         router_epilogue(logits, 2, False, select_on_logits=True, bias=torch.zeros(8).to(dev))
 
+
+
+# ---------------------------------------------------- split-K planning --
+# _plan is pure arithmetic (no device, no triton kernels), so these run
+# on CPU in CI. They pin the two properties the R term must not break:
+# decode is untouched, and sk never grows.
+
+def _plan_n_only(N, K):
+    """The N-only rule _plan carried before R was threaded. Kept here
+    verbatim so 'decode is byte-identical' is checked against the old
+    arithmetic rather than against the new code's own R=1 branch."""
+    triton = pytest.importorskip("triton")
+    kb = K // 32
+    ku = 4 if kb % 4 == 0 else (2 if kb % 2 == 0 else 1)
+    sk = 8 if (triton.cdiv(N, 128) * 8) >= 256 else 16
+    return min(sk, max(1, kb // ku))
+
+
+# the census/serve shapes (gate_up and down for each family) plus two
+# wide-N cells that take the other side of the N-only rule's branch
+# the bound the sweep receipt documents; see bench/int4/RESULTS-sk-r-sweep.md
+SK_R_BOUND = 1.07
+
+_PLAN_SHAPES = [(1536, 2048), (2048, 768), (1024, 1536), (1536, 512),
+                (2048, 2048), (2048, 1024), (5120, 8192), (4096, 4096)]
+
+
+@pytest.mark.parametrize("N,K", _PLAN_SHAPES)
+@pytest.mark.parametrize("sm", [26, 84, 128, 132])
+def test_plan_decode_is_unchanged_by_the_r_term(N, K, sm):
+    """R <= 1 must return exactly the N-only rule's sk, on every SM count.
+
+    Decode (M=1) is every census cell and the licensed serve config, so
+    the R term is only allowed to act above it. This is the property
+    that makes the change safe to land without re-licensing anything."""
+    pytest.importorskip("triton")
+    from int4_b32 import SPLITK_R_FLOOR, _plan
+    want = _plan_n_only(N, K)
+    # every row count below the floor, which is every B=1 decode call:
+    # the grouped GEMV is called with R = top_k there, NOT R = 1, and
+    # top_k is 4-8 for every MoE here. Without the floor this test
+    # fails on olmoe gate_up and qwen3_5_moe at R = 8.
+    for R in range(0, SPLITK_R_FLOOR):
+        assert _plan(N, K, R, sm)[2] == want, (N, K, R, sm)
+    # and the no-R call signature -- what mxfp4_grouped still uses --
+    # must keep meaning "decode"
+    assert _plan(N, K)[2] == want
+
+
+def test_the_floor_clears_every_shipped_top_k():
+    """B=1 decode calls the GEMV once per projection with R = top_k, so
+    the floor is only a safety argument while it sits above every top_k
+    this repo serves. If a model with top_k >= 16 is added, this fails
+    and the floor has to be re-justified rather than silently breached."""
+    pytest.importorskip("triton")
+    from int4_b32 import SPLITK_R_FLOOR
+    shipped_top_k = {"qwen3_moe": 8, "qwen3_5_moe": 8, "olmoe": 8,
+                     "granitemoe": 8, "gpt_oss": 4, "gemma4": 4,
+                     "deepseek_v3": 8, "kimi_k2": 8}
+    assert max(shipped_top_k.values()) < SPLITK_R_FLOOR, shipped_top_k
+
+
+@pytest.mark.parametrize("N,K", _PLAN_SHAPES)
+@pytest.mark.parametrize("sm", [26, 84, 128, 132])
+def test_plan_sk_never_exceeds_the_n_only_rule(N, K, sm):
+    """sk is non-increasing in R, and never above the N-only value.
+
+    Load-bearing beyond tidiness: callers may preallocate ``part`` as
+    [SK*R, N] from a plan taken at another R (mxfp4_grouped and the
+    captured decode path both do). Monotonicity means such a buffer is
+    always big enough, so threading R can over-allocate but never
+    overrun."""
+    pytest.importorskip("triton")
+    from int4_b32 import _plan
+    base = _plan_n_only(N, K)
+    prev = base
+    for R in (1, 2, 3, 4, 8, 16, 32, 64, 128, 256, 1024):
+        sk = _plan(N, K, R, sm)[2]
+        assert sk <= base, (N, K, R, sm, sk, base)
+        assert sk <= prev, f"sk grew with R: {prev} -> {sk} at R={R}"
+        assert sk >= 1
+        prev = sk
+
+
+@pytest.mark.parametrize("N,K", _PLAN_SHAPES)
+@pytest.mark.parametrize("sm", [26, 84, 128, 132])
+def test_plan_stops_splitting_once_the_grid_is_full(N, K, sm):
+    """Enough rows to fill the target on their own => sk == 1, i.e. no
+    partials and no reduce launch at all. This is where the measured
+    1.10x-1.31x at R >= 8 comes from: the reduce is not made cheaper,
+    it stops being launched."""
+    triton = pytest.importorskip("triton")
+    from int4_b32 import SPLITK_TARGET_BLOCKS_PER_SM, _plan
+    tiles = triton.cdiv(N, 128)
+    R = SPLITK_TARGET_BLOCKS_PER_SM * sm  # >= target blocks with tiles >= 1
+    assert tiles * R >= SPLITK_TARGET_BLOCKS_PER_SM * sm
+    assert _plan(N, K, R, sm)[2] == 1
+
+
+@pytest.mark.parametrize("N,K", _PLAN_SHAPES)
+def test_plan_ku_still_divides_the_k_blocks(N, K):
+    """The pre-existing invariant the docstring calls out: a KU that does
+    not divide K//32 reads past the row tail. Threading R must not
+    disturb it, and sk must never exceed the number of spans."""
+    pytest.importorskip("triton")
+    from int4_b32 import _plan
+    kb = K // 32
+    for R in (1, 8, 128):
+        _, _, sk, ku = _plan(N, K, R, 26)
+        assert kb % ku == 0, (N, K, kb, ku)
+        assert sk <= max(1, kb // ku), (N, K, R, sk, ku)
+
+
+def _receipt_cells():
+    """Every swept cell as (row, {sk: ms}, sm_count). Hard-asserts the
+    receipts are present -- test_decode_anchor's rule: read the
+    receipt, never skip past a missing one."""
+    import json
+    rows_dir = pathlib.Path(__file__).resolve().parents[1] / "bench" / "int4" / "rows"
+    files = sorted(rows_dir.glob("sk_*.json"))
+    assert files, f"sk-sweep receipts missing from {rows_dir}"
+    out = []
+    for f in files:
+        doc = json.load(f.open())
+        for r in doc["rows"]:
+            out.append((r, {int(k): v for k, v in r["ms"].items()}, doc["sms"]))
+    assert len(out) == 48, f"expected 48 swept cells, receipts carry {len(out)}"
+    return out
+
+
+def test_plan_is_never_slower_than_the_n_only_rule_on_a_swept_cell():
+    """The property the floor buys, and the reason this change is safe:
+    on every measured cell the R-aware pick is at least as fast as the
+    N-only one. Not 'faster on average' -- never worse, anywhere."""
+    pytest.importorskip("triton")
+    from int4_b32 import _plan
+    for r, t, sm in _receipt_cells():
+        sk = _plan(r["N"], r["K"], r["R"], sm)[2]
+        assert sk in t, (r["family"], r["proj"], r["R"], sk, sorted(t))
+        assert t[sk] <= t[_plan_n_only(r["N"], r["K"])] * 1.0 + 1e-12, (
+            f"{r['family']}/{r['proj']} R={r['R']}: sk{sk} is slower than "
+            f"the N-only sk{_plan_n_only(r['N'], r['K'])}")
+
+
+def test_plan_choice_is_within_the_measured_bound_where_it_acts():
+    """Above the floor -- where the rule actually chooses -- the pick
+    must cost no more than SK_R_BOUND x the best sk MEASURED for that
+    cell. The times are receipts, not derived from the code, so
+    retuning SPLITK_TARGET_BLOCKS_PER_SM has to keep earning its keep
+    against measurements rather than against arithmetic."""
+    pytest.importorskip("triton")
+    from int4_b32 import SPLITK_R_FLOOR, _plan
+    acted = worst = 0
+    worst_at = None
+    for r, t, sm in _receipt_cells():
+        if r["R"] < SPLITK_R_FLOOR:
+            continue
+        acted += 1
+        ratio = t[_plan(r["N"], r["K"], r["R"], sm)[2]] / min(t.values())
+        if ratio > worst:
+            worst, worst_at = ratio, (r["family"], r["proj"], r["R"])
+    assert acted == 24, f"expected 24 cells above the floor, found {acted}"
+    assert worst <= SK_R_BOUND, f"{worst:.3f}x at {worst_at} exceeds {SK_R_BOUND}"
+
+
+def test_plan_beats_the_n_only_rule_on_the_swept_cells():
+    """The reason to take the change at all: summed over the sweep, the
+    R-aware pick must be faster than the N-only one. Guards against a
+    retune that improves the worst case by giving up the win."""
+    pytest.importorskip("triton")
+    from int4_b32 import _plan
+    n_only = r_aware = 0.0
+    for r, t, sm in _receipt_cells():
+        n_only += t[_plan_n_only(r["N"], r["K"])]
+        r_aware += t[_plan(r["N"], r["K"], r["R"], sm)[2]]
+    assert n_only / r_aware >= 1.10, f"only {n_only / r_aware:.3f}x over the N-only rule"
