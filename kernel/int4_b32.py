@@ -108,18 +108,80 @@ def _gemv_int4_b32(xq_ptr, xs_ptr, w_ptr, ws_ptr, eid_ptr, out_ptr,
     tl.store(out_ptr + (sk * R + e) * N + offs_n, acc, mask=n_mask)
 
 
-def _plan(N: int, K: int):
+# Blocks we want resident before split-K stops earning its reduce. The
+# sibling NF4 decode planner (nf4_grouped._decode_plan) spends the same
+# quantity as 4 * sm_count at BLOCK_N=64; this kernel's blocks are twice
+# as wide, and 8 * sm_count is what measured best here -- see _plan.
+SPLITK_TARGET_BLOCKS_PER_SM = 8
+
+_SM_CACHE: dict[str, int] = {}
+
+
+def _sm_count(device) -> int:
+    """SM count, cached per device. Only feeds split-K planning, so the
+    CPU/interpreter path (correctness testing, no GPU) takes a nominal
+    value rather than failing -- mirrors nf4_grouped._sm_count."""
+    key = str(device)
+    if key not in _SM_CACHE:
+        if torch.cuda.is_available() and "cuda" in key:
+            _SM_CACHE[key] = torch.cuda.get_device_properties(
+                device).multi_processor_count
+        else:
+            _SM_CACHE[key] = 128
+    return _SM_CACHE[key]
+
+
+def _plan(N: int, K: int, R: int = 1, sm_count: int = 128):
     """Config from the graph-metric sweep on sm_120 (receipts int4port):
     bn128/w4-8/sk8 class won every census cell; sk fills the grid to
     2+ waves. KU (k-blocks per loop iteration) MUST divide K//32: the
     kernel guards only the first block of each fat iteration, so a
     non-dividing KU reads past the row tail -- caught by the checkout
     parity gate at K=64/96 (garbage-scale errors), invisible on census
-    shapes where 4 | K//32. Kept simple until a second box class is
-    measured."""
+    shapes where 4 | K//32.
+
+    ``R`` is the number of activation rows (active expert-rows this
+    call). The launch grid is ``(cdiv(N, BLOCK_N), R, sk)``, so R is a
+    factor of the very block count sk exists to top up -- but the sk
+    rule above keys only on N, so at R > 1 every projection ran a config
+    chosen for a batch it was not in, AND paid the partials reduce to do
+    it. The sibling NF4 decode planner has always taken its row count
+    (``_decode_plan(N, K, T, sm_count)``); this is that term, restored.
+
+    ``R <= 1`` returns exactly what the N-only rule returned, so every
+    decode (M=1) cell -- which is every census cell, and the licensed
+    serve config -- is untouched by construction.
+
+    Measured (A2000, sm_86, 26 SMs, graph replay, 48 cells over the
+    qwen3_moe/granitemoe/olmoe gate_up+down shapes, R = 1..128, full
+    cost including the reduce -- bench/int4/RESULTS-sk-r-sweep.md): the
+    N-only rule costs 1.136x the per-cell optimum and up to 1.482x;
+    with R threaded it costs 1.008x and at worst 1.078x. The win rises
+    with R -- nothing at R = 1, 1.102x at R = 16, 1.145x at R = 128
+    summed over the six shapes, and up to 1.305x on a single shape
+    (qwen3_moe down at R = 128), where sk collapses to 1 and the
+    partials reduce is not launched at all.
+
+    CAVEAT, and it is the reason the constant is named rather than
+    inlined: sm_count enters the config, so two boxes with different SM
+    counts can pick different sk for the same call, and split-K changes
+    the grouping of the fp32 partial sums. That is the sibling planner's
+    existing bargain, not a new one -- but it is a bargain, and anything
+    asserting bitwise equality ACROSS boxes must pin sk rather than
+    plan it. Within a box the plan is a pure function of (N, K, R).
+    SPLITK_TARGET_BLOCKS_PER_SM is measured on sm_86 only; a second box
+    class should re-measure it (bench/int4/sk_sweep.py)."""
     kb = K // 32
     ku = 4 if kb % 4 == 0 else (2 if kb % 2 == 0 else 1)
     sk = 8 if (triton.cdiv(N, 128) * 8) >= 256 else 16
+    if R > 1:
+        # blocks already resident without splitting; when they alone
+        # cover the target, want == 1 and sk collapses to no reduce
+        programs = triton.cdiv(N, 128) * R
+        want = triton.cdiv(SPLITK_TARGET_BLOCKS_PER_SM * sm_count, programs)
+        capped, sk = sk, 1
+        while sk < want and sk < capped:
+            sk *= 2
     sk = min(sk, max(1, kb // ku))            # never more splits than spans
     return 128, 4, sk, ku                     # BLOCK_N, warps, SK, KU
 
@@ -168,7 +230,7 @@ def gemv_int4_b32(xq, xs, packed, scales, eids, N: int, K: int,
     Needs a CUDA GPU (sm_80+) and Triton. See ``docs/solutions/int4-decode-gemv.md``.
     """
     R = eids.numel()
-    bn, wp, sk, ku = _plan(N, K)
+    bn, wp, sk, ku = _plan(N, K, R, _sm_count(xq.device))
     if part is None:
         part = torch.empty(sk * R, N, dtype=torch.float32, device=xq.device)
     _gemv_int4_b32[(triton.cdiv(N, bn), R, sk)](
