@@ -273,9 +273,11 @@ def gemv_mxfp4_b32(xq, xs, blocks, scales, eids, N: int, K: int,
     assert blocks.dtype == torch.uint8 and scales.dtype == torch.uint8
     assert scales.shape[-1] == K // MX_BLOCK, (scales.shape, K)
     # _plan takes R now (bench/int4/RESULTS-sk-r-sweep.md: 1.10x-1.31x at
-    # R >= 16 on the int4 shapes), and this grid is the same shape -- but
-    # the sweep covered the int4 inner loop, not this e2m1 one, so the
-    # crossover here is unmeasured. Deliberately still the decode plan.
+    # R >= 16 on the int4 shapes) and this grid is the same shape -- but
+    # MEASURED on this e2m1 loop (rows/mx_*.json) the int4 rule regresses
+    # two of 32 cells by 15-17%: split-K keeps earning to R >= 32..128
+    # here. Deliberately the N-only decode plan until an MXFP4-specific
+    # rule has its own receipt.
     bn, wp, sk, ku = _plan(N, K)
     if part is None:
         part = torch.empty(sk * R, N, dtype=torch.float32, device=xq.device)

@@ -130,6 +130,28 @@ sweep is the evidence, not the arithmetic.
   pin `sk` rather than plan it. Within a box the plan stays a pure function of
   `(N, K, R)`.
 
+## MXFP4: measured, and deliberately still unchanged
+
+`mxfp4_grouped.gemv_mxfp4_b32` shares this planner and this grid, so the same
+argument applied — but its inner loop is e2m1, so it was left on the N-only plan
+until measured. Measured (`bench/int4/mx_sweep.py`, `rows/mx_*.json`; same
+rules; 32 cells: gpt-oss-20b gate_up/down at E=32 plus qwen3_moe's shapes for a
+like-for-like with the int4 sweep):
+
+| rule on the MXFP4 kernel | total vs oracle | cells worse than N-only |
+|---|---|---|
+| N-only (shipped) | 1.048× | — |
+| the int4 rule, if applied | 1.022× | **2 of 32** — gpt-oss gate_up R=16 **1.175×**, qwen3 down R=128 **1.150×** |
+
+Better on total, worse on two cells by 15–17 %: the property that made the int4
+change safe to land — never slower than the incumbent on any measured cell —
+**does not carry to e2m1**. Split-K stops earning much later there: `sk=1` comes
+within 2 % of the best only at R ≥ 32 (gpt-oss down), R ≥ 128 (gpt-oss gate_up),
+R ≥ 16 (qwen3 down) and never within R ≤ 128 (qwen3 gate_up), where sk=3–6 wins
+throughout. So MXFP4 stays on the N-only plan. An MXFP4-specific rule (a later
+floor and a larger block target look plausible from these rows) is a follow-up
+with its own receipt, not a constant borrowed from the int4 sweep.
+
 ## One thing found and not actioned
 
 At `R = 1` — the licensed decode config, untouched here — the N-only rule is
