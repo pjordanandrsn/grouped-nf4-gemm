@@ -138,12 +138,30 @@ sk16 at 10.2 µs against sk8 at 9.6 µs; qwen3_moe gate_up 14.4 vs 13.4). That
 is a config licensed on sm_120 being measured on sm_86, which is not evidence
 against it. Recorded, not acted on.
 
-## Harness note
+## Harness note — a correction
 
-Capturing ~40 CUDA graphs in one process and never freeing them produced an
-illegal memory access on the largest shape, whose fatal traceback landed on
-the *next* shape's `manual_seed` — async faults surface late. In a fresh
-process the same shape and row count run clean (olmoe gate_up R=64: 788.3 µs;
-R=128: 1471.9 µs), and the public `gemv_int4_b32` path passes at both under
-`CUDA_LAUNCH_BLOCKING=1`. So the sweep runs one shape per process. This is a
-harness property; no claim is made about the kernel from it.
+The first write-up of this section blamed an illegal memory access on "capturing
+~40 CUDA graphs in one process". That was wrong, and the real cause was mine: the
+harness passed the activation scales as `xs [R, 1]` where the kernel indexes
+`xs_ptr + e*KB + kb0 + ku` — per-(row, 32-block), `[R, K//32]`, exactly what
+`quant_x_rows` produces. The kernel therefore read `R*(KB-1)` floats past the
+buffer: harmless garbage on small shapes, an illegal memory access on the
+largest (olmoe gate_up, K=2048, R≥64), surfacing on the *next* shape's
+`manual_seed` because the fault is asynchronous. The "fresh process passes"
+observation that seemed to implicate graph pools was allocator placement luck.
+
+With `xs [R, K//32]` the full 48-cell sweep ran clean with no fault. Because the
+kernel's cost is data-independent (same loads, same integer MACs regardless of
+the scale values), the timings were expected to be unchanged, and they were
+re-measured rather than assumed: per-(cell, sk) ratio corrected/original median
+**1.0012**, p10–p90 0.988–1.016 (one 1.53× outlier on a ~9 µs first-cell
+warm-up, granitemoe/down R=1 sk=1). The verdict is identical on the corrected
+data — 1.127× over the N-only plan, worst acted cell 1.064×, 0 of 48 cells
+slower — and **the receipts in `rows/` are the corrected-harness ones**; the
+originals were not kept because a receipt produced by a faulty harness should
+not be the one that ships when a clean one exists.
+
+Two disclosures that belong here: the sweep still runs one shape per process
+(cheap, and it keeps any future fault attributable), and the A2000 was shared
+with other containers holding ~8.9 GB of VRAM at 0 % utilisation throughout —
+no SM contention, but the card was not empty.

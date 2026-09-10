@@ -93,7 +93,13 @@ def main():
     rows = []
     for R in RS:
         xq = torch.randint(-127, 127, (R, K), dtype=torch.int8, device=DEV)
-        xs = torch.rand(R, 1, dtype=torch.float32, device=DEV) * 0.01
+        # per-(row, 32-block) activation scales, [R, K//32] -- what quant_x_rows produces and
+        # what the kernel indexes (xs_ptr + e*KB + kb0 + ku). The first cut of this harness
+        # passed [R, 1]: the kernel then read R*(KB-1) floats past the buffer -- harmless
+        # garbage on small shapes, an illegal memory access on the largest, which the
+        # first RESULTS write-up mis-attributed to graph pools. Timings are data-independent
+        # (same loads, same MACs) and were re-measured with this shape to confirm.
+        xs = torch.rand(R, K // 32, dtype=torch.float32, device=DEV) * 0.01
         eids = torch.randint(0, E, (R,), dtype=torch.int32, device=DEV)
         times = {}
         for sk in sks:
@@ -124,7 +130,7 @@ def main():
                      "plan_penalty": pen})
     out = pathlib.Path(__file__).resolve().parent / "rows"
     out.mkdir(exist_ok=True)
-    with (out / f"sk_{name}_{proj}.json").open("w") as f:
+    with (out / f"{os.environ.get('OUT_PREFIX', 'sk')}_{name}_{proj}.json").open("w") as f:
         json.dump({"gpu": gpu, "sms": sms, "torch": torch.__version__, "rows": rows}, f, indent=1)
 
 
