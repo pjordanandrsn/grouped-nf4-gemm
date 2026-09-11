@@ -57,6 +57,10 @@ from int4_pack_ref import dequant_int4_ref, pack_int4_b32  # noqa: E402
 
 # Qwen/Qwen3-30B-A3B @ ad44e777: hidden 2048, 32 heads, 4 kv heads, head_dim 128.
 # (N, K) as Int4Linear stores them: N = out_features, K = in_features.
+# `gemm_int4_b32_grouped_captured`'s shipped default, and the M extent of the
+# hardware MMA K11 read out of the PTX (`mma.sync.aligned.m16n8k16`).
+BLOCK_M = 16
+
 SHAPES = [("q_proj", 4096, 2048), ("k_proj", 512, 2048),
           ("v_proj", 512, 2048), ("o_proj", 2048, 4096)]
 
@@ -111,11 +115,18 @@ def one_shape(name, N, K, ms, dev="cuda"):
     for M in ms:
         x = torch.randn(M, K, dtype=torch.bfloat16, device=dev) / 8
         eids = torch.zeros(M, dtype=torch.int32, device=dev)
-        # one group: rows 0..M of local expert 0. The tile builder's output for
-        # the degenerate E=1 case, written out rather than built.
-        t_row0 = torch.zeros(1, dtype=torch.int32, device=dev)
-        t_rows = torch.full((1,), M, dtype=torch.int32, device=dev)
-        t_group = torch.zeros(1, dtype=torch.int32, device=dev)
+        # The tile table for the degenerate E=1 case, written out rather than
+        # built. A tile holds at most BLOCK_M rows -- the kernel's m_mask is
+        # `tl.arange(0, BLOCK_M) < rows`, so a tile claiming more rows than that
+        # would silently compute only the first BLOCK_M and drop the rest. The
+        # correctness check below would catch it, but building it right is
+        # better than relying on a tolerance to notice.
+        t0 = list(range(0, M, BLOCK_M))
+        t_row0 = torch.tensor(t0, dtype=torch.int32, device=dev)
+        t_rows = torch.tensor([min(BLOCK_M, M - r) for r in t0],
+                              dtype=torch.int32, device=dev)
+        t_group = torch.zeros(len(t0), dtype=torch.int32, device=dev)
+        assert int(t_rows.sum()) == M and int(t_rows.max()) <= BLOCK_M
 
         ref = (x @ w_deq.t()).float()
         out = {}
@@ -128,10 +139,11 @@ def one_shape(name, N, K, ms, dev="cuda"):
             xq, xs = quant_x_rows(x)
             return gemv_int4_b32(xq, xs, packed, scales, eids, N, K)
 
-        def a_gemm(x=x, t_rows=t_rows):
+        def a_gemm(x=x, t_row0=t_row0, t_rows=t_rows, t_group=t_group):
             xq, xs = quant_x_rows(x)
             return gemm_int4_b32_grouped_captured(xq, xs, packed, scales,
-                                                  t_row0, t_rows, t_group)
+                                                  t_row0, t_rows, t_group,
+                                                  block_m=BLOCK_M)
 
         for arm, fn in (("bf16", a_bf16), ("gemv", a_gemv), ("gemm", a_gemm)):
             try:
