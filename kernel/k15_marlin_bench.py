@@ -95,7 +95,13 @@ def main():
           f"torch {torch.__version__}")
     print(f"# graph-replay launch floor {floor * 1e3:.2f} us; "
           f"measured streaming bandwidth {bw:.0f} GB/s")
-    print(f"# marlin supported group sizes: {mu.MARLIN_SUPPORTED_GROUP_SIZES}\n")
+    import os as _os
+    atomic = _os.environ.get("VLLM_MARLIN_USE_ATOMIC_ADD", "")
+    print(f"# marlin supported group sizes: {mu.MARLIN_SUPPORTED_GROUP_SIZES}")
+    # vLLM's own log recommends this for small size_n, which is exactly k_proj/v_proj
+    # (N=512). Measuring with it OFF only would understate the comparator on half the
+    # shapes, so the runner invokes this bench twice and the receipts say which is which.
+    print(f"# VLLM_MARLIN_USE_ATOMIC_ADD={atomic or '(unset)'}\n")
 
     rows = []
     for name, N, K in SHAPES:
@@ -113,8 +119,18 @@ def main():
                 continue
             w_ref, q_w, s = q[0], q[1], q[2]
             g_idx, sort_idx = q[3], q[4]
+            # MarlinWorkspace sizes its scratch as N//min_thread_n * max_parallel, which
+            # for N=512 is 128 -- and the kernel refuses below `min_workspace_size`, which
+            # on this part is the SM count (170): "workspace.numel = 128 is below
+            # min_workspace_size = 170". k_proj and v_proj lost every cell to that in
+            # k15-marlin-4. Size it to cover both rules; a too-large scratch costs
+            # kilobytes and is not on the timed path.
+            need = max(N // mu.GPTQ_MARLIN_MIN_THREAD_N * mu.GPTQ_MARLIN_MAX_PARALLEL,
+                       2 * torch.cuda.get_device_properties(0).multi_processor_count)
             ws = mt.MarlinWorkspace(N, mu.GPTQ_MARLIN_MIN_THREAD_N,
                                     mu.GPTQ_MARLIN_MAX_PARALLEL)
+            if ws.scratch.numel() < need:
+                ws.scratch = torch.zeros(need, dtype=torch.int, device="cuda")
             # 4 bits of weight + one fp16 scale per group, per output column
             wb = N * K // 2 + N * (K // gs) * 2
             for M in ms_list:
@@ -150,6 +166,7 @@ def main():
             torch.cuda.empty_cache()
 
     rep = {"gpu": p.name, "sms": p.multi_processor_count, "vllm": vllm.__version__,
+           "atomic_add": atomic or None,
            "torch": torch.__version__, "launch_floor_ms": floor,
            "streaming_gbs": bw, "rows": rows}
     if a.out:
