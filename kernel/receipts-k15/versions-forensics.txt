@@ -1,0 +1,10 @@
+gnf4 0.30.2 @453bebf5879bca0b5b9c5855868ca69f6467f9cd
+int4_b32 from /opt/conda/lib/python3.11/site-packages/int4_b32.py
+torch 2.8.0+cu128
+triton 3.4.0
+--- vllm venv ---
+vllm 0.28.0
+torch 2.13.0+cu130
+--- forensics ---
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.84, GPU-e3a3ea90-91de-9f95-d30e-d4b20b9c2f3d
+power.limit,clocks.max.sm 550.00 W, 3210 MHz
