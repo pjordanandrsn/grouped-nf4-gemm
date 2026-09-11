@@ -141,6 +141,18 @@ shape as an observation; it does not clear anything.
 - **STOP-3** — no second box on a disappointing result. If Stage A refutes the
   lane, that is the finding.
 
+## Where the runner lives, and why it is not here
+
+`pod-launch.sh` pins and stages exactly two repositories, `adertha` and `e4b`,
+by design — that allowlist is what makes "which code ran" answerable. So the
+box-side runner is `bench/k14/` in experts4bit-qlora, and it pins **this**
+repository the way P39 and P42 already do: a `GNF4_SHA` the box installs and
+also clones, with a tripwire that the clone's HEAD equals the installed pin.
+`k14_bench.py` is a campaign harness and follows this repo's convention of not
+packaging those, so the clone is how it reaches the box.
+
+The lane's prereg, bench and results live here, beside the kernel they judge.
+
 ## Receipts
 
 `receipts-k14/` : `k14_rows.json` (every cell, every arm, ms + GB/s + relative
