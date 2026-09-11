@@ -1,0 +1,25 @@
+# NVIDIA GeForce RTX 5090, 170 SMs, torch 2.8.0+cu128, triton 3.4.0
+# graph-replay launch floor 3.57 us; measured streaming bandwidth 1528 GB/s
+
+   q_proj   N= 4096 K= 2048 M=  1 | bf16=10.3us gemv=7.2us gemm=10.6us | gemv/bf16=0.694 gemm/bf16=1.027 gemm_default/bf16=2.206 best bn16/w2 (256 programs)
+   q_proj   N= 4096 K= 2048 M=  4 | bf16=10.4us gemv=11.1us gemm=10.5us | gemv/bf16=1.068 gemm/bf16=1.018 gemm_default/bf16=2.194 best bn16/w2 (256 programs)
+   q_proj   N= 4096 K= 2048 M=  8 | bf16=10.3us gemv=16.5us gemm=12.5us | gemv/bf16=1.594 gemm/bf16=1.206 gemm_default/bf16=2.200 best bn32/w4 (128 programs)
+   q_proj   N= 4096 K= 2048 M= 16 | bf16=10.3us gemv=24.8us gemm=12.5us | gemv/bf16=2.397 gemm/bf16=1.205 gemm_default/bf16=2.392 best bn32/w4 (128 programs)
+   q_proj   N= 4096 K= 2048 M= 32 | bf16=12.4us gemv=45.2us gemm=14.6us | gemv/bf16=3.652 gemm/bf16=1.177 gemm_default/bf16=2.003 best bn16/w2 (512 programs)
+   k_proj   N=  512 K= 2048 M=  1 | bf16=3.6us gemv=6.2us gemm=10.5us | gemv/bf16=1.723 gemm/bf16=2.882 gemm_default/bf16=6.271 best bn16/w2 (32 programs)
+   k_proj   N=  512 K= 2048 M=  4 | bf16=4.6us gemv=6.3us gemm=10.5us | gemv/bf16=1.351 gemm/bf16=2.260 gemm_default/bf16=4.939 best bn16/w2 (32 programs)
+   k_proj   N=  512 K= 2048 M=  8 | bf16=5.2us gemv=8.3us gemm=10.4us | gemv/bf16=1.588 gemm/bf16=2.000 gemm_default/bf16=4.356 best bn16/w2 (32 programs)
+   k_proj   N=  512 K= 2048 M= 16 | bf16=6.2us gemv=10.3us gemm=12.5us | gemv/bf16=1.660 gemm/bf16=2.004 gemm_default/bf16=3.974 best bn16/w2 (32 programs)
+   k_proj   N=  512 K= 2048 M= 32 | bf16=6.2us gemv=12.5us gemm=12.5us | gemv/bf16=2.006 gemm/bf16=2.010 gemm_default/bf16=3.994 best bn16/w2 (64 programs)
+   v_proj   N=  512 K= 2048 M=  1 | bf16=3.6us gemv=6.2us gemm=10.5us | gemv/bf16=1.747 gemm/bf16=2.925 gemm_default/bf16=6.350 best bn16/w2 (32 programs)
+   v_proj   N=  512 K= 2048 M=  4 | bf16=4.6us gemv=6.3us gemm=10.4us | gemv/bf16=1.359 gemm/bf16=2.264 gemm_default/bf16=4.924 best bn16/w2 (32 programs)
+   v_proj   N=  512 K= 2048 M=  8 | bf16=5.1us gemv=8.3us gemm=10.4us | gemv/bf16=1.632 gemm/bf16=2.052 gemm_default/bf16=4.474 best bn16/w2 (32 programs)
+   v_proj   N=  512 K= 2048 M= 16 | bf16=6.2us gemv=10.4us gemm=12.5us | gemv/bf16=1.665 gemm/bf16=2.003 gemm_default/bf16=3.966 best bn16/w2 (32 programs)
+   v_proj   N=  512 K= 2048 M= 32 | bf16=6.2us gemv=12.4us gemm=12.5us | gemv/bf16=1.989 gemm/bf16=2.003 gemm_default/bf16=3.974 best bn16/w2 (64 programs)
+   o_proj   N= 2048 K= 4096 M=  1 | bf16=10.3us gemv=8.3us gemm=18.6us | gemv/bf16=0.802 gemm/bf16=1.802 gemm_default/bf16=3.978 best bn16/w2 (128 programs)
+   o_proj   N= 2048 K= 4096 M=  4 | bf16=16.5us gemv=12.4us gemm=18.6us | gemv/bf16=0.751 gemm/bf16=1.130 gemm_default/bf16=2.498 best bn16/w2 (128 programs)
+   o_proj   N= 2048 K= 4096 M=  8 | bf16=16.5us gemv=16.6us gemm=18.7us | gemv/bf16=1.005 gemm/bf16=1.132 gemm_default/bf16=2.619 best bn16/w2 (128 programs)
+   o_proj   N= 2048 K= 4096 M= 16 | bf16=18.4us gemv=26.9us gemm=20.7us | gemv/bf16=1.463 gemm/bf16=1.123 gemm_default/bf16=2.460 best bn16/w2 (128 programs)
+   o_proj   N= 2048 K= 4096 M= 32 | bf16=10.3us gemv=48.3us gemm=20.8us | gemv/bf16=4.679 gemm/bf16=2.011 gemm_default/bf16=4.383 best bn16/w2 (256 programs)
+
+wrote /root/k14/k14_rows.json
