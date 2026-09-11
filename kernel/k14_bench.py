@@ -92,13 +92,24 @@ def launch_floor(dev):
 
 
 def peak_bw_gbs(dev):
-    """Theoretical device bandwidth, from the properties torch exposes. Reported
-    as context for the GB/s columns; no verdict rests on it."""
-    p = torch.cuda.get_device_properties(dev)
-    bus, clk = getattr(p, "memory_bus_width", 0), getattr(p, "memory_clock_rate", 0)
-    if not bus or not clk:
-        return None
-    return clk * 1e3 * (bus / 8) * 2 / 1e9      # kHz -> Hz, bits -> bytes, DDR
+    """MEASURED streaming bandwidth: a 512 MB device-to-device copy under graph
+    replay, read + write counted.
+
+    The first cut read `memory_bus_width` / `memory_clock_rate` off
+    `get_device_properties` and printed "unknown" on the census box, because this
+    torch build does not expose them. A measured ceiling is the better number
+    anyway -- the GB/s columns are being compared against what this box can
+    actually stream, not against a spec sheet it may never reach."""
+    n = 512 * 1024 * 1024 // 4
+    src = torch.empty(n, dtype=torch.float32, device=dev)
+    dst = torch.empty_like(src)
+    # bound as defaults, not closed over: the tensors are freed below, and a
+    # lambda that reads a name it outlives is a trap waiting for a reorder
+    ms = timed_replay(lambda d=dst, s=src: d.copy_(s), iters=30, warmup=5)
+    gbs = (src.numel() * 4 * 2) / (ms / 1e3) / 1e9
+    del src, dst
+    torch.cuda.empty_cache()
+    return gbs
 
 
 def one_shape(name, N, K, ms, dev="cuda"):
@@ -107,8 +118,12 @@ def one_shape(name, N, K, ms, dev="cuda"):
     packed, scales = pack_int4_b32(w.float().cpu())
     packed = packed.reshape(1, N, K // 2).to(dev).contiguous()
     scales = scales.reshape(1, N, K // 32).to(dev).contiguous()
-    w_deq = dequant_int4_ref(packed.reshape(N, K // 2),
-                             scales.reshape(N, K // 32)).to(torch.bfloat16).to(dev)
+    # dequant_int4_ref(packed, scales, N, K) -- pure torch, CPU, fp32. It is the
+    # reference the property tests pin the kernels against, so building the bf16
+    # arm's weight with it makes all three arms the same underlying product.
+    w_deq = dequant_int4_ref(packed.reshape(N, K // 2).cpu(),
+                             scales.reshape(N, K // 32).cpu(),
+                             N, K).to(torch.bfloat16).to(dev)
     del w
 
     rows = []
@@ -189,7 +204,7 @@ def main():
     print(f"# {p.name}, {p.multi_processor_count} SMs, torch {torch.__version__}, "
           f"triton {triton.__version__}")
     print(f"# graph-replay launch floor {floor * 1e3:.2f} us; "
-          f"peak bandwidth {('%.0f GB/s' % bw) if bw else 'unknown'}\n")
+          f"measured streaming bandwidth {bw:.0f} GB/s\n")
 
     rows = []
     for name, N, K in SHAPES:
