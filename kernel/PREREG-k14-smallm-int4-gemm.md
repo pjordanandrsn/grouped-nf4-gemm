@@ -158,3 +158,72 @@ The lane's prereg, bench and results live here, beside the kernel they judge.
 `receipts-k14/` : `k14_rows.json` (every cell, every arm, ms + GB/s + relative
 error), the stdout log, `forensics.txt`, `versions.txt`. `RESULTS-k14-*.md` is
 written from those and from nothing else.
+
+---
+
+## Amendment 1 (2026-09-11, before any rented box)
+
+**A free dry-run changed what Stage A should measure.** The harness was run on
+the house A2000 (sm_86, 26 SMs, a card shared with live services) purely to
+prove it executes. Those numbers are **not this lane's evidence** — P39 closed
+by establishing that a constant fitted on sm_86 does not transfer to sm_120 —
+but they are why the design changed, so they are recorded.
+
+Two things came out of it.
+
+**One: the harness had a bug I wrote from memory.** `dequant_int4_ref` takes
+`(packed, scales, N, K)`; the first cut passed two arguments and raised on the
+first shape. It cost one box (`k14-stagea`, rc=1, $0.03, torn down in a
+minute). Every tripwire in the runner passed and the harness still could not
+run — the run proved the installed cut was the pinned one and then died on my
+own call. A harness gets a dry-run before it gets a rental.
+
+**Two: the shipped block config is wrong for this grid.**
+`gemm_int4_b32_grouped_captured`'s default `bn64/w8` was swept on the **expert**
+path, where parallelism comes from the number of experts. A single projection is
+**one M-tile**, so the grid is `1 × cdiv(N, block_n)` — 64 programs for
+`q_proj`, 8 for `k_proj`. Measured on the A2000 at M=16:
+
+| | bf16 | GB/s | vs streaming ceiling 257 GB/s |
+|---|---|---|---|
+| `q_proj` | 70.9 µs | 237 | **92 %** |
+| `o_proj` | 81.1 µs | 207 | 81 % |
+
+The bf16 arm is at the roofline. The GEMM at the shipped default reached
+**12–64 GB/s** — an order of magnitude below it, so it is occupancy-bound, not
+bandwidth-bound, and asking it once at a default swept for a different grid
+would have measured the default rather than the kernel.
+
+So **Stage A now sweeps the gemm arm**: `block_n ∈ {16, 32, 64, 128}` ×
+`warps ∈ {2, 4, 8}`, twelve configs, each cell reporting its program count. The
+shipped default is kept as its own column so the sweep's value is visible rather
+than absorbed. `bf16` and `gemv` are unchanged, single-config arms.
+
+What that changes, on the A2000 at M=16 (again: motivation, not evidence):
+
+| shape | gemm at shipped bn64/w8 | gemm at its best | best config |
+|---|---|---|---|
+| `q_proj` | 1.284 × bf16 | **0.898** | bn32/w2, 128 programs |
+| `o_proj` | 1.583 | 1.035 | bn32/w2, 64 programs |
+| `k_proj` | 3.585 | 1.723 | bn32/w4, 16 programs |
+| `v_proj` | 3.597 | 1.725 | bn32/w4, 16 programs |
+
+The default was costing 30–55 % on the large shapes and a factor of two on the
+small ones. Prediction 1 would have been refuted by a measurement of the wrong
+thing.
+
+**Consequences for the registered structure.**
+
+- **Predictions are unchanged.** They were written about the arm, not the
+  config, and prediction 1 still says `gemm/bf16 < 1.0` on `q_proj` and
+  `o_proj` at M=16 on the **census hardware**. The A2000 says 0.898 and 1.035;
+  a 5090 has 170 SMs against 26 and ~7× the bandwidth, and nothing here
+  entitles me to carry those numbers across.
+- **The mix uses each shape's best config**, and the sweep table ships with the
+  result so the choice is auditable.
+- **Stage B gets cheaper if Stage A passes.** It was "a block-config sweep for
+  the winning arm plus the call-site change". The sweep is now inside Stage A,
+  so Stage B is the `Int4Linear` call site, a per-shape config table, and the
+  K8 two-text perplexity gate that any adoption still requires.
+- **Budget unchanged** at ≤ $0.40 for the box. `k14-stagea`'s $0.03 counts
+  against the $1.50 lane ceiling.
