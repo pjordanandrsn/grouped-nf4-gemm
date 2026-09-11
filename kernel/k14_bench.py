@@ -60,6 +60,15 @@ from int4_pack_ref import dequant_int4_ref, pack_int4_b32  # noqa: E402
 # `gemm_int4_b32_grouped_captured`'s shipped default, and the M extent of the
 # hardware MMA K11 read out of the PTX (`mma.sync.aligned.m16n8k16`).
 BLOCK_M = 16
+# Amendment 1. A single projection is ONE M-tile, so the grouped GEMM's grid is
+# `1 x cdiv(N, block_n)` -- 64 programs for q_proj and 8 for k_proj at the
+# shipped bn64. The expert path it was swept for gets its parallelism from the
+# expert count; a projection has none of that. The A2000 dry-run showed the
+# consequence: bf16 runs at 92-98% of the measured streaming ceiling while the
+# GEMM reaches 12-64 GB/s, so it is occupancy-bound, not bandwidth-bound. A
+# default swept for a different grid is not the kernel's answer, so the gemm arm
+# is swept here rather than asked once.
+GEMM_CONFIGS = [(bn, w) for bn in (16, 32, 64, 128) for w in (2, 4, 8)]
 
 SHAPES = [("q_proj", 4096, 2048), ("k_proj", 512, 2048),
           ("v_proj", 512, 2048), ("o_proj", 2048, 4096)]
@@ -160,25 +169,54 @@ def one_shape(name, N, K, ms, dev="cuda"):
                                                   t_row0, t_rows, t_group,
                                                   block_m=BLOCK_M)
 
-        for arm, fn in (("bf16", a_bf16), ("gemv", a_gemv), ("gemm", a_gemm)):
+        def run(arm, fn, iters=200):
             try:
                 y = fn().float()
                 denom = ref.abs().max().clamp_min(1e-30)
                 err[arm] = float((y - ref).abs().max() / denom)
-                out[arm] = timed_replay(fn)
+                out[arm] = timed_replay(fn, iters=iters)
             except Exception as e:                      # noqa: BLE001
                 out[arm] = f"error: {type(e).__name__}: {e}"
                 err[arm] = None
                 print(f"    {name} M={M} {arm} FAILED {type(e).__name__}: {e}",
                       flush=True)
 
+        run("bf16", a_bf16)
+        run("gemv", a_gemv)
+        sweep = {}
+        for bn, warps in GEMM_CONFIGS:
+            tag = f"gemm_bn{bn}_w{warps}"
+
+            def a_cfg(bn=bn, warps=warps, x=x):
+                xq, xs = quant_x_rows(x)
+                return gemm_int4_b32_grouped_captured(
+                    xq, xs, packed, scales, t_row0, t_rows, t_group,
+                    block_m=BLOCK_M, block_n=bn, warps=warps)
+            run(tag, a_cfg, iters=100)
+            if isinstance(out[tag], float):
+                sweep[tag] = {"ms": out[tag], "block_n": bn, "warps": warps,
+                              "programs": len(t0) * triton.cdiv(N, bn)}
+        if sweep:
+            best = min(sweep, key=lambda k: sweep[k]["ms"])
+            out["gemm"] = out[best]
+            err["gemm"] = err[best]
+            best_cfg = sweep[best]
+        else:
+            out["gemm"] = "error: every gemm config failed"
+            err["gemm"] = None
+            best_cfg = None
+        # the shipped default, kept as its own column so the sweep's value is visible
+        out["gemm_default"] = out.get("gemm_bn64_w8")
+
         wb_bf16 = N * K * 2
         wb_int4 = N * K // 2 + N * (K // 32) * 2
         row = {"shape": name, "N": N, "K": K, "M": M, "ms": out, "rel_err": err,
+               "gemm_sweep": sweep, "gemm_best_config": best_cfg,
+               "tiles_m": len(t0),
                "weight_bytes": {"bf16": wb_bf16, "int4": wb_int4},
                "gbs": {a: (wb_bf16 if a == "bf16" else wb_int4) / (t / 1e3) / 1e9
                        for a, t in out.items() if isinstance(t, float)}}
-        for a in ("gemv", "gemm"):
+        for a in ("gemv", "gemm", "gemm_default"):
             if isinstance(out.get(a), float) and isinstance(out.get("bf16"), float):
                 row.setdefault("vs_bf16", {})[a] = out[a] / out["bf16"]
         rows.append(row)
@@ -186,7 +224,9 @@ def one_shape(name, N, K, ms, dev="cuda"):
                          else f"{a}=ERR" for a in ("bf16", "gemv", "gemm"))
         ratios = " ".join(f"{a}/bf16={row['vs_bf16'][a]:.3f}"
                           for a in row.get("vs_bf16", {}))
-        print(f"   {name:8s} N={N:5d} K={K:5d} M={M:3d} | {cells} | {ratios}",
+        cfg = (f" best bn{best_cfg['block_n']}/w{best_cfg['warps']}"
+               f" ({best_cfg['programs']} programs)" if best_cfg else "")
+        print(f"   {name:8s} N={N:5d} K={K:5d} M={M:3d} | {cells} | {ratios}{cfg}",
               flush=True)
     return rows
 
