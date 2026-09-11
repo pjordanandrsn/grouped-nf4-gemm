@@ -1,0 +1,410 @@
+{
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "sms": 170,
+ "vllm": "0.28.0",
+ "torch": "2.13.0+cu130",
+ "launch_floor_ms": 0.0031014400720596313,
+ "streaming_gbs": 1529.2121885550757,
+ "rows": [
+  {
+   "shape": "q_proj",
+   "N": 4096,
+   "K": 2048,
+   "M": 1,
+   "group_size": 128,
+   "ms": 0.006238080263137817,
+   "rel_err": 2.0602583390427753e-06,
+   "weight_bytes": 4325376,
+   "gbs": 693.3825500065452,
+   "x_floor": 2.011349604764466
+  },
+  {
+   "shape": "q_proj",
+   "N": 4096,
+   "K": 2048,
+   "M": 4,
+   "group_size": 128,
+   "ms": 0.006200640201568603,
+   "rel_err": 0.0004770992381963879,
+   "weight_bytes": 4325376,
+   "gbs": 697.5692604943906,
+   "x_floor": 1.9992777733895817
+  },
+  {
+   "shape": "q_proj",
+   "N": 4096,
+   "K": 2048,
+   "M": 8,
+   "group_size": 128,
+   "ms": 0.006204000115394593,
+   "rel_err": 0.000487329438328743,
+   "weight_bytes": 4325376,
+   "gbs": 697.191476393919,
+   "x_floor": 2.000361113305209
+  },
+  {
+   "shape": "q_proj",
+   "N": 4096,
+   "K": 2048,
+   "M": 16,
+   "group_size": 128,
+   "ms": 0.006369760036468506,
+   "rel_err": 0.0004604051646310836,
+   "weight_bytes": 4325376,
+   "gbs": 679.0485002945347,
+   "x_floor": 2.05380722776256
+  },
+  {
+   "shape": "q_proj",
+   "N": 4096,
+   "K": 2048,
+   "M": 32,
+   "group_size": 128,
+   "ms": 0.010296159982681274,
+   "rel_err": 0.00039777247002348304,
+   "weight_bytes": 4325376,
+   "gbs": 420.0960365102648,
+   "x_floor": 3.319799752198246
+  },
+  {
+   "shape": "q_proj",
+   "N": 4096,
+   "K": 2048,
+   "M": 1,
+   "group_size": 32,
+   "ms": 0.006225119829177856,
+   "rel_err": 0.000125376129290089,
+   "weight_bytes": 4718592,
+   "gbs": 757.9921558912671,
+   "x_floor": 2.0071707608536267
+  },
+  {
+   "shape": "q_proj",
+   "N": 4096,
+   "K": 2048,
+   "M": 4,
+   "group_size": 32,
+   "ms": 0.0061990398168563846,
+   "rel_err": 0.00022893772984389216,
+   "weight_bytes": 4718592,
+   "gbs": 761.1811085918885,
+   "x_floor": 1.998761759965161
+  },
+  {
+   "shape": "q_proj",
+   "N": 4096,
+   "K": 2048,
+   "M": 8,
+   "group_size": 32,
+   "ms": 0.006193600296974182,
+   "rel_err": 0.00045372050954028964,
+   "weight_bytes": 4718592,
+   "gbs": 761.8496147233167,
+   "x_floor": 1.9970078908734425
+  },
+  {
+   "shape": "q_proj",
+   "N": 4096,
+   "K": 2048,
+   "M": 16,
+   "group_size": 32,
+   "ms": 0.008181920051574707,
+   "rel_err": 0.0004633920325431973,
+   "weight_bytes": 4718592,
+   "gbs": 576.7096195338466,
+   "x_floor": 2.6381035459250985
+  },
+  {
+   "shape": "q_proj",
+   "N": 4096,
+   "K": 2048,
+   "M": 32,
+   "group_size": 32,
+   "ms": 0.008252480030059815,
+   "rel_err": 0.00039588281651958823,
+   "weight_bytes": 4718592,
+   "gbs": 571.7786632397098,
+   "x_floor": 2.660854260704588
+  },
+  {
+   "shape": "k_proj",
+   "N": 512,
+   "K": 2048,
+   "M": 1,
+   "group_size": 128,
+   "ms": "error: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170"
+  },
+  {
+   "shape": "k_proj",
+   "N": 512,
+   "K": 2048,
+   "M": 4,
+   "group_size": 128,
+   "ms": "error: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170"
+  },
+  {
+   "shape": "k_proj",
+   "N": 512,
+   "K": 2048,
+   "M": 8,
+   "group_size": 128,
+   "ms": "error: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170"
+  },
+  {
+   "shape": "k_proj",
+   "N": 512,
+   "K": 2048,
+   "M": 16,
+   "group_size": 128,
+   "ms": "error: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170"
+  },
+  {
+   "shape": "k_proj",
+   "N": 512,
+   "K": 2048,
+   "M": 32,
+   "group_size": 128,
+   "ms": "error: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170"
+  },
+  {
+   "shape": "k_proj",
+   "N": 512,
+   "K": 2048,
+   "M": 1,
+   "group_size": 32,
+   "ms": "error: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170"
+  },
+  {
+   "shape": "k_proj",
+   "N": 512,
+   "K": 2048,
+   "M": 4,
+   "group_size": 32,
+   "ms": "error: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170"
+  },
+  {
+   "shape": "k_proj",
+   "N": 512,
+   "K": 2048,
+   "M": 8,
+   "group_size": 32,
+   "ms": "error: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170"
+  },
+  {
+   "shape": "k_proj",
+   "N": 512,
+   "K": 2048,
+   "M": 16,
+   "group_size": 32,
+   "ms": "error: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170"
+  },
+  {
+   "shape": "k_proj",
+   "N": 512,
+   "K": 2048,
+   "M": 32,
+   "group_size": 32,
+   "ms": "error: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170"
+  },
+  {
+   "shape": "v_proj",
+   "N": 512,
+   "K": 2048,
+   "M": 1,
+   "group_size": 128,
+   "ms": "error: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170"
+  },
+  {
+   "shape": "v_proj",
+   "N": 512,
+   "K": 2048,
+   "M": 4,
+   "group_size": 128,
+   "ms": "error: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170"
+  },
+  {
+   "shape": "v_proj",
+   "N": 512,
+   "K": 2048,
+   "M": 8,
+   "group_size": 128,
+   "ms": "error: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170"
+  },
+  {
+   "shape": "v_proj",
+   "N": 512,
+   "K": 2048,
+   "M": 16,
+   "group_size": 128,
+   "ms": "error: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170"
+  },
+  {
+   "shape": "v_proj",
+   "N": 512,
+   "K": 2048,
+   "M": 32,
+   "group_size": 128,
+   "ms": "error: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170"
+  },
+  {
+   "shape": "v_proj",
+   "N": 512,
+   "K": 2048,
+   "M": 1,
+   "group_size": 32,
+   "ms": "error: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170"
+  },
+  {
+   "shape": "v_proj",
+   "N": 512,
+   "K": 2048,
+   "M": 4,
+   "group_size": 32,
+   "ms": "error: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170"
+  },
+  {
+   "shape": "v_proj",
+   "N": 512,
+   "K": 2048,
+   "M": 8,
+   "group_size": 32,
+   "ms": "error: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170"
+  },
+  {
+   "shape": "v_proj",
+   "N": 512,
+   "K": 2048,
+   "M": 16,
+   "group_size": 32,
+   "ms": "error: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170"
+  },
+  {
+   "shape": "v_proj",
+   "N": 512,
+   "K": 2048,
+   "M": 32,
+   "group_size": 32,
+   "ms": "error: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170"
+  },
+  {
+   "shape": "o_proj",
+   "N": 2048,
+   "K": 4096,
+   "M": 1,
+   "group_size": 128,
+   "ms": 0.008271679878234864,
+   "rel_err": 0.00012893244274891913,
+   "weight_bytes": 4325376,
+   "gbs": 522.9138534944143,
+   "x_floor": 2.667044884327471
+  },
+  {
+   "shape": "o_proj",
+   "N": 2048,
+   "K": 4096,
+   "M": 4,
+   "group_size": 128,
+   "ms": 0.008247680068016051,
+   "rel_err": 0.0005002501420676708,
+   "weight_bytes": 4325376,
+   "gbs": 524.4354732882422,
+   "x_floor": 2.6593066047988674
+  },
+  {
+   "shape": "o_proj",
+   "N": 2048,
+   "K": 4096,
+   "M": 8,
+   "group_size": 128,
+   "ms": 0.008236960172653199,
+   "rel_err": 0.00044208666076883674,
+   "weight_bytes": 4325376,
+   "gbs": 525.1179936938747,
+   "x_floor": 2.6558501796822163
+  },
+  {
+   "shape": "o_proj",
+   "N": 2048,
+   "K": 4096,
+   "M": 16,
+   "group_size": 128,
+   "ms": 0.008283360004425049,
+   "rel_err": 0.0004725898033939302,
+   "weight_bytes": 4325376,
+   "gbs": 522.1765078047246,
+   "x_floor": 2.670810917498774
+  },
+  {
+   "shape": "o_proj",
+   "N": 2048,
+   "K": 4096,
+   "M": 32,
+   "group_size": 128,
+   "ms": 0.012339680194854737,
+   "rel_err": 0.00023877745843492448,
+   "weight_bytes": 4325376,
+   "gbs": 350.525777953593,
+   "x_floor": 3.9786937384413474
+  },
+  {
+   "shape": "o_proj",
+   "N": 2048,
+   "K": 4096,
+   "M": 1,
+   "group_size": 32,
+   "ms": 0.008250560164451599,
+   "rel_err": 0.00012722646351903677,
+   "weight_bytes": 4718592,
+   "gbs": 571.9117133804498,
+   "x_floor": 2.660235236779054
+  },
+  {
+   "shape": "o_proj",
+   "N": 2048,
+   "K": 4096,
+   "M": 4,
+   "group_size": 32,
+   "ms": 0.008242400288581848,
+   "rel_err": 0.0004987530992366374,
+   "weight_bytes": 4718592,
+   "gbs": 572.4778990091806,
+   "x_floor": 2.6576042409577054
+  },
+  {
+   "shape": "o_proj",
+   "N": 2048,
+   "K": 4096,
+   "M": 8,
+   "group_size": 32,
+   "ms": 0.008239200115203857,
+   "rel_err": 0.0004524886899162084,
+   "weight_bytes": 4718592,
+   "gbs": 572.7002541536461,
+   "x_floor": 2.656572406292635
+  },
+  {
+   "shape": "o_proj",
+   "N": 2048,
+   "K": 4096,
+   "M": 16,
+   "group_size": 32,
+   "ms": 0.008242080211639405,
+   "rel_err": 0.00047801146865822375,
+   "weight_bytes": 4718592,
+   "gbs": 572.5001308937082,
+   "x_floor": 2.6575010382728212
+  },
+  {
+   "shape": "o_proj",
+   "N": 2048,
+   "K": 4096,
+   "M": 32,
+   "group_size": 32,
+   "ms": 0.01029520034790039,
+   "rel_err": 0.0002367424312978983,
+   "weight_bytes": 4718592,
+   "gbs": 458.32930302928133,
+   "x_floor": 3.3194903363273642
+  }
+ ]
+}

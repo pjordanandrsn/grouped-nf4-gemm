@@ -1,0 +1,47 @@
+# NVIDIA GeForce RTX 5090, 170 SMs, vllm 0.28.0, torch 2.13.0+cu130
+# graph-replay launch floor 3.10 us; measured streaming bandwidth 1529 GB/s
+# marlin supported group sizes: [-1, 32, 64, 128]
+
+   q_proj   g128 M=  1 |    6.24 us |    693 GB/s ( 45.3% of ceiling) |  2.01x floor | rel_err 0.00000
+   q_proj   g128 M=  4 |    6.20 us |    698 GB/s ( 45.6% of ceiling) |  2.00x floor | rel_err 0.00048
+   q_proj   g128 M=  8 |    6.20 us |    697 GB/s ( 45.6% of ceiling) |  2.00x floor | rel_err 0.00049
+   q_proj   g128 M= 16 |    6.37 us |    679 GB/s ( 44.4% of ceiling) |  2.05x floor | rel_err 0.00046
+   q_proj   g128 M= 32 |   10.30 us |    420 GB/s ( 27.5% of ceiling) |  3.32x floor | rel_err 0.00040
+   q_proj   g32  M=  1 |    6.23 us |    758 GB/s ( 49.6% of ceiling) |  2.01x floor | rel_err 0.00013
+   q_proj   g32  M=  4 |    6.20 us |    761 GB/s ( 49.8% of ceiling) |  2.00x floor | rel_err 0.00023
+   q_proj   g32  M=  8 |    6.19 us |    762 GB/s ( 49.8% of ceiling) |  2.00x floor | rel_err 0.00045
+   q_proj   g32  M= 16 |    8.18 us |    577 GB/s ( 37.7% of ceiling) |  2.64x floor | rel_err 0.00046
+   q_proj   g32  M= 32 |    8.25 us |    572 GB/s ( 37.4% of ceiling) |  2.66x floor | rel_err 0.00040
+INFO 09-11 14:54:38 [marlin_utils.py:625] Marlin kernel can achieve better performance for small size_n with experimental use_atomic_add feature. You can consider set environment variable VLLM_MARLIN_USE_ATOMIC_ADD to 1 if possible.
+   k_proj g128 M=1 FAILED RuntimeError: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170
+   k_proj g128 M=4 FAILED RuntimeError: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170
+   k_proj g128 M=8 FAILED RuntimeError: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170
+   k_proj g128 M=16 FAILED RuntimeError: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170
+   k_proj g128 M=32 FAILED RuntimeError: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170
+   k_proj g32 M=1 FAILED RuntimeError: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170
+   k_proj g32 M=4 FAILED RuntimeError: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170
+   k_proj g32 M=8 FAILED RuntimeError: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170
+   k_proj g32 M=16 FAILED RuntimeError: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170
+   k_proj g32 M=32 FAILED RuntimeError: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170
+   v_proj g128 M=1 FAILED RuntimeError: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170
+   v_proj g128 M=4 FAILED RuntimeError: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170
+   v_proj g128 M=8 FAILED RuntimeError: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170
+   v_proj g128 M=16 FAILED RuntimeError: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170
+   v_proj g128 M=32 FAILED RuntimeError: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170
+   v_proj g32 M=1 FAILED RuntimeError: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170
+   v_proj g32 M=4 FAILED RuntimeError: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170
+   v_proj g32 M=8 FAILED RuntimeError: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170
+   v_proj g32 M=16 FAILED RuntimeError: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170
+   v_proj g32 M=32 FAILED RuntimeError: marlin_gemm, /workspace/csrc/libtorch_stable/quantization/marlin/marlin.cu:865, workspace.numel = 128 is below min_workspace_size = 170
+   o_proj   g128 M=  1 |    8.27 us |    523 GB/s ( 34.2% of ceiling) |  2.67x floor | rel_err 0.00013
+   o_proj   g128 M=  4 |    8.25 us |    524 GB/s ( 34.3% of ceiling) |  2.66x floor | rel_err 0.00050
+   o_proj   g128 M=  8 |    8.24 us |    525 GB/s ( 34.3% of ceiling) |  2.66x floor | rel_err 0.00044
+   o_proj   g128 M= 16 |    8.28 us |    522 GB/s ( 34.1% of ceiling) |  2.67x floor | rel_err 0.00047
+   o_proj   g128 M= 32 |   12.34 us |    351 GB/s ( 22.9% of ceiling) |  3.98x floor | rel_err 0.00024
+   o_proj   g32  M=  1 |    8.25 us |    572 GB/s ( 37.4% of ceiling) |  2.66x floor | rel_err 0.00013
+   o_proj   g32  M=  4 |    8.24 us |    572 GB/s ( 37.4% of ceiling) |  2.66x floor | rel_err 0.00050
+   o_proj   g32  M=  8 |    8.24 us |    573 GB/s ( 37.5% of ceiling) |  2.66x floor | rel_err 0.00045
+   o_proj   g32  M= 16 |    8.24 us |    573 GB/s ( 37.4% of ceiling) |  2.66x floor | rel_err 0.00048
+   o_proj   g32  M= 32 |   10.30 us |    458 GB/s ( 30.0% of ceiling) |  3.32x floor | rel_err 0.00024
+
+wrote /root/k15/k15_marlin_rows.json
