@@ -1,6 +1,6 @@
 {
   "package": "grouped-nf4-gemm",
-  "generated": "2026-09-05",
+  "generated": "2026-09-18",
   "schema": "docs/claims-schema.md",
   "status_vocabulary": {
     "confirmed": "pre-registered, OpenTimestamps-stamped blind confirmatory run; protocol and pass/fail fixed before data",
@@ -452,6 +452,86 @@
         "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues"
       ],
       "notes": "#87 (gemm_4bit_grouped int32 offset overflow when max(expert_ids) is large) was listed here until 0.30.1 as 'distinct from the 2 GiB fix in 0.13.2/0.14.0'; that reading was not supported by the issue text. Closed 2026-09-05 by observation in every carrier: PR #342, kernel/test_expert_offset_boundary.py, claim gnf4.kernel.expert-offset-boundary.5090.2026-09-05."
+    },
+    {
+      "id": "gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10",
+      "area": "serve",
+      "claim": "int4_b32._plan takes the activation-row count R and the SM count: for R >= 16 on parts with <= 64 SMs, split-K is sized so about 8 blocks per SM are resident and collapses to sk = 1 (no reduce launch) where the grid alone covers that; below R = 16 the plan is exactly the previous N-only rule on every SM count. Measured on an RTX A2000 (26 SMs; CUDA-graph replay; full cost including reduce_partials) over 48 cells -- qwen3_moe / granitemoe / olmoe gate_up + down at R = 1..128: the N-only rule costs 1.136x the per-cell optimum, the R-aware rule 1.011x, never slower than the N-only rule on any cell; 1.102x at R = 16 rising to 1.145x at R = 128 summed over the six shapes.",
+      "value": 1.011,
+      "unit": "x the per-cell optimum over 48 cells (the N-only rule: 1.136x)",
+      "status": "measured",
+      "hardware": "RTX A2000 12GB (sm_86, 26 SMs), torch 2.8.0+cu128 / triton 3.4.0",
+      "conditions": "kernel-level GEMV timings at a fixed row count, not step-level; the 8 x sm_count target is measured on sm_86 only and the term is gated to sm_count <= 64 (SPLITK_R_TERM_MAX_SMS) after a 5090 step-level read of 1.0064 / 1.0063 NEW/OLD at B=16 (experts4bit-qlora#533, P39); mxfp4_grouped.gemv_mxfp4_b32 deliberately keeps the N-only plan (its own 32-cell sweep, bench/int4/mx_sweep.py, regressed 2 cells by 15-17%)",
+      "measured_on": "2026-09-10",
+      "evidence": [
+        "bench/int4/RESULTS-sk-r-sweep.md",
+        "bench/int4/sk_sweep.py",
+        "bench/int4/rows/sk_qwen3_moe_gate_up.json",
+        "bench/int4/rows/sk_qwen3_moe_down.json",
+        "bench/int4/mx_sweep.py",
+        "kernel/test_int4_b32.py",
+        {
+          "path": "CHANGELOG.md",
+          "section": "0.31.0"
+        }
+      ],
+      "quoted_in": [
+        "docs/STATUS.md",
+        "CHANGELOG.md#0.31.0"
+      ],
+      "notes": "measured_on is the receipt's commit date (PR #357, 2026-09-10); the RESULTS file states no run date. B=1 decode calls the grouped GEMV at R = top_k (4 or 8 for every shipped MoE), so SPLITK_R_FLOOR = 16 leaves every B=1 cell and the licensed serve configuration untouched by construction; kernel/test_int4_b32.py pins R < 16 to a verbatim copy of the old rule, re-derives the worst-cell bound (SK_R_BOUND 1.07; measured 1.064x, granitemoe/down at R = 16) from the receipts, and fails if a shipped model routes to >= 16 experts. sm_count enters the plan, so bitwise equality across boxes must pin sk rather than plan it; within a box the plan is a pure function of (N, K, R)."
+    },
+    {
+      "id": "gnf4.kernel.k14-smallm-int4-gemm-refuted.5090.2026-09-11",
+      "area": "kernel",
+      "claim": "K14 (pre-registered): at M=16 no shipped int4 arm beats the bf16 dequant-then-GEMM path on Qwen3-30B-A3B's four attention projections -- the grouped int4 GEMM at the best of twelve swept block configurations is 1.12-2.00x slower, the int4 GEMV 1.46-2.40x slower -- so the registered mix saving over 48 layers is 0.000 ms/step against a 0.5 ms bar: REFUTED. q_proj's bf16 path reads 16.78 MB in 10.35 us (106% of the measured 1528 GB/s streaming ceiling); k_proj / v_proj are launch-bound at 1.74x the 3.57 us floor.",
+      "value": 0.0,
+      "unit": "ms/step mix saving at M=16 over 48 layers (registered bar 0.5)",
+      "status": "measured",
+      "hardware": "RTX 5090 (sm_120, 170 SMs), torch 2.8.0+cu128 / triton 3.4.0, rented host",
+      "measured_on": "2026-09-11",
+      "evidence": [
+        "kernel/PREREG-k14-smallm-int4-gemm.md",
+        "kernel/RESULTS-k14-smallm-int4-gemm.md",
+        "kernel/k14_bench.py",
+        "kernel/receipts-k14/k14_rows.json",
+        "kernel/receipts-k14/k14_bench.log",
+        {
+          "path": "CHANGELOG.md",
+          "section": "0.31.0"
+        }
+      ],
+      "quoted_in": [
+        "docs/STATUS.md",
+        "CHANGELOG.md#0.31.0"
+      ],
+      "notes": "Prediction 1 (gemm wins on q/o_proj) REFUTED at 1.205x / 1.123x slower; predictions 2 (GEMV_ROWS_MAX = 1 is right) and 3 (k/v launch-bound within 2x of the floor) CONFIRMED. The A2000 dry-run read 0.898 / 1.035 on the same cells -- an sm_86 number does not transfer to sm_120, the rule P39 established. Two bounds the lane did not go looking for, arithmetic under a stated assumption rather than measurements: o_proj runs at 60% of ceiling against q_proj's 106% on the same bytes (about 0.38 ms/step if matched, on the bf16 side), and unfused q/k/v spend three launches where one would do (about 0.44 ms/step at the ceiling). A roofline int4 projection kernel would be worth about 1.29 ms/step; nothing shipped realises it (the kernel built for that arithmetic reaches 22% of the bandwidth it would need). Cost $0.0653 against a $1.50 lane ceiling. Cross-check: the four projections sum to 1.977 ms/step, within 5% of experts4bit-qlora's P42 census share for the same 192 launches."
+    },
+    {
+      "id": "gnf4.kernel.k15-marlin-comparator.5090.2026-09-11",
+      "area": "kernel",
+      "claim": "K15 (pre-registered): vLLM 0.28.0's Marlin GPTQ kernel at g128 runs Qwen3-30B-A3B's q_proj in 6.37 us and o_proj in 8.28 us at M=16 on the same RTX 5090 where this package's bf16 dequant path takes 10.3 / 16.5 us (1.62x / 1.99x) and its best int4 arm 12.5 / 18.9 us; at matched bytes (g32) Marlin still wins (8.18 / 8.24 us), so the advantage is the kernel, not the weight format. Substituting Marlin where measured saves 0.583-0.812 ms/step, inside the 0.5-1.0 ms band the pre-registration fixed as INCONCLUSIVE; experts4bit-qlora#564's 1.67 ms estimate is refuted as too optimistic (Marlin runs at 34-50% of the streaming ceiling, not at it).",
+      "value": 1.99,
+      "unit": "x faster than this package's bf16 dequant path on o_proj at M=16 (q_proj 1.62x)",
+      "status": "measured",
+      "hardware": "RTX 5090 (sm_120, 170 SMs), driver 595.84; this package in torch 2.8.0+cu128, Marlin in its own venv (vllm 0.28.0, torch 2.13.0+cu130); rented host",
+      "measured_on": "2026-09-11",
+      "evidence": [
+        "kernel/PREREG-k15-marlin-comparator.md",
+        "kernel/RESULTS-k15-marlin-comparator.md",
+        "kernel/k15_marlin_bench.py",
+        "kernel/receipts-k15/k15_marlin_rows.json",
+        "kernel/receipts-k15/k15_marlin_bench.log",
+        {
+          "path": "CHANGELOG.md",
+          "section": "0.31.0"
+        }
+      ],
+      "quoted_in": [
+        "docs/STATUS.md",
+        "CHANGELOG.md#0.31.0"
+      ],
+      "notes": "Engines as shipped, across different torch/CUDA builds in different processes, as the pre-registration said; adopting Marlin itself (a GPTQ repack, a dependency, a quality gate) is not established here. k_proj / v_proj are unmeasured: MarlinWorkspace was sized N//64 x 16 = 128 for N=512, below the 170-SM count the kernel requires (fixed in #363; the lane ran out of budget before a box used it). Relative error 0.0000-0.0005 against Marlin's own dequantised reference. Cost $1.1253 against a $1.00 lane ceiling -- over by $0.13, closed rather than extended; four of the six rentals were host draws that failed."
     }
   ]
 }

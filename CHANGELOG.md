@@ -1,5 +1,130 @@
 # Changelog
 
+## 0.31.0 — 2026-09-18 — batched int4 decode plans split-K from the row count; two pre-registered kernel lanes reported (K14 refuted, K15 comparator)
+
+**Batched decode through the int4-b32 expert GEMV gets a plan chosen for the
+batch it is in.** `int4_b32._plan` sized split-K from `N` alone, so at large
+row counts every expert projection ran a configuration chosen for a batch it
+was not in and paid the partials reduce to do it; the plan now takes the
+activation-row count and the SM count, as the NF4 sibling planner always has.
+Affects batched decode (`R >= 16` activation rows, i.e. `B * top_k` through
+experts4bit-qlora's collapsed decode forward) on NVIDIA parts with **64 SMs or
+fewer** under Linux; B=1 decode, which calls this GEMV at `R = top_k` (4 or 8
+for every shipped MoE), returns exactly the previous plan on every card, and
+so does every part with more than 64 SMs (the sm_120 serving class included).
+Prefill, training, the NF4 grouped GEMM and the MXFP4 GEMV are unchanged.
+Upgrade if you serve batched int4 decode on an A2000/A5000-class card; no
+action otherwise. A minor release because split-K changes the grouping of the
+fp32 partial sums where it engages: within one box the plan is a pure function
+of `(N, K, R)`, but anything asserting bitwise equality *across* boxes must pin
+`sk` rather than plan it. No API removed; `_plan(N, K)` still means decode. The
+consumer floor does not move — experts4bit-qlora's `[fast]` extra stays at
+`grouped-nf4-gemm>=0.30.0`; its CI pin may move to this release's commit.
+
+### The int4-b32 split-K planner takes the row count (#357, #358)
+
+- `_plan(N, K, R=1, sm_count=128)`: for `R >= SPLITK_R_FLOOR` (16) on parts
+  with `sm_count <= SPLITK_R_TERM_MAX_SMS` (64), split-K is sized so about
+  `SPLITK_TARGET_BLOCKS_PER_SM` (8) blocks per SM are resident and collapses to
+  `sk = 1` — no reduce launch at all — where the grid alone covers that. `sk`
+  is non-increasing in `R` and never above the N-only value, so a `part`
+  buffer preallocated from a plan at another `R` still fits.
+- **Measured** (`gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10`;
+  `bench/int4/RESULTS-sk-r-sweep.md`, harness `bench/int4/sk_sweep.py`,
+  receipts `bench/int4/rows/sk_*.json`): RTX A2000 (sm_86, 26 SMs), CUDA-graph
+  replay, full cost including `reduce_partials`, 48 cells over the qwen3_moe /
+  granitemoe / olmoe `gate_up` + `down` shapes at `R = 1..128`. The N-only rule
+  costs 1.136× the per-cell optimum, the R-aware rule 1.011×, and it is never
+  slower than the N-only rule on any cell; 1.102× at `R = 16` rising to 1.145×
+  at `R = 128` summed over the six shapes, up to 1.305× on one shape
+  (qwen3_moe `down` at `R = 128`, where the reduce is not launched).
+- **The floor is the safety argument, not a tuning.** B=1 decode does not
+  reach this GEMV at one row — `hot_residency`'s singleton branch calls it once
+  per projection at `R = top_k` — so an R term without a floor would have moved
+  the *licensed* serve configuration (olmoe `gate_up` 16 → 8, qwen3_5_moe 16 → 8
+  and 8 → 4) as a side effect of a batch optimisation. `SPLITK_R_FLOOR = 16`
+  clears every shipped `top_k`; `kernel/test_int4_b32.py` pins `R < 16` to a
+  verbatim copy of the old rule across every row count below the floor and
+  every SM count, re-derives the worst-cell bound (`SK_R_BOUND = 1.07`;
+  measured 1.064×) from the receipts, fails if a model with `top_k >= 16` is
+  added, and checks the monotonicity above.
+- **Gated to the SM class it was measured on (#358).** P39 (box 1, RTX 5090,
+  128 SMs; experts4bit-qlora#533) ran the R-aware plan against the N-only one
+  at B=16 on an artifact-pinned pack and read NEW/OLD = 1.0064 / 1.0063
+  (self-pair spread 0.0005): no step-level gain and a small real regression —
+  on 128 SMs the rule collapses `sk` to 1 at `R = 128` where the old `sk = 16`
+  was worth more than the reduce it saved. Parts above 64 SMs keep the N-only
+  plan at every `R` until a sweep on that class sets its own target. The
+  mechanism stands; the constant does not transfer across SM classes.
+- **MXFP4 is measured and deliberately unchanged.** `gemv_mxfp4_b32` shares
+  the planner and the grid, but on its e2m1 loop the int4 rule regressed two of
+  32 cells by 15–17 % (`bench/int4/mx_sweep.py`, `rows/mx_*.json`): split-K
+  keeps earning to `R >= 32..128` there. It keeps calling `_plan(N, K)` until
+  an MXFP4-specific rule has its own receipt.
+
+### K14, pre-registered and REFUTED: at M=16 no shipped int4 arm beats dequant-then-GEMM on the attention projections (#359, #360, #361)
+
+- `gnf4.kernel.k14-smallm-int4-gemm-refuted.5090.2026-09-11`
+  (`kernel/PREREG-k14-smallm-int4-gemm.md`, `kernel/RESULTS-k14-smallm-int4-gemm.md`,
+  receipts `kernel/receipts-k14/`). RTX 5090, Qwen3-30B-A3B's four attention
+  projections at M=16: the grouped int4 GEMM at the best of twelve swept block
+  configurations is 1.12–2.00× *slower* than the bf16 dequant-then-GEMM path,
+  the int4 GEMV 1.46–2.40× slower, so the registered mix saving over 48 layers
+  is 0.000 ms/step against a 0.5 ms bar. `q_proj`'s bf16 path reads 16.78 MB in
+  10.35 µs — 106 % of the measured 1528 GB/s streaming ceiling — and `k_proj` /
+  `v_proj` are launch-bound at 1.74× the 3.57 µs floor.
+- Amendment 1 swept the `gemm` arm's block configuration: at the shipped
+  `bn64/w8` it ran 2.4–6.3× bf16; at its best (`bn16/w2`, `bn32/w4`) 1.12–2.00×.
+  A single projection is one M-tile, so the expert path's parallelism (the
+  expert count) is not there. Without the sweep the lane would have reported a
+  bad default rather than the kernel.
+- Two bounds the lane did not go looking for, arithmetic under a stated
+  assumption rather than measurements: `o_proj` runs at 60 % of ceiling against
+  `q_proj`'s 106 % on the same bytes (≈ 0.38 ms/step if matched, on the bf16
+  side); unfused q/k/v spend three launches where one would do
+  (≈ 0.44 ms/step at the ceiling). A roofline int4 projection kernel would be
+  worth ≈ 1.29 ms/step; nothing shipped realises it — the kernel built for that
+  arithmetic reaches 22 % of the bandwidth it would need. Cost $0.0653 against
+  a $1.50 ceiling.
+
+### K15, pre-registered: Marlin wins 1.6–2.0× at M=16 and the advantage is the kernel, not the format (#362, #363, #364)
+
+- `gnf4.kernel.k15-marlin-comparator.5090.2026-09-11`
+  (`kernel/PREREG-k15-marlin-comparator.md`, `kernel/RESULTS-k15-marlin-comparator.md`,
+  receipts `kernel/receipts-k15/`). Same RTX 5090, M=16: vLLM 0.28.0's Marlin
+  GPTQ kernel at g128 runs `q_proj` in 6.37 µs and `o_proj` in 8.28 µs where
+  this package's bf16 dequant path takes 10.3 / 16.5 µs (1.62× / 1.99×) and its
+  best int4 arm 12.5 / 18.9 µs. At matched bytes (g32) Marlin still wins
+  (8.18 / 8.24 µs) — the kernel, not the weight format. Relative error
+  0.0000–0.0005 against Marlin's own dequantised reference.
+- **INCONCLUSIVE by the registered rule, informative anyway:** substituting
+  Marlin where measured saves 0.583–0.812 ms/step, inside the 0.5–1.0 ms band
+  the pre-registration fixed as inconclusive. experts4bit-qlora#564's 1.67 ms
+  estimate is refuted as too optimistic — Marlin runs at 34–50 % of the
+  streaming ceiling, not at it. Adoption is not established: engines as
+  shipped across different torch/CUDA builds in different processes; using
+  Marlin would mean a GPTQ repack, a dependency and a quality gate, none
+  touched here.
+- `k_proj` / `v_proj` are unmeasured: `MarlinWorkspace` was sized
+  `N//64 × 16 = 128` for N=512, below the 170-SM count the kernel requires
+  (fixed in #363, which also measures the `use_atomic_add` path); the lane ran
+  out of budget before a box used the fix. Cost $1.1253 against a $1.00 ceiling
+  — over by $0.13, and the lane is closed rather than extended.
+
+### Census and repository hygiene (#356, #355, #345–#354)
+
+- `census/shape_census.json` carries its fetch date and coverage boundary as
+  data (`FETCHED`, `COVERAGE`), and `kernel/test_census_drift.py` fails if
+  regenerating is not a no-op or the model set drifts (#356; the in-repo half
+  of #353 — the cross-repository coverage check stays in the consumer's CI,
+  which already clones this repository with `--sibling`). An unlisted `(N, K)`
+  still takes `_decode_plan`'s universal constant on purpose: it is measured at
+  median regret 1.000 on dense sweeps, so refusing it would be a regression.
+- `private-marker-guard` self-tests every pattern it carries (#355).
+  Repository-only: CI runs on `ready-to-merge` (#352); `AGENTS.md` §10 records
+  how other agents work here, succession, and that nothing is filed upstream
+  without the maintainer's say-so (#345–#354). None of this is in the wheel.
+
 ## 0.30.2 — 2026-09-05 — documentation and register hygiene (no API change; consumer floor unchanged)
 
 **The claims register and the prose that quotes it are now held to their own
