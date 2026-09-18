@@ -1,6 +1,6 @@
 # Status — what this kernel does, what changed, what is open
 
-**As of 2026-09-05, `grouped-nf4-gemm` version 0.30.2.** One page. The README argues; this
+**As of 2026-09-18, `grouped-nf4-gemm` version 0.31.0.** One page. The README argues; this
 page states. Every line here has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
 here that does not.
@@ -123,6 +123,28 @@ was wrong.
 - **Split-K on the decode GEMV is refuted** (flat at `gate_up`, ~14%
   worse at `down`). The kernel ships dormant *as the evidence*
   (the retired claim `gnf4.retired.splitk-gemv`).
+- **The int4-b32 split-K planner takes the row count (0.31.0).**
+  `_plan(N, K)` sized split-K from `N` alone, so at large `R` every expert
+  projection ran a configuration chosen for a batch it was not in and paid
+  the partials reduce to do it. With `R` and the SM count threaded — the
+  NF4 sibling planner always had them — the 48-cell A2000 sweep goes from
+  1.136× to 1.011× of the per-cell optimum and is never slower than the
+  old rule on any cell (1.102× at `R = 16`, 1.145× at `R = 128`). `R < 16`
+  returns exactly the old plan, so B=1 decode — which calls at
+  `R = top_k` — and the licensed serve configuration are untouched by
+  construction. Gated to parts with ≤ 64 SMs after a 5090 step-level read
+  of 1.0064 (the constant does not transfer across SM classes); MXFP4
+  keeps the N-only plan on its own sweep
+  (`gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10`, measured).
+- **K14 is refuted: at M=16 no shipped int4 arm beats dequant-then-GEMM
+  on the attention projections.** On the 5090 the grouped int4 GEMM at
+  its best swept configuration is 1.12–2.00× slower than the bf16 path
+  and the int4 GEMV 1.46–2.40× slower; the registered mix saving is
+  0.000 ms/step against a 0.5 ms bar. `q_proj`'s bf16 path is at 106 %
+  of the streaming ceiling and `k`/`v` are launch-bound, so a roofline
+  int4 projection kernel would be worth ≈ 1.29 ms/step and nothing shipped
+  realises it (`gnf4.kernel.k14-smallm-int4-gemm-refuted.5090.2026-09-11`,
+  measured).
 - **A fixed fraction-of-waterfall is retired as a law** (two 0.77
   readings were a two-host coincidence).
 - **The cold-engine "free floor" premise is refuted** on its target box:
@@ -185,6 +207,14 @@ was wrong.
 - **`docs/cold-engine/STAGE3-SYNTHESIS.md` carries one correction
   outstanding**: gate 1's published read counts are uncorrected, and no
   read count in that document should be quoted until it is re-run.
+- **A Marlin-class GEMM on the int4-b32 format is the measured kernel
+  lane.** K15: vLLM 0.28.0's Marlin runs Qwen3-30B's `q_proj` / `o_proj`
+  1.62× / 1.99× faster than this package's bf16 dequant path at M=16 on
+  the same 5090, and at matched bytes (g32) still wins — the kernel, not
+  the format. Worth 0.58–0.81 ms/step, inside the band the
+  pre-registration fixed as inconclusive; `k`/`v` unmeasured (workspace
+  sizing, fixed after the budget closed); nothing adopted
+  (`gnf4.kernel.k15-marlin-comparator.5090.2026-09-11`, measured).
 - **Every non-CUDA row is a `port target`.** ROCm/XPU numbers do not
   exist; `PROJECTIONS-multiarch.md` is arithmetic, stamped before the
   silicon, and explicitly invites refutation (`gnf4.projection.multiarch`,

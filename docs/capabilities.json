@@ -264,11 +264,13 @@
       ],
       "claim_ids": [
         "gnf4.serve.int4-b32-gemv",
-        "gnf4.serve.gptq-pack-int4-b32"
+        "gnf4.serve.gptq-pack-int4-b32",
+        "gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10"
       ],
       "limitations": [
         "The int4-b32 GEMV and the calibrated packer are measured-private (claims gnf4.serve.int4-b32-gemv, gnf4.serve.gptq-pack-int4-b32): the receipts live in the consumer's private audit tree",
         "Split-K on the decode GEMV was refuted once and ships dormant (claim gnf4.retired.splitk-gemv records the refutation); the shipped plan is the measured one",
+        "Split-K on the int4-b32 GEMV is planned from (N, K, R, SM count) for R >= 16 activation rows on parts with <= 64 SMs (claim gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10); B=1 decode (R = top_k) and parts above 64 SMs keep the N-only plan, and bitwise equality across boxes must pin sk rather than plan it",
         "Whether int4 experts pass a quality gate is the consumer's per-family question (experts4bit-qlora docs/STATUS.md): small-active-parameter models fail it with round-to-nearest packing",
         "The single-stream decode anchor (claim gnf4.serve.decode-anchor-5090) is a consumer-measured anchor of the serving class on a knob-off basis, not a measurement of this lane, and is not cited here as its evidence"
       ],
