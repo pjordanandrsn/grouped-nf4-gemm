@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- K16 P5 read in the consumer (2026-09-19, experts4bit-qlora `k16-p5`): the small-M route saves 1.06 ms/step on the B=16 Qwen3-30B-A3B step on the 5090 (bf16 GEMM family −2.35, `_gemm_int4_b32_smallm` +1.30); **P5 holds** and experts4bit-qlora 0.36.2 makes the route its `auto` default. The claim row, `kernel/RESULTS-k16-smallm-int4-gemm.md` and `docs/STATUS.md` carry the read; no kernel code changes. P4 (single-scale control) remains untested.
+
 ## 0.32.0 — 2026-09-19 — K16: a Marlin-class small-M int4-b32 GEMM for the attention projections ships as `int4_smallm`; read on the RTX 5090 (P1–P3 hold, P4 untested, P5 pending); the consumer routes to it opt-in
 
 ### K16 — a small-M int4-b32 GEMM for the attention projections (experimental; the consumer routes to it OPT-IN only)

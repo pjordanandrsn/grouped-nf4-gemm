@@ -223,8 +223,10 @@ was wrong.
   1.00× / 0.77× of K15's Marlin rows; `k`/`v` sit within 1 µs of the
   4.61 µs launch floor. P1–P3 of the pre-registration hold; P4 (a
   single-scale control) was NOT tested — the bench carried no control arm;
-  P5 (≥ 0.4 ms/step at B=16) waits on the consumer's opt-in route
-  (experts4bit-qlora#578). Nothing in this package routes to it on its own
+  P5 (≥ 0.4 ms/step at B=16) HOLDS in the consumer: −1.06 ms/step on the
+  timed B=16 step (experts4bit-qlora `bench/k16/RESULTS-k16-p5.md`), and
+  the route is the consumer's default from 0.36.2. Nothing in this package
+  routes to it on its own
   (`gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19`, measured).
 - **Every non-CUDA row is a `port target`.** ROCm/XPU numbers do not
   exist; `PROJECTIONS-multiarch.md` is arithmetic, stamped before the
