@@ -552,8 +552,7 @@
     {
      "path": "CHANGELOG.md",
      "section": "0.32.0"
-    },
-    "kernel/RESULTS-k16-smallm-int4-gemm.md#p5"
+    }
    ],
    "quoted_in": [
     "docs/STATUS.md",
