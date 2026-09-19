@@ -28,6 +28,29 @@ import torch
 # routing the ratio sits near 1 and never approaches it.
 _PAD_WASTE_LIMIT = 4.0
 
+# P46 (experts4bit-qlora bench/p46/P46-PREREG.md): the path the delta takes is a measured, recorded choice, not a
+# silent branch. `NF4_QLORA_LORA_PATH` = auto (the shipped rule: padded bmm below the waste limit, loop above) | padded
+# (always the padded bmm) | loop (the per-expert reference) | grouped_mm (torch._grouped_mm over the jagged groups,
+# no padding; CUDA, bf16; refuses where torch has no kernel for the part). `NF4_QLORA_PAD_WASTE_LIMIT` overrides the
+# 4x guard. `LORA_PATH_STATS` counts calls per path so a training census can say which path served a step -- the
+# P45 census found ~273k per-expert matmuls per optimizer step on Qwen3-30B-A3B's field recipe, i.e. `auto` taking
+# the loop, and this is how that is proven rather than inferred.
+LORA_PATH_STATS = {"loop": 0, "padded": 0, "grouped_mm": 0}
+
+
+def _lora_path() -> str:
+    import os
+    v = os.environ.get("NF4_QLORA_LORA_PATH", "auto").strip().lower()
+    if v not in ("auto", "padded", "loop", "grouped_mm"):
+        raise ValueError(f"NF4_QLORA_LORA_PATH={v!r}: expected auto | padded | loop | grouped_mm")
+    return v
+
+
+def _pad_waste_limit() -> float:
+    import os
+    v = os.environ.get("NF4_QLORA_PAD_WASTE_LIMIT")
+    return float(v) if v else _PAD_WASTE_LIMIT
+
 
 class FusedGroupedNf4(torch.autograd.Function):
     """Grouped NF4 forward through the fused kernel; recompute-decode backward.
@@ -220,9 +243,15 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
         return None                      # unchanged: no rows, no delta tensor
     rows = [int(sizes[g]) for g in nz]
     total, widest = sum(rows), max(rows)
-    if len(rows) * widest > _PAD_WASTE_LIMIT * total:
+    path = _lora_path()
+    if path == "loop" or (path == "auto" and len(rows) * widest > _pad_waste_limit() * total):
+        LORA_PATH_STATS["loop"] += 1
         return _lora_delta_grouped_loop(a_cat, lora_A, lora_B, sizes,
                                         expert_ids, scaling)
+    if path == "grouped_mm":
+        LORA_PATH_STATS["grouped_mm"] += 1
+        return _lora_delta_grouped_mm(a_cat, lora_A, lora_B, rows, nz, expert_ids, scaling)
+    LORA_PATH_STATS["padded"] += 1
 
     dev = a_cat.device
     from nf4_grouped import to_device_i32
@@ -258,6 +287,35 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
     # above, so `grp`/`slot` address exactly the real rows and nothing else.
     out = torch.zeros(a_cat.shape[0], B.shape[1], dtype=d.dtype, device=dev)
     out[:total] = d[grp, slot]
+    return out
+
+
+def _lora_delta_grouped_mm(a_cat, lora_A, lora_B, rows, nz, expert_ids, scaling=1.0):
+    """The jagged path: two ``torch._grouped_mm`` calls over the expert-sorted rows with cumulative offsets -- no
+    padding, no per-expert Python, no ``[G, widest, K]`` scratch. bf16 operands (the op's contract); the result is
+    cast back to the adapter dtype so the caller's arithmetic is unchanged. Refuses, with the reason, where torch has
+    no grouped-GEMM kernel for this device (the op raises), rather than falling back silently -- the fallback is a
+    choice the caller makes by setting NF4_QLORA_LORA_PATH."""
+    dev = a_cat.device
+    if not a_cat.is_cuda:
+        raise RuntimeError("NF4_QLORA_LORA_PATH=grouped_mm needs CUDA tensors (torch._grouped_mm has no CPU kernel for these shapes)")
+    offs = torch.tensor(rows, device=dev, dtype=torch.int32).cumsum(0, dtype=torch.int32)
+    total = int(sum(rows))
+    if torch.is_tensor(expert_ids):
+        eid = expert_ids[torch.tensor(nz, device=expert_ids.device, dtype=torch.int64)].to(torch.int64)
+    else:
+        eid = torch.tensor([int(expert_ids[g]) for g in nz], device=dev, dtype=torch.int64)
+    A = lora_A[eid].to(torch.bfloat16)                     # [G, r, K]
+    B = lora_B[eid].to(torch.bfloat16)                     # [G, N, r]
+    x = a_cat[:total].to(torch.bfloat16).contiguous()
+    try:
+        h = torch._grouped_mm(x, A.transpose(1, 2).contiguous(), offs=offs)          # [total, r]
+        d = torch._grouped_mm(h.to(torch.bfloat16).contiguous(), B.transpose(1, 2).contiguous(), offs=offs)   # [total, N]
+    except (RuntimeError, NotImplementedError) as e:
+        raise RuntimeError(f"NF4_QLORA_LORA_PATH=grouped_mm: torch._grouped_mm refused on this device/shape: {str(e)[:200]}") from e
+    d = (scaling * d.to(lora_A.dtype))
+    out = torch.zeros(a_cat.shape[0], B.shape[1], dtype=d.dtype, device=dev)
+    out[:total] = d
     return out
 
 

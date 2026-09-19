@@ -384,3 +384,58 @@ def test_dgrad_kernel_reaches_lora_params_too():
                              dgrad_kernel=True)
     out.sum().backward()
     assert torch.count_nonzero(A.grad) > 0 and torch.count_nonzero(B.grad) > 0
+
+
+
+# --- P46: the delta's path is a recorded choice (NF4_QLORA_LORA_PATH / NF4_QLORA_PAD_WASTE_LIMIT / LORA_PATH_STATS) ---
+def _p46_case(seed=0, E=6, r=4, K=16, N=12):
+    g = torch.Generator().manual_seed(seed)
+    sizes = [7, 0, 1, 30, 2, 5]                       # skewed: 5 groups * widest 30 = 150 > 4 * 45 = 180? no -> ratio 3.3
+    eids = list(range(E))
+    total = sum(sizes)
+    a = torch.randn(total, K, generator=g)
+    A = torch.randn(E, r, K, generator=g) * 0.1
+    B = torch.randn(E, N, r, generator=g) * 0.1
+    return a, A, B, sizes, eids
+
+
+def test_p46_path_env_selects_and_counts(monkeypatch):
+    import nf4_qlora as q
+    a, A, B, sizes, eids = _p46_case()
+    ref = q._lora_delta_grouped_loop(a, A, B, sizes, eids, 2.0)
+    for path, key in (("loop", "loop"), ("padded", "padded"), ("auto", "padded")):
+        monkeypatch.setenv("NF4_QLORA_LORA_PATH", path)
+        before = dict(q.LORA_PATH_STATS)
+        got = q.lora_delta_grouped(a, A, B, sizes, eids, 2.0)
+        assert torch.allclose(got, ref, atol=1e-5, rtol=1e-5), path
+        assert q.LORA_PATH_STATS[key] == before[key] + 1, (path, key)
+    # the waste limit is the auto rule's knob: below the skew it loops, above it pads
+    monkeypatch.setenv("NF4_QLORA_LORA_PATH", "auto")
+    monkeypatch.setenv("NF4_QLORA_PAD_WASTE_LIMIT", "1.0")     # 150 > 45 -> loop
+    before = dict(q.LORA_PATH_STATS)
+    q.lora_delta_grouped(a, A, B, sizes, eids, 2.0)
+    assert q.LORA_PATH_STATS["loop"] == before["loop"] + 1
+    monkeypatch.setenv("NF4_QLORA_PAD_WASTE_LIMIT", "100")
+    before = dict(q.LORA_PATH_STATS)
+    q.lora_delta_grouped(a, A, B, sizes, eids, 2.0)
+    assert q.LORA_PATH_STATS["padded"] == before["padded"] + 1
+    monkeypatch.setenv("NF4_QLORA_LORA_PATH", "nonsense")
+    with pytest.raises(ValueError, match="NF4_QLORA_LORA_PATH"):
+        q.lora_delta_grouped(a, A, B, sizes, eids, 2.0)
+
+
+def test_p46_grouped_mm_refuses_on_cpu_and_matches_on_cuda(monkeypatch):
+    import nf4_qlora as q
+    a, A, B, sizes, eids = _p46_case()
+    monkeypatch.setenv("NF4_QLORA_LORA_PATH", "grouped_mm")
+    with pytest.raises(RuntimeError, match="needs CUDA"):
+        q.lora_delta_grouped(a, A, B, sizes, eids, 2.0)
+    if not CUDA:
+        pytest.skip("grouped_mm parity needs a CUDA device")
+    a, A, B = a.cuda().bfloat16(), A.cuda().bfloat16(), B.cuda().bfloat16()
+    ref = q._lora_delta_grouped_loop(a, A, B, sizes, eids, 2.0)
+    try:
+        got = q.lora_delta_grouped(a, A, B, sizes, eids, 2.0)
+    except RuntimeError as e:
+        pytest.skip(f"torch._grouped_mm not available on this device: {e}")
+    assert got.shape == ref.shape and torch.allclose(got.float(), ref.float(), atol=2e-2, rtol=2e-2)
