@@ -45,3 +45,7 @@ Development on CPU (interpreter) and the A2000 costs nothing. One 5090 lane for 
 ## Amendments
 
 (none yet)
+
+## Pilot read, not a prediction change (2026-09-19 ~01:40Z, before the registered lane)
+
+On the QNAP's RTX A2000 (sm_86, 26 SMs; `kernel/receipts-k16/a2000-pilot.{json,log}`), under K14's instrument at M=16: K16's best config beats the bf16 dequant path **2.21× on `q_proj`** (32.0 vs 70.9 µs), **2.41× on `o_proj`** (33.1 vs 79.6 µs) and ~1.4× on `k_proj`/`v_proj`, while the shipped K14 kernel is slower than bf16 on every shape there (85 / 91 µs). Every swept config is within one bf16 ulp of the reference at the output's magnitude; both correctness suites pass (interpreter fp32-dot, compiled bf16). This is the class the sk sweep taught does NOT transfer to sm_120 (#358), so it registers nothing: P1–P5 are decided on the 5090 lane only. What it does establish is that the design is sound enough to rent for.
