@@ -21,11 +21,15 @@ Relative error is against `x_bf16 @ dequant_int4_ref(packed, scales).T` in bf16 
 - **P2 (beats this package's bf16 dequant path on both) — HOLDS.** 1.63× on `q_proj`, 2.91× on `o_proj` — the thing K14 found no int4 arm could do (K14's grouped GEMM is slower than bf16 on every shape here too: 12.56 / 20.73 µs).
 - **P3 (`k_proj` / `v_proj` do not lose to bf16 by more than 1.2×) — HOLDS.** K16 is faster there as well (4.37 vs 6.23; 4.49 vs 6.29 µs), within 1.0 µs of the 4.61 µs launch floor: launch-bound, as K14 said.
 - **P4 (per-32-block in-tile scaling costs < 5 % against a single-scale control) — NOT TESTED.** `k16_bench.py` carries no single-scale control arm, so this run says nothing about P4 either way. It is an open item, not a pass: a control arm (one scale per row, same tile shape) added to the bench and one more ≤ $0.10 draw would read it.
-- **P5 (model level: the attention GEMM row falls ≥ 0.4 ms/step at B=16 once routed) — PENDING.** Needs the consumer route (experts4bit-qlora `E4B_ATTN_INT4_SMALLM=1`, opt-in) and a P42-style census on a 5090; not a kernel-level number and not read here.
+- **P5 (model level: the attention GEMM row falls ≥ 0.4 ms/step at B=16 once routed) — HOLDS**, read in the consumer on 2026-09-19 (see [P5](#p5) below).
 
 ## Decision rule, applied
 
 P1 ∧ P2 → **open the consumer PR and register the kernel-level claim as `measured`.** Registered as `gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19`. The consumer route is experts4bit-qlora#578 (opt-in behind `E4B_ATTN_INT4_SMALLM=1`; the default stays the cached-bf16 path until P5 reads). No default here changes: nothing in this package routes to `int4_smallm` on its own.
+
+## P5 <a id="p5"></a>
+
+experts4bit-qlora lane `k16-p5` (`bench/k16/RESULTS-k16-p5.md`, receipt `2026-09-19/k16-p5/`; the route is experts4bit-qlora#578, read with the kernel at this lane's cut `f189e67`): P42's census protocol on one RTX 5090 (Qwen3-30B-A3B, B=16, 70 timed steps, 8 profiled replays after the window), three arms on the same bytes — `nf4_b16` 32.24 ms/step, `int4_b16` (rows > 1 on the consumer's cached-bf16 matmul) **12.25**, `int4_b16_smallm` (the route on) **11.19 ms/step**. The bf16 GEMM family that carried the four attention projections falls by **2.35 ms/step**; `_gemm_int4_b32_smallm` costs **1.30 ms/step** in its place (192 calls/step = 4 × 48 layers) and appears in no other arm's census; net −1.05 ms/step against the microbench's predicted −0.96 (19.9 µs × 48). Every other kernel row is within noise between the two int4 arms. **P5 holds** (≥ 0.4 registered); the consumer makes the route its default (`auto`) from 0.36.2 when this package ≥ 0.32.0 is installed. Still open on this side: P4 (the single-scale control).
 
 ## What the sweep says about the shape of the kernel (observations, not registered)
 
