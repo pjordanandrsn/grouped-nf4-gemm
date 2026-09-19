@@ -1,0 +1,11 @@
+# K16 pilot read -- NVIDIA RTX A2000 12GB (sm_86, 26 SMs), the QNAP dev container (gnf4-k16-dev:cu128 = pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime + gcc),
+# torch 2.8.0+cu128, triton 3.4.0, branch lane/k16-smallm-int4-gemm @ 019e84f, 2026-09-19 ~01:40Z.
+# K14's instrument (graph-replay medians, launch floor), M=16, bf16 = x @ dequant(w).to(bf16).T (the dequant-then-GEMM path),
+# k14 gemm = the shipped M-tile kernel at K14's best swept config (bn16/w2), K16 = best of the registered config space.
+# NOT the registered numbers: PREREG-k16 registers the RTX 5090 class; this read is evidence that the design is sound, nothing more.
+launch floor 3.26 us on NVIDIA RTX A2000 12GB
+q_proj  N4096 K2048: bf16 70.94 us | k14 gemm 85.31 us | K16 best 32.04 us (k16_bn32_kc256_sk1_w4_s2) | ratio bf16/K16 2.214
+k_proj  N512 K2048: bf16 13.16 us | k14 gemm 24.53 us | K16 best 9.31 us (k16_bn32_kc256_sk4_w4_s3) | ratio bf16/K16 1.414
+v_proj  N512 K2048: bf16 13.16 us | k14 gemm 24.52 us | K16 best 9.42 us (k16_bn32_kc256_sk4_w4_s3) | ratio bf16/K16 1.397
+o_proj  N2048 K4096: bf16 79.63 us | k14 gemm 90.96 us | K16 best 33.10 us (k16_bn64_kc256_sk4_w4_s2) | ratio bf16/K16 2.406
+# correctness on the same box: interpreter suite (fp32 dot) 9 passed; compiled bf16 suite 9 passed; every swept config within one bf16 ulp of the reference at the output's magnitude.

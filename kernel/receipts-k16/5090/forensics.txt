@@ -1,0 +1,2 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.178.04, GPU-b53491c0-b02d-bbfb-8a9a-117ac9ae823e
+power.limit,clocks.max.sm 575.00 W, 3090 MHz

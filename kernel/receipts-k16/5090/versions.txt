@@ -1,0 +1,4 @@
+gnf4 0.31.0 @f189e67cb161e436f9af018bcf8ace4295e2dcbb
+int4_smallm from /opt/conda/lib/python3.11/site-packages/int4_smallm.py
+torch 2.8.0+cu128
+triton 3.4.0

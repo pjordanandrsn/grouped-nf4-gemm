@@ -50,6 +50,8 @@ _DELIBERATELY_UNPACKAGED: dict[str, str] = {
     # committed for reproducibility, not for import by downstreams.
     "k7_bench": "K7 census bench harness, not library API",
     "k14_bench": "K14 small-M int4 GEMM bench harness; shapes are hardcoded to one\n                  model's attention projections, not library API",
+
+    "k16_bench": "K16 small-M int4 GEMM bench harness (PREREG-k16), campaign instrument, not library API",
     "k15_marlin_bench": "K15 Marlin comparator bench; runs in a vLLM venv, not ours,\n                        and imports vllm -- never a dependency of this package",
     # The certified anchor: a campaign constant that harnesses read so
     # an uncertified literal cannot gate rentals again. Downstream

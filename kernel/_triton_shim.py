@@ -75,6 +75,11 @@ _CPU_PATH = {
         "For a CPU-checkable decode attention over the same fp8 KV bytes, "
         "use fp8_paged_attn.paged_attn_ref(...) — the pure-torch oracle the "
         "shape suite pins every kernel variant against.",
+    "int4_smallm":
+        "For a CPU-checkable result over the same int4-b32 bytes, use "
+        "x.bfloat16() @ int4_pack_ref.dequant_int4_ref(packed, scales, N, K).T "
+        "— the pure-torch reference test_int4_smallm_interp pins the small-M "
+        "GEMM against (the interpreter job runs that file on CPU).",
 }
 
 #: A consumer added later without an entry gets a message that is vague but
