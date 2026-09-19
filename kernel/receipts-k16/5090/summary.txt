@@ -1,0 +1,12 @@
+gnf4 0.31.0 @f189e67cb161e436f9af018bcf8ace4295e2dcbb
+int4_smallm from /opt/conda/lib/python3.11/site-packages/int4_smallm.py
+torch 2.8.0+cu128
+triton 3.4.0
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+9 passed, 228 warnings in 4.35s
+launch floor 4.61 us on NVIDIA GeForce RTX 5090
+q_proj  N4096 K2048: bf16 10.37 us | k14 gemm 12.56 us | K16 best 6.35 us (k16_bn32_kc256_sk1_w4_s3) | ratio bf16/K16 1.634
+k_proj  N512 K2048: bf16 6.23 us | k14 gemm 12.51 us | K16 best 4.37 us (k16_bn32_kc128_sk4_w4_s3) | ratio bf16/K16 1.425
+v_proj  N512 K2048: bf16 6.29 us | k14 gemm 12.50 us | K16 best 4.49 us (k16_bn32_kc256_sk4_w4_s3) | ratio bf16/K16 1.402
+o_proj  N2048 K4096: bf16 18.61 us | k14 gemm 20.73 us | K16 best 6.39 us (k16_bn32_kc256_sk8_w4_s2) | ratio bf16/K16 2.912

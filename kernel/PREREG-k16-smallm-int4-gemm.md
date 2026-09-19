@@ -44,7 +44,11 @@ Development on CPU (interpreter) and the A2000 costs nothing. One 5090 lane for 
 
 ## Amendments
 
-(none yet)
+(none)
+
+## Read (2026-09-19, after the 5090 lane)
+
+Rows in `receipts-k16/5090/`; the read is `RESULTS-k16-smallm-int4-gemm.md`: **P1 holds** (q 6.35 / o 6.39 µs vs ≤ 8.9 / 11.6), **P2 holds** (1.63× / 2.91× over the bf16 dequant path), **P3 holds** (k/v faster than bf16, within 1 µs of the 4.61 µs launch floor), **P4 NOT TESTED** (the bench carried no single-scale control — an open item, not a pass), **P5 pending** (the consumer route, experts4bit-qlora#578). Decision rule → consumer PR + kernel-level claim `measured` (`gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19`).
 
 ## Pilot read, not a prediction change (2026-09-19 ~01:40Z, before the registered lane)
 

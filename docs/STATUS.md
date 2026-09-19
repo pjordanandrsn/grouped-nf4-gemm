@@ -215,6 +215,17 @@ was wrong.
   pre-registration fixed as inconclusive; `k`/`v` unmeasured (workspace
   sizing, fixed after the budget closed); nothing adopted
   (`gnf4.kernel.k15-marlin-comparator.5090.2026-09-11`, measured).
+- **K16 answers K15: a Marlin-class GEMM on the int4-b32 format exists and
+  is measured.** `int4_smallm.gemm_int4_b32_smallm` (in-register dequant,
+  per-block scaling in the tile, bf16 MMA over fat K chunks, fused split-K)
+  at M=16 on the same 5090 runs `q_proj` in 6.35 µs and `o_proj` in 6.39 µs
+  — 1.63× / 2.91× faster than this package's bf16 dequant path and at
+  1.00× / 0.77× of K15's Marlin rows; `k`/`v` sit within 1 µs of the
+  4.61 µs launch floor. P1–P3 of the pre-registration hold; P4 (a
+  single-scale control) was NOT tested — the bench carried no control arm;
+  P5 (≥ 0.4 ms/step at B=16) waits on the consumer's opt-in route
+  (experts4bit-qlora#578). Nothing in this package routes to it on its own
+  (`gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19`, measured).
 - **Every non-CUDA row is a `port target`.** ROCm/XPU numbers do not
   exist; `PROJECTIONS-multiarch.md` is arithmetic, stamped before the
   silicon, and explicitly invites refutation (`gnf4.projection.multiarch`,

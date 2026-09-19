@@ -17,8 +17,15 @@
   6.37 / 8.28 µs on `q_proj` / `o_proj` at M=16 as the target (P1 ≤ 1.4× of it; P2 beats the bf16 dequant path;
   P5 ≥ 0.4 ms/step at B=16 once routed). Correctness suites: `kernel/test_int4_smallm_interp.py` (interpreter
   fp32-dot on CPU; the same file compiled on a GPU). A2000 pilot receipt `kernel/receipts-k16/a2000-pilot.*`
-  (sm_86: 2.21× / 2.41× over bf16 on q/o_proj; not the registered class). **No registered number yet, nothing
-  routes to it**; the 5090 lane decides.
+  (sm_86: 2.21× / 2.41× over bf16 on q/o_proj; not the registered class).
+- **The 5090 lane read (2026-09-19, `kernel/RESULTS-k16-smallm-int4-gemm.md`, rows `kernel/receipts-k16/5090/`):**
+  `q_proj` 6.35 µs (bf16 dequant path 10.37, K14 grouped GEMM 12.56), `k_proj` 4.37 (6.23), `v_proj` 4.49 (6.29),
+  `o_proj` 6.39 (18.61, K14 20.73); launch floor 4.61 µs; relative error 0.003 against the bf16 reference. **P1 holds**
+  (1.00× / 0.77× of K15's Marlin rows against a ≤ 1.4× bar), **P2 holds** (1.63× / 2.91× over the bf16 path), **P3
+  holds** (k/v faster than bf16, launch-bound); **P4 NOT TESTED** (no single-scale control arm in the bench — an open
+  item, not a pass); **P5 pending** the consumer route. Decision rule → the kernel-level claim is registered as
+  `measured` (`gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19`) and the consumer route is opened opt-in
+  (experts4bit-qlora#578, `E4B_ATTN_INT4_SMALLM=1`). **Nothing in this package routes to it on its own.**
 
 ## 0.31.0 — 2026-09-18 — batched int4 decode plans split-K from the row count; two pre-registered kernel lanes reported (K14 refuted, K15 comparator)
 
