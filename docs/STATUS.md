@@ -1,6 +1,6 @@
 # Status — what this kernel does, what changed, what is open
 
-**As of 2026-09-19, `grouped-nf4-gemm` version 0.32.0.** One page. The README argues; this
+**As of 2026-09-19, `grouped-nf4-gemm` version 0.32.1.** One page. The README argues; this
 page states. Every line here has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
 here that does not.
@@ -102,6 +102,17 @@ MXFP4 decode reproduces Kimi K3's own declared reference exactly
 ---
 
 ## What changed — retired, superseded, corrected
+
+- **0.32.1 — the grouped-LoRA delta's `auto` rule is structural.** Until 0.32.0 `auto` sent any adapter
+  call past a 4× padding-waste ratio to the per-expert Python loop. The consumer's P46
+  (experts4bit-qlora `bench/p46/RESULTS-p46.md`, Qwen3-30B-A3B at its field training recipe, RTX 5090)
+  measured that guard choosing the loop for ≥ 85 % of calls every step — 24.46 s/step where the padded
+  `bmm` path forced on trained the same tokens to the same loss (held-out Δ +0.0007 nats) at the same
+  peak VRAM in 4.22 s/step. The loop is launch-bound; the flops padding wastes are rank-r. `auto` now
+  pads unless the padded block would exceed `NF4_QLORA_PAD_BYTES_LIMIT` (2 GiB); the ratio guard is
+  opt-in (`NF4_QLORA_PAD_WASTE_LIMIT`); `LORA_PAD_WASTE` records the skew for the census. No consumer
+  training position moves from this — the consumer re-runs its head-to-head on this cut and quotes from
+  that receipt.
 
 Kept here because a claim that quietly disappears is worse than one that
 was wrong.

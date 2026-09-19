@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.32.1 — 2026-09-19 — the `auto` LoRA-delta rule is STRUCTURAL (pad unless the padded block would not fit): P46 read the 4× flop-waste guard as the defect behind the consumer's launch-bound training step
 
 - **`nf4_qlora.lora_delta_grouped`: the `auto` rule is now STRUCTURAL — pad unless the padded block would not fit** (P46 read,
   experts4bit-qlora `bench/p46/RESULTS-p46.md`, run `p46-qwen3lora`, RTX 5090, Qwen3-30B-A3B at the field recipe). The shipped 4×
