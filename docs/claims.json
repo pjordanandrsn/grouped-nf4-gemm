@@ -551,12 +551,12 @@
     "kernel/receipts-k16/5090/k16_bench.log",
     {
      "path": "CHANGELOG.md",
-     "section": "Unreleased"
+     "section": "0.32.0"
     }
    ],
    "quoted_in": [
     "docs/STATUS.md",
-    "CHANGELOG.md#Unreleased"
+    "CHANGELOG.md#0.32.0"
    ],
    "notes": "Decision rule applied: P1 and P2 hold, so the consumer route is opened (experts4bit-qlora#578, opt-in E4B_ATTN_INT4_SMALLM=1; the default stays the cached-bf16 path until P5 reads) and this row is `measured`, not a model-level claim. Every best config is BLOCK_N=32 / 4 warps; q_proj takes SK=1 at KC=256, k/v SK=4, o_proj SK=8 -- the split follows K/N. The A2000 pilot read 2.21x / 2.41x on q/o where the 5090 reads 1.63x / 2.91x: an sm_86 ratio does not transfer to sm_120 in either direction. Relative error 0.0029-0.0033 against the bf16 reference (contract <= 2^-7). Run 1 of the lane (k16-5090) was a HARNESS_ERROR (no pytest on the image) with no number; cost of both draws about $0.06 against the $0.65 lane ceiling. Marlin comparator figures are cross-process, cross-build, biased in Marlin's favour per the standing correction (K15)."
   }

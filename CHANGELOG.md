@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.32.0 — 2026-09-19 — K16: a Marlin-class small-M int4-b32 GEMM for the attention projections ships as `int4_smallm`; read on the RTX 5090 (P1–P3 hold, P4 untested, P5 pending); the consumer routes to it opt-in
 
-### K16 — a small-M int4-b32 GEMM for the attention projections (experimental; not routed by the consumer)
+### K16 — a small-M int4-b32 GEMM for the attention projections (experimental; the consumer routes to it OPT-IN only)
 
 - `int4_smallm.gemm_int4_b32_smallm(x [M<=16, K], packed [N, K//2], scales [N, K//32]) -> [M, N] bf16`, one launch:
   in-register int4 dequantisation with the per-32-block scale applied inside the tile, bf16 tensor-core MMA over

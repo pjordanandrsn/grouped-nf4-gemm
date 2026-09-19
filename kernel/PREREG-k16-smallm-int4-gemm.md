@@ -44,7 +44,16 @@ Development on CPU (interpreter) and the A2000 costs nothing. One 5090 lane for 
 
 ## Amendments
 
-(none)
+### Amendment 1 (2026-09-19, after the 5090 read, before the P5 lane) — the P5 lane, named
+
+P5 is read by experts4bit-qlora lane `k16-p5` (`bench/k16/k16p5_run.sh`, `k16p5_reduce.py`; the consumer route is
+experts4bit-qlora#578, opt-in `E4B_ATTN_INT4_SMALLM=1`): P42's census runner on one RTX 5090 with three B=16 arms —
+`nf4_b16` (control), `int4_b16` (P42's arm: RTN int4 experts + uncalibrated int4 attention, rows > 1 on the consumer's
+cached-bf16 matmul) and `int4_b16_smallm` (the SAME bytes with the route on). The reading: the bf16-GEMM kernel family's
+ms/step (P42's parser, self-CUDA over 8 profiled replays) falls by ≥ 0.4 from `int4_b16` to `int4_b16_smallm`, with this
+kernel's own ms/step in the smallm arm and both arms' timed `step_ms_clean` quoted beside it; the smallm arm's census
+must carry `gemm_int4_b32_smallm` and the route-off arm must not (a leak or a no-show refuses the row). The kernel
+installed on the box is this lane's cut (`f189e67`, the bytes the 5090 read measured). Nothing above moves P5's number.
 
 ## Read (2026-09-19, after the 5090 lane)
 
