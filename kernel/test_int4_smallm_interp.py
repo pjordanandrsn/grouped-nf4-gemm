@@ -6,7 +6,9 @@ projection shapes (scaled down in K only where the interpreter would crawl) and 
 (K=64, 96; N not a multiple of BLOCK_N; M < 16); (2) deterministic for a fixed config; (3) within one
 bf16 ulp across SK; (4) the plan legaliser refuses what the format cannot express and never changes
 arithmetic silently; (5) the counter is left zeroed (the launch is re-armed). Set by conftest/CI:
-TRITON_INTERPRET=1.
+TRITON_INTERPRET=1. Under the interpreter the dot runs with fp32 operands (numpy has no bf16 dot); the SAME
+file run compiled with TRITON_INTERPRET=0 on a GPU exercises the bf16 tensor-core arithmetic -- that run owns
+the numerics claim, this one owns the contract.
 """
 import os
 os.environ.setdefault("TRITON_INTERPRET", "1")

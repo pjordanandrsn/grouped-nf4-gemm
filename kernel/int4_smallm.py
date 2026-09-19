@@ -28,7 +28,7 @@ _SUPPORTED_KC = (256, 128, 64, 32)
 def _gemm_int4_b32_smallm(x_ptr, w_ptr, ws_ptr, part_ptr, cnt_ptr, out_ptr,
                           M, N, K: tl.constexpr,
                           BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr,
-                          KC: tl.constexpr, SK: tl.constexpr):
+                          KC: tl.constexpr, SK: tl.constexpr, DOT_BF16: tl.constexpr):
     """Grid ``(cdiv(N, BLOCK_N), SK)``. Program (pid_n, pid_k) accumulates rows [0, M) x its N block
     over its K span in fp32, then either stores (SK == 1) or writes an fp32 partial and lets the LAST
     arriving program of the column block reduce all SK partials in split order and store bf16."""
@@ -49,7 +49,11 @@ def _gemm_int4_b32_smallm(x_ptr, w_ptr, ws_ptr, part_ptr, cnt_ptr, out_ptr,
     for c in range(pid_k * PER_SPLIT, (pid_k + 1) * PER_SPLIT):
         k0 = c * KC
         a = tl.load(x_ptr + offs_m[:, None] * K + k0 + offs_kc[None, :],
-                    mask=m_mask[:, None], other=0.0).to(tl.bfloat16)                 # [BM, KC]
+                    mask=m_mask[:, None], other=0.0)                                 # [BM, KC]
+        if DOT_BF16:
+            a = a.to(tl.bfloat16)                                                    # tensor-core operand
+        else:
+            a = a.to(tl.float32)                                                     # interpreter / CPU contract path
         wb = tl.load(w_ptr + offs_n[:, None] * (K // 2) + (k0 // 2) + offs_kh[None, :],
                      mask=n_mask[:, None], other=0).to(tl.int32)                     # [BN, KC/2] bytes
         lo = ((wb & 0xF) - 8).to(tl.float32)                                         # even k = LOW nibble
@@ -58,8 +62,10 @@ def _gemm_int4_b32_smallm(x_ptr, w_ptr, ws_ptr, part_ptr, cnt_ptr, out_ptr,
         sc = tl.load(ws_ptr + offs_n[:, None] * KB + (k0 // 32) + offs_sc[None, :],
                      mask=n_mask[:, None], other=0.0).to(tl.float32)                 # [BN, NSC]
         w3 = tl.reshape(w, (BLOCK_N, NSC, 32)) * sc[:, :, None]                     # scale per 32-block, in-tile
-        wsc = tl.reshape(w3, (BLOCK_N, KC)).to(tl.bfloat16)
-        acc += tl.dot(a, tl.trans(wsc), out_dtype=tl.float32)                        # [BM, BN] bf16 MMA
+        wsc = tl.reshape(w3, (BLOCK_N, KC))
+        if DOT_BF16:
+            wsc = wsc.to(tl.bfloat16)                                                # the dequant-then-GEMM path rounds here too
+        acc += tl.dot(a, tl.trans(wsc), out_dtype=tl.float32)                        # [BM, BN]
     ooff = offs_m[:, None] * N + offs_n[None, :]
     omask = m_mask[:, None] & n_mask[None, :]
     if SK == 1:
@@ -99,11 +105,22 @@ def smallm_workspace(N: int, *, block_m: int = 16, block_n: int = 64, sk: int = 
     return part, cnt
 
 
+def _interpreting() -> bool:
+    import os
+    return os.environ.get("TRITON_INTERPRET", "0") == "1"
+
+
 def gemm_int4_b32_smallm(x: torch.Tensor, packed: torch.Tensor, scales: torch.Tensor, *,
                          block_n: int = 64, kc: int = 128, sk: int = 4, warps: int = 4, stages: int = 2,
-                         workspace=None) -> torch.Tensor:
+                         workspace=None, dot_bf16: bool | None = None) -> torch.Tensor:
     """``x [M, K]`` (bf16/fp16/fp32; M <= 16), ``packed [N, K//2] uint8``, ``scales [N, K//32]`` (fp16/bf16/fp32)
-    in the int4-b32 layout (``int4_pack_ref.pack_int4_b32``). Returns ``[M, N]`` bf16. One launch."""
+    in the int4-b32 layout (``int4_pack_ref.pack_int4_b32``). Returns ``[M, N]`` bf16. One launch.
+
+    ``dot_bf16``: the MMA operands are bf16 (the shipped tensor-core arithmetic; also what the dequant-then-GEMM
+    path rounds to). Under ``TRITON_INTERPRET=1`` it defaults to False -- the interpreter has no bf16 dot (numpy),
+    so the CPU contract suite runs the same indexing / dequant / scaling / split-K logic with fp32 operands; the
+    bf16 numerics are owned by the compiled suite on a GPU. Never silently mixed: the choice is recorded by the
+    caller's flag, and a test that wants bf16 under the interpreter gets the interpreter's failure, not a fallback."""
     M, K = x.shape
     N, kh = packed.shape
     if M > 16:
@@ -117,9 +134,11 @@ def gemm_int4_b32_smallm(x: torch.Tensor, packed: torch.Tensor, scales: torch.Te
         part, cnt = workspace
         if part.shape[0] < sk or part.shape[2] != N or cnt.numel() < triton.cdiv(N, block_n):
             raise ValueError("workspace does not fit this plan")
+    if dot_bf16 is None:
+        dot_bf16 = not _interpreting()
     out = torch.empty(M, N, dtype=torch.bfloat16, device=x.device)
     xc = x.contiguous()
     _gemm_int4_b32_smallm[(triton.cdiv(N, block_n), sk)](
         xc, packed, scales, part, cnt, out, M, N, K=K,
-        BLOCK_M=16, BLOCK_N=block_n, KC=kc, SK=sk, num_warps=warps, num_stages=stages)
+        BLOCK_M=16, BLOCK_N=block_n, KC=kc, SK=sk, DOT_BF16=bool(dot_bf16), num_warps=warps, num_stages=stages)
     return out
