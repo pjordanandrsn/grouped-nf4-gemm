@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### K16 — a small-M int4-b32 GEMM for the attention projections (experimental; not routed by the consumer)
+
+- `int4_smallm.gemm_int4_b32_smallm(x [M<=16, K], packed [N, K//2], scales [N, K//32]) -> [M, N] bf16`, one launch:
+  in-register int4 dequantisation with the per-32-block scale applied inside the tile, bf16 tensor-core MMA over
+  K chunks of 128–256 (four to eight scale blocks per dot instead of one), split-K across programs with the
+  reduction fused into the same launch (the last-arriving program of a column block sums the fp32 partials in
+  split order and stores bf16). Activations stay bf16 — the arithmetic is the dequant-then-GEMM path's without
+  materialising the weight. `plan_smallm` legalises (BLOCK_N, KC, SK) for a shape and refuses what the format
+  cannot express; `smallm_workspace` preallocates the partial buffer and the per-column counters so the launch
+  is capture-legal. Under `TRITON_INTERPRET=1` the dot runs with fp32 operands (numpy has no bf16 dot); the
+  compiled suite owns the bf16 numerics.
+- Pre-registered as lane K16 (`kernel/PREREG-k16-smallm-int4-gemm.md`): the kernel K15 pointed at, with Marlin's
+  6.37 / 8.28 µs on `q_proj` / `o_proj` at M=16 as the target (P1 ≤ 1.4× of it; P2 beats the bf16 dequant path;
+  P5 ≥ 0.4 ms/step at B=16 once routed). Correctness suites: `kernel/test_int4_smallm_interp.py` (interpreter
+  fp32-dot on CPU; the same file compiled on a GPU). A2000 pilot receipt `kernel/receipts-k16/a2000-pilot.*`
+  (sm_86: 2.21× / 2.41× over bf16 on q/o_proj; not the registered class). **No registered number yet, nothing
+  routes to it**; the 5090 lane decides.
+
 ## 0.31.0 — 2026-09-18 — batched int4 decode plans split-K from the row count; two pre-registered kernel lanes reported (K14 refuted, K15 comparator)
 
 **Batched decode through the int4-b32 expert GEMV gets a plan chosen for the

@@ -39,7 +39,8 @@ import os
 import pytest
 
 _INTERP_FILES = {"test_interp_contract.py", "test_mxfp4_interp.py",
-                 "test_mxfp4_gemv_b32.py", "test_shape_feasibility.py"}
+                 "test_mxfp4_gemv_b32.py", "test_shape_feasibility.py",
+                 "test_int4_smallm_interp.py"}
 
 
 def _device_present():

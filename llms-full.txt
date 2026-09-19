@@ -1352,7 +1352,10 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
         "int4_pack_ref:pack_int4_b32",
         "int4_pack_ref:dequant_int4_ref",
         "gptq_pack:gptq_pack_int4_b32",
-        "gptq_pack:HessianAccumulator"
+        "gptq_pack:HessianAccumulator",
+        "int4_smallm:gemm_int4_b32_smallm",
+        "int4_smallm:plan_smallm",
+        "int4_smallm:smallm_workspace"
       ],
       "documentation": [
         "docs/solutions/int4-decode-gemv.md",
@@ -1368,7 +1371,8 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
         "Split-K on the decode GEMV was refuted once and ships dormant (claim gnf4.retired.splitk-gemv records the refutation); the shipped plan is the measured one",
         "Split-K on the int4-b32 GEMV is planned from (N, K, R, SM count) for R >= 16 activation rows on parts with <= 64 SMs (claim gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10); B=1 decode (R = top_k) and parts above 64 SMs keep the N-only plan, and bitwise equality across boxes must pin sk rather than plan it",
         "Whether int4 experts pass a quality gate is the consumer's per-family question (experts4bit-qlora docs/STATUS.md): small-active-parameter models fail it with round-to-nearest packing",
-        "The single-stream decode anchor (claim gnf4.serve.decode-anchor-5090) is a consumer-measured anchor of the serving class on a knob-off basis, not a measurement of this lane, and is not cited here as its evidence"
+        "The single-stream decode anchor (claim gnf4.serve.decode-anchor-5090) is a consumer-measured anchor of the serving class on a knob-off basis, not a measurement of this lane, and is not cited here as its evidence",
+        "K16 (pre-registered, kernel/PREREG-k16-smallm-int4-gemm.md): int4_smallm.gemm_int4_b32_smallm is a small-M single-projection GEMM -- in-register int4 dequant, per-block scaling inside the tile, bf16 tensor-core MMA over fat K chunks, split-K with the reduction fused into one launch. Its contract suites pass (interpreter and compiled) and an sm_86 pilot read is on record (kernel/receipts-k16/a2000-pilot.log), but the register holds NO number for it on the registered class and the consumer does not route to it; experimental until the K16 lane reports and registers a claim"
       ],
       "status": "measured-private"
     },
