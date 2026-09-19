@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **`nf4_qlora.lora_delta_grouped`: the `auto` rule is now STRUCTURAL — pad unless the padded block would not fit** (P46 read,
+  experts4bit-qlora `bench/p46/RESULTS-p46.md`, run `p46-qwen3lora`, RTX 5090, Qwen3-30B-A3B at the field recipe). The shipped 4×
+  flop-waste guard sent ≥ 85 % of the adapter calls to the per-expert loop on every step; the padded `bmm` path forced on trained
+  the same tokens to the same loss (held-out Δ +0.0007 nats, median per-step |Δ| 0.0024, the 0.05 band) at the same peak VRAM
+  in **4.22 s/step against 24.46** (0.173×; 365 vs 62 tok/s). The loop is launch-bound and the flops padding wastes are
+  rank-r matmuls, so waste was the wrong quantity to guard. `auto` now pads unless `G · max(rows) · (K + N) · itemsize`
+  exceeds `NF4_QLORA_PAD_BYTES_LIMIT` (default 2 GiB); `NF4_QLORA_PAD_WASTE_LIMIT`, when SET, re-arms the old ratio guard on
+  top; `LORA_PAD_WASTE` records the last / max waste ratio and the padded bytes for the census. `grouped_mm` stays opt-in
+  (torch 2.8's `_grouped_mm` is sm_90-only — the 5090 refused it, recorded). **The consumer's training position does not move
+  from this entry**: experts4bit-qlora re-runs its field-recipe head-to-head (tp4 box B) on this cut and quotes from that receipt.
+
 - **`nf4_qlora.lora_delta_grouped`: the adapter delta's path is a recorded choice** (P46, experts4bit-qlora
   `bench/p46/P46-PREREG.md`). `NF4_QLORA_LORA_PATH` = `auto` (the shipped rule, unchanged: padded bmm below the padding-waste
   limit, the per-expert loop above) | `padded` | `loop` | `grouped_mm` (two `torch._grouped_mm` calls over the jagged

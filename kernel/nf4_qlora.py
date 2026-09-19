@@ -26,16 +26,20 @@ import torch
 # padding would inflate the row count past this multiple of the real rows. 4x is a
 # guard against pathological router skew, not a tuned optimum — at uniform-ish
 # routing the ratio sits near 1 and never approaches it.
-_PAD_WASTE_LIMIT = 4.0
-
-# P46 (experts4bit-qlora bench/p46/P46-PREREG.md): the path the delta takes is a measured, recorded choice, not a
-# silent branch. `NF4_QLORA_LORA_PATH` = auto (the shipped rule: padded bmm below the waste limit, loop above) | padded
-# (always the padded bmm) | loop (the per-expert reference) | grouped_mm (torch._grouped_mm over the jagged groups,
-# no padding; CUDA, bf16; refuses where torch has no kernel for the part). `NF4_QLORA_PAD_WASTE_LIMIT` overrides the
-# 4x guard. `LORA_PATH_STATS` counts calls per path so a training census can say which path served a step -- the
-# P45 census found ~273k per-expert matmuls per optimizer step on Qwen3-30B-A3B's field recipe, i.e. `auto` taking
-# the loop, and this is how that is proven rather than inferred.
+_PAD_WASTE_LIMIT = 4.0          # historical: the shipped `auto` rule until 0.32.1 (P46 read it as the defect); now an OPT-IN guard
+_PAD_BYTES_LIMIT = 2 * 2 ** 30   # `auto` pads unless the padded block would exceed this many bytes (P46: structure, not flops)
+# The adapter delta's path is a RECORDED choice (experts4bit-qlora P46, bench/p46/P46-PREREG.md / RESULTS-p46.md), never a
+# silent branch. `NF4_QLORA_LORA_PATH` = auto | padded | loop | grouped_mm. The `auto` rule since 0.32.1: the padded bmm
+# path unless the padded block `G * max(rows) * (K + N) * itemsize` would exceed `NF4_QLORA_PAD_BYTES_LIMIT` (default
+# 2 GiB) -- what padding actually risks is MEMORY; the flops it wastes are r-rank matmuls that cost nothing next to the
+# launches the loop pays (P46: at Qwen3-30B-A3B's field recipe the 4x waste guard sent >= 85 % of calls to the loop and the
+# step took 24.5 s where the padded path took 4.2 s, same loss, same peak VRAM). `NF4_QLORA_PAD_WASTE_LIMIT`, when SET,
+# re-arms the old flop-waste guard on top (loop above that ratio); unset means no waste guard. `grouped_mm` = two
+# `torch._grouped_mm` calls over the jagged groups (no padding; CUDA, bf16, sm_90 in torch 2.8; refuses where torch has no
+# kernel for the part). `LORA_PATH_STATS` counts calls per path (ints only -- consumers cast) and `LORA_PAD_WASTE` records
+# the last / max padding-waste ratio seen, so a training census can say which path served a step and at what skew.
 LORA_PATH_STATS = {"loop": 0, "padded": 0, "grouped_mm": 0}
+LORA_PAD_WASTE = {"last": 0.0, "max": 0.0, "last_bytes": 0}
 
 
 def _lora_path() -> str:
@@ -46,10 +50,17 @@ def _lora_path() -> str:
     return v
 
 
-def _pad_waste_limit() -> float:
+def _pad_waste_limit():
+    """The OPT-IN flop-waste guard: a ratio when `NF4_QLORA_PAD_WASTE_LIMIT` is set, else None (no waste guard)."""
     import os
     v = os.environ.get("NF4_QLORA_PAD_WASTE_LIMIT")
-    return float(v) if v else _PAD_WASTE_LIMIT
+    return float(v) if v else None
+
+
+def _pad_bytes_limit() -> int:
+    import os
+    v = os.environ.get("NF4_QLORA_PAD_BYTES_LIMIT")
+    return int(float(v)) if v else _PAD_BYTES_LIMIT
 
 
 class FusedGroupedNf4(torch.autograd.Function):
@@ -230,9 +241,14 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
 
     Padding is the one hazard. Group sizes come from the router, so a hot expert
     makes ``max(sizes)`` large and the padded block ``G * max(sizes)`` rows wide
-    regardless of how few rows are real. Past ``_PAD_WASTE_LIMIT`` the loop is
-    faster and is used instead — pathological routing must not silently cost
-    more than it did before this change.
+    regardless of how few rows are real. Until 0.32.1 the rule sent any call past
+    a 4x flop-waste ratio to the loop; experts4bit-qlora's P46 (RESULTS-p46.md)
+    measured that guard choosing the loop for >= 85 % of calls at the field recipe
+    and costing 20 s of a 24.5 s step -- the loop is launch-bound and the wasted
+    flops are rank-r matmuls. The `auto` rule is now structural: pad unless the
+    padded block would exceed ``_PAD_BYTES_LIMIT`` bytes (``NF4_QLORA_PAD_BYTES_LIMIT``),
+    where the loop is what fits. ``NF4_QLORA_PAD_WASTE_LIMIT``, when set, re-arms the
+    flop-waste guard on top. Either way the route changes, never the result.
     """
     # `sizes` is a host sequence by contract (the kernel launch grid comes off
     # it), so which groups are non-empty is a host-side fact and needs no device
@@ -244,7 +260,15 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
     rows = [int(sizes[g]) for g in nz]
     total, widest = sum(rows), max(rows)
     path = _lora_path()
-    if path == "loop" or (path == "auto" and len(rows) * widest > _pad_waste_limit() * total):
+    waste = len(rows) * widest / total
+    pad_bytes = len(rows) * widest * (a_cat.shape[1] + lora_B.shape[1]) * a_cat.element_size()
+    LORA_PAD_WASTE["last"], LORA_PAD_WASTE["last_bytes"] = waste, pad_bytes
+    LORA_PAD_WASTE["max"] = max(LORA_PAD_WASTE["max"], waste)
+    if path == "auto":
+        wl = _pad_waste_limit()
+        if pad_bytes > _pad_bytes_limit() or (wl is not None and waste > wl):
+            path = "loop"
+    if path == "loop":
         LORA_PATH_STATS["loop"] += 1
         return _lora_delta_grouped_loop(a_cat, lora_A, lora_B, sizes,
                                         expert_ids, scaling)
