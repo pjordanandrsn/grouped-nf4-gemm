@@ -256,22 +256,40 @@ def test_batched_lora_delta_keeps_the_scaling():
                           rtol=1e-4, atol=1e-5)
 
 
-def test_pathological_skew_falls_back_to_the_loop():
-    """Router skew makes the padded block G*max(sizes) rows wide however few are real.
-    Past the guard the loop must be used, so bad routing cannot cost MORE than it did
-    before this optimization existed."""
+def test_pathological_skew_pads_when_it_fits_and_loops_when_it_would_not(monkeypatch):
+    """P46 (experts4bit-qlora RESULTS-p46.md): the `auto` rule is structural. Router skew makes the padded
+    block G*max(sizes) rows wide however few are real; since 0.32.1 that is fine while it FITS (the loop is
+    launch-bound, the wasted flops are rank-r) and the loop is used only past the padded-bytes limit, or past
+    the flop-waste ratio when NF4_QLORA_PAD_WASTE_LIMIT is explicitly set. The route changes, never the result."""
+    import nf4_qlora as q
     from nf4_qlora import _PAD_WASTE_LIMIT, lora_delta_grouped, _lora_delta_grouped_loop
 
     n_exp = 8
-    sizes, eids = [200] + [1] * (n_exp - 1), list(range(n_exp))   # 1600 padded for 207 real
+    sizes, eids = [200] + [1] * (n_exp - 1), list(range(n_exp))   # 1600 padded for 207 real: waste 7.7x
     assert len(sizes) * max(sizes) > _PAD_WASTE_LIMIT * sum(sizes), "fixture not skewed enough"
     torch.manual_seed(6)
     a_cat = torch.randn(sum(sizes), K, dtype=torch.float32)
     A, B = _lora_params(n_exp=n_exp)
-    # Same answer either way — the guard changes the route, never the result.
-    assert torch.allclose(lora_delta_grouped(a_cat, A, B, sizes, eids, 1.5),
-                          _lora_delta_grouped_loop(a_cat, A, B, sizes, eids, 1.5),
-                          rtol=1e-4, atol=1e-5)
+    want = _lora_delta_grouped_loop(a_cat, A, B, sizes, eids, 1.5)
+    monkeypatch.delenv("NF4_QLORA_PAD_WASTE_LIMIT", raising=False)
+    monkeypatch.delenv("NF4_QLORA_PAD_BYTES_LIMIT", raising=False)
+    monkeypatch.setenv("NF4_QLORA_LORA_PATH", "auto")
+    before = dict(q.LORA_PATH_STATS)
+    assert torch.allclose(lora_delta_grouped(a_cat, A, B, sizes, eids, 1.5), want, rtol=1e-4, atol=1e-5)
+    assert q.LORA_PATH_STATS["padded"] == before["padded"] + 1, "skew that fits pads (the P46 rule)"
+    assert abs(q.LORA_PAD_WASTE["last"] - 1600 / 207) < 1e-9 and q.LORA_PAD_WASTE["max"] >= q.LORA_PAD_WASTE["last"]
+    assert q.LORA_PAD_WASTE["last_bytes"] == 8 * 200 * (K + B.shape[1]) * 4
+    # the structural guard: a padded block over the byte limit loops
+    monkeypatch.setenv("NF4_QLORA_PAD_BYTES_LIMIT", str(q.LORA_PAD_WASTE["last_bytes"] - 1))
+    before = dict(q.LORA_PATH_STATS)
+    assert torch.allclose(lora_delta_grouped(a_cat, A, B, sizes, eids, 1.5), want, rtol=1e-4, atol=1e-5)
+    assert q.LORA_PATH_STATS["loop"] == before["loop"] + 1
+    monkeypatch.delenv("NF4_QLORA_PAD_BYTES_LIMIT")
+    # the opt-in flop-waste guard still works when asked for
+    monkeypatch.setenv("NF4_QLORA_PAD_WASTE_LIMIT", str(_PAD_WASTE_LIMIT))
+    before = dict(q.LORA_PATH_STATS)
+    assert torch.allclose(lora_delta_grouped(a_cat, A, B, sizes, eids, 1.5), want, rtol=1e-4, atol=1e-5)
+    assert q.LORA_PATH_STATS["loop"] == before["loop"] + 1
 
 
 def test_no_rows_returns_none_as_before():
@@ -409,7 +427,7 @@ def test_p46_path_env_selects_and_counts(monkeypatch):
         got = q.lora_delta_grouped(a, A, B, sizes, eids, 2.0)
         assert torch.allclose(got, ref, atol=1e-5, rtol=1e-5), path
         assert q.LORA_PATH_STATS[key] == before[key] + 1, (path, key)
-    # the waste limit is the auto rule's knob: below the skew it loops, above it pads
+    # the waste limit is an OPT-IN guard on the auto rule (0.32.1): set, it loops above the ratio; unset, no waste guard
     monkeypatch.setenv("NF4_QLORA_LORA_PATH", "auto")
     monkeypatch.setenv("NF4_QLORA_PAD_WASTE_LIMIT", "1.0")     # 150 > 45 -> loop
     before = dict(q.LORA_PATH_STATS)
