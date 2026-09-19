@@ -22,22 +22,28 @@ from int4_pack_ref import dequant_int4_ref, pack_int4_b32          # noqa: E402
 from int4_smallm import gemm_int4_b32_smallm, plan_smallm, smallm_workspace  # noqa: E402
 
 
+INTERP = os.environ.get("TRITON_INTERPRET", "0") == "1"
+DEV = "cpu" if INTERP else ("cuda" if torch.cuda.is_available() else None)
+if DEV is None:
+    pytest.skip("compiled mode needs a CUDA device; set TRITON_INTERPRET=1 for the CPU contract run", allow_module_level=True)
+
+
 def _case(N, K, M, seed=0):
     g = torch.Generator().manual_seed(seed)
     w = torch.randn(N, K, generator=g) * 0.7
     packed, scales = pack_int4_b32(w)
     w_deq = dequant_int4_ref(packed, scales, N, K).float()
     x = (torch.randn(M, K, generator=g) * 0.5).to(torch.bfloat16)
-    ref = (x.float() @ w_deq.t())
-    return x, packed.contiguous(), scales.contiguous(), ref
+    # the reference is the dequant-then-GEMM path's own arithmetic: bf16-rounded weights, fp32 accumulate
+    ref = x.float() @ w_deq.to(torch.bfloat16).float().t()
+    return x.to(DEV), packed.contiguous().to(DEV), scales.contiguous().to(DEV), ref
 
 
 def _ulp_ok(y, ref):
-    # within one bf16 ulp of the reference value, plus fp32 accumulation slack scaled to the row magnitude
-    yb = y.float(); rb = ref.to(torch.bfloat16).float()
-    ulp = torch.maximum(rb.abs(), torch.full_like(rb, 1e-6)) * 2 ** -7
-    slack = ref.abs().max() * 2e-6
-    return bool(((yb - rb).abs() <= ulp + slack).all()), float((yb - ref).abs().max())
+    """K14's metric: the largest deviation from the dequant-then-GEMM reference, relative to the largest output --
+    within one bf16 ulp at that magnitude (2^-7). Per-element relative bounds are meaningless where outputs cancel."""
+    err = (y.float().cpu() - ref).abs().max()
+    return bool(err <= 2 ** -7 * ref.abs().max()), float(err)
 
 
 @pytest.mark.parametrize("N,K,M,bn,kc,sk", [
@@ -63,11 +69,11 @@ def test_deterministic_and_within_ulp_across_sk():
         a = gemm_int4_b32_smallm(x, packed, scales, block_n=64, kc=128, sk=sk)
         b = gemm_int4_b32_smallm(x, packed, scales, block_n=64, kc=128, sk=sk)
         assert torch.equal(a, b), f"sk={sk}: two launches of one config differ"
-        ys[sk] = a.float()
-    base = ys[1].to(torch.bfloat16).float()
-    ulp = torch.maximum(base.abs(), torch.full_like(base, 1e-6)) * 2 ** -7
+        ys[sk] = a.float().cpu()
+    base = ys[1]
+    bound = 2 ** -7 * base.abs().max()
     for sk in (2, 4, 8):
-        assert ((ys[sk] - base).abs() <= ulp).all(), f"sk={sk} differs from sk=1 by more than one bf16 ulp"
+        assert (ys[sk] - base).abs().max() <= bound, f"sk={sk} differs from sk=1 by more than one bf16 ulp at the output's magnitude"
 
 
 def test_counter_rearmed_and_workspace_reuse():
@@ -88,4 +94,5 @@ def test_plan_refuses_or_legalises_never_silently_rearithmetics():
     with pytest.raises(ValueError):
         plan_smallm(64, 48)                                           # not a multiple of the scale block
     with pytest.raises(ValueError):
-        gemm_int4_b32_smallm(torch.zeros(17, 64, dtype=torch.bfloat16), *pack_int4_b32(torch.randn(8, 64)))
+        pk, sc = pack_int4_b32(torch.randn(8, 64))
+        gemm_int4_b32_smallm(torch.zeros(17, 64, dtype=torch.bfloat16, device=DEV), pk.to(DEV), sc.to(DEV))
