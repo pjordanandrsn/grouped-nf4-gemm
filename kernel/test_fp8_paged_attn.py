@@ -79,8 +79,20 @@ FP8_DOT_OK = (torch.cuda.is_available()
 def _modes():
     """Kernel paths to run every shape test through. compute="fp8" needs
     fp8 MMA hardware; on older cards the shape tests still cover both
-    non-fp8 paths."""
-    modes = [("split", {}), ("packed", {"pack_heads": True})]
+    non-fp8 paths.
+
+    **Every arm names its compute mode explicitly, including the f32
+    ones** (gnf4#319). They used to pass no ``compute`` at all, which was
+    correct only while an unset ``compute`` meant f32. Since
+    RESULTS-m3-default-on the default is capability-conditional and
+    resolves to **fp8 on sm_89+**, so on those cards the ``split`` and
+    ``packed`` arms silently ran the fp8 kernel -- and were then judged
+    at the f32 tolerance by ``_close``, which reads the tolerance off the
+    arm's NAME. That is the whole of #319: 27 cases failing on an RTX
+    5090 for the f32 modes, none of which was running an f32 kernel.
+    ``test_modes_run_the_kernel_they_name`` holds this shut."""
+    modes = [("split", {"compute": "f32"}),
+             ("packed", {"pack_heads": True, "compute": "f32"})]
     if FP8_DOT_OK:
         modes.append(("f8dot", {"compute": "fp8"}))
         modes.append(("pf8", {"pack_heads": True, "compute": "fp8"}))
@@ -475,6 +487,33 @@ def test_f32_dot_precision_env_selector(monkeypatch):
         monkeypatch.setenv("GNF4_ATTN_F32_PRECISION", bad)
         with pytest.raises(ValueError, match="not a dot precision"):
             _f32_dot_precision()
+
+
+@needs_gpu
+@pytest.mark.parametrize("mode,mkw", _modes())
+def test_modes_run_the_kernel_they_name(mode, mkw):
+    """gnf4#319's root cause, held shut: an arm must run the compute mode
+    its name claims, on every card.
+
+    ``_close`` picks its tolerance from the arm's NAME (2e-2 for the f32
+    modes, 1.5e-1 for the fp8 ones). So an arm that names one path and
+    runs another is not a loose test -- it is a test whose verdict means
+    nothing, in whichever direction the tolerances happen to fall. On
+    sm_120 it fell the strict way and produced 27 failures attributed to
+    kernels that never ran; on a card where fp8 is unavailable the same
+    slip would fall the lax way and hide a real defect behind a 7.5x
+    tolerance. The compute tally is the only thing that can tell the
+    difference, because both paths return a plausible tensor."""
+    from fp8_paged_attn import compute_counts, reset_compute_counts
+
+    want_mode = "fp8" if mode in ("f8dot", "pf8") else "f32"
+    reset_compute_counts()
+    _run_both(2, 16, 4, 64, [64, 80], mode_kw=mkw)
+    counts = compute_counts()
+    assert counts[want_mode] == 1, (
+        f"arm {mode!r} should have run the {want_mode} path exactly once; "
+        f"the kernel tallied {counts}")
+    assert counts["fp8" if want_mode == "f32" else "f32"] == 0, counts
 
 
 @needs_gpu
