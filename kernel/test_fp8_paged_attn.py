@@ -457,6 +457,40 @@ def test_attn_compute_env_selector(monkeypatch):
             _compute_default()
 
 
+def test_f32_dot_precision_env_selector(monkeypatch):
+    """gnf4#319 selector, checked WITHOUT a GPU. The shipped default is
+    ``tf32`` -- what Triton picks for an fp32 dot anyway, and what this
+    file's tolerance has always been calibrated against; the point of
+    naming it is that the arm is now stated rather than inherited. A
+    typo REFUSES: a mode that silently ran tf32 would be recorded as an
+    exact arm."""
+    from fp8_paged_attn import _f32_dot_precision
+
+    monkeypatch.delenv("GNF4_ATTN_F32_PRECISION", raising=False)
+    assert _f32_dot_precision() == "tf32"
+    for good in ("tf32", "tf32x3", "ieee"):
+        monkeypatch.setenv("GNF4_ATTN_F32_PRECISION", good)
+        assert _f32_dot_precision() == good
+    for bad in ("TF32", "fp32", "exact", "1", ""):
+        monkeypatch.setenv("GNF4_ATTN_F32_PRECISION", bad)
+        with pytest.raises(ValueError, match="not a dot precision"):
+            _f32_dot_precision()
+
+
+@needs_gpu
+@pytest.mark.parametrize("mode,mkw", _modes())
+def test_head_dim_256_matches_reference(mode, mkw):
+    """gnf4#324 asked for the shape tests to cover head_dim 256 in EVERY
+    mode; the fp8 half got a test and the f32 half did not, so the f32
+    packed kernel's 148 KB tile has never been exercised here. It has no
+    pre-launch model -- only the OutOfResources catch -- so this is the
+    test that says the catch works on a card that overflows and that the
+    kernel is right on one that does not."""
+    got, want = _run_both(1, 16, 8, 256, [64], k_groups=4, v_groups=1,
+                          mode_kw=mkw)
+    _close(got, want, mode)
+
+
 # ---- sliding windows and attention sinks (model parity: Gemma-4, gpt-oss)
 
 @needs_gpu
