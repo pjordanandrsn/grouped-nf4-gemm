@@ -173,3 +173,19 @@ One warning, the geometry remembered in `_PACKED_UNFIT`, a result that
 matches the oracle. The 5090 shows the fp8 half of the same fallback
 firing pre-launch from the calibrated model. Both cards carry a 101376-byte
 limit, so this is the same wall the issue hit.
+
+`head_dim` 512 completes the set the issue asked for, and it exercises the
+other half of the contract — the typed refusal, on the A2000:
+
+```
+UnsupportedShapeError: fp8_paged_attn._fp8_paged_decode_split: geometry
+(head_dim=512, n_kv_heads=2, ktile=32, k_groups=4, v_groups=1, block_g=16,
+num_warps=2, num_stages=3) needs 117760 bytes of shared memory against this
+device's limit of 101376 bytes; pass a smaller ktile or num_stages
+```
+
+A geometry no split config can stage refuses with its numbers and a remedy,
+which is what `UnsupportedShapeError` is for; the packed kernel at that
+geometry stages a smaller tile (32 columns, not 128) and runs. So across
+128 / 256 / 512 in every mode the three outcomes are all exercised: it runs,
+it falls back with a warning, or it refuses with the numbers.

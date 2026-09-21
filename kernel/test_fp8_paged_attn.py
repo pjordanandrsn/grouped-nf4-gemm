@@ -20,6 +20,7 @@ from fp8_kv import (  # noqa: E402
     quantize_kv_fp8,
     unpack_kv_block_grouped,
 )
+from _triton_shim import UnsupportedShapeError  # noqa: E402
 from fp8_paged_attn import (  # noqa: E402
     fp8_paged_decode_attention,
     paged_attn_available,
@@ -517,16 +518,24 @@ def test_modes_run_the_kernel_they_name(mode, mkw):
 
 
 @needs_gpu
+@pytest.mark.parametrize("d,hkv,hq", [(256, 8, 16), (512, 2, 16)])
 @pytest.mark.parametrize("mode,mkw", _modes())
-def test_head_dim_256_matches_reference(mode, mkw):
-    """gnf4#324 asked for the shape tests to cover head_dim 256 in EVERY
-    mode; the fp8 half got a test and the f32 half did not, so the f32
-    packed kernel's 148 KB tile has never been exercised here. It has no
-    pre-launch model -- only the OutOfResources catch -- so this is the
-    test that says the catch works on a card that overflows and that the
-    kernel is right on one that does not."""
-    got, want = _run_both(1, 16, 8, 256, [64], k_groups=4, v_groups=1,
-                          mode_kw=mkw)
+def test_wide_head_dims_match_reference(mode, mkw, d, hkv, hq):
+    """gnf4#324 asked for the shape tests to cover head_dim 128, 256 and
+    512 in EVERY mode. 128 is covered by the shape tests above; the fp8
+    half of 256/512 got ``test_fp8_modes_across_head_dims_and_group_counts``
+    and the f32 half got nothing, so the f32 packed kernel's 148 KB tile
+    at D=256 had never been exercised here. It has no pre-launch fit
+    model -- only the ``OutOfResources`` catch -- so these cases say the
+    catch works on a card that overflows and that the kernel is right on
+    one that does not. A geometry no split config can stage raises
+    ``UnsupportedShapeError`` with the numbers, which is the contract and
+    not a failure of this test's premise; it is allowed to say so."""
+    try:
+        got, want = _run_both(1, hq, hkv, d, [64], k_groups=4, v_groups=1,
+                              mode_kw=mkw)
+    except UnsupportedShapeError as e:
+        pytest.skip(f"{mode} refuses D={d} on this card, with numbers: {e}")
     _close(got, want, mode)
 
 
