@@ -985,16 +985,18 @@ def _f32_dot_precision() -> str:
     ========  ====================  ==========  =========
     mode      worst split abs err   KV GB/s     vs tf32
     ========  ====================  ==========  =========
-    tf32      0.0156 (1 bf16 ULP)   79.2        1.00x
-    tf32x3    0.000000              44.1        0.56x
-    ieee      0.000000              4.5         0.06x
+    tf32      0.015625 (1 bf16 ULP) 77.9        1.00x
+    tf32x3    0.000000              39.5        0.51x
+    ieee      0.000000               4.5        0.06x
     ========  ====================  ==========  =========
 
-    So exactness is available and it is not free: ``tf32x3`` costs 44%
+    So exactness is available and it is not free: ``tf32x3`` costs 49%
     of the path's throughput and ``ieee`` costs 94% -- the latter lands
     *below* the 4.8 GB/s occupancy-starved first version this kernel
     was written to replace, which is why gnf4#319's suggested remedy
-    ("pin ``input_precision='ieee'``") is not one.
+    ("pin ``input_precision='ieee'``") is not one. In the emitted PTX
+    ``ieee`` carries no ``mma.sync`` at all, only 1045 ``fma.rn.f32``:
+    it leaves the tensor cores entirely.
 
     An unrecognised value RAISES rather than falling back: a typo'd
     mode that silently ran tf32 would be recorded as an exact arm.
