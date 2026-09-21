@@ -1000,6 +1000,15 @@ def _f32_dot_precision() -> str:
 
     An unrecognised value RAISES rather than falling back: a typo'd
     mode that silently ran tf32 would be recorded as an exact arm.
+
+    **Scope: the SPLIT f32 kernel only.** The packed f32 kernel
+    (``pack_heads=True``) casts q, k and v to bf16 before its dots, so
+    there are no fp32 operands for ``input_precision`` to govern and this
+    variable is a no-op on that path -- its residual is bf16 INPUT
+    rounding, one output ULP on the shapes measured. Said here because a
+    knob that quietly does nothing on one of the two kernels it appears
+    to name is the same defect as an arm that quietly runs a kernel it
+    does not name, which is what gnf4#319 turned out to be.
     """
     v = os.environ.get("GNF4_ATTN_F32_PRECISION", "tf32")
     if v not in _F32_PRECISIONS:
