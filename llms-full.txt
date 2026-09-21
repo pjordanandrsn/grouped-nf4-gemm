@@ -2093,6 +2093,46 @@ with the pure-torch reference, every above-boundary case in its own process
 (an illegal access poisons the CUDA context). `kernel/test_offsets_2gib.py`
 keeps the original 258 x 8 MiB reproduction.
 
+Both of those need CUDA and about 2.3 GiB of free device memory, so on every
+runner this project has they skip in full: until 2026-09-21 nothing CI could
+run failed when the promotion was dropped, which is how the MXFP4 port shipped
+without it (#205). `kernel/test_offset_boundary_interp.py` closes that on CPU
+under `TRITON_INTERPRET=1`. Each case maps ~4 GiB of address space with
+`torch.empty` and writes three small tiles into it; Linux commits on touch, so
+resident memory stays about 0.5 GiB. The stack's base sits at the boundary, so
+the correct offset and the wrapped one are **both inside the mapping** and a
+kernel that wraps misreads a decoy tile instead of faulting -- an assertion
+rather than a crash. Every case also asserts the decoy is distinguishable, so a
+geometry that stopped straddling fails instead of passing quietly.
+
+Two things that make such a test vacuous if missed, both learned by writing one:
+
+- **A stride must itself fit in int32.** Triton specialises integer arguments,
+  so a stride >= 2^31 is passed as i64 and the product cannot wrap whatever the
+  index dtype is. A first draft using `stride = 2**31` passed against a
+  deliberately unpromoted kernel.
+- **The wide-load and dot-pad decode routes are word-addressed.** The wrapper
+  hands them `B.view(torch.int32)`, so the kernel multiplies the expert id by a
+  stride counted in 32-bit words and their wrap is at 2^31 **words** = 8 GiB of
+  packed bytes, four times further out than every byte-addressed route. A
+  fixture built on the 2 GiB byte boundary gives them a product of 2^29, which
+  does not wrap, so those arms pass with the promotion removed. The CPU suite
+  gives the wide route its own 16 GiB-of-address-space case;
+  **the wide and dot-pad arms of `test_expert_offset_boundary.py` are built on
+  the byte geometry and therefore do not straddle their own boundary** -- the
+  0.30.1 note claiming those routes were "observed above 2^31 for the first
+  time" holds for the scalar, split-K and vec routes only.
+
+**The Triton interpreter does wrap int32 offset arithmetic.** The 0.14.0
+CHANGELOG states that `TRITON_INTERPRET=1` "evaluates offsets with int64
+semantics and the overflow cannot manifest there". Measured on triton 3.4.0 /
+torch 2.8.0 / numpy 2.3.2 that is false: the interpreter evaluates
+`int32_tensor * python_int` under NEP 50, where the Python int is weak, so the
+product stays int32 and wraps (expert 256 x 8 MiB -> -2147483648). That entry is
+superseded by this paragraph. The property is pinned by
+`test_interpreter_arithmetic_still_wraps`, so if a future triton or numpy
+widens it the suite says so rather than silently losing its power.
+
 **Shared-memory feasibility is decided before the launch.** A tile
 configuration whose shared-memory need exceeds the device's limit is refused
 or re-dispatched *before* the launch, never surfaced as Triton's
