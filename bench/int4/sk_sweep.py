@@ -107,9 +107,11 @@ def main():
             dst = torch.empty(R, N, dtype=torch.bfloat16, device=DEV)
 
             def call(sk=sk, part=part, dst=dst):
+                # K17 signature: (part, cnt, out) pointers + FUSED_REDUCE; this sweep times the
+                # two-launch path, so FUSED_REDUCE=0 and the extra pointers are unused.
                 _gemv_int4_b32[(tiles, R, sk)](
-                    xq, xs, packed, scales, eids, part,
-                    N, K=K, R=R, BLOCK_N=bn, SK=sk, KU=ku, num_warps=wp)
+                    xq, xs, packed, scales, eids, part, part, dst,
+                    N, K=K, R=R, BLOCK_N=bn, SK=sk, KU=ku, FUSED_REDUCE=0, num_warps=wp)
                 if sk > 1:
                     reduce_partials(part, sk, R, N, out=dst)
             try:
