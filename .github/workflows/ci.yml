@@ -97,6 +97,20 @@ jobs:
           TRITON_INTERPRET: "1"
         run: cd kernel && python -m pytest test_interp_contract.py test_gemv_vec_loads.py test_group_tiles_device.py test_int4_b32.py test_int4_smallm_interp.py test_int4_b32_fused_reduce_interp.py -q
 
+      # The 2^31 expert-offset boundary (gnf4#87) WITHOUT a GPU. The two
+      # existing boundary suites need CUDA and ~2.3 GiB of device memory, so
+      # they skip in full on every runner this project has -- nothing CI could
+      # run failed when the eid int64 promotion was dropped, and a port HAS
+      # dropped it once (#205, MXFP4, found live months later). This file
+      # straddles the boundary on CPU: ~4 GiB of lazily-committed address space
+      # per case (~0.5 GiB resident), the wrapped and correct offsets both
+      # inside the mapping so a wrap misreads instead of faulting. An
+      # _INTERP_FILES member, so its own process.
+      - name: expert-offset boundary on CPU (interpreter mode)
+        env:
+          TRITON_INTERPRET: "1"
+        run: cd kernel && python -m pytest test_offset_boundary_interp.py -q
+
       # Shape feasibility (gnf4#324): the pure-Python selection rules with
       # mocked device limits, plus the interpreter-mode fit-down of the NF4
       # M-tile under a capped limit. An _INTERP_FILES member, so its own

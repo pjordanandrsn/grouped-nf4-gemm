@@ -116,6 +116,17 @@ def _nf4_check_expert(B, A, N, K, e, tag, *, dotpad_shape=False):
     go = (torch.randn(4, N, device=DEV) * 0.1).bfloat16()
     want_dg = (go.float() @ w_ref)
 
+    # NB (2026-09-21): the "wide" arm below, and the dot-pad cases, are handed
+    # B.view(torch.int32) by the wrapper, so those kernels multiply the expert
+    # id by a stride counted in 32-bit WORDS -- their wrap is at 2^31 words =
+    # 8 GiB of packed bytes, 4x this fixture's byte geometry. At the geometries
+    # here their product only reaches 2^29, so those two arms exercise the
+    # routes but do NOT straddle their own boundary: they pass with the int64
+    # promotion removed. The scalar, split-K and vec arms are byte-addressed
+    # and do straddle. Covering wide properly needs a 16 GiB mapping, which
+    # kernel/test_offset_boundary_interp.py does on CPU (host memory is
+    # lazily committed; device memory is not). Do not read a green wide arm
+    # here as boundary coverage.
     def decode(label, **kw):
         env = kw.pop("env", {})
         saved = {k: os.environ.get(k) for k in ("GNF4_GEMV_WIDE_LOADS", "GNF4_GEMV_VEC_LOADS",
