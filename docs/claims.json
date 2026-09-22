@@ -559,6 +559,35 @@
     "CHANGELOG.md#0.32.0"
    ],
    "notes": "Decision rule applied: P1 and P2 hold, so the consumer route is opened (experts4bit-qlora#578, opt-in E4B_ATTN_INT4_SMALLM=1; P5 read 2026-09-19 in the consumer: HOLDS, and experts4bit-qlora 0.36.2 makes the route the default when this package (>= 0.32.0) is installed) and this row is `measured`, not a model-level claim. Every best config is BLOCK_N=32 / 4 warps; q_proj takes SK=1 at KC=256, k/v SK=4, o_proj SK=8 -- the split follows K/N. The A2000 pilot read 2.21x / 2.41x on q/o where the 5090 reads 1.63x / 2.91x: an sm_86 ratio does not transfer to sm_120 in either direction. Relative error 0.0029-0.0033 against the bf16 reference (contract <= 2^-7). Run 1 of the lane (k16-5090) was a HARNESS_ERROR (no pytest on the image) with no number; cost of both draws about $0.06 against the $0.65 lane ceiling. Marlin comparator figures are cross-process, cross-build, biased in Marlin's favour per the standing correction (K15)."
+  },
+  {
+   "id": "gnf4.kernel.k17-fused-splitk-gemv.5090.2026-09-21",
+   "area": "kernel",
+   "claim": "K17 (pre-registered 2026-09-21, #372): the int4-b32 GEMV gemv_int4_b32 can fold its split-K reduce into its own launch (FUSED_REDUCE epilogue: fp32 partials, acq_rel atomic counter per (row, column block), last arriver sums in split order and casts once; opt-in via fused_reduce=True / GNF4_GEMV_FUSED_REDUCE=1). On the RTX 5090, six Qwen3-30B-A3B shapes x R in {1,8,16,128}: P1 bitwise identity HOLDS 24/24 (interpreter 197/197, compiled 27/27, counter re-arms to zero after 800+ graph replays); P2 (R=1 saving 3-6 us per call on every shape) REFUTED -- expert_gate_up +2.04 us, attn_kv +0.87, the other four <= 0.02 us (two-launch and fused both 6.20 us): the removed _reduce_partials launch was overlapped in the graph, not on the critical path; P3 (R=128 expert shapes within -0.10x..+0.15x) HOLDS at the slow end, fused/two-launch 1.094 (gate_up) and 1.061 (down); unregistered but in the rows, every attention shape is 6-12 % slower fused at R=128 and the SK=8 shapes at R=16. Timings sit on a ~2.05 us grid (instrument note in the results). Decision rule: P1 and not P2 -> ships opt-in, default off at every R; the consumer's step-level read (P4) is lane P57 in experts4bit-qlora.",
+   "value": 2.04,
+   "unit": "us saved per call at R=1 on expert_gate_up (the largest of six shapes; 0.00-0.87 on the others), launch floor 3.67 us",
+   "status": "measured",
+   "hardware": "RTX 5090 (sm_120, 170 SMs, driver 595.91.07), torch 2.8.0+cu128 / triton 3.4.0, rented host (vast instance 51979470)",
+   "measured_on": "2026-09-21",
+   "evidence": [
+    "kernel/PREREG-k17-fused-splitk-gemv.md",
+    "kernel/RESULTS-k17-fused-splitk-gemv.md",
+    "kernel/int4_b32.py",
+    "kernel/k17_bench.py",
+    "kernel/k17_reduce.py",
+    "kernel/receipts-k17/5090/k17_rows.json",
+    "kernel/receipts-k17/5090/k17_bench.log",
+    "kernel/receipts-k17/5090/tests_compiled.log",
+    {
+     "path": "CHANGELOG.md",
+     "section": "Unreleased"
+    }
+   ],
+   "quoted_in": [
+    "docs/STATUS.md",
+    "CHANGELOG.md#Unreleased"
+   ],
+   "notes": "A negative-result row on purpose: the kernel is exact and ships, the hypothesis that its launch was the cost did not survive the card. The P54 census row it targeted (_reduce_partials 0.300 ms/step at B=1 in experts4bit-qlora) is GPU time the kernel spends either way, not a launch removal recovers. Lane k17-5090-1 cost $0.0888 (estimate $0.65); receipts in adertha-receipts 4aff79c. The A2000 pilot (receipts-k17/a2000-pilot.json, free) showed 0.0-2.8 us at R=1 and was recorded as a warning before the launch."
   }
  ]
 }

@@ -53,6 +53,7 @@ _DELIBERATELY_UNPACKAGED: dict[str, str] = {
 
     "k16_bench": "K16 small-M int4 GEMM bench harness (PREREG-k16), campaign instrument, not library API",
     "k17_bench": "K17 fused split-K GEMV bench harness (PREREG-k17), campaign instrument, not library API",
+    "k17_reduce": "K17 verdict calculator (reads receipts-k17/5090/k17_rows.json against PREREG-k17), campaign instrument, not library API",
     "k15_marlin_bench": "K15 Marlin comparator bench; runs in a vLLM venv, not ours,\n                        and imports vllm -- never a dependency of this package",
     # The certified anchor: a campaign constant that harnesses read so
     # an uncertified literal cannot gate rentals again. Downstream

@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- **K17: `gemv_int4_b32(..., fused_reduce=True)` / `GNF4_GEMV_FUSED_REDUCE=1` — the int4-b32 GEMV can fold its split-K reduce into
+  its own launch (fp32 partials, `acq_rel` atomic counter per (row, column block), last arriver sums in split order, casts once;
+  `gemv_counter_len` sizes the `cnt` workspace; `cnt`/`out` allocated when not passed). OFF by default.** Pre-registered
+  (`kernel/PREREG-k17-fused-splitk-gemv.md`, #372) and read on the RTX 5090 2026-09-21 (`kernel/RESULTS-k17-fused-splitk-gemv.md`,
+  lane `k17-5090-1`, $0.0888): **P1 bitwise identity HOLDS** on all 24 shape × R rows (interpreter 197/197, compiled 27/27, the
+  counter reads zero after 800+ graph replays); **P2 REFUTED** — at R=1 the fused path saves 2.04 µs on `expert_gate_up`, 0.87 on
+  `attn_kv` and ≤ 0.02 µs on the other four shapes (both paths 6.20 µs), so the removed launch was hidden in the graph, not on the
+  critical path; **P3 HOLDS at the slow end** (fused/two-launch 1.094 / 1.061 at R=128 on the expert shapes; the attention shapes
+  6–12 % slower there, unregistered). Decision rule `P1 ∧ ¬P2` → ships opt-in; no R at which it is a default. Register row
+  `gnf4.kernel.k17-fused-splitk-gemv.5090.2026-09-21`. `_gemv_int4_b32`'s signature gained `cnt_ptr`, `out_ptr`, `FUSED_REDUCE`
+  (constexpr); with `FUSED_REDUCE=0` the kernel body is byte-for-byte the shipped one.
+- `kernel/test_int4_b32_fused_reduce_interp.py` (named in `ci.yml`'s interpreter job and guarded in `conftest._INTERP_FILES`),
+  `kernel/k17_bench.py`, `kernel/k17_reduce.py` (campaign instruments, deliberately not in the wheel).
+
 ## 0.32.1 — 2026-09-19 — the `auto` LoRA-delta rule is STRUCTURAL (pad unless the padded block would not fit): P46 read the 4× flop-waste guard as the defect behind the consumer's launch-bound training step
 
 - **`nf4_qlora.lora_delta_grouped`: the `auto` rule is now STRUCTURAL — pad unless the padded block would not fit** (P46 read,

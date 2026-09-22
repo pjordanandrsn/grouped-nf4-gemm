@@ -307,9 +307,14 @@ def gemv_int4_b32(xq, xs, packed, scales, eids, N: int, K: int,
     [E, N, K//32]`` (fp16). Returns ``[R, N]`` bf16. ``part`` may be a
     preallocated ``[SK*R, N]`` fp32 buffer (pass it under capture).
 
-    ``fused_reduce`` (lane K17; default :func:`gemv_fused_reduce_default`) folds
-    the split-K reduce into the GEMV launch: bitwise the same result as the
-    two-launch path, one launch fewer. It needs ``cnt`` (``[R * cdiv(N, 128)]``
+    ``fused_reduce`` (lane K17; default :func:`gemv_fused_reduce_default`,
+    i.e. **off** unless ``GNF4_GEMV_FUSED_REDUCE=1``) folds the split-K reduce
+    into the GEMV launch: bitwise the same result as the two-launch path, one
+    launch fewer. Read on the RTX 5090 2026-09-21
+    (``kernel/RESULTS-k17-fused-splitk-gemv.md``): exact on all 24 shape x R
+    rows, but the removed launch was hidden in the graph at R=1 (savings 0-2 us,
+    P2 refuted) and the fused epilogue is 6-12 % slower at R=128, so it ships
+    opt-in and is not a default at any R. It needs ``cnt`` (``[R * cdiv(N, 128)]``
     int32, zeroed; allocate with :func:`gemv_counter_len`) and ``out``
     (``[R, N]`` bf16); both are allocated here when not given, so a caller that
     preallocates ``part`` under capture preallocates these the same way.
