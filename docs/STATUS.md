@@ -253,6 +253,11 @@ was wrong.
   fused epilogue is 6–12 % slower at R=128. Ships **opt-in** (`GNF4_GEMV_FUSED_REDUCE=1`), default off at every
   R. `kernel/RESULTS-k17-fused-splitk-gemv.md`; register row
   `gnf4.kernel.k17-fused-splitk-gemv.5090.2026-09-21`; the consumer's step-level read is experts4bit-qlora lane P57.
+- **K18 read (2026-09-22, RTX 5090): a grouped split-K int4-b32 expert GEMV — each expert's weight slice loaded once
+  for up to 4 of its rows — is exact and slower.** On experts4bit-qlora P60's recorded Qwen3-30B-A3B B=16 routing it
+  runs 9.689 ms/step against the served GEMV's 6.520 (P2 refuted), and 1.00–1.65× the served call at R = 8/16 (P3
+  refuted), worst where nothing can be shared. Not a lever; `gemv_int4_b32_grouped` stays dormant as the evidence.
+  `kernel/RESULTS-k18-grouped-expert-gemv.md`; register row `gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22`.
 - **Every non-CUDA row is a `port target`.** ROCm/XPU numbers do not
   exist; `PROJECTIONS-multiarch.md` is arithmetic, stamped before the
   silicon, and explicitly invites refutation (`gnf4.projection.multiarch`,

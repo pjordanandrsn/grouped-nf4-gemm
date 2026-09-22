@@ -213,7 +213,7 @@
     "int4 attention projections at decode",
     "grouped split-K GEMV sharing an expert's weight loads across its rows at batch 16"
    ],
-   "solution": "quant_x_rows quantises activation rows to int8 with per-32 scales; gemv_int4_b32 runs the split-K int4-b32 GEMV over packed [E, N, K//2] + fp16 scales [E, N, K//32] (reduce_partials folds the split-K sum and bf16 cast into one launch); pack_int4_b32 is the round-to-nearest packer and gptq_pack_int4_b32 + HessianAccumulator the calibrated one; gemm_int4_b32_grouped_captured is the capture-legal batched variant. gemv_int4_b32_grouped (K18) is the split-K GEMV with each program serving up to four rows of one expert, bitwise the served GEMV.",
+   "solution": "quant_x_rows quantises activation rows to int8 with per-32 scales; gemv_int4_b32 runs the split-K int4-b32 GEMV over packed [E, N, K//2] + fp16 scales [E, N, K//32] (reduce_partials folds the split-K sum and bf16 cast into one launch); pack_int4_b32 is the round-to-nearest packer and gptq_pack_int4_b32 + HessianAccumulator the calibrated one; gemm_int4_b32_grouped_captured is the capture-legal batched variant. gemv_int4_b32_grouped (K18) is the split-K GEMV with each program serving up to four rows of one expert, bitwise the served GEMV and measured slower (dormant).",
    "modes": [
     "inference",
     "serving",
@@ -271,7 +271,8 @@
     "gnf4.serve.int4-b32-gemv",
     "gnf4.serve.gptq-pack-int4-b32",
     "gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10",
-    "gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19"
+    "gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19",
+    "gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22"
    ],
    "limitations": [
     "The int4-b32 GEMV and the calibrated packer are measured-private (claims gnf4.serve.int4-b32-gemv, gnf4.serve.gptq-pack-int4-b32): the receipts live in the consumer's private audit tree",
@@ -280,7 +281,7 @@
     "Whether int4 experts pass a quality gate is the consumer's per-family question (experts4bit-qlora docs/STATUS.md): small-active-parameter models fail it with round-to-nearest packing",
     "The single-stream decode anchor (claim gnf4.serve.decode-anchor-5090) is a consumer-measured anchor of the serving class on a knob-off basis, not a measurement of this lane, and is not cited here as its evidence",
     "K16: int4_smallm.gemm_int4_b32_smallm is a small-M single-projection GEMM -- in-register int4 dequant, per-block scaling inside the tile, bf16 tensor-core MMA over fat K chunks, split-K fused into the launch (kernel/PREREG-k16-smallm-int4-gemm.md). Measured on the RTX 5090 class at M=16 (claim gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19): it beats this package's bf16 dequant path on every attention shape and meets the pre-registered Marlin bar; the single-scale control (P4) was not tested and the model-level step saving (P5) is pending. Nothing in this package routes to it; the consumer's route is opt-in (experts4bit-qlora E4B_ATTN_INT4_SMALLM=1)",
-    "K18: int4_b32.gemv_int4_b32_grouped tiles the call's rows expert-major in-register (histogram, cumsum, per-expert rank -- no sort, no host sync, capture-legal) so each program loads one expert's weight slice once for up to GROUPED_MT_DEFAULT=4 of its rows, computes each row with the served arithmetic and stores the fp32 partial at the row's original index; the result is torch.equal to gemv_int4_b32(..., fused_reduce=False) (kernel/test_int4_b32_grouped_interp.py, and across the 2^31 expert offset in kernel/test_expert_offset_boundary.py). Pre-registered (kernel/PREREG-k18-grouped-expert-gemv.md) and not yet measured: it is inside no registered claim, and nothing in this package or the consumer routes to it. The tiling holds a next_pow2(E + 1)-bin histogram in shared memory, so the wrapper refuses E > GROUPED_E_MAX=4095 (every shipped MoE is far below it)"
+    "K18: int4_b32.gemv_int4_b32_grouped tiles the call's rows expert-major in-register (histogram, cumsum, per-expert rank -- no sort, no host sync, capture-legal) so each program loads one expert's weight slice once for up to GROUPED_MT_DEFAULT=4 of its rows; it is torch.equal to gemv_int4_b32(..., fused_reduce=False). Measured on the RTX 5090 (claim gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22): exact, and SLOWER than gemv_int4_b32 both on the recorded Qwen3-30B-A3B B=16 routing and at the small row counts, so it is not a lever and ships dormant as the evidence; use gemv_int4_b32. Nothing in this package or the consumer routes to it. The wrapper refuses E > GROUPED_E_MAX=4095 (the tiling's shared-memory histogram)"
    ],
    "status": "measured-private"
   },

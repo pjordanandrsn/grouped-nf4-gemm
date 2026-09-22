@@ -1,0 +1,14 @@
+P2 replay (128 steps): served 6.520  grouped 9.689  dedup 5.564 ms/step  | saving -3.169  | P1 mismatches on replay: 0
+   P3 expert_gate_up   R= 8 served   10.72 us  grouped   14.82 us  ratio 1.382  equal True
+   P3 expert_gate_up   R=16 served   14.85 us  grouped   16.90 us  ratio 1.138  equal True
+   P3 expert_down      R= 8 served    9.02 us  grouped    8.99 us  ratio 0.996  equal True
+   P3 expert_down      R=16 served    8.88 us  grouped   10.88 us  ratio 1.225  equal True
+   P3 attn_q           R= 8 served   16.99 us  grouped   27.14 us  ratio 1.597  equal True
+   P3 attn_q           R=16 served   27.04 us  grouped   33.09 us  ratio 1.224  equal True
+   P3 attn_kv          R= 8 served    8.93 us  grouped    8.99 us  ratio 1.007  equal True
+   P3 attn_kv          R=16 served    8.99 us  grouped   10.75 us  ratio 1.196  equal True
+   P3 attn_o           R= 8 served   19.63 us  grouped   27.30 us  ratio 1.390  equal True
+   P3 attn_o           R=16 served   27.39 us  grouped   34.83 us  ratio 1.272  equal True
+   P3 attn_qkv_fused   R= 8 served   18.94 us  grouped   31.23 us  ratio 1.649  equal True
+   P3 attn_qkv_fused   R=16 served   31.46 us  grouped   39.10 us  ratio 1.243  equal True
+rows written; P1 failures: 0
