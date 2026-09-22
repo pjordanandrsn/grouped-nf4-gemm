@@ -41,7 +41,7 @@ as an i64 argument by Triton's specialization. Carriers: `nf4_grouped`
 (`_gemm_nf4_grouped`, `_gemv_nf4_grouped`, `_gemv_nf4_grouped_splitk`,
 `_gemv_nf4_dotpad`, `_gemv_nf4_dotpad_splitk`, `_dgrad_nf4_grouped`),
 `mxfp4_grouped` (`_gemm_mxfp4_grouped`, `_gemv_mxfp4_grouped`,
-`_gemv_mxfp4_b32`), `int4_b32` (`_gemv_int4_b32`, `_gemm_int4_b32_grouped`),
+`_gemv_mxfp4_b32`), `int4_b32` (`_gemv_int4_b32`, `_gemv_int4_b32_grouped`, `_gemm_int4_b32_grouped`),
 `host_gather._gather_rows`, the `mxfp4_pipelined` / `mxfp4_residency` gathers
 (slot × row words), the `fp8_kv` appenders (block-table row × row bytes) and,
 from this date, the four `fp8_paged_attn` decode kernels, whose block-table
@@ -113,6 +113,7 @@ device, interpreter mode — and 0 never refuses). Rules by kernel:
 | fp8 paged decode, packed f32 | no calibrated model | an overflow at the launch falls back to the split f32 kernel the same way |
 | fp8 paged decode, split (f32 and fp8) | `KTILE * D` per K and V | an overflow at the launch is raised as `UnsupportedShapeError` naming the geometry, Triton's required bytes and the limit (reduce `ktile` or `num_stages`) |
 | MXFP4 M-tile / GEMV, int4-b32 GEMV / M-tile, NF4 decode GEMVs | fixed tiles (`BLOCK_K` 32 or 64, `BLOCK_N` ≤ 128) | no runtime dimension scales the tile; every configuration fits a 64 KB LDS |
+| int4-b32 grouped GEMV (`_gemv_int4_b32_grouped`, K18) | the expert-id histogram, `next_pow2(E + 1)` int32 bins, beside the served GEMV's fixed tile (`int4_b32.GROUPED_MT_DEFAULT` = 4 rows per program) | `gemv_int4_b32_grouped` refuses `E > int4_b32.GROUPED_E_MAX` (4095: a 16 KiB histogram, so every admitted configuration fits a 64 KB LDS) with `UnsupportedShapeError` before the launch; the refusal names `gemv_int4_b32`, which serves any `E` |
 
 `UnsupportedShapeError` is a `ValueError` carrying `kernel`, `shape`,
 `need_bytes`, `limit_bytes`; the CPU unit test

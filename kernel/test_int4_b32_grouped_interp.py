@@ -96,3 +96,26 @@ def test_capture_legal():
     g.replay()
     torch.cuda.synchronize()
     assert torch.equal(out, ref)
+
+
+def test_expert_bound_raises_before_launch():
+    """The tiling histograms the expert ids in shared memory, so the wrapper
+    refuses past ``GROUPED_E_MAX`` BEFORE the launch with the typed
+    ``UnsupportedShapeError`` (KERNEL_CONTRACT's feasibility rule, gnf4#324)
+    naming the served GEMV, instead of Triton's ``OutOfResources``; the bound
+    itself still runs."""
+    from _triton_shim import UnsupportedShapeError
+    from int4_b32 import GROUPED_E_MAX
+    xq, xs = quant_x_rows(torch.zeros(2, 32, dtype=torch.bfloat16, device=DEV))
+    e = torch.zeros(2, dtype=torch.int32, device=DEV)
+    for E, ok in ((GROUPED_E_MAX, True), (GROUPED_E_MAX + 1, False)):
+        packed = torch.zeros(E, 16, 16, dtype=torch.uint8, device=DEV)
+        scales = torch.ones(E, 16, 1, dtype=torch.float16, device=DEV)
+        if ok:
+            got = gemv_int4_b32_grouped(xq, xs, packed, scales, e, 16, 32)
+            ref = gemv_int4_b32(xq, xs, packed, scales, e, 16, 32, fused_reduce=False)
+            assert torch.equal(got, ref)
+        else:
+            with pytest.raises(UnsupportedShapeError, match="GROUPED_E_MAX") as err:
+                gemv_int4_b32_grouped(xq, xs, packed, scales, e, 16, 32)
+            assert err.value.shape["E"] == E and err.value.need_bytes > err.value.limit_bytes

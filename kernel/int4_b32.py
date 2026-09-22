@@ -33,6 +33,7 @@ import triton
 import triton.language as tl
 
 from int4_pack_ref import BLOCK, dequant_int4_ref, pack_int4_b32  # noqa: F401
+from _triton_shim import UnsupportedShapeError  # noqa: E402
 
 
 # ------------------------------------------------- activation quantise --
@@ -434,6 +435,11 @@ def _gemv_int4_b32_grouped(xq_ptr, xs_ptr, w_ptr, ws_ptr, eid_ptr, part_ptr,
 
 
 GROUPED_MT_DEFAULT = 4
+# The in-register tiling holds a histogram of next_pow2(E + 1) int32 bins in
+# shared memory (16 KiB at this bound; sm_86/sm_120 allow ~99 KiB per block,
+# less what the reductions take). Every shipped MoE is far below it (Kimi-K2:
+# 384 experts, 2 KiB); past it, call gemv_int4_b32.
+GROUPED_E_MAX = 4095
 
 
 def gemv_int4_b32_grouped(xq, xs, packed, scales, eids, N: int, K: int,
@@ -448,6 +454,14 @@ def gemv_int4_b32_grouped(xq, xs, packed, scales, eids, N: int, K: int,
     nothing calls it until the lane's 5090 read and a consumer lane say so."""
     R = eids.numel()
     E = packed.shape[0]
+    if E > GROUPED_E_MAX:
+        raise UnsupportedShapeError(
+            "gemv_int4_b32_grouped", {"E": E, "N": N, "K": K, "R": R},
+            need_bytes=4 * triton.next_power_of_2(E + 1),
+            limit_bytes=4 * triton.next_power_of_2(GROUPED_E_MAX + 1),
+            hint=(f"the limit is the contract's GROUPED_E_MAX={GROUPED_E_MAX} (the expert-id "
+                  "histogram stays at 16 KiB so the kernel fits a 64 KB LDS on every target), "
+                  "not the device's; use gemv_int4_b32"))
     bn, wp, sk, ku = _plan(N, K, R, _sm_count(xq.device))
     if part is None:
         part = torch.empty(sk * R, N, dtype=torch.float32, device=xq.device)
