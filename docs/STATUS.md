@@ -66,8 +66,9 @@ sm_89+ precondition; measured on the RTX 5090 only;
 `gnf4.serve.m3-defaults-on`) is supported; the **f32 compute path**
 (`fp8-paged-attention-f32-compute`) — the sm_80–sm_88 default, the
 fallback where an fp8 constraint fails, and every explicit f32 request on
-any card — is open under #319 (`gnf4.open.f32-compute-modes-triton34`)
-and carried as `unsupported` until it closes. The
+any card — is **supported as of #319's close**: measured on an RTX A2000
+(sm_86) and an RTX 5090 (sm_120), same errors on both, 0.00% over
+tolerance (`gnf4.serve.f32-arms-ran-fp8`). The
 certified single-stream anchor for Qwen3-30B-A3B on the RTX 5090 class
 is **7.37 ms/step ±4.2% (≈130–142 tok/s)** — the class carries 8.5%
 inter-box dispersion while each box repeats itself to 0.16%, so quote
@@ -102,6 +103,20 @@ MXFP4 decode reproduces Kimi K3's own declared reference exactly
 ---
 
 ## What changed — retired, superseded, corrected
+
+- **#319 is closed, and it was never a kernel defect — the f32 shape arms were not running an f32
+  kernel.** `test_fp8_paged_attn.py`'s `_modes()` built its f32 arms with no `compute` kwarg, which was
+  right only while an unset `compute` meant f32. Since RESULTS-m3-default-on the default is
+  capability-conditional and resolves to **fp8 on sm_89+**, so on those cards `split` and `packed` ran
+  the fp8 kernel while `_close` judged them at the f32 tolerance (2e-2 against the fp8 path's own
+  1.5e-1). On an RTX 5090, `compute_counts()` after one call per arm reads **`{'f32': 0, 'fp8': 4}`**,
+  and the `split`/`f8dot` and `packed`/`pf8` pairs return byte-identical tensors. With every arm naming
+  its mode the suite goes **27 failed → 93 passed** on that same card, and the f32 errors there are the
+  same bf16 output ULPs an RTX A2000 reports (0.003906 / 0.007812 / 0.015625). The claim
+  `gnf4.open.f32-compute-modes-triton34` is **retired**, replaced by `gnf4.serve.f32-arms-ran-fp8`;
+  `kernel/RESULTS-319-f32-precision.md` carries the measurements. **The advice this page used to give —
+  gate lanes on those boxes with `-k "f8dot or pf8"` — excluded precisely the arms that were
+  mislabelled, and should not be followed.**
 
 - **0.32.1 — the grouped-LoRA delta's `auto` rule is structural.** Until 0.32.0 `auto` sent any adapter
   call past a 4× padding-waste ratio to the per-expert Python loop. The consumer's P46
@@ -198,13 +213,6 @@ was wrong.
 
 ## What is open
 
-- **#319 — the f32 paged-decode compute modes miss their reference** on
-  torch 2.8.0+cu128 / triton 3.4.0 (10 of 35 tests, up to 0.074 against
-  a 0.02 tolerance), on unmodified `main`. The fp8 modes — the default
-  on sm_89+ where the constraints pass, sm_120 serving included — pass,
-  so that serving path is unaffected; the sm_80–sm_88 default path and
-  every explicit f32 request (on any card, Hopper included) are not
-  (`gnf4.open.f32-compute-modes-triton34`).
 - **#73, #60, #58** — arena/NVMe efficiency: host copy is ~71% of a K3
   layer; staging blocks ~30% of a training step; 8 requests issued per
   layer where 2 would do.

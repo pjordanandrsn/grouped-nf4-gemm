@@ -223,13 +223,33 @@
   {
    "id": "gnf4.open.f32-compute-modes-triton34",
    "area": "serve",
-   "claim": "OPEN: the f32 compute modes (split, packed) of the fp8 paged decode miss their reference by up to 0.074 (tol 0.02) on 10 of 35 tests on torch 2.8.0+cu128 / triton 3.4.0 (sm_120), on unmodified main; the fp8 modes -- the sm_120 serving default -- pass.",
-   "status": "open",
+   "claim": "RETIRED (was: the f32 compute modes of the fp8 paged decode miss their reference by up to 0.074 against a 0.02 tolerance on torch 2.8.0+cu128 / triton 3.4.0, sm_120). The f32 kernels were not the ones failing: the suite's f32 shape arms passed no compute kwarg, so on sm_89+ the capability-conditional default resolved them to the fp8 kernel while _close still judged them at the f32 tolerance.",
+   "status": "retired",
    "hardware": "RTX 5090",
    "evidence": [
+    "kernel/RESULTS-319-f32-precision.md",
     "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/319"
    ],
-   "notes": "Serving on sm_120 with GNF4_ATTN_COMPUTE unset is unaffected. The f32 path is the sm_80-sm_88 default (sm_89+, Hopper included, defaults to fp8 where fp8_compute_unsupported passes), the fallback wherever an fp8 constraint fails, and every explicit f32 request on any card; its tests cannot gate a lane on these boxes with -x. docs/capabilities.json carries it as fp8-paged-attention-f32-compute, status unsupported, until this closes."
+   "notes": "Kept so the retraction is findable: docs/STATUS.md, README.md and docs/capabilities.json all carried this reading, and the advice it produced -- gate lanes with -k 'f8dot or pf8' -- excluded exactly the arms that were mislabelled.",
+   "retired_reason": "Measured wrong at the source. On an RTX 5090, compute_counts() after one call per shape arm reads {'f32': 0, 'fp8': 4}: the split and packed arms ran the fp8 kernel, returning tensors byte-identical to the f8dot and pf8 arms of the same geometry, and were then checked against 2e-2 instead of the fp8 path's own 1.5e-1. The observed error (relative Frobenius 0.049, exact at T=1) is the fp8 path's documented q/p rounding envelope, not a defect. An RTX A2000 passes the identical suite on the identical torch 2.8.0+cu128 / triton 3.4.0, because sm_86 has no fp8 MMA to default to -- which is why the 'triton 3.4' framing never fit. Superseding row: gnf4.serve.f32-arms-ran-fp8."
+  },
+  {
+   "id": "gnf4.serve.f32-arms-ran-fp8",
+   "area": "serve",
+   "claim": "gnf4#319 was a test-harness defect, not a kernel defect. The fp8 paged decode's f32 shape arms passed no compute kwarg, so on sm_89+ the capability-conditional default resolved them to the fp8 kernel while the harness judged them at the f32 tolerance (2e-2) instead of the fp8 path's 1.5e-1. On an RTX 5090 compute_counts() reads {'f32': 0, 'fp8': 4} across the four arms, and the split/f8dot and packed/pf8 pairs return byte-identical tensors. Every arm now names its compute mode and test_modes_run_the_kernel_they_name asserts the tally per arm.",
+   "status": "measured",
+   "measured_on": "2026-09-21",
+   "hardware": "RTX 5090 (sm_120) and RTX A2000 (sm_86), torch 2.8.0+cu128 / triton 3.4.0",
+   "evidence": [
+    "kernel/RESULTS-319-f32-precision.md",
+    "kernel/test_fp8_paged_attn.py",
+    "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/319"
+   ],
+   "evidence_private": [
+    "adertha-receipts/receipts/experts4bit-qlora/2026-09-21/p319-f32prec-1/",
+    "adertha-receipts/receipts/experts4bit-qlora/2026-09-21/p319b-where-1/"
+   ],
+   "notes": "Replaces the retired row gnf4.open.f32-compute-modes-triton34, which is kept so the retraction is findable; that row is retired rather than superseded because it was not true-as-measured. The A2000 passes the identical suite on the identical wheels because sm_86 has no fp8 MMA to default to, so there the f32 arms genuinely run f32; its worst residual is one bf16 output ULP (0.015625) with a median of exactly zero. Separately, the f32 split path's dot precision is now stated rather than inherited (GNF4_ATTN_F32_PRECISION, default tf32 = prior behaviour); tf32x3 is exact at 0.51x throughput and ieee at 0.06x, emitting no mma.sync at all. That knob is not a fix for #319 and is not offered as one."
   },
   {
    "id": "gnf4.serve.int4-b32-gemv",

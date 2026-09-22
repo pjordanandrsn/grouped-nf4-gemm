@@ -20,6 +20,7 @@ from fp8_kv import (  # noqa: E402
     quantize_kv_fp8,
     unpack_kv_block_grouped,
 )
+from _triton_shim import UnsupportedShapeError  # noqa: E402
 from fp8_paged_attn import (  # noqa: E402
     fp8_paged_decode_attention,
     paged_attn_available,
@@ -79,8 +80,20 @@ FP8_DOT_OK = (torch.cuda.is_available()
 def _modes():
     """Kernel paths to run every shape test through. compute="fp8" needs
     fp8 MMA hardware; on older cards the shape tests still cover both
-    non-fp8 paths."""
-    modes = [("split", {}), ("packed", {"pack_heads": True})]
+    non-fp8 paths.
+
+    **Every arm names its compute mode explicitly, including the f32
+    ones** (gnf4#319). They used to pass no ``compute`` at all, which was
+    correct only while an unset ``compute`` meant f32. Since
+    RESULTS-m3-default-on the default is capability-conditional and
+    resolves to **fp8 on sm_89+**, so on those cards the ``split`` and
+    ``packed`` arms silently ran the fp8 kernel -- and were then judged
+    at the f32 tolerance by ``_close``, which reads the tolerance off the
+    arm's NAME. That is the whole of #319: 27 cases failing on an RTX
+    5090 for the f32 modes, none of which was running an f32 kernel.
+    ``test_modes_run_the_kernel_they_name`` holds this shut."""
+    modes = [("split", {"compute": "f32"}),
+             ("packed", {"pack_heads": True, "compute": "f32"})]
     if FP8_DOT_OK:
         modes.append(("f8dot", {"compute": "fp8"}))
         modes.append(("pf8", {"pack_heads": True, "compute": "fp8"}))
@@ -455,6 +468,75 @@ def test_attn_compute_env_selector(monkeypatch):
         monkeypatch.setenv("GNF4_ATTN_COMPUTE", bad)
         with pytest.raises(ValueError, match="not a compute mode"):
             _compute_default()
+
+
+def test_f32_dot_precision_env_selector(monkeypatch):
+    """gnf4#319 selector, checked WITHOUT a GPU. The shipped default is
+    ``tf32`` -- what Triton picks for an fp32 dot anyway, and what this
+    file's tolerance has always been calibrated against; the point of
+    naming it is that the arm is now stated rather than inherited. A
+    typo REFUSES: a mode that silently ran tf32 would be recorded as an
+    exact arm."""
+    from fp8_paged_attn import _f32_dot_precision
+
+    monkeypatch.delenv("GNF4_ATTN_F32_PRECISION", raising=False)
+    assert _f32_dot_precision() == "tf32"
+    for good in ("tf32", "tf32x3", "ieee"):
+        monkeypatch.setenv("GNF4_ATTN_F32_PRECISION", good)
+        assert _f32_dot_precision() == good
+    for bad in ("TF32", "fp32", "exact", "1", ""):
+        monkeypatch.setenv("GNF4_ATTN_F32_PRECISION", bad)
+        with pytest.raises(ValueError, match="not a dot precision"):
+            _f32_dot_precision()
+
+
+@needs_gpu
+@pytest.mark.parametrize("mode,mkw", _modes())
+def test_modes_run_the_kernel_they_name(mode, mkw):
+    """gnf4#319's root cause, held shut: an arm must run the compute mode
+    its name claims, on every card.
+
+    ``_close`` picks its tolerance from the arm's NAME (2e-2 for the f32
+    modes, 1.5e-1 for the fp8 ones). So an arm that names one path and
+    runs another is not a loose test -- it is a test whose verdict means
+    nothing, in whichever direction the tolerances happen to fall. On
+    sm_120 it fell the strict way and produced 27 failures attributed to
+    kernels that never ran; on a card where fp8 is unavailable the same
+    slip would fall the lax way and hide a real defect behind a 7.5x
+    tolerance. The compute tally is the only thing that can tell the
+    difference, because both paths return a plausible tensor."""
+    from fp8_paged_attn import compute_counts, reset_compute_counts
+
+    want_mode = "fp8" if mode in ("f8dot", "pf8") else "f32"
+    reset_compute_counts()
+    _run_both(2, 16, 4, 64, [64, 80], mode_kw=mkw)
+    counts = compute_counts()
+    assert counts[want_mode] == 1, (
+        f"arm {mode!r} should have run the {want_mode} path exactly once; "
+        f"the kernel tallied {counts}")
+    assert counts["fp8" if want_mode == "f32" else "f32"] == 0, counts
+
+
+@needs_gpu
+@pytest.mark.parametrize("d,hkv,hq", [(256, 8, 16), (512, 2, 16)])
+@pytest.mark.parametrize("mode,mkw", _modes())
+def test_wide_head_dims_match_reference(mode, mkw, d, hkv, hq):
+    """gnf4#324 asked for the shape tests to cover head_dim 128, 256 and
+    512 in EVERY mode. 128 is covered by the shape tests above; the fp8
+    half of 256/512 got ``test_fp8_modes_across_head_dims_and_group_counts``
+    and the f32 half got nothing, so the f32 packed kernel's 148 KB tile
+    at D=256 had never been exercised here. It has no pre-launch fit
+    model -- only the ``OutOfResources`` catch -- so these cases say the
+    catch works on a card that overflows and that the kernel is right on
+    one that does not. A geometry no split config can stage raises
+    ``UnsupportedShapeError`` with the numbers, which is the contract and
+    not a failure of this test's premise; it is allowed to say so."""
+    try:
+        got, want = _run_both(1, hq, hkv, d, [64], k_groups=4, v_groups=1,
+                              mode_kw=mkw)
+    except UnsupportedShapeError as e:
+        pytest.skip(f"{mode} refuses D={d} on this card, with numbers: {e}")
+    _close(got, want, mode)
 
 
 # ---- sliding windows and attention sinks (model parity: Gemma-4, gpt-oss)
