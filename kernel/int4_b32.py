@@ -26,6 +26,8 @@ Two measurement rules are load-bearing for anyone touching configs here
 """
 from __future__ import annotations
 
+import os
+
 import torch
 import triton
 import triton.language as tl
@@ -65,15 +67,27 @@ def quant_x_rows(x: torch.Tensor):
 
 # ----------------------------------------------------------- the kernel --
 @triton.jit
-def _gemv_int4_b32(xq_ptr, xs_ptr, w_ptr, ws_ptr, eid_ptr, out_ptr,
+def _gemv_int4_b32(xq_ptr, xs_ptr, w_ptr, ws_ptr, eid_ptr, part_ptr,
+                   cnt_ptr, out_ptr,
                    N, K: tl.constexpr, R: tl.constexpr,
                    BLOCK_N: tl.constexpr, SK: tl.constexpr,
-                   KU: tl.constexpr):
+                   KU: tl.constexpr, FUSED_REDUCE: tl.constexpr):
     """One program computes BLOCK_N output rows of expert ``eids[e]`` for
     activation row ``e``, over its split-K span. Grid (cdiv(N,BN), R, SK).
     Dense callers pass R=1 with ``eids=[0]``. Stores fp32 partials at
-    ``out[(sk*R + e)*N + n]``; the wrapper reduces (exact in fp32 --
-    the int32 block dots are exact, so only the scale sums reorder)."""
+    ``part[(sk*R + e)*N + n]``; with ``FUSED_REDUCE=0`` the wrapper reduces
+    them in a second launch (exact in fp32 -- the int32 block dots are
+    exact, so only the scale sums reorder).
+
+    ``FUSED_REDUCE=1`` (lane K17, ``PREREG-k17-fused-splitk-gemv.md``): the
+    reduce rides THIS launch, the way ``int4_smallm`` already does it. Each
+    program stores its partial, then bumps the counter of its (row, column
+    block); the LAST arriver sums the ``SK`` partials **in split order** --
+    the same order ``_reduce_partials`` uses, so the result is bitwise the
+    two-launch result -- casts to bf16 once into ``out[e*N + n]``, and
+    re-arms its counter. ``cnt`` is ``[R * cdiv(N, BLOCK_N)] int32``, zeroed
+    once at allocation and left zeroed by every launch. ``SK == 1`` stores
+    bf16 straight to ``out`` (nothing to reduce, no counter traffic)."""
     pid = tl.program_id(0)
     e = tl.program_id(1)
     sk = tl.program_id(2)
@@ -105,7 +119,22 @@ def _gemv_int4_b32(xq_ptr, xs_ptr, w_ptr, ws_ptr, eid_ptr, out_ptr,
             ws = tl.load(sbase + offs_n[:, None] * KB + kb0 + ku[None, :],
                          mask=n_mask[:, None], other=0.0).to(tl.float32)
             acc += tl.sum(d.to(tl.float32) * (ws * xsv[None, :]), axis=1)
-    tl.store(out_ptr + (sk * R + e) * N + offs_n, acc, mask=n_mask)
+    if FUSED_REDUCE:
+        if SK == 1:
+            tl.store(out_ptr + e * N + offs_n, acc.to(tl.bfloat16), mask=n_mask)
+        else:
+            tl.store(part_ptr + (sk * R + e) * N + offs_n, acc, mask=n_mask)
+            tl.debug_barrier()
+            nb = (N + BLOCK_N - 1) // BLOCK_N
+            prev = tl.atomic_add(cnt_ptr + e * nb + pid, 1, sem="acq_rel")
+            if prev == SK - 1:
+                total = tl.zeros((BLOCK_N,), dtype=tl.float32)
+                for s in range(0, SK):                 # split order: the order _reduce_partials sums in
+                    total += tl.load(part_ptr + (s * R + e) * N + offs_n, mask=n_mask, other=0.0)
+                tl.store(out_ptr + e * N + offs_n, total.to(tl.bfloat16), mask=n_mask)
+                tl.atomic_xchg(cnt_ptr + e * nb + pid, 0)   # armed for the next launch
+    else:
+        tl.store(part_ptr + (sk * R + e) * N + offs_n, acc, mask=n_mask)
 
 
 # Blocks we want resident before split-K stops earning its reduce. The
@@ -248,12 +277,47 @@ def reduce_partials(part: torch.Tensor, sk: int, R: int, N: int,
     return out
 
 
+#: Lane K17: fold the split-K reduce into the GEMV's own launch. ``1``/``0`` force it; unset = the
+#: shipped default, which stays the two-launch path until the K17 lane reads (PREREG-k17-fused-splitk-gemv.md).
+GEMV_FUSED_REDUCE_ENV = "GNF4_GEMV_FUSED_REDUCE"
+GEMV_FUSED_REDUCE_DEFAULT = False
+
+
+def gemv_fused_reduce_default() -> bool:
+    v = os.environ.get(GEMV_FUSED_REDUCE_ENV, "").strip().lower()
+    if v in ("1", "true", "on"):
+        return True
+    if v in ("0", "false", "off"):
+        return False
+    return GEMV_FUSED_REDUCE_DEFAULT
+
+
+def gemv_counter_len(N: int, R: int, block_n: int = 128) -> int:
+    """Length of the ``cnt`` workspace the fused reduce needs: one int32 per (row, column block)."""
+    return R * triton.cdiv(N, block_n)
+
+
 def gemv_int4_b32(xq, xs, packed, scales, eids, N: int, K: int,
-                  part: torch.Tensor | None = None):
+                  part: torch.Tensor | None = None,
+                  cnt: torch.Tensor | None = None,
+                  out: torch.Tensor | None = None,
+                  fused_reduce: bool | None = None):
     """Grouped decode GEMV: ``R = eids.numel()`` activation rows, row ``e``
     against expert ``eids[e]``. ``packed [E, N, K//2]``, ``scales
     [E, N, K//32]`` (fp16). Returns ``[R, N]`` bf16. ``part`` may be a
     preallocated ``[SK*R, N]`` fp32 buffer (pass it under capture).
+
+    ``fused_reduce`` (lane K17; default :func:`gemv_fused_reduce_default`,
+    i.e. **off** unless ``GNF4_GEMV_FUSED_REDUCE=1``) folds the split-K reduce
+    into the GEMV launch: bitwise the same result as the two-launch path, one
+    launch fewer. Read on the RTX 5090 2026-09-21
+    (``kernel/RESULTS-k17-fused-splitk-gemv.md``): exact on all 24 shape x R
+    rows, but the removed launch was hidden in the graph at R=1 (savings 0-2 us,
+    P2 refuted) and the fused epilogue is 6-12 % slower at R=128, so it ships
+    opt-in and is not a default at any R. It needs ``cnt`` (``[R * cdiv(N, 128)]``
+    int32, zeroed; allocate with :func:`gemv_counter_len`) and ``out``
+    (``[R, N]`` bf16); both are allocated here when not given, so a caller that
+    preallocates ``part`` under capture preallocates these the same way.
 
     Use it for single-token (decode) projections on int4-b32 packed weights (``packed [E, N,
     K//2]`` uint8 + ``scales [E, N, K//32]`` fp16 from ``pack_int4_b32`` or
@@ -264,10 +328,25 @@ def gemv_int4_b32(xq, xs, packed, scales, eids, N: int, K: int,
     bn, wp, sk, ku = _plan(N, K, R, _sm_count(xq.device))
     if part is None:
         part = torch.empty(sk * R, N, dtype=torch.float32, device=xq.device)
+    if fused_reduce is None:
+        fused_reduce = gemv_fused_reduce_default()
+    if not fused_reduce:
+        _gemv_int4_b32[(triton.cdiv(N, bn), R, sk)](
+            xq, xs, packed, scales, eids, part, part, part,
+            N, K=K, R=R, BLOCK_N=bn, SK=sk, KU=ku, FUSED_REDUCE=0, num_warps=wp)
+        return reduce_partials(part, sk, R, N, out=out)
+    need = gemv_counter_len(N, R, bn)
+    if cnt is None:
+        cnt = torch.zeros(need, dtype=torch.int32, device=xq.device)
+    elif cnt.numel() != need or cnt.dtype != torch.int32:
+        raise ValueError(f"cnt must be int32 with {need} entries (R={R} x cdiv(N={N}, {bn})), got "
+                         f"{tuple(cnt.shape)} {cnt.dtype}")
+    if out is None:
+        out = torch.empty(R, N, dtype=torch.bfloat16, device=xq.device)
     _gemv_int4_b32[(triton.cdiv(N, bn), R, sk)](
-        xq, xs, packed, scales, eids, part,
-        N, K=K, R=R, BLOCK_N=bn, SK=sk, KU=ku, num_warps=wp)
-    return reduce_partials(part, sk, R, N)
+        xq, xs, packed, scales, eids, part, cnt, out,
+        N, K=K, R=R, BLOCK_N=bn, SK=sk, KU=ku, FUSED_REDUCE=1, num_warps=wp)
+    return out
 
 
 # ------------------------------------------------- grouped M-tile GEMM --

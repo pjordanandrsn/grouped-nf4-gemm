@@ -1,0 +1,26 @@
+launch floor 3.67 us on NVIDIA GeForce RTX 5090
+   expert_gate_up   N= 1536 K= 2048 R=  1 sk=16 | two-launch    6.20 us | fused    4.16 us | saving  +2.04 us = +0.56 floors | ratio 0.670 | cnt re-armed True
+   expert_gate_up   N= 1536 K= 2048 R=  8 sk=16 | two-launch    8.26 us | fused    8.25 us | saving  +0.01 us = +0.00 floors | ratio 0.999 | cnt re-armed True
+   expert_gate_up   N= 1536 K= 2048 R= 16 sk=16 | two-launch   12.43 us | fused   12.40 us | saving  +0.03 us = +0.01 floors | ratio 0.997 | cnt re-armed True
+   expert_gate_up   N= 1536 K= 2048 R=128 sk=16 | two-launch   71.82 us | fused   78.60 us | saving  -6.78 us = -1.85 floors | ratio 1.094 | cnt re-armed True
+   expert_down      N= 2048 K=  768 R=  1 sk= 6 | two-launch    4.16 us | fused    4.14 us | saving  +0.02 us = +0.00 floors | ratio 0.996 | cnt re-armed True
+   expert_down      N= 2048 K=  768 R=  8 sk= 6 | two-launch    6.20 us | fused    6.20 us | saving  -0.00 us = -0.00 floors | ratio 1.001 | cnt re-armed True
+   expert_down      N= 2048 K=  768 R= 16 sk= 6 | two-launch    8.25 us | fused    8.16 us | saving  +0.09 us = +0.02 floors | ratio 0.989 | cnt re-armed True
+   expert_down      N= 2048 K=  768 R=128 sk= 6 | two-launch   33.06 us | fused   35.08 us | saving  -2.03 us = -0.55 floors | ratio 1.061 | cnt re-armed True
+   attn_q           N= 4096 K= 2048 R=  1 sk= 8 | two-launch    6.20 us | fused    6.20 us | saving  +0.00 us = +0.00 floors | ratio 0.999 | cnt re-armed True
+   attn_q           N= 4096 K= 2048 R=  8 sk= 8 | two-launch   14.43 us | fused   14.53 us | saving  -0.10 us = -0.03 floors | ratio 1.007 | cnt re-armed True
+   attn_q           N= 4096 K= 2048 R= 16 sk= 8 | two-launch   24.68 us | fused   26.75 us | saving  -2.07 us = -0.56 floors | ratio 1.084 | cnt re-armed True
+   attn_q           N= 4096 K= 2048 R=128 sk= 8 | two-launch  172.24 us | fused  188.58 us | saving -16.34 us = -4.46 floors | ratio 1.095 | cnt re-armed True
+   attn_kv          N=  512 K= 2048 R=  1 sk=16 | two-launch    5.02 us | fused    4.15 us | saving  +0.87 us = +0.24 floors | ratio 0.826 | cnt re-armed True
+   attn_kv          N=  512 K= 2048 R=  8 sk=16 | two-launch    6.20 us | fused    4.18 us | saving  +2.03 us = +0.55 floors | ratio 0.673 | cnt re-armed True
+   attn_kv          N=  512 K= 2048 R= 16 sk=16 | two-launch    8.25 us | fused    6.21 us | saving  +2.04 us = +0.56 floors | ratio 0.753 | cnt re-armed True
+   attn_kv          N=  512 K= 2048 R=128 sk=16 | two-launch   26.75 us | fused   28.83 us | saving  -2.08 us = -0.57 floors | ratio 1.078 | cnt re-armed True
+   attn_o           N= 2048 K= 4096 R=  1 sk=16 | two-launch    6.21 us | fused    6.20 us | saving  +0.01 us = +0.00 floors | ratio 0.998 | cnt re-armed True
+   attn_o           N= 2048 K= 4096 R=  8 sk=16 | two-launch   16.08 us | fused   14.66 us | saving  +1.41 us = +0.39 floors | ratio 0.912 | cnt re-armed True
+   attn_o           N= 2048 K= 4096 R= 16 sk=16 | two-launch   24.79 us | fused   26.75 us | saving  -1.96 us = -0.53 floors | ratio 1.079 | cnt re-armed True
+   attn_o           N= 2048 K= 4096 R=128 sk=16 | two-launch  172.75 us | fused  186.38 us | saving -13.62 us = -3.72 floors | ratio 1.079 | cnt re-armed True
+   attn_qkv_fused   N= 5120 K= 2048 R=  1 sk= 8 | two-launch    6.21 us | fused    6.20 us | saving  +0.01 us = +0.00 floors | ratio 0.998 | cnt re-armed True
+   attn_qkv_fused   N= 5120 K= 2048 R=  8 sk= 8 | two-launch   16.57 us | fused   18.49 us | saving  -1.92 us = -0.52 floors | ratio 1.116 | cnt re-armed True
+   attn_qkv_fused   N= 5120 K= 2048 R= 16 sk= 8 | two-launch   28.94 us | fused   32.31 us | saving  -3.37 us = -0.92 floors | ratio 1.117 | cnt re-armed True
+   attn_qkv_fused   N= 5120 K= 2048 R=128 sk= 8 | two-launch  214.84 us | fused  235.96 us | saving -21.11 us = -5.76 floors | ratio 1.098 | cnt re-armed True
+rows: 24; P1 failures: 0

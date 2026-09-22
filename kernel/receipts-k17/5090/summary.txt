@@ -1,0 +1,21 @@
+gnf4 0.32.1 @af1a13769aa41805f1c04993433a0d482da2524e
+int4_b32 from /opt/conda/lib/python3.11/site-packages/int4_b32.py
+torch 2.8.0+cu128
+triton 3.4.0
+........................................................................ [ 73%]
+.....................................................                    [100%]
+197 passed in 323.28s (0:05:23)
+...........................                                              [100%]
+27 passed in 13.64s
+   attn_kv          N=  512 K= 2048 R=  8 sk=16 | two-launch    6.20 us | fused    4.18 us | saving  +2.03 us = +0.55 floors | ratio 0.673 | cnt re-armed True
+   attn_kv          N=  512 K= 2048 R= 16 sk=16 | two-launch    8.25 us | fused    6.21 us | saving  +2.04 us = +0.56 floors | ratio 0.753 | cnt re-armed True
+   attn_kv          N=  512 K= 2048 R=128 sk=16 | two-launch   26.75 us | fused   28.83 us | saving  -2.08 us = -0.57 floors | ratio 1.078 | cnt re-armed True
+   attn_o           N= 2048 K= 4096 R=  1 sk=16 | two-launch    6.21 us | fused    6.20 us | saving  +0.01 us = +0.00 floors | ratio 0.998 | cnt re-armed True
+   attn_o           N= 2048 K= 4096 R=  8 sk=16 | two-launch   16.08 us | fused   14.66 us | saving  +1.41 us = +0.39 floors | ratio 0.912 | cnt re-armed True
+   attn_o           N= 2048 K= 4096 R= 16 sk=16 | two-launch   24.79 us | fused   26.75 us | saving  -1.96 us = -0.53 floors | ratio 1.079 | cnt re-armed True
+   attn_o           N= 2048 K= 4096 R=128 sk=16 | two-launch  172.75 us | fused  186.38 us | saving -13.62 us = -3.72 floors | ratio 1.079 | cnt re-armed True
+   attn_qkv_fused   N= 5120 K= 2048 R=  1 sk= 8 | two-launch    6.21 us | fused    6.20 us | saving  +0.01 us = +0.00 floors | ratio 0.998 | cnt re-armed True
+   attn_qkv_fused   N= 5120 K= 2048 R=  8 sk= 8 | two-launch   16.57 us | fused   18.49 us | saving  -1.92 us = -0.52 floors | ratio 1.116 | cnt re-armed True
+   attn_qkv_fused   N= 5120 K= 2048 R= 16 sk= 8 | two-launch   28.94 us | fused   32.31 us | saving  -3.37 us = -0.92 floors | ratio 1.117 | cnt re-armed True
+   attn_qkv_fused   N= 5120 K= 2048 R=128 sk= 8 | two-launch  214.84 us | fused  235.96 us | saving -21.11 us = -5.76 floors | ratio 1.098 | cnt re-armed True
+rows: 24; P1 failures: 0

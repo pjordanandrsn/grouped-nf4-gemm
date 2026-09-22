@@ -1,0 +1,36 @@
+gcc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0
+dcfd79aeb34f407d83b57852eb77bd61cf5678c1
+[2026-09-21T23:33:04Z] k17-probe2: compiled contract (A2000, sm_86): P1 torch.equal on the six registered shapes x four row counts
+...........................                                              [100%]
+27 passed in 43.21s
+[2026-09-21T23:33:48Z] k17-probe2: compiled rc=0
+[2026-09-21T23:33:48Z] k17-probe2: pilot bench (A2000; the registered numbers come only from the 5090 lane)
+launch floor 3.34 us on NVIDIA RTX A2000 12GB
+   expert_gate_up   N= 1536 K= 2048 R=  1 sk=16 | two-launch   14.18 us | fused   11.37 us | saving  +2.81 us = +0.84 floors | ratio 0.802 | cnt re-armed True
+   expert_gate_up   N= 1536 K= 2048 R=  8 sk=16 | two-launch   75.36 us | fused   71.71 us | saving  +3.65 us = +1.09 floors | ratio 0.952 | cnt re-armed True
+   expert_gate_up   N= 1536 K= 2048 R= 16 sk= 2 | two-launch  132.52 us | fused  131.73 us | saving  +0.78 us = +0.23 floors | ratio 0.994 | cnt re-armed True
+   expert_gate_up   N= 1536 K= 2048 R=128 sk= 1 | two-launch 1035.83 us | fused 1016.66 us | saving +19.17 us = +5.73 floors | ratio 0.981 | cnt re-armed True
+   expert_down      N= 2048 K=  768 R=  1 sk= 6 | two-launch    5.57 us | fused    4.83 us | saving  +0.74 us = +0.22 floors | ratio 0.867 | cnt re-armed True
+   expert_down      N= 2048 K=  768 R=  8 sk= 6 | two-launch   36.98 us | fused   35.00 us | saving  +1.98 us = +0.59 floors | ratio 0.946 | cnt re-armed True
+   expert_down      N= 2048 K=  768 R= 16 sk= 1 | two-launch   61.39 us | fused   59.22 us | saving  +2.17 us = +0.65 floors | ratio 0.965 | cnt re-armed True
+   expert_down      N= 2048 K=  768 R=128 sk= 1 | two-launch  476.38 us | fused  457.34 us | saving +19.05 us = +5.70 floors | ratio 0.960 | cnt re-armed True
+   attn_q           N= 4096 K= 2048 R=  1 sk= 8 | two-launch   23.41 us | fused   22.58 us | saving  +0.83 us = +0.25 floors | ratio 0.964 | cnt re-armed True
+   attn_q           N= 4096 K= 2048 R=  8 sk= 8 | two-launch  202.28 us | fused  206.57 us | saving  -4.28 us = -1.28 floors | ratio 1.021 | cnt re-armed True
+   attn_q           N= 4096 K= 2048 R= 16 sk= 1 | two-launch  388.96 us | fused  386.12 us | saving  +2.84 us = +0.85 floors | ratio 0.993 | cnt re-armed True
+   attn_q           N= 4096 K= 2048 R=128 sk= 1 | two-launch 3057.19 us | fused 3154.35 us | saving -97.17 us = -29.06 floors | ratio 1.032 | cnt re-armed True
+   attn_kv          N=  512 K= 2048 R=  1 sk=16 | two-launch    5.70 us | fused    4.31 us | saving  +1.39 us = +0.42 floors | ratio 0.756 | cnt re-armed True
+   attn_kv          N=  512 K= 2048 R=  8 sk=16 | two-launch   23.69 us | fused   21.98 us | saving  +1.71 us = +0.51 floors | ratio 0.928 | cnt re-armed True
+   attn_kv          N=  512 K= 2048 R= 16 sk= 4 | two-launch   28.52 us | fused   28.29 us | saving  +0.23 us = +0.07 floors | ratio 0.992 | cnt re-armed True
+   attn_kv          N=  512 K= 2048 R=128 sk= 1 | two-launch  250.18 us | fused  230.48 us | saving +19.70 us = +5.89 floors | ratio 0.921 | cnt re-armed True
+   attn_o           N= 2048 K= 4096 R=  1 sk=16 | two-launch   25.39 us | fused   23.82 us | saving  +1.57 us = +0.47 floors | ratio 0.938 | cnt re-armed True
+   attn_o           N= 2048 K= 4096 R=  8 sk=16 | two-launch  232.04 us | fused  228.99 us | saving  +3.06 us = +0.91 floors | ratio 0.987 | cnt re-armed True
+   attn_o           N= 2048 K= 4096 R= 16 sk= 1 | two-launch  474.62 us | fused  479.90 us | saving  -5.27 us = -1.58 floors | ratio 1.011 | cnt re-armed True
+   attn_o           N= 2048 K= 4096 R=128 sk= 1 | two-launch 3841.08 us | fused 3884.80 us | saving -43.72 us = -13.08 floors | ratio 1.011 | cnt re-armed True
+   attn_qkv_fused   N= 5120 K= 2048 R=  1 sk= 8 | two-launch   28.03 us | fused   28.02 us | saving  +0.01 us = +0.00 floors | ratio 1.000 | cnt re-armed True
+   attn_qkv_fused   N= 5120 K= 2048 R=  8 sk= 8 | two-launch  251.74 us | fused  258.19 us | saving  -6.45 us = -1.93 floors | ratio 1.026 | cnt re-armed True
+   attn_qkv_fused   N= 5120 K= 2048 R= 16 sk= 1 | two-launch  491.08 us | fused  484.50 us | saving  +6.58 us = +1.97 floors | ratio 0.987 | cnt re-armed True
+   attn_qkv_fused   N= 5120 K= 2048 R=128 sk= 1 | two-launch 3856.54 us | fused 3965.12 us | saving -108.58 us = -32.48 floors | ratio 1.028 | cnt re-armed True
+rows: 24; P1 failures: 0
+[2026-09-21T23:34:15Z] k17-probe2: bench rc=0
+[2026-09-21T23:34:16Z] k17-probe2: rows -> /share/Container/scripts/k17-a2000-rows.json
+K17_PROBE2_DONE rc=0

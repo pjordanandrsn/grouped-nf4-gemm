@@ -1,0 +1,27 @@
+[2026-09-21T23:13:43Z] k17-probe: runtime nvidia-runtime
+torch 2.8.0+cu128 triton 3.4.0 cuda True NVIDIA RTX A2000 12GB
+f486472a6863ea9545b296301b7c2c70b6787623
+[2026-09-21T23:14:01Z] k17-probe: interpreter run (CPU)
+........................................................................ [ 36%]
+........................................................................ [ 73%]
+.....................................................                    [100%]
+197 passed in 1053.34s (0:17:33)
+[2026-09-21T23:31:36Z] k17-probe: interpreter rc=0
+[2026-09-21T23:31:36Z] k17-probe: compiled run (A2000, sm_86)
+        cc = os.environ.get("CC")
+        if cc is None:
+            clang = shutil.which("clang")
+            gcc = shutil.which("gcc")
+            cc = gcc if gcc is not None else clang
+            if cc is None:
+>               raise RuntimeError(
+                    "Failed to find C compiler. Please specify via CC environment variable or set triton.knobs.build.impl.")
+E               RuntimeError: Failed to find C compiler. Please specify via CC environment variable or set triton.knobs.build.impl.
+
+/opt/conda/lib/python3.11/site-packages/triton/runtime/build.py:32: RuntimeError
+=========================== short test summary info ============================
+FAILED test_int4_b32_fused_reduce_interp.py::test_p1_fused_reduce_is_bitwise_the_two_launch_result[8-1536-2048-1]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed in 2.15s
+[2026-09-21T23:31:39Z] k17-probe: compiled rc=1
+K17_PROBE_DONE rc=1

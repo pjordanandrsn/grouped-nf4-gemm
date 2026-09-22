@@ -247,6 +247,12 @@ was wrong.
   the route is the consumer's default from 0.36.2. Nothing in this package
   routes to it on its own
   (`gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19`, measured).
+- **K17 read (2026-09-21, RTX 5090): folding the int4-b32 GEMV's split-K reduce into its own launch is exact
+  (24/24 rows bitwise, counter re-arms under graph replay) but was not the cost** — at R=1 the removed
+  `_reduce_partials` launch was overlapped in the graph (savings 0–2 µs; P2 refuted by its own clause), and the
+  fused epilogue is 6–12 % slower at R=128. Ships **opt-in** (`GNF4_GEMV_FUSED_REDUCE=1`), default off at every
+  R. `kernel/RESULTS-k17-fused-splitk-gemv.md`; register row
+  `gnf4.kernel.k17-fused-splitk-gemv.5090.2026-09-21`; the consumer's step-level read is experts4bit-qlora lane P57.
 - **Every non-CUDA row is a `port target`.** ROCm/XPU numbers do not
   exist; `PROJECTIONS-multiarch.md` is arithmetic, stamped before the
   silicon, and explicitly invites refutation (`gnf4.projection.multiarch`,
