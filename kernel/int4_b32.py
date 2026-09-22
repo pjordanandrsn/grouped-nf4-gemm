@@ -33,6 +33,7 @@ import triton
 import triton.language as tl
 
 from int4_pack_ref import BLOCK, dequant_int4_ref, pack_int4_b32  # noqa: F401
+from _triton_shim import UnsupportedShapeError  # noqa: E402
 
 
 # ------------------------------------------------- activation quantise --
@@ -347,6 +348,129 @@ def gemv_int4_b32(xq, xs, packed, scales, eids, N: int, K: int,
         xq, xs, packed, scales, eids, part, cnt, out,
         N, K=K, R=R, BLOCK_N=bn, SK=sk, KU=ku, FUSED_REDUCE=1, num_warps=wp)
     return out
+
+
+# ---------------------------------------- K18: grouped split-K GEMV --
+@triton.jit
+def _gemv_int4_b32_grouped(xq_ptr, xs_ptr, w_ptr, ws_ptr, eid_ptr, part_ptr,
+                           N, K: tl.constexpr, R: tl.constexpr, RP: tl.constexpr,
+                           E: tl.constexpr, EB: tl.constexpr, MT: tl.constexpr,
+                           BLOCK_N: tl.constexpr, SK: tl.constexpr, KU: tl.constexpr):
+    """Lane K18 (``PREREG-k18-grouped-expert-gemv.md``): the split-K GEMV with
+    each program serving up to ``MT`` rows of ONE expert, so the expert's
+    weight slice is read once per program instead of once per row.
+
+    Grid ``(cdiv(N, BLOCK_N), R, SK)`` -- the served GEMV's grid. Program
+    ``(pid, t, sk)`` derives tile ``t`` of the call's expert-major tiling
+    in-register from the ``R`` expert ids (histogram, cumsum, per-expert
+    rank: no extra launch, no sort, no host sync, legal under capture):
+    experts in id order, each expert's rows in input order, ``MT`` rows per
+    tile. Slots ``t >= #tiles`` exit before any load.
+
+    **Arithmetic is the served GEMV's, row by row:** the same int32 block
+    dots, the same fp32 scale products summed over the same ``KU`` axis,
+    accumulated in the same k order, and the fp32 partial stored at the
+    row's ORIGINAL index ``part[(sk*R + row)*N + n]``, so the served
+    ``_reduce_partials`` runs unchanged and the result is bitwise the
+    served GEMV's. Only the weight loads are shared across a tile's rows,
+    and only rows that exist are computed (P7's lesson: an M-tile that
+    pads 1-2 rows to 16 MMA lanes lost 1.92x/1.28x to this GEMV)."""
+    pid = tl.program_id(0)
+    t = tl.program_id(1)
+    sk = tl.program_id(2)
+    ridx = tl.arange(0, RP)
+    rmask = ridx < R
+    e_all = tl.load(eid_ptr + ridx, mask=rmask, other=E).to(tl.int32)
+    bins = tl.arange(0, EB)
+    cnt = tl.histogram(e_all, EB)                     # pad rows land in bin E
+    cnt = tl.where(bins < E, cnt, 0)
+    tiles = (cnt + MT - 1) // MT
+    tend = tl.cumsum(tiles, 0)
+    ntiles = tl.sum(tiles, 0)
+    if t < ntiles:
+        x = tl.sum((tend <= t).to(tl.int32), 0)       # this tile's expert
+        c = t - tl.sum(tl.where(bins == x, tend - tiles, 0), 0)
+        sel = (e_all == x) & rmask
+        rank = tl.cumsum(sel.to(tl.int32), 0) - 1
+        mm = tl.arange(0, MT)
+        hit = sel[None, :] & (rank[None, :] == (c * MT + mm)[:, None])      # [MT, RP]
+        rows = tl.sum(tl.where(hit, ridx[None, :], 0), axis=1)              # [MT]
+        valid = tl.sum(hit.to(tl.int32), axis=1) > 0                        # [MT]
+        eid = x.to(tl.int64)
+        offs_n = pid * BLOCK_N + tl.arange(0, BLOCK_N)
+        n_mask = offs_n < N
+        KB: tl.constexpr = K // 32
+        span: tl.constexpr = (KB + SK * KU - 1) // (SK * KU)
+        ku = tl.arange(0, KU)
+        pair = tl.arange(0, 16)
+        wbase = w_ptr + eid * N * (K // 2)
+        sbase = ws_ptr + eid * N * KB
+        acc = tl.zeros((MT, BLOCK_N), dtype=tl.float32)
+        for kbi in range(0, span):
+            kb0 = (sk * span + kbi) * KU
+            if kb0 < KB:
+                wb = tl.load(wbase + offs_n[:, None] * (K // 2) + kb0 * 16
+                             + tl.arange(0, KU * 16)[None, :],
+                             mask=n_mask[:, None], other=0).to(tl.int32)
+                wb = tl.reshape(wb, (BLOCK_N, KU, 16))
+                lo = (wb & 0xF) - 8
+                hi = ((wb >> 4) & 0xF) - 8
+                ws = tl.load(sbase + offs_n[:, None] * KB + kb0 + ku[None, :],
+                             mask=n_mask[:, None], other=0.0).to(tl.float32)
+                for m in tl.static_range(MT):
+                    is_m = mm == m
+                    ok = tl.sum((valid & is_m).to(tl.int32), 0) > 0
+                    if ok:
+                        e = tl.sum(tl.where(is_m, rows, 0), 0).to(tl.int64)
+                        xoff = e * K + kb0 * 32 + ku[:, None] * 32 + 2 * pair[None, :]
+                        xe = tl.load(xq_ptr + xoff).to(tl.int32)
+                        xo = tl.load(xq_ptr + xoff + 1).to(tl.int32)
+                        xsv = tl.load(xs_ptr + e * KB + kb0 + ku)
+                        d = tl.sum(lo * xe[None, :, :], axis=2) \
+                          + tl.sum(hi * xo[None, :, :], axis=2)
+                        contrib = tl.sum(d.to(tl.float32) * (ws * xsv[None, :]), axis=1)
+                        acc = tl.where(is_m[:, None], acc + contrib[None, :], acc)
+        poff = (sk * R + rows.to(tl.int64))[:, None] * N + offs_n[None, :]
+        tl.store(part_ptr + poff, acc, mask=valid[:, None] & n_mask[None, :])
+
+
+GROUPED_MT_DEFAULT = 4
+# The in-register tiling holds a histogram of next_pow2(E + 1) int32 bins in
+# shared memory (16 KiB at this bound; sm_86/sm_120 allow ~99 KiB per block,
+# less what the reductions take). Every shipped MoE is far below it (Kimi-K2:
+# 384 experts, 2 KiB); past it, call gemv_int4_b32.
+GROUPED_E_MAX = 4095
+
+
+def gemv_int4_b32_grouped(xq, xs, packed, scales, eids, N: int, K: int,
+                          part: torch.Tensor | None = None,
+                          out: torch.Tensor | None = None,
+                          mt: int = GROUPED_MT_DEFAULT):
+    """Lane K18: :func:`gemv_int4_b32` with each program serving up to ``mt``
+    rows of one expert (the expert's weight slice read once per program).
+    Same inputs, same plan, same partial layout and the same two-launch
+    reduce as the served GEMV, so the result is ``torch.equal`` to
+    ``gemv_int4_b32(..., fused_reduce=False)`` -- the lane's P1. Opt-in;
+    nothing calls it until the lane's 5090 read and a consumer lane say so."""
+    R = eids.numel()
+    E = packed.shape[0]
+    if E > GROUPED_E_MAX:
+        raise UnsupportedShapeError(
+            "gemv_int4_b32_grouped", {"E": E, "N": N, "K": K, "R": R},
+            need_bytes=4 * triton.next_power_of_2(E + 1),
+            limit_bytes=4 * triton.next_power_of_2(GROUPED_E_MAX + 1),
+            hint=(f"the limit is the contract's GROUPED_E_MAX={GROUPED_E_MAX} (the expert-id "
+                  "histogram stays at 16 KiB so the kernel fits a 64 KB LDS on every target), "
+                  "not the device's; use gemv_int4_b32"))
+    bn, wp, sk, ku = _plan(N, K, R, _sm_count(xq.device))
+    if part is None:
+        part = torch.empty(sk * R, N, dtype=torch.float32, device=xq.device)
+    rp = triton.next_power_of_2(max(R, 2))
+    eb = triton.next_power_of_2(E + 1)
+    _gemv_int4_b32_grouped[(triton.cdiv(N, bn), R, sk)](
+        xq, xs, packed, scales, eids, part,
+        N, K=K, R=R, RP=rp, E=E, EB=eb, MT=mt, BLOCK_N=bn, SK=sk, KU=ku, num_warps=wp)
+    return reduce_partials(part, sk, R, N, out=out)
 
 
 # ------------------------------------------------- grouped M-tile GEMM --

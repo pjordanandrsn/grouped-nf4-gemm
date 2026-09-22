@@ -1,7 +1,26 @@
 # Changelog
 
-## Unreleased — K17: the int4-b32 GEMV's fused split-K reduce is exact but was not the cost (ships opt-in); #319 was a mislabelled test arm: the f32 paged-decode arms never ran an f32 kernel on sm_89+
+## Unreleased — K18: a grouped split-K int4-b32 GEMV, bitwise the served one (opt-in, awaiting its read); K17: the int4-b32 GEMV's fused split-K reduce is exact but was not the cost (ships opt-in); #319 was a mislabelled test arm: the f32 paged-decode arms never ran an f32 kernel on sm_89+
 
+- **K18: `int4_b32.gemv_int4_b32_grouped(xq, xs, packed, scales, eids, N, K, part=None, out=None, mt=4)` — the split-K
+  int4-b32 GEMV with each program serving up to `mt` rows of ONE expert, so the expert's weight slice is loaded once per
+  program instead of once per row.** New kernel `_gemv_int4_b32_grouped`: grid `(cdiv(N, BLOCK_N), R, SK)` (the served
+  GEMV's, from the same `_plan`); each program derives its tile of the call's expert-major tiling in-register from the `R`
+  expert ids (`tl.histogram` over `next_pow2(E + 1)` bins, `tl.cumsum`, per-expert rank — no sort, no extra launch, no
+  host sync, capture-legal); rows are computed with the served GEMV's per-row arithmetic and their fp32 partials stored at
+  the ORIGINAL row index, so the served `reduce_partials` runs unchanged and the result is `torch.equal` to
+  `gemv_int4_b32(..., fused_reduce=False)`. Distinct from `_gemm_int4_b32_grouped` (16-row MMA tiles, no split-K), which
+  P7 measured 1.92×/1.28× slower than this GEMV at decode. Pre-registered (`kernel/PREREG-k18-grouped-expert-gemv.md`):
+  P1 bitwise identity, P2 ≥ 0.5 ms/step saved on experts4bit-qlora P60's recorded Qwen3-30B-A3B B=16 routing (where
+  repeated rows cost 0.92 ms/step), P3 no regression beyond +3 % at R = 8/16. **Not yet measured — inside no registered
+  claim, and nothing routes to it.** `GROUPED_MT_DEFAULT = 4`; `GROUPED_E_MAX = 4095` bounds the histogram at 16 KiB and
+  the wrapper refuses larger `E` with `UnsupportedShapeError` before the launch (KERNEL_CONTRACT's feasibility table).
+- `kernel/test_int4_b32_grouped_interp.py` (bitwise vs the served GEMV: one row, all-distinct, one expert across many
+  tiles, skewed, non-power-of-two `R`, ragged `N`, `SK > 1`, `mt` ∈ {1, 2, 4, 8}; compiled adds Qwen3-30B-A3B's expert
+  shapes at R=128 and a CUDA-graph replay; the `GROUPED_E_MAX` refusal) — named in `ci.yml`'s interpreter job and
+  guarded in `conftest._INTERP_FILES`. `kernel/test_expert_offset_boundary.py` gains an `int4_b32_grouped` case: 2 MiB
+  per expert, experts 1023/1024 straddling 2^31, bitwise vs the served GEMV and within tolerance of `dequant_int4_ref`.
+  `kernel/k18_bench.py` is the lane's instrument (deliberately not in the wheel).
 - **K17: `gemv_int4_b32(..., fused_reduce=True)` / `GNF4_GEMV_FUSED_REDUCE=1` — the int4-b32 GEMV can fold its split-K reduce into
   its own launch (fp32 partials, `acq_rel` atomic counter per (row, column block), last arriver sums in split order, casts once;
   `gemv_counter_len` sizes the `cnt` workspace; `cnt`/`out` allocated when not passed). OFF by default.** Pre-registered

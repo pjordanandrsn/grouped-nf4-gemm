@@ -80,6 +80,14 @@ _CPU_PATH = {
         "x.bfloat16() @ int4_pack_ref.dequant_int4_ref(packed, scales, N, K).T "
         "— the pure-torch reference test_int4_smallm_interp pins the small-M "
         "GEMM against (the interpreter job runs that file on CPU).",
+    "int4_b32":
+        "For a CPU-checkable result over the same int4-b32 bytes, use "
+        "(xq.float() * xs.repeat_interleave(32, dim=1)) @ "
+        "int4_pack_ref.dequant_int4_ref(packed[e], scales[e], N, K).T per row "
+        "— the reference test_expert_offset_boundary pins every int4_b32 "
+        "kernel against. int4_b32 imports triton itself (it takes only "
+        "UnsupportedShapeError from this shim), so without triton it fails "
+        "at import, before any launch could reach this message.",
 }
 
 #: A consumer added later without an entry gets a message that is vague but

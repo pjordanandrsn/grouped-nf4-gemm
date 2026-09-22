@@ -210,6 +210,7 @@ That's the same instrument the 144/144 training receipt used.
 | nowhere yet — you need to make an arena | `nvme_arena.bake_expert_tensors(...)` (relocates MXFP4) or `nvme_bake_nf4.bake_nf4` (re-quantises bf16) |
 | a checkpoint you want to **verify**, not run | `verify_provenance` |
 | **VRAM**, int4-b32-packed, one projection, ≤ 16 rows (the K16 lane) | `int4_smallm.gemm_int4_b32_smallm(...)`; `plan_smallm` picks (BLOCK_N, KC, SK), `smallm_workspace` preallocates — measured on the 5090 class (`gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19`); nothing here routes to it, the consumer's route is opt-in |
+| **VRAM**, int4-b32-packed experts, several rows per expert (batch-16 decode; the K18 lane) | `int4_b32.gemv_int4_b32_grouped(...)` — `gemv_int4_b32`'s arguments and bitwise its result, each expert's weights read once per four of its rows; pre-registered and not yet measured (no claim), nothing routes to it |
 
 **Do not quantise-bake a checkpoint that is already MXFP4.** Relocation
 keeps the bytes and hands packed nibbles to the kernel; re-quantising to

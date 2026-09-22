@@ -26,6 +26,11 @@ stack is barely past 2 GiB and the boundary lands on a whole expert:
   expert 1365 = 2^31 - 1 MiB below, expert 1366 = 2^31 + 0.5 MiB above,
   E = 1368: 2.00 GiB packed + 269 MiB absmax
 
+  int4-b32 grouped GEMV (K18): N=2048, K=2048 -> 2 MiB/expert, expert 1023
+  = 2^31 - 2 MiB below, expert 1024 = 2^31 above, E = 1026: 2.00 GiB packed
+  + 269 MiB fp16 scales (its tiling histograms the expert ids, which bounds E
+  -- ``int4_b32.GROUPED_E_MAX`` -- so it cannot share the 16386-expert stack)
+
   fp8 paged attention: head_dim 128, 8 kv heads, 16 tokens/block, K rows
   padded to a 1 MiB stride (``k_row_bytes``), 2050 rows = 2.00 GiB K pool
   (+ 35 MiB V pool at its natural row); the 32-token sequence's blocks sit
@@ -350,6 +355,50 @@ def case_int4_b32(big: bool):
     _i4_check_experts(P, S, experts, "int4-b32")
 
 
+
+# ------------------------------------------------- int4-b32 grouped (K18) --
+# Its own stack: the grouped GEMV's in-register tiling holds a histogram of
+# next_pow2(E + 1) bins, so the 16k-expert stack above would exceed its
+# expert bound; a wider per-expert slice crosses 2^31 at ~1k experts instead.
+I4G_N, I4G_K = 2048, 2048
+I4G_STRIDE = I4G_N * (I4G_K // 2)                      # 2 MiB
+I4G_BELOW, I4G_ABOVE = straddle(I4G_STRIDE)            # 1023, 1024
+I4G_E = I4G_ABOVE + 2                                  # 1026
+
+
+def case_int4_b32_grouped(big: bool):
+    """The K18 grouped GEMV over 4 rows per sampled expert in shuffled order
+    (the tiling must find each expert's rows by rank): bitwise against the
+    served GEMV, and within tolerance of the pure-torch reference."""
+    from int4_b32 import gemv_int4_b32, gemv_int4_b32_grouped, quant_x_rows
+    from int4_pack_ref import dequant_int4_ref
+    E = I4G_E if big else 8
+    g = torch.Generator(device=DEV).manual_seed(29)
+    P = torch.randint(0, 256, (E, I4G_N, I4G_K // 2), generator=g, dtype=torch.uint8, device=DEV)
+    S = (torch.rand(E, I4G_N, I4G_K // 32, generator=g, device=DEV) * 0.05 + 1e-3).half()
+    if big:
+        assert (E - 1) * I4G_STRIDE >= BOUNDARY
+        experts = (0, I4G_BELOW, I4G_ABOVE, I4G_ABOVE + 1)
+    else:
+        experts = (0, E - 1)
+    rows_per = 4
+    flat = torch.tensor(experts, dtype=torch.int32, device=DEV).repeat_interleave(rows_per)
+    perm = torch.randperm(flat.numel(), generator=torch.Generator().manual_seed(len(experts))).to(DEV)
+    eids = flat.index_select(0, perm)
+    torch.manual_seed(len(experts))
+    x = (torch.randn(eids.numel(), I4G_K, device=DEV) * 0.5).bfloat16()
+    xq, xs = quant_x_rows(x)
+    got = gemv_int4_b32_grouped(xq, xs, P, S, eids, I4G_N, I4G_K)
+    served = gemv_int4_b32(xq, xs, P, S, eids, I4G_N, I4G_K, fused_reduce=False)
+    torch.cuda.synchronize()
+    assert torch.equal(got, served), "int4-b32 grouped gemv != served gemv"
+    x_deq = xq.float() * xs.repeat_interleave(32, dim=1)
+    for r_i in range(eids.numel()):
+        e = int(eids[r_i])
+        want = x_deq[r_i:r_i + 1] @ dequant_int4_ref(P[e], S[e], I4G_N, I4G_K).T
+        r = _rel(got[r_i:r_i + 1], want)
+        assert r < 1e-2, f"int4-b32 grouped row {r_i} expert {e}: rel {r:.3e}"
+
 # ------------------------------------------------------ fp8 paged attention --
 FA_D, FA_HKV, FA_G, FA_BT, FA_KG = 128, 8, 2, 16, 4
 FA_KROW = 2 ** 20                                       # padded K row stride
@@ -438,6 +487,7 @@ CASES = {
     "nf4_dotpad": case_nf4_dotpad,
     "mxfp4": case_mxfp4,
     "int4_b32": case_int4_b32,
+    "int4_b32_grouped": case_int4_b32_grouped,
     "fp8_attn": case_fp8_attn,
 }
 
