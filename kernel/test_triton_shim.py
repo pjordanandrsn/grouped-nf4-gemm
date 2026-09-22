@@ -74,6 +74,7 @@ def test_consumers_are_actually_found():
         ("nf4_grouped", "dequant_ref(packed, absmax, N, K)", "dequant_mxfp4"),
         ("mxfp4_grouped", "mxfp4_pack_ref.dequant_mxfp4", "dequant_ref("),
         ("host_gather", "no CPU equivalent", "dequant_ref("),
+        ("int4_b32", "int4_pack_ref.dequant_int4_ref", "dequant_mxfp4"),
     ],
 )
 def test_launch_failure_names_the_right_cpu_path(module, expect, forbid):
