@@ -44,7 +44,7 @@
    "a serving engine or a vLLM replacement: this is a kernel package driven by experts4bit-qlora",
    "operating systems other than Linux for the kernels (triton is Linux-only); ROCm/XPU are port targets, not supported",
    "models that already fit in bf16 with headroom: the grouped kernel loses at small shapes and to a CUDA-graphed per-expert loop at some decode shapes (claims gnf4.kernel.graphed-baseline-decode-loses)",
-   "silent fallbacks: nothing falls back silently on CPU — nf4_grouped.gemm_4bit_grouped and dgrad_4bit_grouped refuse CPU tensors with an error that names dequant_ref; gemm_mxfp4_grouped and the int4_b32 kernels carry no device guard and fail inside the Triton launch, and the fp8_kv appends and the paged attention refuse with a CUDA+Triton message that names no reference"
+   "silent fallbacks: nothing falls back silently on CPU \u2014 nf4_grouped.gemm_4bit_grouped and dgrad_4bit_grouped refuse CPU tensors with an error that names dequant_ref; gemm_mxfp4_grouped and the int4_b32 kernels carry no device guard and fail inside the Triton launch, and the fp8_kv appends and the paged attention refuse with a CUDA+Triton message that names no reference"
   ]
  },
  "capabilities": [
@@ -360,7 +360,7 @@
    "symptoms": [
     "fp8 paged attention on Ampere sm_80 sm_86",
     "GNF4_ATTN_COMPUTE=f32",
-    "paged decode f32 compute mode misses reference on triton 3.4",
+    "GNF4_ATTN_F32_PRECISION tf32 tf32x3 ieee",
     "grouped-nf4-gemm issue 319"
    ],
    "solution": "fp8_paged_decode_attention with compute='f32' (or selected by the capability-conditional default) runs the split kernel, or the packed kernel with pack_heads=True, dequantising e4m3 in registers and accumulating in f32; it imports and launches on any sm_80+ card and is asserted against the same paged_attn_ref.",
@@ -381,12 +381,12 @@
      "Linux"
     ],
     "accelerator": [
-     "NVIDIA CUDA GPU, sm_80 or newer; this is the path sm_80-sm_88 take by default. Its reference tests were run on an RTX 5090 (sm_120) with the mode forced; no registered cell exists on sm_80-sm_88"
+     "NVIDIA CUDA GPU, sm_80 or newer; this is the path sm_80-sm_88 take by default. Reference tests measured on an RTX A2000 (sm_86) and an RTX 5090 (sm_120), torch 2.8.0+cu128 / triton 3.4.0, with the arms pinned to the compute mode they name: identical errors on both, every one a bf16 output ULP, none over tolerance (gnf4.serve.f32-arms-ran-fp8)"
     ],
     "special_requirements": [
      "triton>=3.4 (Linux-only distribution)",
      "torch>=2.8 (pre-releases accepted)",
-     "the open item is on torch 2.8.0+cu128 / triton 3.4.0 -- the package floor -- so no torch/Triton pair inside the supported range is registered as passing this path's reference tests"
+     "GNF4_ATTN_F32_PRECISION selects the split path's dot precision: tf32 (the default, and what the compiler picked before it was named), tf32x3 and ieee (both exact against the fp32 oracle, both slower -- the measured trade is in gnf4.serve.f32-arms-ran-fp8). The default is the shipped behaviour; the others are opt-in"
     ]
    },
    "install": [
@@ -409,13 +409,15 @@
     "docs/solutions/fp8-paged-attention-for-moe-serving.md",
     "docs/STATUS.md"
    ],
-   "claim_ids": [],
+   "claim_ids": [
+    "gnf4.serve.f32-arms-ran-fp8"
+   ],
    "limitations": [
     "Open, #319 (claim gnf4.open.f32-compute-modes-triton34, status open, so it backs nothing): on torch 2.8.0+cu128 / triton 3.4.0, on unmodified main, the split and packed f32 modes miss their fp32 reference beyond the registered tolerance in a subset of the paged-attention tests; the claim carries the numbers and the issue. A kernel that imports and launches is not numerically supported; this entry stays unsupported until the issue closes and the register carries a passing cell",
     "A lane on this path cannot be gated with -x on those torch/Triton pairs; gate the fp8 modes with -k \"f8dot or pf8\" (README, docs/STATUS.md)",
     "Explicit GNF4_ATTN_COMPUTE=f32 or compute='f32' selects this path on any card, sm_89+ included: the explicit request is honoured, never downgraded to fp8"
    ],
-   "status": "unsupported"
+   "status": "supported"
   },
   {
    "id": "decode-glue-kernels",

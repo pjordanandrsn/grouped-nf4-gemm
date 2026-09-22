@@ -107,6 +107,7 @@ if _TRITON:
         BLOCK_G: tl.constexpr,
         FUSE_COMBINE: tl.constexpr,
         HAS_SINK: tl.constexpr,
+        F32_PREC: tl.constexpr,
     ):
         pid = tl.program_id(0)
         s_id = pid % n_split
@@ -172,7 +173,7 @@ if _TRITON:
             k = k * ks[:, :, None]
             k = tl.reshape(k, (KTILE, D))
 
-            s = tl.dot(q, tl.trans(k)) * sm_scale
+            s = tl.dot(q, tl.trans(k), input_precision=F32_PREC) * sm_scale
             s = tl.where(t_mask[None, :], s, float("-inf"))
 
             m_new = tl.maximum(m_i, tl.max(s, axis=1))
@@ -193,7 +194,7 @@ if _TRITON:
             v = v * vs[:, :, None]
             v = tl.reshape(v, (KTILE, D))
 
-            acc += tl.dot(p.to(v.dtype), v)
+            acc += tl.dot(p.to(v.dtype), v, input_precision=F32_PREC)
             m_i = m_new
 
         # partials: [B, H_KV, n_split, BLOCK_G(, D)], fp32
@@ -963,6 +964,60 @@ def _f32_fuse_default() -> bool:
     return os.environ.get("GNF4_F32_FUSE_COMBINE", "1") == "1"
 
 
+#: What ``tl.dot`` is allowed to do with the f32 split path's fp32
+#: operands. Triton's own default for an fp32 dot is ``"tf32"``, and
+#: that is what this kernel has always run: the test file's tolerance
+#: comment says so in as many words ("bf16-output rounding plus tf32
+#: dot"). Naming it here makes the choice reviewable and measurable
+#: instead of inherited from whatever the compiler picks per
+#: architecture -- which is the whole of gnf4#319.
+_F32_PRECISIONS = ("tf32", "tf32x3", "ieee")
+
+
+def _f32_dot_precision() -> str:
+    """``input_precision`` for the f32 SPLIT path's two dots.
+
+    ``tf32`` is the default and the shipped behaviour. The measured
+    trade on the card where this path is the serving default (RTX
+    A2000, sm_86, torch 2.8.0+cu128 / triton 3.4.0, B=25 T=4096
+    H=32/8 D=128, ``kernel/RESULTS-319-f32-precision.md``):
+
+    ========  ====================  ==========  =========
+    mode      worst split abs err   KV GB/s     vs tf32
+    ========  ====================  ==========  =========
+    tf32      0.015625 (1 bf16 ULP) 77.9        1.00x
+    tf32x3    0.000000              39.5        0.51x
+    ieee      0.000000               4.5        0.06x
+    ========  ====================  ==========  =========
+
+    So exactness is available and it is not free: ``tf32x3`` costs 49%
+    of the path's throughput and ``ieee`` costs 94% -- the latter lands
+    *below* the 4.8 GB/s occupancy-starved first version this kernel
+    was written to replace, which is why gnf4#319's suggested remedy
+    ("pin ``input_precision='ieee'``") is not one. In the emitted PTX
+    ``ieee`` carries no ``mma.sync`` at all, only 1045 ``fma.rn.f32``:
+    it leaves the tensor cores entirely.
+
+    An unrecognised value RAISES rather than falling back: a typo'd
+    mode that silently ran tf32 would be recorded as an exact arm.
+
+    **Scope: the SPLIT f32 kernel only.** The packed f32 kernel
+    (``pack_heads=True``) casts q, k and v to bf16 before its dots, so
+    there are no fp32 operands for ``input_precision`` to govern and this
+    variable is a no-op on that path -- its residual is bf16 INPUT
+    rounding, one output ULP on the shapes measured. Said here because a
+    knob that quietly does nothing on one of the two kernels it appears
+    to name is the same defect as an arm that quietly runs a kernel it
+    does not name, which is what gnf4#319 turned out to be.
+    """
+    v = os.environ.get("GNF4_ATTN_F32_PRECISION", "tf32")
+    if v not in _F32_PRECISIONS:
+        raise ValueError(
+            f"GNF4_ATTN_F32_PRECISION={v!r} is not a dot precision; "
+            f"expected one of {_F32_PRECISIONS}")
+    return v
+
+
 #: PREREG-m3 mechanism receipt, the attention half. Same reasoning as
 #: ``nf4_grouped._DISPATCH_COUNTS``: ``GNF4_ATTN_COMPUTE=fp8`` is a
 #: request, and the caller may also pass ``compute=`` explicitly, so
@@ -1550,6 +1605,7 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
                 NG_K=k_groups, NG_V=v_groups, BLOCK_G=block_g,
                 FUSE_COMBINE=fuse_combine,
                 HAS_SINK=has_sink,
+                F32_PREC=_f32_dot_precision(),
                 num_warps=num_warps, num_stages=num_stages,
             )
         except Exception as e:  # noqa: BLE001 -- only the resource class is converted

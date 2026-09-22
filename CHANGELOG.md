@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## Unreleased — K17: the int4-b32 GEMV's fused split-K reduce is exact but was not the cost (ships opt-in); #319 was a mislabelled test arm: the f32 paged-decode arms never ran an f32 kernel on sm_89+
 
 - **K17: `gemv_int4_b32(..., fused_reduce=True)` / `GNF4_GEMV_FUSED_REDUCE=1` — the int4-b32 GEMV can fold its split-K reduce into
   its own launch (fp32 partials, `acq_rel` atomic counter per (row, column block), last arriver sums in split order, casts once;
@@ -15,6 +15,38 @@
   (constexpr); with `FUSED_REDUCE=0` the kernel body is byte-for-byte the shipped one.
 - `kernel/test_int4_b32_fused_reduce_interp.py` (named in `ci.yml`'s interpreter job and guarded in `conftest._INTERP_FILES`),
   `kernel/k17_bench.py`, `kernel/k17_reduce.py` (campaign instruments, deliberately not in the wheel).
+- **`kernel/test_fp8_paged_attn.py`: every shape arm now NAMES its compute mode, and a new test asserts
+  the kernel's own tally per arm** (#319). `_modes()` built its two f32 arms as `("split", {})` and
+  `("packed", {"pack_heads": True})` — no `compute` key. That was correct only while an unset `compute`
+  meant f32; since RESULTS-m3-default-on the default is capability-conditional and `_compute_default`
+  returns **fp8 on sm_89+**. So on every Ada/Hopper/Blackwell card those arms have been running the
+  **fp8** kernel, while `_close` judged them at the **f32** tolerance (2e-2) because it reads the
+  tolerance off the arm's *name* — the fp8 path's own envelope being 1.5e-1. Measured on an RTX 5090
+  (`compute_counts()` after one call per arm = **`{'f32': 0, 'fp8': 4}`**; `split` and `f8dot` return
+  byte-identical tensors, as do `packed` and `pf8`). The 27 failures that card reported for the f32
+  modes were the fp8 path's documented q/p rounding (relative Frobenius 0.049, exact at T=1) checked
+  against a tolerance written for a kernel that was not running. An RTX A2000 passes the identical
+  suite on the identical torch 2.8.0+cu128 / triton 3.4.0, because sm_86 has no fp8 MMA to default to.
+  `test_modes_run_the_kernel_they_name` holds it shut: both paths return a plausible tensor, so the
+  tally is the only witness. The claim `gnf4.open.f32-compute-modes-triton34` is **retired** (kept so
+  the retraction is findable) and replaced by `gnf4.serve.f32-arms-ran-fp8`.
+
+- **`fp8_paged_attn`: the f32 split path's dot precision is a stated arm, not an inherited one**
+  (`GNF4_ATTN_F32_PRECISION` = `tf32` (default, unchanged behaviour) | `tf32x3` | `ieee`; an
+  unrecognised value raises). Its two dots took fp32 operands and passed no `input_precision`, so what
+  they computed was whatever Triton picks per architecture. Measured on the A2000 — the class where f32
+  IS the serving default — at B=25 T=4096 H=32/8 D=128: `tf32` 0.015625 worst error (one bf16 output
+  ULP) at **77.9 GB/s**; `tf32x3` **exact** at 39.5 GB/s (0.51×); `ieee` exact at 4.5 GB/s (0.06×), and
+  in the emitted PTX `ieee` carries **no `mma.sync` at all** — 1045 `fma.rn.f32`, off the tensor cores
+  entirely, below the 4.8 GB/s occupancy-starved first version this kernel replaced. #319's suggested
+  remedy was to pin `ieee`; it is priced here and refused as a default. **This knob is not a fix for
+  #319 and is not offered as one.**
+
+- **`head_dim` 256 is covered in EVERY mode** (#324, the half that was still open). The issue asked for
+  it and only the fp8 half got a test; the f32 packed kernel has no pre-launch fit model, only the
+  `OutOfResources` catch, and that catch had never been exercised. The new case reproduces #324's
+  numbers on the A2000 to the byte — `Required: 148480, Hardware limit: 101376` — warns once, remembers
+  the geometry in `_PACKED_UNFIT`, and returns the split kernel's result, which matches the oracle.
 
 ## 0.32.1 — 2026-09-19 — the `auto` LoRA-delta rule is STRUCTURAL (pad unless the padded block would not fit): P46 read the 4× flop-waste guard as the defect behind the consumer's launch-bound training step
 

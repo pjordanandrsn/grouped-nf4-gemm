@@ -309,13 +309,6 @@ never ran Unsloth's own kernel.
 
 ## What is open
 
-[#319](https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/319) the
-f32 paged compute modes miss their reference on torch 2.8 / triton 3.4
-(the fp8 modes, the sm_89+ default, pass; the f32 path is the sm_80–sm_88
-default and every explicit f32 request, and `docs/capabilities.json`
-carries it as its own `unsupported` entry, `fp8-paged-attention-f32-compute`,
-beside the supported `fp8-paged-attention-fp8-compute`, until this closes;
-claim `gnf4.open.f32-compute-modes-triton34`);
 #73, #60, #58 arena/NVMe
 efficiency; #71 pinned-row factor, conservative on cgroup v1 (v2 unmeasured).
 [#87](https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/87) (int32
