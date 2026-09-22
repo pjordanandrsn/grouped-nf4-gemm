@@ -1,0 +1,155 @@
+{
+ "device": "NVIDIA GeForce RTX 5090",
+ "sm_count": 170,
+ "torch": "2.8.0+cu128",
+ "steps": 128,
+ "layers": 48,
+ "eids_sha256": "c050961e7f7d9f12cca31d71681d6fdbd1984dd2888a87bf044338ff3ee3cc76",
+ "plans": {
+  "gate_up": 16,
+  "down": 6
+ },
+ "p1_replay_mismatches": 0,
+ "replay": {
+  "served": {
+   "step_ms_median": 6.520079970359802,
+   "step_ms_mean": 6.536898873746395,
+   "min": 6.078320026397705,
+   "max": 6.926959991455078
+  },
+  "grouped": {
+   "step_ms_median": 9.68891167640686,
+   "step_ms_mean": 9.685724075883627,
+   "min": 9.193151950836182,
+   "max": 10.077871799468994
+  },
+  "dedup": {
+   "step_ms_median": 5.563719987869263,
+   "step_ms_mean": 5.569005124270916,
+   "min": 4.8061439990997314,
+   "max": 6.142767906188965
+  }
+ },
+ "small_r": [
+  {
+   "shape": "expert_gate_up",
+   "N": 1536,
+   "K": 2048,
+   "R": 8,
+   "p1_equal": true,
+   "served_us": 10.71999967098236,
+   "grouped_us": 14.816000126302242,
+   "ratio": 1.3820896064397483
+  },
+  {
+   "shape": "expert_gate_up",
+   "N": 1536,
+   "K": 2048,
+   "R": 16,
+   "p1_equal": true,
+   "served_us": 14.84800036996603,
+   "grouped_us": 16.896000131964684,
+   "ratio": 1.1379310150167607
+  },
+  {
+   "shape": "expert_down",
+   "N": 2048,
+   "K": 768,
+   "R": 8,
+   "p1_equal": true,
+   "served_us": 9.02399979531765,
+   "grouped_us": 8.991999551653862,
+   "ratio": 0.9964538736270371
+  },
+  {
+   "shape": "expert_down",
+   "N": 2048,
+   "K": 768,
+   "R": 16,
+   "p1_equal": true,
+   "served_us": 8.880000095814466,
+   "grouped_us": 10.879999957978725,
+   "ratio": 1.225225207273021
+  },
+  {
+   "shape": "attn_q",
+   "N": 4096,
+   "K": 2048,
+   "R": 8,
+   "p1_equal": true,
+   "served_us": 16.992000862956047,
+   "grouped_us": 27.135999873280525,
+   "ratio": 1.5969867287636046
+  },
+  {
+   "shape": "attn_q",
+   "N": 4096,
+   "K": 2048,
+   "R": 16,
+   "p1_equal": true,
+   "served_us": 27.03999914228916,
+   "grouped_us": 33.08799862861633,
+   "ratio": 1.223668627151264
+  },
+  {
+   "shape": "attn_kv",
+   "N": 512,
+   "K": 2048,
+   "R": 8,
+   "p1_equal": true,
+   "served_us": 8.927999995648861,
+   "grouped_us": 8.991999551653862,
+   "ratio": 1.007168409054233
+  },
+  {
+   "shape": "attn_kv",
+   "N": 512,
+   "K": 2048,
+   "R": 16,
+   "p1_equal": true,
+   "served_us": 8.991999551653862,
+   "grouped_us": 10.751999914646149,
+   "ratio": 1.1957295874940939
+  },
+  {
+   "shape": "attn_o",
+   "N": 2048,
+   "K": 4096,
+   "R": 8,
+   "p1_equal": true,
+   "served_us": 19.632000476121902,
+   "grouped_us": 27.295999228954315,
+   "ratio": 1.3903829750897783
+  },
+  {
+   "shape": "attn_o",
+   "N": 2048,
+   "K": 4096,
+   "R": 16,
+   "p1_equal": true,
+   "served_us": 27.39199995994568,
+   "grouped_us": 34.832000732421875,
+   "ratio": 1.2716121781306746
+  },
+  {
+   "shape": "attn_qkv_fused",
+   "N": 5120,
+   "K": 2048,
+   "R": 8,
+   "p1_equal": true,
+   "served_us": 18.94400082528591,
+   "grouped_us": 31.231999397277832,
+   "ratio": 1.6486485450101043
+  },
+  {
+   "shape": "attn_qkv_fused",
+   "N": 5120,
+   "K": 2048,
+   "R": 16,
+   "p1_equal": true,
+   "served_us": 31.456001102924347,
+   "grouped_us": 39.103999733924866,
+   "ratio": 1.2431332134677955
+  }
+ ]
+}

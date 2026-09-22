@@ -608,6 +608,35 @@
     "CHANGELOG.md#Unreleased"
    ],
    "notes": "A negative-result row on purpose: the kernel is exact and ships, the hypothesis that its launch was the cost did not survive the card. The P54 census row it targeted (_reduce_partials 0.300 ms/step at B=1 in experts4bit-qlora) is GPU time the kernel spends either way, not a launch removal recovers. Lane k17-5090-1 cost $0.0888 (estimate $0.65); receipts in adertha-receipts 4aff79c. The A2000 pilot (receipts-k17/a2000-pilot.json, free) showed 0.0-2.8 us at R=1 and was recorded as a warning before the launch."
+  },
+  {
+   "id": "gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22",
+   "area": "kernel",
+   "claim": "K18 (pre-registered 2026-09-22, #377): gemv_int4_b32_grouped, the int4-b32 split-K GEMV with each program serving up to 4 rows of one expert (the expert's weight slice loaded once per program, rows computed with the served arithmetic, partials at their original index). On the RTX 5090, replaying experts4bit-qlora P60's recorded Qwen3-30B-A3B B=16 routing (128 steps x 48 layers, gate_up + down, one CUDA graph per step): P1 bitwise identity HOLDS (0 of 256 step x projection checks differ; 12/12 small-R rows equal; interpreter 21 + 190, compiled 28/28 on the box); P2 (served - grouped >= 0.5 ms/step) REFUTED -- grouped 9.689 ms/step against served 6.520 (1.49x, 3.17 ms slower; dedup 5.564 reproduces P60's 5.560); P3 (within +3 % at R = 8/16 on the six K17 shapes) REFUTED -- 1.00-1.65x, worst at R=8 where every row is a distinct expert and nothing can be shared, so the loss is overhead the kernel adds. Decision rule: P1 and not P2 -> exact-and-not-faster, not shipped as a lever; the entrypoint stays dormant as the evidence. It also withdraws P60's reading of its 0.92 ms dedup gap as weight re-streaming: sharing the loads while keeping every row's arithmetic did not recover it, and P60's sorted arm had already shown locality is not the constraint.",
+   "value": -3.169,
+   "unit": "ms/step saved by the grouped GEMV over the served one on the recorded B=16 routing (negative = slower; served 6.520, grouped 9.689)",
+   "status": "measured",
+   "hardware": "RTX 5090 (sm_120, 170 SMs, driver 580.119.02), torch 2.8.0+cu128 / triton 3.4.0, rented host (vast instance 52118802)",
+   "measured_on": "2026-09-22",
+   "evidence": [
+    "kernel/PREREG-k18-grouped-expert-gemv.md",
+    "kernel/RESULTS-k18-grouped-expert-gemv.md",
+    "kernel/int4_b32.py",
+    "kernel/k18_bench.py",
+    "kernel/k18_reduce.py",
+    "kernel/receipts-k18/5090/k18_rows.json",
+    "kernel/receipts-k18/5090/k18_bench.log",
+    "kernel/receipts-k18/5090/tests_compiled.log",
+    {
+     "path": "CHANGELOG.md",
+     "section": "Unreleased"
+    }
+   ],
+   "quoted_in": [
+    "docs/STATUS.md",
+    "CHANGELOG.md#Unreleased"
+   ],
+   "notes": "A negative-result row on purpose, like K17's: the kernel is exact and stays dormant, and the hypothesis it was built on did not survive the card. Lane k18-5090-1 cost $0.1269 (estimate $0.66); receipts in adertha-receipts 542a4ce. Mechanism not profiled: the rows establish that the loss exists with zero sharing (R=8), and the design runs the same per-row arithmetic on about one program per distinct expert at R=128; which of the added costs dominates was not measured."
   }
  ]
 }
