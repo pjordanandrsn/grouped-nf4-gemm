@@ -80,6 +80,28 @@ def _gpu():
     return "cuda"
 
 
+def _assert_within_fp32_sum_bound(got, terms):
+    """Lane B393's accuracy contract (kernel/RESULTS-b393-combine-reduce-bitwise.md): each element of the bf16
+    ``got`` is within what a correct fp32 sum of ``terms`` over dim 0 -- in ANY order, with or without a fused
+    multiply-add -- then cast to bf16, can be off from the exact sum:
+
+        |got - exact| <= c * |exact| + (n + 1) * 2**-24 * sum|term| * (1 + c)
+
+    ``c`` is the cast's relative error: half a bf16 ULP (2**-8) on silicon, which rounds to nearest; one full ULP
+    (2**-7) under ``TRITON_INTERPRET=1``, whose bf16 cast does not (B393's dry run). ``terms`` must be exact
+    (fp64 of the inputs, products formed in fp64)."""
+    t = terms.double()
+    n = t.shape[0]
+    exact, abs_sum = t.sum(0), t.abs().sum(0)
+    c = 2.0 ** -7 if os.environ.get("TRITON_INTERPRET") == "1" else 2.0 ** -8
+    bound = c * exact.abs() + (n + 1) * 2.0 ** -24 * abs_sum * (1 + c)
+    err = (got.double().reshape(exact.shape) - exact).abs()
+    bad = err > bound
+    assert not bool(bad.any()), (
+        f"{int(bad.sum())} of {err.numel()} elements outside the fp32-sum bound; "
+        f"worst err {float(err[bad].max()):.3e} against bound {float(bound[bad][err[bad].argmax()]):.3e}")
+
+
 @pytest.mark.parametrize("N,K,E,R", [(64, 64, 4, 3), (128, 96, 8, 8),
                                      (256, 2048, 16, 8)])
 def test_gemv_matches_reference(N, K, E, R):
@@ -434,8 +456,11 @@ def test_rope_norm_heads_matches_reference(R, HEADS, D):
 
 @pytest.mark.parametrize("T,k,H", [(1, 8, 2048), (16, 4, 2880), (3, 2, 1000)])
 def test_combine_rows_matches_torch(T, k, H):
-    """The fused top-k combine equals the torch chain (fp32 weight-and-sum,
-    bf16 out), including a masked tail."""
+    """The fused top-k combine is a correct fp32 weight-and-sum of the same
+    terms, cast to bf16, including a masked tail. Not bitwise the torch chain:
+    lane B393 measured it differing in rare elements (the kernel contracts the
+    multiply-add into one rounding) and held it to this bound in 144 of 144
+    census cases on an RTX 5090 (kernel/RESULTS-b393-combine-reduce-bitwise.md)."""
     pytest.importorskip("triton")
     from int4_b32 import combine_rows
     dev = _gpu()
@@ -443,9 +468,9 @@ def test_combine_rows_matches_torch(T, k, H):
     dn = (torch.randn(T * k, H) * 2).to(dev, torch.bfloat16)
     w = torch.rand(T * k, device=dev)
     got = combine_rows(dn, w, k)
-    want = (dn.float() * w[:, None]).view(T, k, H).sum(1).to(torch.bfloat16)
     assert got.shape == (T, H) and got.dtype == torch.bfloat16
-    assert (got.float() - want.float()).abs().max() <= want.float().abs().max() * 2 ** -7
+    terms = (dn.double() * w.double()[:, None]).view(T, k, H).transpose(0, 1)    # [k, T, H], exact products
+    _assert_within_fp32_sum_bound(got, terms)
 
 
 @pytest.mark.parametrize("sk,R,N", [(8, 1, 768), (16, 4, 2048), (3, 5, 1000)])
@@ -458,11 +483,33 @@ def test_reduce_partials_matches_torch(sk, R, N):
     torch.manual_seed(5)
     part = torch.randn(sk * R, N, device=dev) * 3
     got = reduce_partials(part, sk, R, N)
-    want = part.reshape(sk, R, N).sum(0).to(torch.bfloat16)
     assert got.shape == (R, N) and got.dtype == torch.bfloat16
-    # the fp32 sum order differs (static loop vs torch's reduction tree):
-    # bf16 output rounding is the only visible difference, 1 ULP at most
-    assert (got.float() - want.float()).abs().max() <= want.float().abs().max() * 2 ** -7
+    # Not bitwise torch's chain: the kernel sums in slot order and torch's
+    # .sum(0) does not, and near cancellation two correct fp32 orders land many
+    # bf16 ULPs apart (lane B393: up to 8 ULP at the census shapes). What holds is
+    # the accuracy bound of any correct order.
+    _assert_within_fp32_sum_bound(got, part.double().reshape(sk, R, N))
+
+
+@pytest.mark.parametrize("sk,R,N", [(8, 1, 768), (16, 4, 2048), (3, 5, 1000)])
+def test_reduce_partials_is_the_slot_order_sum(sk, R, N):
+    """Bitwise: the fused reduce is the fp32 sum of the partials in slot order,
+    each add rounded, then one bf16 cast -- lane B393 measured this in 270 of 270
+    census cases on an RTX 5090 and on an RTX A2000. Silicon only: the Triton
+    interpreter's bf16 cast does not round to nearest, so its output is not a
+    bitwise reading (B393's dry-run disclosure)."""
+    pytest.importorskip("triton")
+    if os.environ.get("TRITON_INTERPRET") == "1":
+        pytest.skip("bitwise reading needs silicon: the interpreter's bf16 cast differs")
+    from int4_b32 import reduce_partials
+    dev = _gpu()
+    torch.manual_seed(5)
+    part = torch.randn(sk * R, N, device=dev) * 3
+    p = part.reshape(sk, R, N)
+    acc = torch.zeros(R, N, dtype=torch.float32, device=dev)
+    for s in range(sk):
+        acc = acc + p[s]
+    assert torch.equal(reduce_partials(part, sk, R, N), acc.to(torch.bfloat16))
 
 
 @pytest.mark.parametrize("R,HEADS,D", [(1, 32, 64), (16, 8, 128), (3, 4, 96)])

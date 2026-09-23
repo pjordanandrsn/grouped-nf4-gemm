@@ -104,6 +104,27 @@ MXFP4 decode reproduces Kimi K3's own declared reference exactly
 
 ## What changed — retired, superseded, corrected
 
+- **#393 is closed, answered with an accuracy contract, not a bitwise one
+  (lane B393, 2026-09-23, RTX 5090).** `combine_rows` (the fused MoE top-k
+  weight-and-sum experts4bit-qlora runs on every MoE layer by default) and
+  `reduce_partials` (the fused split-K reduce) were tested to a tolerance and
+  documented as taking the torch chains' order. Measured over 414 census cases
+  at the served shapes, neither is bitwise its chain: `combine_rows` differs
+  in 95 of 144 cases (392 of 9.07 M elements) and `reduce_partials` in 49 of
+  270. Both are within the error bound of a correct fp32 summation in every
+  case, at the same max ratio as torch's own chain (0.996), so each is as
+  accurate as what it replaced.
+  - `reduce_partials` is bitwise the slot-order sum.
+  - `combine_rows` is the slot-order sum with a fused multiply-add, exactly so
+    on sm_86. That is a follow-up diagnostic, not the reading.
+  - Neither the kernel's bits nor torch's chain are the same across GPU
+    architectures. The accuracy bound holds on both.
+
+  ([`RESULTS-b393-combine-reduce-bitwise.md`](../kernel/RESULTS-b393-combine-reduce-bitwise.md);
+  `gnf4.kernel.combine-rows-accuracy.5090.2026-09-23` and
+  `gnf4.kernel.reduce-partials-slot-order.5090.2026-09-23`, measured.) The
+  docstrings and the two tests now state and assert that contract. No kernel
+  changed. The end-to-end effect is experts4bit-qlora#708's to size.
 - **#386 is closed: every carrier of the int64 expert-base promotion is now
   observed past its own boundary.** The gathers (`host_gather`,
   `mxfp4_pipelined`, `mxfp4_residency`) are int64-word-addressed, and the
@@ -257,12 +278,7 @@ was wrong.
   layer's rows are prefetchable (guarded by a CUDA event, with a
   `hot_rows` floor of two layers' experts).
 - **#71** — `PINNED_ROW_FACTOR` is ~2× conservative on cgroup v1; v2
-  needs a box the rented pods cannot give.
-- **#393** — `combine_rows` fuses the MoE weight, slot sum and bf16 cast in
-  one launch and is tested to a tolerance, not bitwise, while experts4bit-qlora
-  runs it on every MoE layer by default (`E4B_FUSE_COMBINE=1`). No registered
-  claim says fused = unfused; the ask is a `torch.equal` GPU test over the
-  census shapes, with a receipt. (#60, #71 and #393 are `gnf4.open.issues`.)
+  needs a box the rented pods cannot give. (#60 and #71 are `gnf4.open.issues`.)
 - **`docs/context-budgets.md` is rung-one only** (A2000-measured
   KB/token); full-depth real-weight confirmation is pending and the K3
   row is a declared gap. Its own text forbids promoting pending rows to

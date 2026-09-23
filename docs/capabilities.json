@@ -483,12 +483,14 @@
     "docs/STATUS.md"
    ],
    "claim_ids": [
-    "gnf4.serve.decode-glue-kernels"
+    "gnf4.serve.decode-glue-kernels",
+    "gnf4.kernel.combine-rows-accuracy.5090.2026-09-23",
+    "gnf4.kernel.reduce-partials-slot-order.5090.2026-09-23"
    ],
    "limitations": [
     "The composition timing and the paired perplexity deltas are measured-private (claim gnf4.serve.decode-glue-kernels): real runs through the consumer on the RTX 5090 whose receipts live in a private audit tree; what is checkable here is each kernel's parity test",
     "int4_b32 imports triton at module level and is not importable without it",
-    "reduce_partials (0.29.0) and combine_rows (0.30.0) are inside no registered claim: capability without a published measurement"
+    "combine_rows and reduce_partials carry an accuracy contract, not a bitwise one: each is within the error bound of a correct fp32 summation in every census case on an RTX 5090, and neither is bitwise the torch chain it replaced (lane B393; gnf4.kernel.combine-rows-accuracy.5090.2026-09-23, gnf4.kernel.reduce-partials-slot-order.5090.2026-09-23); neither their bits nor torch's chain are the same across GPU architectures"
    ],
    "status": "measured-private"
   },

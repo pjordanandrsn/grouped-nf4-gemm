@@ -1,0 +1,15 @@
+int4_b32 /opt/conda/lib/python3.11/site-packages/int4_b32.py
+gnf4 0.33.2 @69bb93f39ac5f4b2bbe50ff6e60659bb46fe8fd6
+torch 2.8.0+cu128
+triton 3.4.0
+combine_rows.vs_chain                      49/144 cases bit-equal; 392 of 9069312 elements differ; max 53 bf16 ulp
+combine_rows.vs_sequential                 58/144 cases bit-equal; 297 of 9069312 elements differ; max 44 bf16 ulp
+combine_rows.chain_vs_sequential           80/144 cases bit-equal; 246 of 9069312 elements differ; max 64 bf16 ulp
+combine_rows.fused_bound_ratio            144/144 cases within the fp32 summation bound; max ratio 0.996
+combine_rows.chain_bound_ratio            144/144 cases within the fp32 summation bound; max ratio 0.996
+reduce_partials.vs_chain                  221/270 cases bit-equal; 111 of 4455360 elements differ; max 8 bf16 ulp
+reduce_partials.vs_sequential             270/270 cases bit-equal; 0 of 4455360 elements differ; max 0 bf16 ulp
+reduce_partials.chain_vs_sequential       221/270 cases bit-equal; 111 of 4455360 elements differ; max 8 bf16 ulp
+reduce_partials.fused_bound_ratio         270/270 cases within the fp32 summation bound; max ratio 0.996
+reduce_partials.chain_bound_ratio         270/270 cases within the fp32 summation bound; max ratio 0.996
+census.json: 414 cases on NVIDIA GeForce RTX 5090

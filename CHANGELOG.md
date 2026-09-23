@@ -2,6 +2,26 @@
 
 ## Unreleased — #386: the gathers and the fp8 KV appenders are observed past their own 2^31 boundary, on CPU, in CI; the shared capabilities check reads the serving position from STATUS's position section (tests and repository tooling; nothing in the wheel changes)
 
+- **Lane B393 read (#393 closed): `combine_rows` and `reduce_partials` carry an accuracy contract, not a bitwise one.**
+  The lane was pre-registered in #396 and run on one RTX 5090 for $0.0299, with teardown proven. The census covered
+  414 cases at the served shapes, and the result is outcome B for both kernels.
+  - **Neither kernel is bitwise its torch chain.** `combine_rows` differs in 95/144 cases (392 of 9.07 M elements) and
+    `reduce_partials` in 49/270.
+  - **Both are within the error bound of a correct fp32 summation in every case,** at the same max ratio as the chain.
+    The claims are `gnf4.kernel.combine-rows-accuracy.5090.2026-09-23` and
+    `gnf4.kernel.reduce-partials-slot-order.5090.2026-09-23`.
+  - **Attribution.** `reduce_partials` is bitwise the slot-order sum. A follow-up diagnostic on the NAS A2000 (sm_86)
+    shows `combine_rows` equal bit-for-bit to the slot-order sum with a fused multiply-add. Its PTX has `fma.rn.f32`
+    only (`kernel/receipts-b393/a2000-fma-attribution/`).
+  - **Found while reading it.** Neither the kernel's bits nor torch's own chain are the same across sm_86 and sm_120.
+    The accuracy bound holds on both.
+  - **Docstrings corrected.** `combine_rows` said "fp32 in slot order, as the torch chain's is". Neither half held.
+  - **Tests.** `test_combine_rows_matches_torch` and `test_reduce_partials_matches_torch` replace the whole-tensor
+    `max|d| <= max|ref| * 2**-7` with the per-element bound. Under `TRITON_INTERPRET=1` the cast term is one full ULP;
+    the interpreter's truncating cast was measured at 1.98× the half-ULP bound. The new
+    `test_reduce_partials_is_the_slot_order_sum` asserts `torch.equal` on silicon.
+  - **No kernel changed.** The end-to-end size is experts4bit-qlora#708's to measure, with `E4B_FUSE_COMBINE=0` as its
+    control.
 - **`kernel/test_offset_boundary_interp.py` gains five cases (#386).** KERNEL_CONTRACT listed these kernels as carriers
   of the int64 expert-base promotion covered by the boundary suite, and no boundary test called any of them. They are
   `host_gather._gather_rows`, the `mxfp4_pipelined` / `mxfp4_residency` slot gathers, and the `fp8_kv` T=1 and batched
