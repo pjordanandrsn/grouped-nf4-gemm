@@ -1,5 +1,5 @@
 # How do I run paged decode attention over an FP8 KV cache for a quantized MoE serving path, with sliding windows, attention sinks and a custom scale?
-<!-- summary: fp8_paged_decode_attention runs paged flash-decode over an E4M3 KV cache with windows, sinks and a custom scale; the fp8 compute path is supported on sm_89+, the f32 path is open under #319. -->
+<!-- summary: fp8_paged_decode_attention runs paged flash-decode over an E4M3 KV cache with windows, sinks and a custom scale; the fp8 compute path is supported on sm_89+, the f32 path (the sm_80–sm_88 default) since #319's close. -->
 
 Use `fp8_paged_attn.fp8_paged_decode_attention` from `grouped-nf4-gemm`: a Triton flash-decode kernel over paged E4M3 K/V blocks that dequantizes in registers, takes `window`, `sinks`, `sm_scale` and per-layer row strides, and is checked against the pure-torch `fp8_paged_attn.paged_attn_ref`. The KV quantize/pack primitives live in `fp8_kv`; the decode glue kernels (fused RMSNorm, residual fold, rotary, router epilogue) live in `int4_b32`.
 

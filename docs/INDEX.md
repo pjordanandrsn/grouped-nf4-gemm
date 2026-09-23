@@ -16,7 +16,7 @@ the README's confirmatory section for how the kernel numbers were made.
   the machine-readable capability contract; validated in CI by
   `scripts/check_capabilities.py` against pyproject, source and the claims
   register. One status per entry, so the fp8 paged attention is two
-  entries by compute path (fp8 supported; f32 open under #319). Current.
+  entries by compute path (fp8 supported; f32 supported since #319's close). Current.
 - **[`discovery-queries.json`](discovery-queries.json)** — the
   discoverability regression corpus (`scripts/check_discovery_contract.py`).
   Current.

@@ -27,6 +27,12 @@
   - **Checked.** On experts4bit-qlora's register the position is then P58's 2026-09-22 rows, which the capability cites,
     so the warning clears without any data edit. The runtime repository's existing serving-position tests pass unchanged.
   - The rule is still the runtime role's only.
+- **Four documents still called the fp8 paged kernel's f32 compute path open under #319**, although #319 closed in 0.33.0
+  and the path has been `supported` since, measured on sm_86 and sm_120 (`gnf4.serve.f32-arms-ran-fp8`). They were
+  `docs/SOLUTIONS.md`, `docs/INDEX.md`, the fp8 solution page's summary line and `AGENTS.md`. `AGENTS.md` also presented
+  the retired `gnf4.open.f32-compute-modes-triton34` as current and called the capability `unsupported`. All four now
+  match `docs/capabilities.json` and STATUS. 0.33.1's cleanup (#381) had fixed the capability, the README and the
+  solution page body, but not these.
 
 ## 0.33.2 — 2026-09-23 — documentation, register data, tests and repository tooling only (every shipped module identical to 0.33.1): the claims register has ONE schema, shared with experts4bit-qlora; lane B374 observes the word-addressed decode routes (wide loads, and dot-pad, the default at its census shapes) past their own 2^31 boundary on an RTX 5090, closing #374; #386 opened
 
