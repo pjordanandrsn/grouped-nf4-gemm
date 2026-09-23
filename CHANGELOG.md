@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — K18: a grouped split-K int4-b32 GEMV is bitwise the served one and slower (dormant evidence); K17: the int4-b32 GEMV's fused split-K reduce is exact but was not the cost (ships opt-in); #319 was a mislabelled test arm: the f32 paged-decode arms never ran an f32 kernel on sm_89+
+## 0.33.0 — 2026-09-23 — two opt-in int4-b32 GEMV variants, both exact and neither a default (K17 `fused_reduce=True`, K18 `gemv_int4_b32_grouped`); #319 was a mislabelled test arm, not an f32 kernel defect; #87's int64 expert-offset promotion is now guarded by a CPU test CI runs
 
 - **K18: `int4_b32.gemv_int4_b32_grouped(xq, xs, packed, scales, eids, N, K, part=None, out=None, mt=4)` — the split-K
   int4-b32 GEMV with each program serving up to `mt` rows of ONE expert, so the expert's weight slice is loaded once per
@@ -72,6 +72,18 @@
   `OutOfResources` catch, and that catch had never been exercised. The new case reproduces #324's
   numbers on the A2000 to the byte — `Required: 148480, Hardware limit: 101376` — warns once, remembers
   the geometry in `_PACKED_UNFIT`, and returns the split kernel's result, which matches the oracle.
+
+- **#87 closed: the int64 expert-offset promotion is guarded by a test CI can actually run** (#373). Every
+  `@triton.jit` body was audited from the installed 0.32.1 wheel source and all expert-id and row carriers promote before
+  the stride product, so no kernel changed. What was missing was a check that could fail: both boundary suites need CUDA
+  and ~2.3 GiB of device memory, so they skip in full on every runner, and a port has dropped the promotion before
+  (#205). `kernel/test_offset_boundary_interp.py` straddles 2^31 on CPU under `TRITON_INTERPRET=1` (15 cases, ~42 s, a
+  new `ci.yml` step), with the wrapped and correct offsets both inside the mapping so a wrap misreads a decoy tile instead
+  of faulting. Falsified per module with the promotion removed: `nf4_grouped` 7 failed, `mxfp4_grouped` 3, `int4_b32` 2.
+  Two corrections recorded in `docs/KERNEL_CONTRACT.md`: the Triton interpreter **does** wrap int32 offset arithmetic
+  (NEP 50; the 0.14.0 entry saying it cannot is superseded, and `test_interpreter_arithmetic_still_wraps` pins it), and
+  the wide-load and dot-pad routes are word-addressed, so they wrap at 8 GiB of packed bytes, not 2 GiB — the GPU
+  suite's wide and dot-pad arms are built on the byte geometry and do not straddle their own boundary.
 
 ## 0.32.1 — 2026-09-19 — the `auto` LoRA-delta rule is STRUCTURAL (pad unless the padded block would not fit): P46 read the 4× flop-waste guard as the defect behind the consumer's launch-bound training step
 

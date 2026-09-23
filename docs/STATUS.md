@@ -1,6 +1,6 @@
 # Status — what this kernel does, what changed, what is open
 
-**As of 2026-09-19, `grouped-nf4-gemm` version 0.32.1.** One page. The README argues; this
+**As of 2026-09-23, `grouped-nf4-gemm` version 0.33.0.** One page. The README argues; this
 page states. Every line here has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
 here that does not.
@@ -117,6 +117,13 @@ MXFP4 decode reproduces Kimi K3's own declared reference exactly
   `kernel/RESULTS-319-f32-precision.md` carries the measurements. **The advice this page used to give —
   gate lanes on those boxes with `-k "f8dot or pf8"` — excluded precisely the arms that were
   mislabelled, and should not be followed.**
+
+- **0.33.0 — two int4-b32 GEMV variants ship opt-in, and neither is a default.** K17's fused split-K
+  reduce (`gemv_int4_b32(..., fused_reduce=True)` / `GNF4_GEMV_FUSED_REDUCE=1`) and K18's grouped expert
+  GEMV (`gemv_int4_b32_grouped`) are both bitwise the served GEMV and both measured slower where they were
+  meant to help (the two reads under *What is open*). The served GEMV and every default are unchanged
+  from 0.32.1. The same release closes #87 with a CPU boundary test CI runs, and records that #319 was a
+  mislabelled test arm (above).
 
 - **0.32.1 — the grouped-LoRA delta's `auto` rule is structural.** Until 0.32.0 `auto` sent any adapter
   call past a 4× padding-waste ratio to the per-expert Python loop. The consumer's P46
