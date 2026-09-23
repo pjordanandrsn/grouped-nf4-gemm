@@ -1,0 +1,186 @@
+FFFFF                                                                    [100%]
+=================================== FAILURES ===================================
+____________________________ test_host_gather_rows _____________________________
+
+host_gather_case = (tensor([[164, 172,  10,  ..., 124, 230, 193],
+        [  0,   0,   0,  ...,   0,   0,   0],
+        [  0,   0,   0,  ... 181,  ..., 195, 104,  28]], dtype=torch.uint8), 2048, tensor([192, 163, 140,  ..., 229,  55,  53], dtype=torch.uint8))
+
+    def test_host_gather_rows(host_gather_case):
+        """``gather_expert_rows`` reads ``src + want * row_words``; the int32 operand
+        is the expert id, loaded from ``ids``. Through the public wrapper."""
+        from host_gather import gather_expert_rows
+        host, eid, decoy = host_gather_case
+        dst = torch.zeros(1, host.shape[1], dtype=torch.uint8)
+        gather_expert_rows(dst, host, torch.tensor([eid], dtype=torch.int32), block=1 << 16)
+>       _copy_verdict(dst[0, :GW_TILE * 8], host[eid, :GW_TILE * 8], decoy, "host_gather")
+
+test_offset_boundary_interp.py:484: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+got = tensor([192, 163, 140,  ..., 229,  55,  53], dtype=torch.uint8)
+true = tensor([119,  56, 181,  ..., 190, 124,  24], dtype=torch.uint8)
+decoy = tensor([192, 163, 140,  ..., 229,  55,  53], dtype=torch.uint8)
+tag = 'host_gather'
+
+    def _copy_verdict(got, true, decoy, tag):
+>       assert torch.equal(got, true), (
+            f"{tag}: the row past 2^31 words was not copied"
+            + (" -- it copied the tile at the WRAPPED address" if torch.equal(got, decoy) else ""))
+E       AssertionError: host_gather: the row past 2^31 words was not copied -- it copied the tile at the WRAPPED address
+E       assert False
+E        +  where False = <built-in method equal of type object at 0x7fb6a58c94c0>(tensor([192, 163, 140,  ..., 229,  55,  53], dtype=torch.uint8), tensor([119,  56, 181,  ..., 190, 124,  24], dtype=torch.uint8))
+E        +    where <built-in method equal of type object at 0x7fb6a58c94c0> = torch.equal
+
+test_offset_boundary_interp.py:459: AssertionError
+_______________________ test_mxfp4_pipelined_slot_gather _______________________
+
+slot_gather_case = (tensor([ 20, 163, 241,  ...,   0,   0,   0], dtype=torch.uint8), tensor([[ 81, 123,  65,  ...,  38, 155,  96],
+      ... 64, 255,  ...,  56, 175, 224], dtype=torch.uint8), 0, tensor([ 20, 163, 241,  ...,  93,  61,  49], dtype=torch.uint8))
+
+    def test_mxfp4_pipelined_slot_gather(slot_gather_case):
+        from mxfp4_pipelined import _gather_kernel
+        buf, dst, slot_hi, decoy, wrapped, tile = slot_gather_case
+        want, have = _slot_launch_state(slot_gather_case)
+        _gather_kernel()[(dst.shape[0], 1)](dst.view(torch.int64), want, have, SG_ROW_WORDS,
+                                            BLOCK=GW_TILE, num_warps=4)
+>       _slot_verdict(slot_gather_case, "mxfp4_pipelined gather")
+
+test_offset_boundary_interp.py:535: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+case = (tensor([ 20, 163, 241,  ...,   0,   0,   0], dtype=torch.uint8), tensor([[ 81, 123,  65,  ...,  38, 155,  96],
+      ... 64, 255,  ...,  56, 175, 224], dtype=torch.uint8), 0, tensor([ 20, 163, 241,  ...,  93,  61,  49], dtype=torch.uint8))
+tag = 'mxfp4_pipelined gather'
+
+    def _slot_verdict(case, tag):
+        buf, dst, slot_hi, decoy, wrapped, tile = case
+        got = dst[slot_hi, :tile.numel()]
+        at_wrap = buf[wrapped:wrapped + tile.numel()]
+>       assert torch.equal(got, tile), (
+            f"{tag}: slot {slot_hi} (2^31 words in) did not receive its row"
+            + (" -- the store landed at the WRAPPED address" if torch.equal(at_wrap, tile) else ""))
+E       AssertionError: mxfp4_pipelined gather: slot 1024 (2^31 words in) did not receive its row -- the store landed at the WRAPPED address
+E       assert False
+E        +  where False = <built-in method equal of type object at 0x7fb6a58c94c0>(tensor([0, 0, 0,  ..., 0, 0, 0], dtype=torch.uint8), tensor([ 20, 163, 241,  ...,  93,  61,  49], dtype=torch.uint8))
+E        +    where <built-in method equal of type object at 0x7fb6a58c94c0> = torch.equal
+
+test_offset_boundary_interp.py:522: AssertionError
+_______________________ test_mxfp4_residency_perm_gather _______________________
+
+slot_gather_case = (tensor([ 20, 163, 241,  ...,   0,   0,   0], dtype=torch.uint8), tensor([[ 81, 123,  65,  ...,  38, 155,  96],
+      ... 64, 255,  ...,  56, 175, 224], dtype=torch.uint8), 0, tensor([ 20, 163, 241,  ...,  93,  61,  49], dtype=torch.uint8))
+
+    def test_mxfp4_residency_perm_gather(slot_gather_case):
+        from mxfp4_residency import _perm_gather_kernel
+        buf, dst, slot_hi, decoy, wrapped, tile = slot_gather_case
+        want, have = _slot_launch_state(slot_gather_case)
+        zero = torch.zeros(1, dtype=torch.int64)                     # one piece: src 0 -> dst 0
+        n = torch.tensor([GW_TILE], dtype=torch.int64)
+        _perm_gather_kernel()[(dst.shape[0], 1)](dst.view(torch.int64), want, have, zero, zero, n,
+                                                 SG_ROW_WORDS, BLOCK=GW_TILE, num_warps=4)
+>       _slot_verdict(slot_gather_case, "mxfp4_residency perm gather")
+
+test_offset_boundary_interp.py:546: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+case = (tensor([ 20, 163, 241,  ...,   0,   0,   0], dtype=torch.uint8), tensor([[ 81, 123,  65,  ...,  38, 155,  96],
+      ... 64, 255,  ...,  56, 175, 224], dtype=torch.uint8), 0, tensor([ 20, 163, 241,  ...,  93,  61,  49], dtype=torch.uint8))
+tag = 'mxfp4_residency perm gather'
+
+    def _slot_verdict(case, tag):
+        buf, dst, slot_hi, decoy, wrapped, tile = case
+        got = dst[slot_hi, :tile.numel()]
+        at_wrap = buf[wrapped:wrapped + tile.numel()]
+>       assert torch.equal(got, tile), (
+            f"{tag}: slot {slot_hi} (2^31 words in) did not receive its row"
+            + (" -- the store landed at the WRAPPED address" if torch.equal(at_wrap, tile) else ""))
+E       AssertionError: mxfp4_residency perm gather: slot 1024 (2^31 words in) did not receive its row -- the store landed at the WRAPPED address
+E       assert False
+E        +  where False = <built-in method equal of type object at 0x7fb6a58c94c0>(tensor([0, 0, 0,  ..., 0, 0, 0], dtype=torch.uint8), tensor([ 20, 163, 241,  ...,  93,  61,  49], dtype=torch.uint8))
+E        +    where <built-in method equal of type object at 0x7fb6a58c94c0> = torch.equal
+
+test_offset_boundary_interp.py:522: AssertionError
+______________________________ test_fp8_append_t1 ______________________________
+
+fp8_pool_case = (<module 'fp8_kv' from '/w/unpromoted/kernel/fp8_kv.py'>, tensor([0, 0, 0,  ..., 0, 0, 0], dtype=torch.uint8), tensor(......,   0,   0,   0], dtype=torch.uint8), 1973791, tensor([203, 158, 131,  ..., 217, 119, 104], dtype=torch.uint8), 960)
+
+    def test_fp8_append_t1(fp8_pool_case):
+        fp8_kv, buf, pool, row_hi, decoy, wrapped = fp8_pool_case
+        _fp8_reset(fp8_pool_case, [row_hi])
+        g = torch.Generator().manual_seed(46)
+        x = torch.randn(FP8_H, FP8_D, generator=g)
+        fill = 1
+        fp8_kv._fp8_append_t1_side[(FP8_H,)](
+            x, pool, pool.view(torch.int32), torch.tensor([row_hi], dtype=torch.int32),
+            torch.tensor([fill], dtype=torch.int32), FP8_ROW, FP8_PAY, FP8_BT,
+            H=FP8_H, D=FP8_D, GROUPS=FP8_G, GS=FP8_D // FP8_G, E4M3_MAX=fp8_kv.E4M3_MAX, num_warps=1)
+>       _fp8_verdict(fp8_pool_case, fill, x, "fp8 append t1")
+
+test_offset_boundary_interp.py:607: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+case = (<module 'fp8_kv' from '/w/unpromoted/kernel/fp8_kv.py'>, tensor([0, 0, 0,  ..., 0, 0, 0], dtype=torch.uint8), tensor(......,   0,   0,   0], dtype=torch.uint8), 1973791, tensor([203, 158, 131,  ..., 217, 119, 104], dtype=torch.uint8), 960)
+fill = 1
+x = tensor([[ 8.8181e-01, -2.2370e-01,  1.1010e+00,  5.8639e-01,  1.6542e+00,
+         -1.6189e+00,  2.4177e-01,  8.1263e-...     -6.3201e-02,  3.1459e+00, -9.4637e-01,  1.4606e+00, -9.8273e-02,
+          4.7337e-02, -7.5029e-01, -1.8612e-01]])
+tag = 'fp8 append t1'
+
+    def _fp8_verdict(case, fill, x, tag):
+        fp8_kv, buf, pool, row_hi, decoy, wrapped = case
+        r = _rel(_fp8_token(pool, row_hi, fill), x)
+        wrote_wrap = not torch.equal(buf[wrapped:wrapped + FP8_ROW], decoy)
+>       assert r < 0.1, (f"{tag}: row {row_hi} (past 2^31 bytes) does not hold the token (rel {r:.3e})"
+                         + (" -- the bytes landed at the WRAPPED address" if wrote_wrap else ""))
+E       AssertionError: fp8 append t1: row 1973791 (past 2^31 bytes) does not hold the token (rel 1.000e+00) -- the bytes landed at the WRAPPED address
+E       assert 1.0 < 0.1
+
+test_offset_boundary_interp.py:592: AssertionError
+____________________ test_fp8_append_bt1_spans_the_boundary ____________________
+
+fp8_pool_case = (<module 'fp8_kv' from '/w/unpromoted/kernel/fp8_kv.py'>, tensor([0, 0, 0,  ..., 0, 0, 0], dtype=torch.uint8), tensor(..., 0,  ..., 0, 0, 0], dtype=torch.uint8), 1973791, tensor([203, 158, 131,  ..., 217, 119, 104], dtype=torch.uint8), 960)
+
+    def test_fp8_append_bt1_spans_the_boundary(fp8_pool_case):
+        """One batched launch appending to a slot whose row is below the boundary
+        and one whose row is above it."""
+        fp8_kv, buf, pool, row_hi, decoy, wrapped = fp8_pool_case
+        _fp8_reset(fp8_pool_case, [0, row_hi])
+        g = torch.Generator().manual_seed(47)
+        x = torch.randn(2, FP8_H, FP8_D, generator=g)
+        fills = (2, 1)
+        fp8_kv._fp8_append_bt1_side[(2, FP8_H)](
+            x, pool, pool.view(torch.int32), torch.tensor([[0], [row_hi]], dtype=torch.int32),
+            torch.tensor([0, 1], dtype=torch.int32), torch.tensor(fills, dtype=torch.int32),
+            1, FP8_ROW, FP8_PAY, FP8_BT,
+            H=FP8_H, D=FP8_D, GROUPS=FP8_G, GS=FP8_D // FP8_G, E4M3_MAX=fp8_kv.E4M3_MAX, num_warps=1)
+        assert _rel(_fp8_token(pool, 0, fills[0]), x[0]) < 0.1, "fp8 append bt1: the low row misread"
+>       _fp8_verdict(fp8_pool_case, fills[1], x[1], "fp8 append bt1")
+
+test_offset_boundary_interp.py:624: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+case = (<module 'fp8_kv' from '/w/unpromoted/kernel/fp8_kv.py'>, tensor([0, 0, 0,  ..., 0, 0, 0], dtype=torch.uint8), tensor(..., 0,  ..., 0, 0, 0], dtype=torch.uint8), 1973791, tensor([203, 158, 131,  ..., 217, 119, 104], dtype=torch.uint8), 960)
+fill = 1
+x = tensor([[ 0.9219, -1.2566,  0.1729, -0.7540,  1.6380, -0.1829,  1.9161,  0.0782,
+         -0.8677,  0.3596, -1.6406,  ...  0.7893,  2.0319, -0.1783,  0.2366,
+          0.5460, -1.0924,  0.3022, -0.3310, -0.1181,  1.9707, -0.6428,  0.0872]])
+tag = 'fp8 append bt1'
+
+    def _fp8_verdict(case, fill, x, tag):
+        fp8_kv, buf, pool, row_hi, decoy, wrapped = case
+        r = _rel(_fp8_token(pool, row_hi, fill), x)
+        wrote_wrap = not torch.equal(buf[wrapped:wrapped + FP8_ROW], decoy)
+>       assert r < 0.1, (f"{tag}: row {row_hi} (past 2^31 bytes) does not hold the token (rel {r:.3e})"
+                         + (" -- the bytes landed at the WRAPPED address" if wrote_wrap else ""))
+E       AssertionError: fp8 append bt1: row 1973791 (past 2^31 bytes) does not hold the token (rel 1.000e+00) -- the bytes landed at the WRAPPED address
+E       assert 1.0 < 0.1
+
+test_offset_boundary_interp.py:592: AssertionError
+=========================== short test summary info ============================
+FAILED test_offset_boundary_interp.py::test_host_gather_rows - AssertionError...
+FAILED test_offset_boundary_interp.py::test_mxfp4_pipelined_slot_gather - Ass...
+FAILED test_offset_boundary_interp.py::test_mxfp4_residency_perm_gather - Ass...
+FAILED test_offset_boundary_interp.py::test_fp8_append_t1 - AssertionError: f...
+FAILED test_offset_boundary_interp.py::test_fp8_append_bt1_spans_the_boundary
+5 failed, 15 deselected in 5.34s

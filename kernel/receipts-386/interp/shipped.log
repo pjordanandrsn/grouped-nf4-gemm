@@ -1,0 +1,29 @@
+....................                                                     [100%]
+=============================== warnings summary ===============================
+test_offset_boundary_interp.py: 18 warnings
+    tensor.__index__ = lambda self: int(self.handle.data)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED test_offset_boundary_interp.py::test_interpreter_arithmetic_still_wraps
+PASSED test_offset_boundary_interp.py::test_geometry_straddles
+PASSED test_offset_boundary_interp.py::test_word_addressed_routes_sit_four_times_further_out
+PASSED test_offset_boundary_interp.py::test_nf4_decode[scalar-kw0-env0]
+PASSED test_offset_boundary_interp.py::test_nf4_decode[scalar_splitk-kw1-env1]
+PASSED test_offset_boundary_interp.py::test_nf4_decode[scalar/vec-kw2-env2]
+PASSED test_offset_boundary_interp.py::test_nf4_m_tile
+PASSED test_offset_boundary_interp.py::test_nf4_dgrad
+PASSED test_offset_boundary_interp.py::test_nf4_grouped_launch_spans_the_boundary
+PASSED test_offset_boundary_interp.py::test_nf4_decode_wide_loads
+PASSED test_offset_boundary_interp.py::test_mxfp4_grouped[1-gemv]
+PASSED test_offset_boundary_interp.py::test_mxfp4_grouped[4-m-tile]
+PASSED test_offset_boundary_interp.py::test_mxfp4_gemv_b32
+PASSED test_offset_boundary_interp.py::test_int4_b32_gemv
+PASSED test_offset_boundary_interp.py::test_int4_b32_m_tile
+PASSED test_offset_boundary_interp.py::test_host_gather_rows
+PASSED test_offset_boundary_interp.py::test_mxfp4_pipelined_slot_gather
+PASSED test_offset_boundary_interp.py::test_mxfp4_residency_perm_gather
+PASSED test_offset_boundary_interp.py::test_fp8_append_t1
+PASSED test_offset_boundary_interp.py::test_fp8_append_bt1_spans_the_boundary
+20 passed, 18 warnings in 53.84s

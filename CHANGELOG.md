@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased — #386: the gathers and the fp8 KV appenders are observed past their own 2^31 boundary, on CPU, in CI (tests only; nothing in the wheel changes)
+
+- **`kernel/test_offset_boundary_interp.py` gains five cases (#386).** KERNEL_CONTRACT listed these kernels as carriers
+  of the int64 expert-base promotion covered by the boundary suite, and no boundary test called any of them. They are
+  `host_gather._gather_rows`, the `mxfp4_pipelined` / `mxfp4_residency` slot gathers, and the `fp8_kv` T=1 and batched
+  appenders.
+  - **The gathers** multiply an int32 id or slot by `row_words`, a stride in int64 words, so they wrap at 2^31 words
+    (16 GiB). An int32 wrap moves an address by 2^32 words, so each case spans ~32 GiB of address space. It is mapped
+    `MAP_NORESERVE`: the heuristic overcommit check refuses a `torch.empty` that large on a 16 GB runner and does not
+    charge this mapping. Resident memory stays a few hundred MiB. The verdicts are exact copies, plus an untouched decoy
+    at the wrapped address for the two that write past the boundary.
+  - **The fp8 appenders** are byte-addressed. Their cases check WHERE the bytes land: the true row dequantizes to the
+    input, and the wrapped row keeps its decoy. The e4m3 rounding stays `test_fp8_kv_append.py`'s GPU-only bitwise
+    gate. The public wrappers refuse CPU tensors, so the cases launch the kernels with the wrappers' arguments.
+  - **Calibrated** in the CPU container (torch 2.8.0 / triton 3.4.0 / numpy 2.3.2). The whole file, 20 cases, passes
+    on the shipped kernels. A copy with exactly the five straddling promotions removed fails all five new cases, each at
+    the wrapped address (`kernel/receipts-386/interp/`, claim `gnf4.kernel.boundary-gathers-appenders.interp.2026-09-23`).
+- **`docs/KERNEL_CONTRACT.md`** says where those carriers are covered. `gnf4.open.issues` drops #386. No kernel changed.
+
 ## 0.33.2 — 2026-09-23 — documentation, register data, tests and repository tooling only (every shipped module identical to 0.33.1): the claims register has ONE schema, shared with experts4bit-qlora; lane B374 observes the word-addressed decode routes (wide loads, and dot-pad, the default at its census shapes) past their own 2^31 boundary on an RTX 5090, closing #374; #386 opened
 
 - **`scripts/check_claims_register.py` and `docs/claims-schema.md` are one file each, byte-identical in both

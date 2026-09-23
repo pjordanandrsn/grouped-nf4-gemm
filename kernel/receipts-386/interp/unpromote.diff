@@ -1,0 +1,57 @@
+diff -u shipped/kernel/fp8_kv.py unpromoted/kernel/fp8_kv.py
+--- shipped/kernel/fp8_kv.py	2026-09-23 11:46:59.000000000 +0000
++++ unpromoted/kernel/fp8_kv.py	2026-09-23 12:00:18.407345959 +0000
+@@ -243,7 +243,7 @@
+         fill = pos - blk * bt
+         # int64 BEFORE any byte product: row * row_bytes overflows int32
+         # on multi-GiB arenas (the nf4_grouped lesson).
+-        row = tl.load(tbl_ptr + blk).to(tl.int64)
++        row = tl.load(tbl_ptr + blk)
+         pay = row * row_bytes + fill * (H * D) + h * D
+         sc = (row * row_bytes + pay_bytes
+               + (fill * (H * GROUPS) + h * GROUPS) * 4)
+@@ -334,7 +334,7 @@
+         pos = tl.load(lens_ptr + slot).to(tl.int64)
+         blk = pos // bt
+         fill = pos - blk * bt
+-        row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
++        row = tl.load(tbl_ptr + slot * bps + blk)
+         pay = row * row_bytes + fill * (H * D) + h * D
+         sc = (row * row_bytes + pay_bytes
+               + (fill * (H * GROUPS) + h * GROUPS) * 4)
+diff -u shipped/kernel/host_gather.py unpromoted/kernel/host_gather.py
+--- shipped/kernel/host_gather.py	2026-09-23 11:46:59.000000000 +0000
++++ unpromoted/kernel/host_gather.py	2026-09-23 12:00:18.406345959 +0000
+@@ -50,7 +50,7 @@
+     offs = chunk * BLOCK + tl.arange(0, BLOCK)
+     mask = offs < row_words
+     src = tl.cast(src_addr, tl.pointer_type(tl.int64))
+-    vals = tl.load(src + want.to(tl.int64) * row_words + offs, mask=mask)
++    vals = tl.load(src + want * row_words + offs, mask=mask)
+     tl.store(dst_ptr + slot.to(tl.int64) * row_words + offs, vals, mask=mask)
+ 
+ 
+diff -u shipped/kernel/mxfp4_pipelined.py unpromoted/kernel/mxfp4_pipelined.py
+--- shipped/kernel/mxfp4_pipelined.py	2026-09-23 11:46:59.000000000 +0000
++++ unpromoted/kernel/mxfp4_pipelined.py	2026-09-23 12:00:18.406345959 +0000
+@@ -57,7 +57,7 @@
+             mask = offs < row_words
+             src = tl.cast(want, tl.pointer_type(tl.int64))
+             vals = tl.load(src + offs, mask=mask)
+-            tl.store(dst_ptr + slot.to(tl.int64) * row_words + offs, vals, mask=mask)
++            tl.store(dst_ptr + slot * row_words + offs, vals, mask=mask)
+ 
+         _KERNEL = _gather_rows_addr
+     return _KERNEL
+diff -u shipped/kernel/mxfp4_residency.py unpromoted/kernel/mxfp4_residency.py
+--- shipped/kernel/mxfp4_residency.py	2026-09-23 11:46:59.000000000 +0000
++++ unpromoted/kernel/mxfp4_residency.py	2026-09-23 12:00:18.406345959 +0000
+@@ -130,7 +130,7 @@
+             mask = offs < n
+             src = tl.cast(want, tl.pointer_type(tl.int64))
+             vals = tl.load(src + so + offs, mask=mask)
+-            tl.store(dst_ptr + slot.to(tl.int64) * row_words + do + offs,
++            tl.store(dst_ptr + slot * row_words + do + offs,
+                      vals, mask=mask)
+ 
+         _PERM_KERNEL = _gather_rows_perm
