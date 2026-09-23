@@ -53,7 +53,9 @@ elements; the decode GEMVs index their rows by program id and are bounded by
 their contract (one token per group, `T` in the hundreds), which keeps
 `T * max(K, N)` far below 2^31 without a cast. Pack and reference ops are
 pure torch and index in int64. The straddling regression is
-`kernel/test_expert_offset_boundary.py`: for each carrier, the experts (or
+`kernel/test_expert_offset_boundary.py`: for each kernel carrier except the
+gathers and the `fp8_kv` appenders (promoted by inspection, but no test puts
+them past their boundary: #386), the experts (or
 pool rows) whose base offsets sit just below and just above 2^31 are compared
 with the pure-torch reference, every above-boundary case in its own process
 (an illegal access poisons the CUDA context). `kernel/test_offsets_2gib.py`

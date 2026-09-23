@@ -106,7 +106,8 @@ MXFP4 decode reproduces Kimi K3's own declared reference exactly
 
 - **#374 is closed: the word-addressed decode routes are observed past their
   own 2^31 boundary (lane B374, 2026-09-23, RTX 5090).** The wide-load and
-  dot-pad routes — dot-pad is the default decode route on >= 160-SM parts —
+  dot-pad routes — dot-pad is the default decode route on >= 160-SM parts at
+  its census shapes —
   address the stack in 32-bit words and wrap at 2^31 words (8 GiB), which the
   2026-09-05 boundary suite's byte geometry never reached; its green wide and
   dot-pad arms were not coverage of that boundary.
@@ -246,7 +247,11 @@ was wrong.
   `hot_rows` floor of two layers' experts).
 - **#71** — `PINNED_ROW_FACTOR` is ~2× conservative on cgroup v1; v2
   needs a box the rented pods cannot give.
-  (#60 and #71 are `gnf4.open.issues`.)
+- **#386** — the boundary suite never calls the gathers (`host_gather`,
+  `mxfp4_pipelined`, `mxfp4_residency`; int64-word-addressed, boundary at
+  16 GiB) or the `fp8_kv` appenders. Their int64 promotion is correct by
+  inspection and not observed past 2^31. (#60, #71 and #386 are
+  `gnf4.open.issues`.)
 - **`docs/context-budgets.md` is rung-one only** (A2000-measured
   KB/token); full-depth real-weight confirmation is pending and the K3
   row is a declared gap. Its own text forbids promoting pending rows to

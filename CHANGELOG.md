@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — the claims register has ONE schema, shared with experts4bit-qlora, and this register is migrated to it; lane B374 read: the word-addressed decode routes (wide loads, and dot-pad, the default) are observed past their own 2^31 boundary on an RTX 5090, closing #374 (repository tooling, data and tests; nothing in the wheel changes)
+## Unreleased — the claims register has ONE schema, shared with experts4bit-qlora, and this register is migrated to it; lane B374 read: the word-addressed decode routes (wide loads, and dot-pad, the default at its census shapes) are observed past their own 2^31 boundary on an RTX 5090, closing #374 (repository tooling, data and tests; nothing in the wheel changes)
 
 - **`scripts/check_claims_register.py` and `docs/claims-schema.md` are one file each, byte-identical in both
   repositories** (both now in `SHARED`). The two copies had drifted into two schemas that refused each other's data (14
@@ -52,7 +52,10 @@
     is proven.
   - **Correction.** `gnf4.kernel.expert-offset-boundary.5090.2026-09-05` gains a note: its wide and dot-pad arms
     straddle 2^31 bytes, not their own boundary. Its value and its other routes stand.
-  - `gnf4.open.issues` drops #374. No kernel changed.
+  - `gnf4.open.issues` drops #374 and adds #386. KERNEL_CONTRACT had said the boundary suite covers "each
+    carrier", but it never calls the gathers (`host_gather`, `mxfp4_pipelined`, `mxfp4_residency`, all
+    word-addressed) or the `fp8_kv` appenders. Their promotion is correct by inspection and untested past 2^31.
+    The sentence now says so. No kernel changed.
 
 ## 0.33.1 — 2026-09-23 — documentation and repository tooling only (every shipped module identical to 0.33.0): the open-issue list and #319's closure corrected across README, STATUS, the register, the capabilities and the solution pages; the CI scripts shared with experts4bit-qlora start to become one file
 

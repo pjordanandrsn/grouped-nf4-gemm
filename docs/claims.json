@@ -171,7 +171,7 @@
   {
    "id": "gnf4.kernel.word-boundary-wide-dotpad.5090.2026-09-23",
    "area": "kernel",
-   "claim": "The word-addressed NF4 decode routes -- wide loads and dot-pad, the default decode route on parts with >= 160 SMs -- read the right expert past their own 2^31-word (8 GiB) offset boundary on an RTX 5090: the 4 cases of kernel/test_offset_boundary_words_gpu.py (scalar and split-K with wide loads, dot-pad and dot-pad split-K) pass on the shipped kernels, and all 4 fail by reading the decoy at the int32-wrapped address when the six int64 promotions are stripped, closing #374.",
+   "claim": "The word-addressed NF4 decode routes -- wide loads and dot-pad, the default decode route on parts with >= 160 SMs at its census shapes -- read the right expert past their own 2^31-word (8 GiB) offset boundary on an RTX 5090: the 4 cases of kernel/test_offset_boundary_words_gpu.py (scalar and split-K with wide loads, dot-pad and dot-pad split-K) pass on the shipped kernels, and all 4 fail by reading the decoy at the int32-wrapped address when the six int64 promotions are stripped, closing #374.",
    "value": 4,
    "unit": "GPU cases past 2^31 words, passing shipped and failing unpromoted",
    "status": "measured",
@@ -492,7 +492,7 @@
   {
    "id": "gnf4.open.issues",
    "area": "kernel",
-   "claim": "OPEN issues at 2026-09-23: #60 (arena staging blocks ~30% of a training step), #71 (PINNED_ROW_FACTOR conservative on cgroup v1).",
+   "claim": "OPEN issues at 2026-09-23: #60 (arena staging blocks ~30% of a training step), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #386 (the boundary suite never calls the gathers or the fp8_kv appenders past 2^31).",
    "status": "open",
    "evidence": [
     {
@@ -500,9 +500,12 @@
     },
     {
      "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/71"
+    },
+    {
+     "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/386"
     }
    ],
-   "notes": "#87 (gemm_4bit_grouped int32 offset overflow when max(expert_ids) is large) was listed here until 0.30.1 as 'distinct from the 2 GiB fix in 0.13.2/0.14.0'; that reading was not supported by the issue text. Closed 2026-09-05 by observation in every carrier: PR #342, kernel/test_expert_offset_boundary.py, claim gnf4.kernel.expert-offset-boundary.5090.2026-09-05. Updated 2026-09-23: #319 closed in 0.33.0 (a mislabelled test arm, gnf4.serve.f32-arms-ran-fp8); #73 closed (fixed in 0.12.0 by #74/#76/#79: 1113 -> 56.8 ms/layer, 78% of device); #58 closed (six of eight calls per layer are cache hits, 0.02 s/step; the stall is #60); #353 and #374 added. The claim previously read: OPEN issues at 2026-09-05: #319 (f32 paged compute modes on triton 3.4), #73 (K3 fetch host copy ~71% of a layer), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #60 (arena staging blocks ~30% of a training step), #58 (8 requests per layer where 2 would do). Later the same day: #353 closed (experts4bit-qlora#697 runs the census cross-check in CI against the installed kernel commit's census). Later still: #374 closed by observation (lane B374, gnf4.kernel.word-boundary-wide-dotpad.5090.2026-09-23: the wide-load and dot-pad routes past their own 2^31-word boundary on an RTX 5090)."
+   "notes": "#87 (gemm_4bit_grouped int32 offset overflow when max(expert_ids) is large) was listed here until 0.30.1 as 'distinct from the 2 GiB fix in 0.13.2/0.14.0'; that reading was not supported by the issue text. Closed 2026-09-05 by observation in every carrier: PR #342, kernel/test_expert_offset_boundary.py, claim gnf4.kernel.expert-offset-boundary.5090.2026-09-05. Updated 2026-09-23: #319 closed in 0.33.0 (a mislabelled test arm, gnf4.serve.f32-arms-ran-fp8); #73 closed (fixed in 0.12.0 by #74/#76/#79: 1113 -> 56.8 ms/layer, 78% of device); #58 closed (six of eight calls per layer are cache hits, 0.02 s/step; the stall is #60); #353 and #374 added. The claim previously read: OPEN issues at 2026-09-05: #319 (f32 paged compute modes on triton 3.4), #73 (K3 fetch host copy ~71% of a layer), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #60 (arena staging blocks ~30% of a training step), #58 (8 requests per layer where 2 would do). Later the same day: #353 closed (experts4bit-qlora#697 runs the census cross-check in CI against the installed kernel commit's census). Later still: #374 closed by observation (lane B374, gnf4.kernel.word-boundary-wide-dotpad.5090.2026-09-23: the wide-load and dot-pad routes past their own 2^31-word boundary on an RTX 5090). #386 added the same day, found while writing that read: KERNEL_CONTRACT listed the gathers and fp8_kv appenders as carriers covered by the boundary suite, which never calls them."
   },
   {
    "id": "gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10",

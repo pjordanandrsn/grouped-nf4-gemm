@@ -29,11 +29,12 @@ Each GPU case ran in its own pytest process in both passes, and each asserted it
 |---|---|---|---|
 | wide loads, split 1 | 8192 (base = 2^31 words = 8 GiB) | `scalar` | PASS |
 | wide loads, split 4 | 8192 | `scalar_splitk` | PASS |
-| dot-pad (the default on ≥ 160-SM parts) | 5462 (base 1 MiB past 2^31 words) | `dotpad` | PASS |
+| dot-pad (the default on ≥ 160-SM parts at its census shapes) | 5462 (base 1 MiB past 2^31 words) | `dotpad` | PASS |
 | dot-pad split-K | 5462 | `dotpad_splitk` | PASS |
 
-All four passed and none was skipped. The pure-arithmetic geometry test also passed. Every case read the
-true tile to within the 5e-2 tolerance, and the decoy was more than 10× that tolerance away.
+All four passed and none was skipped. The pure-arithmetic geometry test also passed. A pass means both of
+the case's assertions held: it read the true tile to within the 5e-2 tolerance, and the decoy was more than
+10× that tolerance away. A passing log does not print the values.
 
 ## P2 — the test can see the bug: HOLDS
 
@@ -57,15 +58,21 @@ The cases therefore do straddle the word boundary, which is exactly what the byt
 
 - **The word boundary is now observed on silicon.** The wide-load and dot-pad routes' 2^31-word boundary is
   observed on an RTX 5090, for the first time and with a test proven able to fail. This includes dot-pad,
-  the shipped default decode route on this class of part.
+  the shipped default decode route on this class of part at its census shapes.
 - **Documentation.** `docs/KERNEL_CONTRACT.md` and `test_expert_offset_boundary.py`'s comment point here.
 - **The earlier row is corrected, not rewritten.** `gnf4.kernel.expert-offset-boundary.5090.2026-09-05`
   gains a note: its wide and dot-pad arms straddle 2^31 *bytes*, not their own boundary.
 - **Register row:** `gnf4.kernel.word-boundary-wide-dotpad.5090.2026-09-23` (measured).
 
-Bounded: one box, one torch/Triton pair, the NF4 routes only. The MXFP4 and int4-b32 kernels are
-byte-addressed, and `test_expert_offset_boundary.py` / `test_offset_boundary_interp.py` cover them at their
-own boundary.
+Bounded: one box, one torch/Triton pair, the two NF4 routes only. The byte-addressed MXFP4 and int4-b32
+kernels are covered at their own boundary by `test_expert_offset_boundary.py` and
+`test_offset_boundary_interp.py`, and the fp8 paged-decode kernels by the first of those (GPU) only.
+
+Checking that sentence turned up a gap that B374 does not close: #386. `host_gather._gather_rows` and the
+`mxfp4_pipelined` / `mxfp4_residency` gathers are word-addressed too, in int64 words, so their boundary is
+2^31 words = 16 GiB. The `fp8_kv` appenders form an int64 byte offset. `docs/KERNEL_CONTRACT.md` lists all of
+them as carriers, and all of them promote before the product, but by inspection only: neither boundary suite
+calls any of them.
 
 One recording note: the launcher prefixes the executor identity with the role, so passing
 `POD_LAUNCH_AGENT=CTO/…` wrote `CTO/CTO/…` as `executed_by` in the launch receipt. That receipt stays in the
