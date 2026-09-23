@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — the claims register has ONE schema, shared with experts4bit-qlora, and this register is migrated to it; lane B374 read: the word-addressed decode routes (wide loads, and dot-pad, the default at its census shapes) are observed past their own 2^31 boundary on an RTX 5090, closing #374 (repository tooling, data and tests; nothing in the wheel changes)
+## 0.33.2 — 2026-09-23 — documentation, register data, tests and repository tooling only (every shipped module identical to 0.33.1): the claims register has ONE schema, shared with experts4bit-qlora; lane B374 observes the word-addressed decode routes (wide loads, and dot-pad, the default at its census shapes) past their own 2^31 boundary on an RTX 5090, closing #374; #386 opened
 
 - **`scripts/check_claims_register.py` and `docs/claims-schema.md` are one file each, byte-identical in both
   repositories** (both now in `SHARED`). The two copies had drifted into two schemas that refused each other's data (14
