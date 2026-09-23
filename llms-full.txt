@@ -326,12 +326,13 @@ three limits where the fused path loses and what is measured-private, is
   in [`capabilities.json`](capabilities.json): the fp8 compute path
   (sm_89+ precondition, measured on the RTX 5090 only) is supported; the
   f32 compute path (the sm_80–sm_88 default and every explicit f32
-  request) is open under #319 and `unsupported` until it closes.
+  request) is supported as of #319's close, measured on an RTX A2000 and an
+  RTX 5090 (`gnf4.serve.f32-arms-ran-fp8`).
 
 ## Source: docs/solutions/fp8-paged-attention-for-moe-serving.md (https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/fp8-paged-attention-for-moe-serving.md)
 
 # How do I run paged decode attention over an FP8 KV cache for a quantized MoE serving path, with sliding windows, attention sinks and a custom scale?
-<!-- summary: fp8_paged_decode_attention runs paged flash-decode over an E4M3 KV cache with windows, sinks and a custom scale; the fp8 compute path is supported on sm_89+, the f32 path is open under #319. -->
+<!-- summary: fp8_paged_decode_attention runs paged flash-decode over an E4M3 KV cache with windows, sinks and a custom scale; the fp8 compute path is supported on sm_89+, the f32 path (the sm_80–sm_88 default) since #319's close. -->
 
 Use `fp8_paged_attn.fp8_paged_decode_attention` from `grouped-nf4-gemm`: a Triton flash-decode kernel over paged E4M3 K/V blocks that dequantizes in registers, takes `window`, `sinks`, `sm_scale` and per-layer row strides, and is checked against the pure-torch `fp8_paged_attn.paged_attn_ref`. The KV quantize/pack primitives live in `fp8_kv`; the decode glue kernels (fused RMSNorm, residual fold, rotary, router epilogue) live in `int4_b32`.
 
@@ -2493,9 +2494,11 @@ the Triton kernels need a CUDA GPU; macOS and Windows are not exercised by CI, s
 say "not exercised by CI" rather than "supported". `int4_b32` imports triton
 directly and is not importable without it. ROCm/XPU are port targets
 (`docs/PORTABILITY.md`), not supported. The fp8 paged kernel's f32 compute modes
-(the sm_80–sm_88 default and every explicit f32 request) miss their reference on
-triton 3.4 (#319, `gnf4.open.f32-compute-modes-triton34`); `docs/capabilities.json` carries them as
-`fp8-paged-attention-f32-compute` (`unsupported`) beside `fp8-paged-attention-fp8-compute` (supported: sm_89+, measured on the RTX 5090 only).
+(the sm_80–sm_88 default and every explicit f32 request) are supported as of
+#319's close, measured on sm_86 and sm_120 (`gnf4.serve.f32-arms-ran-fp8`). #319
+was a test-harness defect, and the claim that they miss their reference,
+`gnf4.open.f32-compute-modes-triton34`, is retired. `docs/capabilities.json` carries them as
+`fp8-paged-attention-f32-compute` (supported) beside `fp8-paged-attention-fp8-compute` (supported: sm_89+, measured on the RTX 5090 only).
 
 ## 10. Contributing
 

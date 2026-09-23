@@ -168,9 +168,11 @@ the Triton kernels need a CUDA GPU; macOS and Windows are not exercised by CI, s
 say "not exercised by CI" rather than "supported". `int4_b32` imports triton
 directly and is not importable without it. ROCm/XPU are port targets
 (`docs/PORTABILITY.md`), not supported. The fp8 paged kernel's f32 compute modes
-(the sm_80–sm_88 default and every explicit f32 request) miss their reference on
-triton 3.4 (#319, `gnf4.open.f32-compute-modes-triton34`); `docs/capabilities.json` carries them as
-`fp8-paged-attention-f32-compute` (`unsupported`) beside `fp8-paged-attention-fp8-compute` (supported: sm_89+, measured on the RTX 5090 only).
+(the sm_80–sm_88 default and every explicit f32 request) are supported as of
+#319's close, measured on sm_86 and sm_120 (`gnf4.serve.f32-arms-ran-fp8`). #319
+was a test-harness defect, and the claim that they miss their reference,
+`gnf4.open.f32-compute-modes-triton34`, is retired. `docs/capabilities.json` carries them as
+`fp8-paged-attention-f32-compute` (supported) beside `fp8-paged-attention-fp8-compute` (supported: sm_89+, measured on the RTX 5090 only).
 
 ## 10. Contributing
 

@@ -91,4 +91,5 @@ three limits where the fused path loses and what is measured-private, is
   in [`capabilities.json`](capabilities.json): the fp8 compute path
   (sm_89+ precondition, measured on the RTX 5090 only) is supported; the
   f32 compute path (the sm_80–sm_88 default and every explicit f32
-  request) is open under #319 and `unsupported` until it closes.
+  request) is supported as of #319's close, measured on an RTX A2000 and an
+  RTX 5090 (`gnf4.serve.f32-arms-ran-fp8`).
