@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — the claims register has ONE schema, shared with experts4bit-qlora, and this register is migrated to it (repository tooling and data; nothing in the wheel changes)
+## Unreleased — the claims register has ONE schema, shared with experts4bit-qlora, and this register is migrated to it; lane B374 registered, and a GPU test for the word-addressed decode routes' own 2^31 boundary (repository tooling, data and tests; nothing in the wheel changes)
 
 - **`scripts/check_claims_register.py` and `docs/claims-schema.md` are one file each, byte-identical in both
   repositories** (both now in `SHARED`). The two copies had drifted into two schemas that refused each other's data (14
@@ -30,6 +30,19 @@
   that carries them.
 - **CI** now resolves the cross-repository evidence in experts4bit-qlora's `main`, where before it was only listed as
   SKIP.
+
+- **`kernel/test_offset_boundary_words_gpu.py` and `kernel/PREREG-b374-word-boundary-gpu.md` (#374).** The wide-load and
+  dot-pad NF4 decode routes address the stack in 32-bit words, so they wrap at 2^31 words (8 GiB of packed bytes), and
+  `test_expert_offset_boundary.py`'s byte geometry never reaches that. Dot-pad has been the default decode route on
+  >= 160-SM parts since M3, and no test had put it past its boundary.
+  - **The test.** A real 16 GiB device buffer puts the target expert past 8 GiB and a decoy at the int32-wrapped address.
+    A wrap is therefore a detectable misread, not a fault.
+  - **The cases.** Four: wide split 1 and 4, dot-pad and dot-pad split-K at the census gate_up shape. Each asserts its
+    route, and each is skipped legibly below 17.5 GiB free. The pure geometry check runs in CI everywhere.
+  - **The lane.** B374, one RTX 5090 at <= $0.66, runs the file against the shipped kernels (P1: all pass) and against
+    a copy with all SIX eid promotions removed (P2: all fail).
+  - **Why six.** The dot-pad kernels promote in the load itself (`tl.load(eids_ptr + g).to(tl.int64)`), so the four
+    `eid = eid.to(tl.int64)` lines alone would leave dot-pad promoted and calibrate nothing.
 
 ## 0.33.1 — 2026-09-23 — documentation and repository tooling only (every shipped module identical to 0.33.0): the open-issue list and #319's closure corrected across README, STATUS, the register, the capabilities and the solution pages; the CI scripts shared with experts4bit-qlora start to become one file
 
