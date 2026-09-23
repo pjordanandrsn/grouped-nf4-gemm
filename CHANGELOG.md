@@ -96,6 +96,17 @@
       124/124 unchanged.
 - **`gnf4.open.issues` and STATUS list #393** (filed 2026-09-23): `combine_rows` has no bitwise contract, and
   experts4bit-qlora runs it by default. The register had said the open issues were #60 and #71 only.
+- **Lane B393 registered (#393): are `combine_rows` and `reduce_partials` bitwise equal to the torch chains they
+  replace?** Both are tested only to a `2**-7`-relative tolerance.
+  - **Why it matters.** experts4bit-qlora runs `combine_rows` on every MoE layer by default, and its call site says
+    the fused path takes "the same order and roundings".
+  - **The census.** `kernel/b393_bitwise_census.py` compares each kernel with the verbatim chain and with a strictly
+    sequential sum, in bf16 ULPs. It covers every served family's `(top_k, hidden)` at T = 1/16/17/64, and split-K
+    factors 2–16. `kernel/test_b393_census_helpers.py` checks the instrument on CPU in CI.
+  - **The pre-registration.** `kernel/PREREG-b393-combine-reduce-bitwise.md` gives the decision rule: bitwise, a
+    bounded reorder-class, or a defect.
+  - **Why the GPU.** An interpreter dry run executed every case but is not a reading: the interpreter's own bf16 cast
+    rounding puts about half the elements 1 ULP off.
 
 ## 0.33.2 — 2026-09-23 — documentation, register data, tests and repository tooling only (every shipped module identical to 0.33.1): the claims register has ONE schema, shared with experts4bit-qlora; lane B374 observes the word-addressed decode routes (wide loads, and dot-pad, the default at its census shapes) past their own 2^31 boundary on an RTX 5090, closing #374; #386 opened
 
