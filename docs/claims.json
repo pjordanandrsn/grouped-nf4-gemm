@@ -201,6 +201,69 @@
    "notes": "Pre-registered (P1: 4/4 pass shipped; P2: 4/4 fail unpromoted) and merged before the rental in #384. Unpromoted misreads: wide rel 1.467 vs the true tile / 1.822e-03 vs the decoy, dot-pad 1.405 / 2.408e-03; no faults. One box, one torch/Triton pair, the NF4 routes only; the byte-addressed routes are covered at their own boundary by gnf4.kernel.expert-offset-boundary.5090.2026-09-05. Run b374-5090-1, $0.0354, teardown proven (kernel/receipts-b374/5090/teardown-proof.json)."
   },
   {
+   "id": "gnf4.kernel.combine-rows-accuracy.5090.2026-09-23",
+   "area": "kernel",
+   "claim": "int4_b32.combine_rows, the fused MoE top-k weight-and-sum that experts4bit-qlora runs on every MoE layer by default, is a correct fp32 sum of its terms followed by the bf16 cast -- every element within the error bound of a correct fp32 summation in some order, in 144 of 144 census cases at every served family's (top_k, hidden) on an RTX 5090 -- but it is NOT bitwise the torch chain it replaced: 95 of 144 cases differ, 392 of 9,069,312 elements, closing #393 with an accuracy contract instead of a bitwise one.",
+   "value": 144,
+   "unit": "census cases within the fp32-summation accuracy bound (of 144); max bound ratio 0.996",
+   "status": "measured",
+   "hardware": "RTX 5090 (sm_120, 600 W), torch 2.8.0+cu128 / triton 3.4.0, rented host (Vast)",
+   "conditions": "grouped-nf4-gemm 0.33.2 installed at 69bb93f; (top_k, hidden) of Qwen3 8/2048, OLMoE 8/2048, Granite 8/1536, Mixtral 2/4096, gpt-oss 4/2880, Gemma-4 8/2816; T = 1, 16, 17, 64; 3 seeds; a heavy-tailed variant; bf16 dn, fp32 softmax-normalised w; bound = 2^-8 |exact| + (k+1) 2^-24 sum|term| (1 + 2^-8) against the fp64 exact sum",
+   "measured_on": "2026-09-23",
+   "evidence": [
+    "kernel/RESULTS-b393-combine-reduce-bitwise.md",
+    "kernel/PREREG-b393-combine-reduce-bitwise.md",
+    "kernel/b393_bitwise_census.py",
+    "kernel/receipts-b393/5090/census.json",
+    "kernel/receipts-b393/5090/summary.txt",
+    "kernel/receipts-b393/a2000-fma-attribution/README.md",
+    {
+     "repository": "experts4bit-qlora",
+     "path": "bench/b393/b393_run.sh"
+    },
+    {
+     "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/393"
+    }
+   ],
+   "quoted_in": [
+    "docs/STATUS.md",
+    "CHANGELOG.md"
+   ],
+   "notes": "Pre-registered in #396 (outcome B of A/B/C: not bit-equal, fused_bound_ratio <= 1 everywhere). Readings: vs the chain 49/144 cases bit-equal, max 53 bf16 ULP; vs the separately-rounded slot-order sum 58/144, max 44; the chain vs that sum 80/144, max 64 -- ULPs are unbounded near cancellation, so they are reported, not decided on. The torch chain meets the same bound at the same max ratio: the fused kernel is exactly as accurate as what it replaced. Attribution, a follow-up diagnostic on an RTX A2000 (sm_86), not this row's reading: the kernel equals the slot-order sum with a fused multiply-add bit-for-bit in 144/144 cases and its PTX accumulates with fma.rn.f32 only. On sm_120 its per-case differences against the same deterministic reference differ from sm_86's in >= 35 of 144 cases, and torch's own chain differs across the two architectures in >= 41 -- neither is bitwise-stable across GPUs; the accuracy bound holds on both. End-to-end size is experts4bit-qlora#708's (E4B_FUSE_COMBINE=0 control). Run b393-5090-1, $0.0299, teardown proven (kernel/receipts-b393/5090/teardown-proof.json)."
+  },
+  {
+   "id": "gnf4.kernel.reduce-partials-slot-order.5090.2026-09-23",
+   "area": "kernel",
+   "claim": "int4_b32.reduce_partials, the fused split-K reduce and bf16 cast, is bitwise the fp32 sum of its partials in slot order (270 of 270 census cases, 0 of 4,455,360 elements differing, on an RTX 5090 and identically on an RTX A2000) and within the fp32-summation accuracy bound everywhere; it is not bitwise torch's part.reshape(sk, R, N).sum(0), which sums in a different order (49 of 270 cases differ, max 8 bf16 ULP).",
+   "value": 270,
+   "unit": "census cases bit-equal to the slot-order sum (of 270)",
+   "status": "measured",
+   "hardware": "RTX 5090 (sm_120, 600 W), torch 2.8.0+cu128 / triton 3.4.0, rented host (Vast)",
+   "conditions": "grouped-nf4-gemm 0.33.2 installed at 69bb93f; sk in {2, 3, 4, 8, 16}, R in {1, 4, 16}, N in {768, 1536, 2048, 2816, 2880, 4096}, 3 seeds; fp32 partials; the RTX A2000 figures are the lane's disclosed rehearsal on the pre-merge branch, case-for-case identical",
+   "measured_on": "2026-09-23",
+   "evidence": [
+    "kernel/RESULTS-b393-combine-reduce-bitwise.md",
+    "kernel/PREREG-b393-combine-reduce-bitwise.md",
+    "kernel/b393_bitwise_census.py",
+    "kernel/receipts-b393/5090/census.json",
+    "kernel/receipts-b393/5090/summary.txt",
+    "kernel/receipts-b393/a2000-rehearsal/census.json",
+    "kernel/test_int4_b32.py",
+    {
+     "repository": "experts4bit-qlora",
+     "path": "bench/b393/b393_run.sh"
+    },
+    {
+     "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/393"
+    }
+   ],
+   "quoted_in": [
+    "docs/STATUS.md",
+    "CHANGELOG.md"
+   ],
+   "notes": "Pre-registered in #396 (outcome B). The whole difference from the chain is torch's reduction order: fused and the chain differ in the same 111 elements the chain and the slot-order sum do. kernel/test_int4_b32.py::test_reduce_partials_is_the_slot_order_sum now asserts it with torch.equal on silicon (skipped under TRITON_INTERPRET, whose bf16 cast does not round to nearest). Run b393-5090-1, $0.0299, teardown proven."
+  },
+  {
    "id": "gnf4.kernel.boundary-gathers-appenders.interp.2026-09-23",
    "area": "kernel",
    "claim": "The five carriers of the int64 expert-base promotion that no boundary test called are observed past their own 2^31 boundary on CPU, under the Triton interpreter, in CI: host_gather._gather_rows and the mxfp4_pipelined / mxfp4_residency slot gathers past 2^31 int64 words, and the fp8_kv T=1 and batched appenders past 2^31 bytes. All 5 cases of kernel/test_offset_boundary_interp.py pass on the shipped kernels, and all 5 fail at the int32-wrapped address when the five straddling promotions are removed, closing #386.",
@@ -519,7 +582,7 @@
   {
    "id": "gnf4.open.issues",
    "area": "kernel",
-   "claim": "OPEN issues at 2026-09-23: #60 (arena staging blocks ~30% of a training step), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #393 (combine_rows fuses the MoE weight-and-sum with no bitwise contract, and experts4bit-qlora runs it by default).",
+   "claim": "OPEN issues at 2026-09-23: #60 (arena staging blocks ~30% of a training step), #71 (PINNED_ROW_FACTOR conservative on cgroup v1).",
    "status": "open",
    "evidence": [
     {
@@ -527,12 +590,9 @@
     },
     {
      "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/71"
-    },
-    {
-     "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/393"
     }
    ],
-   "notes": "#87 (gemm_4bit_grouped int32 offset overflow when max(expert_ids) is large) was listed here until 0.30.1 as 'distinct from the 2 GiB fix in 0.13.2/0.14.0'; that reading was not supported by the issue text. Closed 2026-09-05 by observation in every carrier: PR #342, kernel/test_expert_offset_boundary.py, claim gnf4.kernel.expert-offset-boundary.5090.2026-09-05. Updated 2026-09-23: #319 closed in 0.33.0 (a mislabelled test arm, gnf4.serve.f32-arms-ran-fp8); #73 closed (fixed in 0.12.0 by #74/#76/#79: 1113 -> 56.8 ms/layer, 78% of device); #58 closed (six of eight calls per layer are cache hits, 0.02 s/step; the stall is #60); #353 and #374 added. The claim previously read: OPEN issues at 2026-09-05: #319 (f32 paged compute modes on triton 3.4), #73 (K3 fetch host copy ~71% of a layer), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #60 (arena staging blocks ~30% of a training step), #58 (8 requests per layer where 2 would do). Later the same day: #353 closed (experts4bit-qlora#697 runs the census cross-check in CI against the installed kernel commit's census). Later still: #374 closed by observation (lane B374, gnf4.kernel.word-boundary-wide-dotpad.5090.2026-09-23: the wide-load and dot-pad routes past their own 2^31-word boundary on an RTX 5090). #386 added the same day, found while writing that read: KERNEL_CONTRACT listed the gathers and fp8_kv appenders as carriers covered by the boundary suite, which never calls them. Later still: #386 closed by observation on CPU (gnf4.kernel.boundary-gathers-appenders.interp.2026-09-23: the gathers and fp8_kv appenders past their boundary under the Triton interpreter, in CI). #393 was filed the same day at 15:53Z: combine_rows is tested to a tolerance (max|d| <= max|ref| * 2^-7), not torch.equal, and no registered claim covers it; the ask is a bitwise GPU test on named hardware."
+   "notes": "#87 (gemm_4bit_grouped int32 offset overflow when max(expert_ids) is large) was listed here until 0.30.1 as 'distinct from the 2 GiB fix in 0.13.2/0.14.0'; that reading was not supported by the issue text. Closed 2026-09-05 by observation in every carrier: PR #342, kernel/test_expert_offset_boundary.py, claim gnf4.kernel.expert-offset-boundary.5090.2026-09-05. Updated 2026-09-23: #319 closed in 0.33.0 (a mislabelled test arm, gnf4.serve.f32-arms-ran-fp8); #73 closed (fixed in 0.12.0 by #74/#76/#79: 1113 -> 56.8 ms/layer, 78% of device); #58 closed (six of eight calls per layer are cache hits, 0.02 s/step; the stall is #60); #353 and #374 added. The claim previously read: OPEN issues at 2026-09-05: #319 (f32 paged compute modes on triton 3.4), #73 (K3 fetch host copy ~71% of a layer), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #60 (arena staging blocks ~30% of a training step), #58 (8 requests per layer where 2 would do). Later the same day: #353 closed (experts4bit-qlora#697 runs the census cross-check in CI against the installed kernel commit's census). Later still: #374 closed by observation (lane B374, gnf4.kernel.word-boundary-wide-dotpad.5090.2026-09-23: the wide-load and dot-pad routes past their own 2^31-word boundary on an RTX 5090). #386 added the same day, found while writing that read: KERNEL_CONTRACT listed the gathers and fp8_kv appenders as carriers covered by the boundary suite, which never calls them. Later still: #386 closed by observation on CPU (gnf4.kernel.boundary-gathers-appenders.interp.2026-09-23: the gathers and fp8_kv appenders past their boundary under the Triton interpreter, in CI). #393 was filed the same day at 15:53Z: combine_rows is tested to a tolerance (max|d| <= max|ref| * 2^-7), not torch.equal, and no registered claim covers it; the ask is a bitwise GPU test on named hardware. Later still: #393 closed as answered by lane B393 (gnf4.kernel.combine-rows-accuracy.5090.2026-09-23, gnf4.kernel.reduce-partials-slot-order.5090.2026-09-23): no bitwise contract, a measured accuracy contract instead."
   },
   {
    "id": "gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10",

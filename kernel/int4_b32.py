@@ -255,7 +255,10 @@ def _reduce_partials(part_ptr, out_ptr, SK: tl.constexpr, RN,
     ``part.reshape(sk, R, N).sum(0).to(bf16)`` it replaces was three
     dispatches (view, sum, copy) and two kernels per projection call --
     the largest glue site in Qwen3's B=1 op census (bo3p: 596 us of an
-    eager step, 864 dispatches, all from this line)."""
+    eager step, 864 dispatches, all from this line). The sum is fp32 in
+    slot order, each add rounded: bitwise that sequential sum, and not
+    bitwise torch's ``.sum(0)``, whose order differs (lane B393, 270 of
+    270 census cases on an RTX 5090 and an RTX A2000)."""
     pid = tl.program_id(0)
     offs = pid * BLOCK + tl.arange(0, BLOCK)
     m = offs < RN
@@ -744,7 +747,15 @@ def _combine_rows(dn_ptr, w_ptr, out_ptr, K: tl.constexpr, H,
 def combine_rows(dn: torch.Tensor, w: torch.Tensor, k: int):
     """``dn [T*k, H]`` (bf16 expert outputs, token-major, k slots per
     token) and ``w [T*k]`` (routing weights) -> ``[T, H]`` bf16, one
-    launch. Summation is fp32 in slot order, as the torch chain's is."""
+    launch. Summation is fp32 in slot order with the multiply-add
+    contracted by the compiler (``fma.rn.f32`` in its sm_86 PTX: one
+    rounding per slot, not two), so it is NOT bitwise the torch chain
+    ``(dn.float() * w[:, None]).view(T, k, H).sum(1)``, which rounds
+    each product and does not sum in slot order. Lane B393 measured the contract that holds: every element is
+    within the error of a correct fp32 sum in some order, then the bf16
+    cast (kernel/RESULTS-b393-combine-reduce-bitwise.md; 144 of 144
+    census cases on an RTX 5090). Neither this kernel's bits nor the
+    torch chain's are the same across GPU architectures."""
     TK, H = dn.shape
     T = TK // k
     out = torch.empty(T, H, dtype=torch.bfloat16, device=dn.device)
