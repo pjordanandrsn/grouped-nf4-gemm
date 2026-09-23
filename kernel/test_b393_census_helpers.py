@@ -76,3 +76,26 @@ def test_census_refuses_without_cuda(monkeypatch, tmp_path):
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     assert C.run(str(tmp_path / "x.json")) == 3
     assert not (tmp_path / "x.json").exists()
+
+
+def test_bound_ratio_accepts_any_correct_order_and_flags_a_wrong_result():
+    # terms that cancel below fp32's resolution at 1: the two fp32 orders give 0 and 2^-25, arbitrarily many
+    # bf16 ULPs apart, and both are correct fp32 sums -- the case a ULP-only rule would call a defect
+    one, tiny = torch.tensor(1.0, dtype=torch.float32), torch.tensor(2.0 ** -25, dtype=torch.float32)
+    order_a = ((one + tiny) - one).reshape(1)                                   # 1 + 2^-25 rounds to 1: 0
+    order_b = ((one - one) + tiny).reshape(1)                                   # 2^-25
+    assert float(order_a) == 0.0 and float(order_b) == 2.0 ** -25
+    terms = torch.tensor([[1.0, 2.0 ** -25, -1.0]], dtype=torch.float64)
+    exact, abs_sum = terms.sum(dim=1), terms.abs().sum(dim=1)
+    a, b = order_a.to(torch.bfloat16), order_b.to(torch.bfloat16)
+    assert C.ulp_stats(a, b)["max_ulp"] > 1000                                  # far apart in ULPs ...
+    assert C.bound_ratio(a, exact, abs_sum, 3) <= 1.0                           # ... and both within the bound
+    assert C.bound_ratio(b, exact, abs_sum, 3) <= 1.0
+    wrong = torch.tensor([0.01]).to(torch.bfloat16)                             # no order produces this
+    assert C.bound_ratio(wrong, exact, abs_sum, 3) > 1.0
+
+
+def test_bound_ratio_flags_a_nonzero_result_of_all_zero_terms():
+    z = torch.zeros(1, dtype=torch.float64)
+    assert C.bound_ratio(torch.tensor([1.0]).to(torch.bfloat16), z, z, 2) == float("inf")
+    assert C.bound_ratio(torch.tensor([0.0]).to(torch.bfloat16), z, z, 2) == 0.0

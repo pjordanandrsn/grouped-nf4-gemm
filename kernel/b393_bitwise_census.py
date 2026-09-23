@@ -18,8 +18,13 @@ sequential reading but not to the chain means the difference is torch's reductio
 from both means the kernel's own arithmetic (e.g. a fused multiply-add) differs as well.
 
 Distances are reported in bf16 ULPs (the output dtype), per element, so "differs" is exact: equal bits, or
-the number of representable bf16 values between them. Shapes are the served families' own (top-k, hidden)
-and decode / verify / prefill row counts; inputs are seeded, with a heavy-tailed variant.
+the number of representable bf16 values between them. ULPs alone cannot say whether a result is WRONG: where
+the terms cancel and the sum lands near zero, a correct fp32 sum in another order can be many bf16 ULPs away
+(an A2000 rehearsal of this file showed 36). So every result is also checked against the exact sum (fp64 of
+the same terms): its error must stay within the fp32 summation bound ``(n_terms + 1) * 2**-24 * sum|term|``
+plus half a bf16 ULP for the final cast (``bound_ratio`` gives the derivation). ``bound_ratio`` <= 1 means within that bound, for
+the fused result and for the chain alike. Shapes are the served families' own (top-k, hidden) and decode /
+verify / prefill row counts; inputs are seeded, with a heavy-tailed variant.
 
 GPU only for a reading. ``python kernel/b393_bitwise_census.py --out census.json``. Exits 0 when every case
 ran (the verdict is the JSON, read against kernel/PREREG-b393-combine-reduce-bitwise.md), 3 when CUDA is
@@ -74,6 +79,28 @@ def ulp_stats(got: torch.Tensor, ref: torch.Tensor) -> dict:
     return {"equal": bool(torch.equal(got.view(torch.int16), ref.view(torch.int16))), "n": got.numel(),
             "n_diff": n_diff, "max_ulp": int(d.max()) if d.numel() else 0,
             "max_abs": float((got.float() - ref.float()).abs().max()) if got.numel() else 0.0}
+
+
+def bound_ratio(got: torch.Tensor, exact: torch.Tensor, abs_sum: torch.Tensor, n_terms: int) -> float:
+    """``max |got - exact| / bound`` over the elements, where ``bound`` is what a correct fp32 sum of
+    ``n_terms`` products or partials, in ANY order, then cast to bf16, can be off by:
+
+        |bf16(s) - exact| <= |bf16(s) - s| + |s - exact|
+                          <= 2**-8 * |s|   + e,        e = (n_terms + 1) * 2**-24 * sum|term|
+                          <= 2**-8 * |exact| + e * (1 + 2**-8)
+
+    (``e`` bounds any summation order of n rounded products, with or without a fused multiply-add; ``2**-8``
+    relative is half a bf16 ULP, bf16 keeping 8 significant bits). A result within it is a correct fp32 sum
+    in SOME order; a ratio above 1 is outside what any order can produce."""
+    ex = exact.double()
+    e = (n_terms + 1) * 2.0 ** -24 * abs_sum.double()
+    bound = 2.0 ** -8 * ex.abs() + e * (1 + 2.0 ** -8)
+    err = (got.double() - ex).abs()
+    ok = bound > 0
+    zero_err = err[~ok]
+    if zero_err.numel() and float(zero_err.max()) > 0:
+        return float("inf")                       # a nonzero result where every term is exactly zero
+    return float((err[ok] / bound[ok]).max()) if bool(ok.any()) else 0.0
 
 
 def combine_inputs(T: int, k: int, H: int, seed: int, heavy: bool, dev) -> tuple[torch.Tensor, torch.Tensor]:
@@ -132,9 +159,13 @@ def run(out_path: str, device: str = "cuda") -> int:
                     got = combine_rows(dn, w, k)
                     chain, seq = combine_chain(dn, w, T, k, H), combine_sequential(dn, w, T, k, H)
                     sync()
+                    terms = (dn.double() * w.double()[:, None]).view(T, k, H)
+                    exact, abs_sum = terms.sum(dim=1), terms.abs().sum(dim=1)
                     cases.append({"kernel": "combine_rows", "family": fam, "k": k, "H": H, "T": T, "seed": seed,
                                   "heavy": heavy, "vs_chain": ulp_stats(got, chain), "vs_sequential": ulp_stats(got, seq),
-                                  "chain_vs_sequential": ulp_stats(chain, seq)})
+                                  "chain_vs_sequential": ulp_stats(chain, seq),
+                                  "fused_bound_ratio": bound_ratio(got, exact, abs_sum, k),
+                                  "chain_bound_ratio": bound_ratio(chain, exact, abs_sum, k)})
     for sk in SPLITS:
         for R in PART_ROWS:
             for N in WIDTHS:
@@ -144,9 +175,13 @@ def run(out_path: str, device: str = "cuda") -> int:
                     got = reduce_partials(part, sk, R, N)
                     chain, seq = reduce_chain(part, sk, R, N), reduce_sequential(part, sk, R, N)
                     sync()
+                    pd = part.double().reshape(sk, R, N)
+                    exact, abs_sum = pd.sum(0), pd.abs().sum(0)
                     cases.append({"kernel": "reduce_partials", "sk": sk, "R": R, "N": N, "seed": seed,
                                   "vs_chain": ulp_stats(got, chain), "vs_sequential": ulp_stats(got, seq),
-                                  "chain_vs_sequential": ulp_stats(chain, seq)})
+                                  "chain_vs_sequential": ulp_stats(chain, seq),
+                                  "fused_bound_ratio": bound_ratio(got, exact, abs_sum, sk),
+                                  "chain_bound_ratio": bound_ratio(chain, exact, abs_sum, sk)})
     summary = {}
     for kern in ("combine_rows", "reduce_partials"):
         cs = [c for c in cases if c["kernel"] == kern]
@@ -155,6 +190,9 @@ def run(out_path: str, device: str = "cuda") -> int:
                 "cases": len(cs), "cases_equal": sum(c[ref]["equal"] for c in cs),
                 "elements": sum(c[ref]["n"] for c in cs), "elements_differing": sum(c[ref]["n_diff"] for c in cs),
                 "max_ulp": max(c[ref]["max_ulp"] for c in cs)}
+        for who in ("fused", "chain"):
+            summary[f"{kern}.{who}_bound_ratio"] = {"cases": len(cs), "max": max(c[f"{who}_bound_ratio"] for c in cs),
+                                                    "cases_within": sum(c[f"{who}_bound_ratio"] <= 1.0 for c in cs)}
     doc = {"lane": "B393", "prereg": "kernel/PREREG-b393-combine-reduce-bitwise.md",
            "versions": {"torch": torch.__version__, "triton": triton.__version__, "cuda": torch.version.cuda,
                         "python": platform.python_version()},
@@ -164,8 +202,12 @@ def run(out_path: str, device: str = "cuda") -> int:
     with open(out_path, "w") as f:
         json.dump(doc, f, indent=1)
     for key, s in summary.items():
-        print(f"{key:40s} {s['cases_equal']:4d}/{s['cases']} cases bit-equal; {s['elements_differing']} of "
-              f"{s['elements']} elements differ; max {s['max_ulp']} bf16 ulp")
+        if key.endswith("_bound_ratio"):
+            print(f"{key:40s} {s['cases_within']:4d}/{s['cases']} cases within the fp32 summation bound; "
+                  f"max ratio {s['max']:.3f}")
+        else:
+            print(f"{key:40s} {s['cases_equal']:4d}/{s['cases']} cases bit-equal; {s['elements_differing']} of "
+                  f"{s['elements']} elements differ; max {s['max_ulp']} bf16 ulp")
     return 0
 
 

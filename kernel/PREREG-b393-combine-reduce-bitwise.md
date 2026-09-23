@@ -40,35 +40,62 @@ chains, and slot order in the sequential reading.
   Per element, each reading records bit equality and the bf16 ULP distance.
 - **Attribution.** If fused equals sequential but not the chain, the difference is torch's reduction order. If
   fused differs from both, the kernel's own arithmetic differs too, for example a fused multiply-add.
+- **Accuracy.** Every result, fused and chain, is checked against the exact sum: fp64 of the same terms. Its
+  error must stay within what any correct fp32 summation order, followed by the bf16 cast, can produce:
+  `2**-8 * |exact| + (n + 1) * 2**-24 * sum|term| * (1 + 2**-8)`, derived in `bound_ratio`. `bound_ratio <= 1`
+  means the result is a correct fp32 sum in some order. Above 1 no order produces it.
 
-A dry run under `TRITON_INTERPRET=1` (`--device cpu`) executed all 414 cases. It is not a reading. The
-interpreter showed about 50% of elements 1 ULP off, while the chain and the sequential sum agreed exactly,
-which is the signature of the interpreter's own bf16 cast rounding. That is why this lane reads a GPU and
-nothing else.
+## What was run before this registration was final (disclosed: it changed the metric)
 
-## Expectation (stated, not the decision)
+None of these is the lane's reading, which is the RTX 5090 below.
 
-- **`reduce_partials`:** differences in some elements, since its test comment already says the order differs.
-- **`combine_rows`:** differences in some elements too. torch's non-innermost reduction is not strictly
-  sequential, and Triton may contract `acc += x * w` into an FMA.
+- **Interpreter dry run** (`TRITON_INTERPRET=1`, `--device cpu`): all 414 cases executed. About 50% of elements
+  came out 1 ULP off while the chain and the sequential sum agreed exactly. That is the interpreter's own bf16
+  cast rounding, so interpreter output is never a reading.
+- **Two rehearsals on the NAS RTX A2000** (sm_86, image `pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel`, this
+  branch's kernel, not a pinned cut):
+  - `reduce_partials` equals the sequential sum in 270/270 cases. It is bit-equal to the chain in 221/270; 111 of
+    4.46 M elements differ, by up to 8 bf16 ULP.
+  - `combine_rows` is bit-equal to the chain in 48/144 cases; 398 of 9.07 M elements differ, by up to **36 bf16
+    ULP**. It equals the sequential sum in 58/144 cases, so it differs from that sum too.
+  - Every result, fused and chain, sits within the accuracy bound in every case, at a max ratio of 0.996. That
+    maximum is the bf16 cast's own half-ULP at a value just above a power of two.
 
-In both, 1 bf16 ULP at most, because two fp32 sums of the same terms round to bf16 within one step of each
-other at these magnitudes. The attribution arm says which cause it is.
+The first draft of this registration made **"at most 1 bf16 ULP"** the correct/defect line. The A2000 showed
+that line is wrong: where terms cancel and the sum lands near zero, two correct fp32 orders round to bf16 values
+many ULPs apart. That rule would have called correct arithmetic a defect. The accuracy bound replaced it before
+this registration merged. The rehearsals also shaped the expectation below, and they say so.
+
+## Expectation (stated, informed by the A2000 rehearsal, not the decision)
+
+- **`reduce_partials`:** not bitwise with the chain. It is bit-equal to the sequential sum, so the kernel adds in
+  slot order and the whole difference is torch's reduction order.
+- **`combine_rows`:** not bitwise with either reference, consistent with the kernel contracting `acc += x * w`
+  into a fused multiply-add while the chain rounds the product first.
+- **Both:** within the accuracy bound everywhere. ULP distances are not bounded near cancellation.
 
 ## Decision rule
 
 For each kernel separately:
 
-- **A — bitwise at every case.** Register a measured claim ("bitwise equal to the torch chain at the served
-  shapes, RTX 5090, torch/Triton as recorded"). Add a GPU test asserting `torch.equal` over the census cases,
-  and keep the docstring and the experts4bit-qlora comment, now measured. #393's "register it" branch.
-- **B — differs, at most 1 bf16 ULP.** Register a measured reorder-class claim: max ULP, fraction of elements
-  differing, and the attributed cause. Correct the gnf4 docstring and the experts4bit-qlora call-site comment
-  to what was measured. Tighten `test_combine_rows_matches_torch` / `test_reduce_partials_matches_torch` from
-  the `2**-7`-relative bound to "at most 1 bf16 ULP", which is strictly stronger. #393's other branch, sizing
-  the effect end to end, goes to experts4bit-qlora#708's probe, with `E4B_FUSE_COMBINE=0` as the control arm.
-  #393 then closes as answered: no bitwise contract, a measured bounded one instead.
-- **C — more than 1 bf16 ULP anywhere.** A defect. It is filed and fixed before anything is claimed.
+- **A — bit-equal to the chain in every case.** Register a measured claim ("bitwise equal to the torch chain at
+  the served shapes, RTX 5090, torch/Triton as recorded"). Add a GPU test asserting `torch.equal` over the census
+  cases, and keep the docstring and the experts4bit-qlora comment, now measured. #393's "register it" branch.
+- **B — not bit-equal, and `fused_bound_ratio <= 1` in every case.** The kernel is a correct fp32 sum in some
+  order. Then:
+  - Register a measured reorder-class claim: the fraction of elements differing, the max bf16 ULP (stating that
+    ULPs are unbounded near cancellation), the max bound ratio, and the attribution read from `vs_sequential`.
+  - Correct the gnf4 docstring ("fp32 in slot order, as the torch chain's is") and the experts4bit-qlora
+    call-site comment ("the same order and roundings") to what was measured.
+  - Replace the `2**-7 * max|ref|` tolerance in `test_combine_rows_matches_torch` /
+    `test_reduce_partials_matches_torch` with the per-element accuracy bound. That is far tighter per element.
+  - #393's other branch, sizing the effect end to end, goes to experts4bit-qlora#708's probe, with
+    `E4B_FUSE_COMBINE=0` as the control arm.
+
+  #393 then closes as answered: no bitwise contract, a measured accuracy contract instead.
+- **C — `fused_bound_ratio > 1` in any case.** No summation order produces the result, so it is a defect. It is
+  filed and fixed before anything is claimed. The same test on `chain_bound_ratio` is reported, not decided on:
+  torch itself above 1 would be recorded as a finding about the reference.
 
 ## Box and cost
 

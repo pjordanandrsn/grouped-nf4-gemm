@@ -107,6 +107,12 @@
     bounded reorder-class, or a defect.
   - **Why the GPU.** An interpreter dry run executed every case but is not a reading: the interpreter's own bf16 cast
     rounding puts about half the elements 1 ULP off.
+  - **A rehearsal changed the metric before registration** (disclosed there, with its receipt in
+    `kernel/receipts-b393/a2000-rehearsal/`, NOT a reading).
+    - It ran on the NAS RTX A2000. `combine_rows` differed from the chain by up to 36 bf16 ULP near cancellation,
+      while staying within the fp32 summation bound. A "≤ 1 ULP" rule would have called correct arithmetic a defect.
+    - The correct/defect line is now accuracy against the exact (fp64) sum: `bound_ratio <= 1` means a correct fp32
+      sum in some order.
 
 ## 0.33.2 — 2026-09-23 — documentation, register data, tests and repository tooling only (every shipped module identical to 0.33.1): the claims register has ONE schema, shared with experts4bit-qlora; lane B374 observes the word-addressed decode routes (wide loads, and dot-pad, the default at its census shapes) past their own 2^31 boundary on an RTX 5090, closing #374; #386 opened
 
