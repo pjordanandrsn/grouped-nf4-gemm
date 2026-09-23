@@ -310,8 +310,7 @@ never ran Unsloth's own kernel.
 
 ## What is open
 
-#73, #60, #58 arena/NVMe
-efficiency; #71 pinned-row factor, conservative on cgroup v1 (v2 unmeasured).
+#60 arena staging (~30% of a training step; the next layer's rows are prefetchable); #71 pinned-row factor, conservative on cgroup v1 (v2 unmeasured).
 [#87](https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/87) (int32
 offset overflow at large `max(expert_ids)`) is closed by observation in
 every carrier (PR #342; boundary test `kernel/test_expert_offset_boundary.py`;
@@ -328,7 +327,7 @@ frozen tree.
 
 ```
 python -m pytest kernel/test_nf4_grouped.py -q
-python -m pytest kernel/test_fp8_paged_attn.py -q -k "f8dot or pf8"   # the sm_120 serving modes
+python -m pytest kernel/test_fp8_paged_attn.py -q   # every compute mode, each arm pinned to the mode it names (#319)
 ```
 
 ## Layout

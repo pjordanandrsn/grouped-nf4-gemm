@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — the CI scripts both repositories carry start to become one file (repository tooling; nothing in the wheel changes)
+## Unreleased — the CI scripts both repositories carry start to become one file (repository tooling; nothing in the wheel changes); the open-issue list corrected
 
 - **`scripts/check_shared_tooling.py`** (new, byte-identical in experts4bit-qlora): `SHARED` lists the scripts that are one
   file in both repositories. Nine of the thirteen same-named scripts had forked, so one check name enforced two rules; the
@@ -12,6 +12,18 @@
 - **`scripts/check_readme_links.py`** now derives the README tag pin from `CHANGELOG.md`'s latest `## <version> — <date>`
   heading cross-checked against `pyproject.toml` (experts4bit-qlora's rule). The old copy read `pyproject.toml` alone, so a
   version bump without its CHANGELOG section passed; it is now refused (calibrated on this repository's files).
+
+- **Docs: #73 and #58 were still listed as open** in README, STATUS, the `gnf4.open.issues` claim and the NVMe solution
+  page. #73 was fixed in 0.12.0 (#74/#76/#79: 1113 → 56.8 ms per layer on real K3 bytes, 78% of device); #58 was answered
+  by its own trace (six of eight calls per layer are cache hits, 0.02 s/step; the stall is #60). The claim also still
+  named #319, closed in 0.33.0. The open list is now #60, #71, #353 and #374; the claim's previous text is kept in its notes.
+
+- **Docs: #319's closure had not reached three places.** `fp8-paged-attention-f32-compute` in `docs/capabilities.json`
+  still opened with "Open, #319 (claim `gnf4.open.f32-compute-modes-triton34` …)" and still advised gating lanes with
+  `-k "f8dot or pf8"`, which excluded exactly the mislabelled arms; the fp8 solution page's GPU example called the f32 path
+  "open under #319"; and the README's reproduce block still ran `test_fp8_paged_attn.py` with that filter. All three now say
+  #319 is closed and cite `gnf4.serve.f32-arms-ran-fp8`. Found by the consumer site's claim-reference check, which refuses a
+  retired id presented without the word "retired".
 
 ## 0.33.0 — 2026-09-23 — two opt-in int4-b32 GEMV variants, both exact and neither a default (K17 `fused_reduce=True`, K18 `gemv_int4_b32_grouped`); #319 was a mislabelled test arm, not an f32 kernel defect; #87's int64 expert-offset promotion is now guarded by a CPU test CI runs
 
