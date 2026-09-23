@@ -81,7 +81,7 @@ GPU: the kernel against the reference, recording which compute mode actually ran
 
 ```python
 # GPU (sm_89+ for the fp8 compute default) + triton; sm_80-sm_88 take the f32 path,
-# open under #319 on triton 3.4 (claim gnf4.open.f32-compute-modes-triton34)
+# supported: #319 closed as a mislabelled test arm (claim gnf4.serve.f32-arms-ran-fp8)
 import torch
 from fp8_paged_attn import (fp8_paged_decode_attention, paged_attn_ref,
                             paged_attn_available, compute_counts)

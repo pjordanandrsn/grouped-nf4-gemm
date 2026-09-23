@@ -44,7 +44,7 @@
    "a serving engine or a vLLM replacement: this is a kernel package driven by experts4bit-qlora",
    "operating systems other than Linux for the kernels (triton is Linux-only); ROCm/XPU are port targets, not supported",
    "models that already fit in bf16 with headroom: the grouped kernel loses at small shapes and to a CUDA-graphed per-expert loop at some decode shapes (claims gnf4.kernel.graphed-baseline-decode-loses)",
-   "silent fallbacks: nothing falls back silently on CPU \u2014 nf4_grouped.gemm_4bit_grouped and dgrad_4bit_grouped refuse CPU tensors with an error that names dequant_ref; gemm_mxfp4_grouped and the int4_b32 kernels carry no device guard and fail inside the Triton launch, and the fp8_kv appends and the paged attention refuse with a CUDA+Triton message that names no reference"
+   "silent fallbacks: nothing falls back silently on CPU — nf4_grouped.gemm_4bit_grouped and dgrad_4bit_grouped refuse CPU tensors with an error that names dequant_ref; gemm_mxfp4_grouped and the int4_b32 kernels carry no device guard and fail inside the Triton launch, and the fp8_kv appends and the paged attention refuse with a CUDA+Triton message that names no reference"
   ]
  },
  "capabilities": [
@@ -417,8 +417,8 @@
     "gnf4.serve.f32-arms-ran-fp8"
    ],
    "limitations": [
-    "Open, #319 (claim gnf4.open.f32-compute-modes-triton34, status open, so it backs nothing): on torch 2.8.0+cu128 / triton 3.4.0, on unmodified main, the split and packed f32 modes miss their fp32 reference beyond the registered tolerance in a subset of the paged-attention tests; the claim carries the numbers and the issue. A kernel that imports and launches is not numerically supported; this entry stays unsupported until the issue closes and the register carries a passing cell",
-    "A lane on this path cannot be gated with -x on those torch/Triton pairs; gate the fp8 modes with -k \"f8dot or pf8\" (README, docs/STATUS.md)",
+    "#319 is closed: its failures were the test's shape arms running the fp8 kernel on sm_89+ while judged at the f32 tolerance, never a defect in these kernels (claim gnf4.serve.f32-arms-ran-fp8); the earlier claim gnf4.open.f32-compute-modes-triton34 is retired",
+    "Measured on two cards (sm_86 and sm_120) on one torch/Triton pair; other pairs are unmeasured. The old advice to gate lanes with -k \"f8dot or pf8\" excluded exactly the mislabelled arms and should not be followed (docs/STATUS.md)",
     "Explicit GNF4_ATTN_COMPUTE=f32 or compute='f32' selects this path on any card, sm_89+ included: the explicit request is honoured, never downgraded to fp8"
    ],
    "status": "supported"

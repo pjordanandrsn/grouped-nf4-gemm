@@ -327,7 +327,7 @@ frozen tree.
 
 ```
 python -m pytest kernel/test_nf4_grouped.py -q
-python -m pytest kernel/test_fp8_paged_attn.py -q -k "f8dot or pf8"   # the sm_120 serving modes
+python -m pytest kernel/test_fp8_paged_attn.py -q   # every compute mode, each arm pinned to the mode it names (#319)
 ```
 
 ## Layout
