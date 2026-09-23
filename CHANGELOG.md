@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — #386: the gathers and the fp8 KV appenders are observed past their own 2^31 boundary, on CPU, in CI (tests only; nothing in the wheel changes)
+## Unreleased — #386: the gathers and the fp8 KV appenders are observed past their own 2^31 boundary, on CPU, in CI; the shared capabilities check reads the serving position from STATUS's position section (tests and repository tooling; nothing in the wheel changes)
 
 - **`kernel/test_offset_boundary_interp.py` gains five cases (#386).** KERNEL_CONTRACT listed these kernels as carriers
   of the int64 expert-base promotion covered by the boundary suite, and no boundary test called any of them. They are
@@ -18,6 +18,15 @@
     on the shipped kernels. A copy with exactly the five straddling promotions removed fails all five new cases, each at
     the wrapped address (`kernel/receipts-386/interp/`, claim `gnf4.kernel.boundary-gathers-appenders.interp.2026-09-23`).
 - **`docs/KERNEL_CONTRACT.md`** says where those carriers are covered. `gnf4.open.issues` drops #386. No kernel changed.
+- **`scripts/check_capabilities.py` (shared with experts4bit-qlora): the serving position is read from STATUS's position
+  section.** The serving-position WARN takes "the position" to be the newest `area: serve` claims STATUS quotes. It read
+  the whole file, so a lane quoted under "What is open" counted too. Since 2026-09-23 that was P61's expert-GEMV cost
+  split, a diagnostic read, and the rule warned on every experts4bit-qlora CI run.
+  - **The fix.** It now reads only the text before STATUS's first `## What changed` heading, or the whole file when there
+    is none. "What changed" records retired rows and "What is open" pending or diagnostic ones.
+  - **Checked.** On experts4bit-qlora's register the position is then P58's 2026-09-22 rows, which the capability cites,
+    so the warning clears without any data edit. The runtime repository's existing serving-position tests pass unchanged.
+  - The rule is still the runtime role's only.
 
 ## 0.33.2 — 2026-09-23 — documentation, register data, tests and repository tooling only (every shipped module identical to 0.33.1): the claims register has ONE schema, shared with experts4bit-qlora; lane B374 observes the word-addressed decode routes (wide loads, and dot-pad, the default at its census shapes) past their own 2^31 boundary on an RTX 5090, closing #374; #386 opened
 

@@ -35,3 +35,14 @@ def test_the_real_register_passes_with_no_serving_warning():
     r = subprocess.run([sys.executable, str(_SCRIPT), "--root", str(ROOT)], capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
     assert "WARN" not in r.stdout and "::warning::" not in r.stdout, r.stdout
+
+
+def test_the_position_is_read_before_the_first_what_changed_heading():
+    """The helper the runtime-only rule reads STATUS through. It is role-agnostic, so it is
+    pinned here as well as in the runtime repository's tests: a lane quoted under "What
+    changed" or "What is open" is not the position."""
+    status = "# S\n\n## What it does today\n\n`gnf4.a`\n\n## What changed\n\n`gnf4.b`\n\n## What is open\n\n`gnf4.c`\n"
+    pos = cc.status_position_text(status)
+    assert "`gnf4.a`" in pos and "`gnf4.b`" not in pos and "`gnf4.c`" not in pos
+    assert cc.status_position_text("no headings `gnf4.a`") == "no headings `gnf4.a`"
+
