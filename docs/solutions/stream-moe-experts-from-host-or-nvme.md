@@ -117,7 +117,7 @@ The CPU block bakes, verifies the full chain (source range hash, manifest, arena
 - `Mxfp4NvmeResidency` is not CUDA-graph capturable: a miss is a host-side disk read.
 - Do not quantize-bake a checkpoint that already ships MXFP4 ([README](../../README.md)); relocate it.
 - The cold-engine premise (bitsandbytes' CPU dequant as a free decode arm) is refuted on a box without AVX-512 (claim `gnf4.cold-engine.phase0-premise-refuted`).
-- Open issues on arena efficiency (#73, #60, #58) and the pinned-row factor (#71: `PINNED_ROW_FACTOR` is conservative on cgroup v1; cgroup v2 is unmeasured) are listed in [`STATUS.md`](../STATUS.md). No ROCm or XPU.
+- Open issues on arena staging (#60) and the pinned-row factor (#71: `PINNED_ROW_FACTOR` is conservative on cgroup v1; cgroup v2 is unmeasured) are listed in [`STATUS.md`](../STATUS.md). No ROCm or XPU.
 
 ## Related
 
