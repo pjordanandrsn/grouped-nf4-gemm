@@ -27,6 +27,7 @@ _DELIBERATELY_UNPACKAGED: dict[str, str] = {
     # they are not library API and are meaningless outside the repo
     # (their bars are hardcoded to their campaigns). Ship the receipts,
     # not the calculator.
+    "b393_bitwise_census": "lane B393 census instrument (#393): run from a clone on the box, not library API",
     "k1_verdict": "K1 decode-config campaign instrument, not library API",
     "k2_verdict": "K2 vectorized-nibbles campaign instrument, not library API",
     "k3_verdict": "K3 attribution campaign instrument, not library API",
