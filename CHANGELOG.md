@@ -55,6 +55,22 @@
   - **API and CI.** `current_record` is renamed `current_kernel_record`, and `check_dependency_floor.py` imports the new
     name. The runtime's `current_record` is a different function. CI now runs the check with `--require-tags`: the
     discoverability job already fetches the tags, so the floor-vs-tag comparison can no longer be silently skipped.
+- **`scripts/check_readme_claims.py` is one file, shared with experts4bit-qlora** (now in `SHARED`; 12 shared files).
+  The two copies had forked by 399 diff lines. The unified file reads its role through
+  `check_system_manifest.system_role` and reads the claim-id namespace from the register itself.
+  - **Shared rules.** Headline numbers must be the register's current values, cited ids must exist, and an inactive id
+    may appear only on a line that says so. Both roles apply these.
+  - **Per-role settings (`PROFILES`).** Where the copies still differ, each role keeps its own setting, and each
+    setting carries the reason in a comment. For all but one, switching to the other role's value either fails that
+    repository's `main` or lets through an input its old copy failed. The runtime's exemption for anchored documents
+    is kept by choice: a finding there could only be fixed by editing an anchored file.
+  - **Now also checked here.** A results row must have a result column. Ids cited as `<code>` or as link text are
+    checked like backticked ones. The line must name the id's own status. The status-word test ignores URLs, HTML
+    comments and bare ids, so an id such as `gnf4.retired.x` cannot vouch for itself. `docs/SOLUTIONS.md` is covered.
+    The manifest is required, and without it the check exits 2.
+  - **Parity.** 110 mutation rows across both repositories give 0 cases where an old copy failed and the new file
+    passed. On `main` and on the v0.33.2 tag, old and new give the same exit code. CI's test step passes 124/124
+    unchanged.
 
 ## 0.33.2 — 2026-09-23 — documentation, register data, tests and repository tooling only (every shipped module identical to 0.33.1): the claims register has ONE schema, shared with experts4bit-qlora; lane B374 observes the word-addressed decode routes (wide loads, and dot-pad, the default at its census shapes) past their own 2^31 boundary on an RTX 5090, closing #374; #386 opened
 
