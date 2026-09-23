@@ -57,8 +57,8 @@ and its calibrated packer, the **decode glue kernels** (fused RMSNorm,
 residual-fold, rotary, router epilogue), and the host-streaming and NVMe
 tiers for models that do not fit.
 
-**Current position, one page:** [`docs/STATUS.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.33.0/docs/STATUS.md).
-**Every number, with its evidence and tier:** [`docs/claims.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.33.0/docs/claims.json).
+**Current position, one page:** [`docs/STATUS.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.33.1/docs/STATUS.md).
+**Every number, with its evidence and tier:** [`docs/claims.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.33.1/docs/claims.json).
 
 ## Use this when
 
@@ -131,7 +131,7 @@ pip install grouped-nf4-gemm bitsandbytes
 python examples/dequant_tax.py          # ~1 min, one GPU, no model download
 ```
 
-[`examples/dequant_tax.py`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.33.0/examples/dequant_tax.py)
+[`examples/dequant_tax.py`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.33.1/examples/dequant_tax.py)
 times the dequantise-then-GEMM round trip against computing on the
 packed bytes at three points on the M axis, prints a **self-pair** beside
 every ratio (a ratio inside the instrument's own spread is not a
@@ -1746,7 +1746,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
 
 # Status — what this kernel does, what changed, what is open
 
-**As of 2026-09-23, `grouped-nf4-gemm` version 0.33.0.** One page. The README argues; this
+**As of 2026-09-23, `grouped-nf4-gemm` version 0.33.1.** One page. The README argues; this
 page states. Every line here has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
 here that does not.
@@ -1979,11 +1979,9 @@ was wrong.
   `hot_rows` floor of two layers' experts).
 - **#71** — `PINNED_ROW_FACTOR` is ~2× conservative on cgroup v1; v2
   needs a box the rented pods cannot give.
-- **#353** — the consumer's cross-check of this package's shape census
-  against its claimed architectures exists but no CI runs it; **#374** —
-  the GPU boundary suite's wide-load and dot-pad arms are word-addressed
-  and do not straddle their own 2^31-word boundary (the CPU suite covers
-  that route). (#60, #71, #353 and #374 are `gnf4.open.issues`.)
+- **#374** — the GPU boundary suite's wide-load and dot-pad arms are
+  word-addressed and do not straddle their own 2^31-word boundary (the CPU
+  suite covers that route). (#60, #71 and #374 are `gnf4.open.issues`.)
 - **`docs/context-budgets.md` is rung-one only** (A2000-measured
   KB/token); full-depth real-weight confirmation is pending and the K3
   row is a declared gap. Its own text forbids promoting pending rows to
@@ -2514,7 +2512,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 Open items (no evidence either way):
 
 - gnf4.open.context-budgets-rung-two [open]: OPEN: context-budgets.md's KB/token table is rung-one (A2000) measured; full-depth real-weight confirmation is pending and the K3 row is a declared gap. Its own text forbids promoting pending rows to READMEs.
-- gnf4.open.issues [open]: OPEN issues at 2026-09-23: #60 (arena staging blocks ~30% of a training step), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #353 (the consumer's shape-census cross-check is not run by any CI), #374 (the GPU boundary suite's wide-load and dot-pad arms do not straddle their word-addressed boundary).
+- gnf4.open.issues [open]: OPEN issues at 2026-09-23: #60 (arena staging blocks ~30% of a training step), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #374 (the GPU boundary suite's wide-load and dot-pad arms do not straddle their word-addressed boundary).
 
 Projections (arithmetic, not runs):
 
