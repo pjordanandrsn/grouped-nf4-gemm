@@ -25,6 +25,13 @@
   #319 is closed and cite `gnf4.serve.f32-arms-ran-fp8`. Found by the consumer site's claim-reference check, which refuses a
   retired id presented without the word "retired".
 
+- **`scripts/check_capabilities.py` is one file in both repositories** (added to `SHARED`). This repository's copy was a
+  strict subset of the consumer's; the union adds the consumer's `training_support` cross-reference (inert here: this
+  schema admits no such key) and its serving-position rule, which is now gated on the repository's role in
+  `docs/system-manifest.json` instead of silently never matching because of a hard-coded `e4b.` id prefix. The rule
+  assumes one serving position per repository and would warn falsely here (two false warnings measured when the prefix
+  was derived and the gate absent). `kernel/test_check_capabilities_role.py` pins the gate from this side.
+
 ## 0.33.0 — 2026-09-23 — two opt-in int4-b32 GEMV variants, both exact and neither a default (K17 `fused_reduce=True`, K18 `gemv_int4_b32_grouped`); #319 was a mislabelled test arm, not an f32 kernel defect; #87's int64 expert-offset promotion is now guarded by a CPU test CI runs
 
 - **K18: `int4_b32.gemv_int4_b32_grouped(xq, xs, packed, scales, eids, N, K, part=None, out=None, mt=4)` — the split-K
