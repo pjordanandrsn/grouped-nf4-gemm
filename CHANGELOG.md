@@ -71,6 +71,29 @@
   - **Parity.** 110 mutation rows across both repositories give 0 cases where an old copy failed and the new file
     passed. On `main` and on the v0.33.2 tag, old and new give the same exit code. CI's test step passes 124/124
     unchanged.
+- **`scripts/check_change_impact.py` and `scripts/check_dependency_floor.py` are one file each, shared with
+  experts4bit-qlora** (both now in `SHARED`; 14 shared files, every CI script both repositories carry except the
+  per-package `wheel_smoke.py`). Each reads its role through `check_system_manifest.system_role` and keeps the settings
+  that still differ in a commented `PROFILES` dict.
+  - **Change impact.** Both roles now diff against `git merge-base BASE HEAD`, which is this copy's rule.
+    - A branch behind its base is no longer charged with what landed on the base since it forked. The runtime's old
+      copy diffed against the base itself, and so both blamed such a PR for a claim change it never made and passed one
+      whose missing companion the moved base happened to supply.
+    - Untracked files count as added.
+    - The contract is read in either shape, and every class a trigger reports must be named in it.
+    - A claim's `unit` change is now a measured-result trigger alongside `status` and `value`.
+    - The new-module, new-`@triton.jit` and layout-constant triggers stay kernel-only.
+  - **Dependency floor.** The kernel-floor statement rule reads both copies' forms in both roles, over the union of both
+    copies' documents: `requires X`, `≥`, `ci.yml`, all of STATUS and the documents INDEX lists under "Current". The
+    floor's source, the historical-line markers, the anchored-document exemption and the consumer-version pins stay per
+    role.
+  - **Parity.**
+    - 127 mutation rows. The one where an old copy failed and the new file passes is the merge-base false positive
+      above.
+    - 644 historical PR ranges, with no weakening wherever the new file can run. Ranges from before the manifest existed
+      exit 2, because the file cannot tell which package it is there.
+    - On both `main`s, every CI form gives the same exit code and findings. This repository's checker suite passes
+      124/124 unchanged.
 
 ## 0.33.2 — 2026-09-23 — documentation, register data, tests and repository tooling only (every shipped module identical to 0.33.1): the claims register has ONE schema, shared with experts4bit-qlora; lane B374 observes the word-addressed decode routes (wide loads, and dot-pad, the default at its census shapes) past their own 2^31 boundary on an RTX 5090, closing #374; #386 opened
 
