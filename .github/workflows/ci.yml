@@ -244,7 +244,7 @@ jobs:
           python-version: "3.11"
       - name: capability contract (schema, pyproject, source symbols, claims, install routes)
         run: python scripts/check_capabilities.py
-      - name: claims register bookkeeping (every evidence entry resolves at HEAD, ISO measured_on on measured rows, superseded/retired fields, quoted_in resolves, no placeholder notes on an active row)
+      - name: claims register against its one schema (docs/claims-schema.md, the same file in both repositories -- locations are tracked files with GitHub anchors, evidence forms, ISO dates, direct named-back successors, no placeholder on an active row, licence labels)
         run: python scripts/check_claims_register.py
       - name: prose quotes the register (README, STATUS, solution pages -- every backticked id exists, a superseded/retired id only on a line that says so, README/STATUS results tables hold the register's current values)
         run: python scripts/check_readme_claims.py
@@ -268,6 +268,12 @@ jobs:
         run: python scripts/check_docs_examples.py --root .
       - name: shared tooling present (the scripts both repositories carry as one file; this repository is their upstream, and the runtime repository's CI checks its copies are byte-identical to this main)
         run: python scripts/check_shared_tooling.py
+      - name: cross-repository claim evidence resolves in the runtime repository's main (clone it, run the claims register with --sibling; without it those entries are only listed as SKIP)
+        run: |
+          set -euo pipefail
+          REPO=$(python -c "import json; print(json.load(open('docs/system-manifest.json'))['packages']['runtime']['repository'])")
+          git clone --quiet --depth 1 "$REPO" /tmp/sibling-runtime
+          python scripts/check_claims_register.py --sibling /tmp/sibling-runtime
       - name: build sdist + wheel, twine check, METADATA assertions
         run: |
           python -m pip install --quiet --upgrade pip build twine

@@ -135,17 +135,13 @@
    "hardware": "A2000 (sm_86)",
    "measured_on": "2026-08-06",
    "evidence": [
-    {
-     "path": "CHANGELOG.md",
-     "section": "0.7.0",
-     "note": "the A2000 cells (gate_up 5.92 vs 61.78 ms, down 3.28 vs 85.12 ms, the composed step 403.7 -> 26.5 ms) are recorded in the 0.7.0 release entry; no kernel/RESULTS-*.md carries them, which the earlier glob implied"
-    },
+    "CHANGELOG.md#070--2026-08-06",
     {
      "repository": "experts4bit-qlora",
      "path": "bench/dgrad-gate/RESULTS-dgrad-gate.md"
     }
    ],
-   "notes": "measured_on is the date of the 0.7.0 entry that records the A2000 cells, and the run date the dgrad-gate receipt states."
+   "notes": "measured_on is the date of the 0.7.0 entry that records the A2000 cells, and the run date the dgrad-gate receipt states. Evidence CHANGELOG.md#070--2026-08-06 (the 0.7.0 release entry): the A2000 cells (gate_up 5.92 vs 61.78 ms, down 3.28 vs 85.12 ms, the composed step 403.7 -> 26.5 ms) are recorded in the 0.7.0 release entry; no kernel/RESULTS-*.md carries them, which the earlier glob implied"
   },
   {
    "id": "gnf4.kernel.expert-offset-boundary.5090.2026-09-05",
@@ -159,10 +155,7 @@
    "measured_on": "2026-09-05",
    "evidence": [
     "kernel/test_expert_offset_boundary.py",
-    {
-     "path": "CHANGELOG.md",
-     "section": "0.30.1"
-    }
+    "CHANGELOG.md#0301--2026-09-05"
    ],
    "evidence_private": [
     "INT4B16/gnf4-87/gpu-logs/boundary.log"
@@ -171,7 +164,7 @@
     "docs/STATUS.md",
     "README.md",
     "docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md",
-    "CHANGELOG.md#0.30.1"
+    "CHANGELOG.md#0301--2026-09-05"
    ],
    "notes": "The public evidence is the test and the 0.30.1 changelog entry; the GPU log (10 passed in 29.07 s) is in the private receipt tree, so the run itself cannot be checked from this repository -- rerun the file on any CUDA device with >= 4 GiB free. Same release, #324: an infeasible tile is refused or re-dispatched before the launch (_triton_shim.UnsupportedShapeError, fp8_paged_attn.packed_unsupported, nf4_grouped.prefill_fit) instead of surfacing Triton's OutOfResources; no NVIDIA configuration moves and no registered number changes, so it carries no entry of its own. On the same 5090 run kernel/test_shape_feasibility.py passed compiled and under the interpreter (28 each) and the fp8 paged modes passed (47; the 37 f32 modes stay deselected under #319), with the packed-tile fallback firing at head_dim 256 / 8 kv heads."
   },
@@ -199,7 +192,7 @@
    "hardware": "RTX 5090, one box",
    "evidence": [
     "kernel/RESULTS-m3-default-on.md",
-    "kernel/receipts-m3/"
+    "kernel/receipts-m3/m3_manifest.txt"
    ],
    "measured_on": "2026-08-27",
    "notes": "Read the ppl deltas as zero, not gains. Dispatch receipts (dispatch_counts, compute_counts) exist because an env var is a request, not an event. Correction (0.30.2, 2026-09-05): the sentence said `k_groups in (1,2,4)`, the predicate as it stood at the 2026-08-27 run; fp8_paged_attn.fp8_compute_unsupported has admitted (1, 2, 4, 8, 16) since 0.26.0 (Gemma-4's per-layer key-scale groups) and the sentence now describes the shipped predicate. The measurement and its numbers are unchanged."
@@ -213,10 +206,7 @@
    "measured_on": "2026-09-03",
    "evidence": [
     "kernel/test_fp8_paged_attn.py",
-    {
-     "path": "CHANGELOG.md",
-     "section": "0.24.0"
-    }
+    "CHANGELOG.md#0240--2026-09-03"
    ],
    "notes": "End-to-end parity of the SERVING path built on these (Granite, gpt-oss, Gemma-4) is measured in experts4bit-qlora's receipts, which are private -- see e4b's register."
   },
@@ -228,7 +218,9 @@
    "hardware": "RTX 5090",
    "evidence": [
     "kernel/RESULTS-319-f32-precision.md",
-    "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/319"
+    {
+     "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/319"
+    }
    ],
    "notes": "Kept so the retraction is findable: docs/STATUS.md, README.md and docs/capabilities.json all carried this reading, and the advice it produced -- gate lanes with -k 'f8dot or pf8' -- excluded exactly the arms that were mislabelled.",
    "retired_reason": "Measured wrong at the source. On an RTX 5090, compute_counts() after one call per shape arm reads {'f32': 0, 'fp8': 4}: the split and packed arms ran the fp8 kernel, returning tensors byte-identical to the f8dot and pf8 arms of the same geometry, and were then checked against 2e-2 instead of the fp8 path's own 1.5e-1. The observed error (relative Frobenius 0.049, exact at T=1) is the fp8 path's documented q/p rounding envelope, not a defect. An RTX A2000 passes the identical suite on the identical torch 2.8.0+cu128 / triton 3.4.0, because sm_86 has no fp8 MMA to default to -- which is why the 'triton 3.4' framing never fit. Superseding row: gnf4.serve.f32-arms-ran-fp8."
@@ -243,7 +235,9 @@
    "evidence": [
     "kernel/RESULTS-319-f32-precision.md",
     "kernel/test_fp8_paged_attn.py",
-    "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/319"
+    {
+     "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/319"
+    }
    ],
    "evidence_private": [
     "adertha-receipts/receipts/experts4bit-qlora/2026-09-21/p319-f32prec-1/",
@@ -266,7 +260,7 @@
     "INT4B16/P15-B16"
    ],
    "quoted_in": [
-    "CHANGELOG.md#0.18.0"
+    "CHANGELOG.md#0180--2026-08-31"
    ],
    "notes": "Measured refusals kept: the format stays OFF the lm_head (+0.18 ppl) and dense attention shapes lose to bf16 in both the GEMV and M=16 GEMM regimes. measured_on is the date of the 0.18.0 entry that first quotes these cells -- an upper bound, since the run dates are in the private receipts (INT4B16/P1, P15-B16), not stated publicly."
   },
@@ -303,9 +297,9 @@
     "INT4B16/P18-GLUER3"
    ],
    "quoted_in": [
-    "CHANGELOG.md#0.19.0",
-    "CHANGELOG.md#0.20.0",
-    "CHANGELOG.md#0.21.0"
+    "CHANGELOG.md#0190--2026-09-01",
+    "CHANGELOG.md#0200--2026-09-01",
+    "CHANGELOG.md#0210--2026-09-02"
    ],
    "notes": "measured_on is the date of the 0.21.0 entry (round 3, the composed number) -- an upper bound, since the run dates are in the private receipts (INT4B16/P16, P18), not stated publicly."
   },
@@ -326,8 +320,8 @@
    "status": "retired",
    "retired_reason": "sm_120 became the primary serving target in 0.15.0-0.24.0: M=1 configs retuned for it, the sm_120 census, the decode anchor, M3 defaults, the int4 lanes and the fp8 paged attention were all measured on rented RTX 5090s.",
    "quoted_in": [
-    "README.md#What was retired",
-    "docs/STATUS.md#What changed"
+    "README.md#what-was-retired",
+    "docs/STATUS.md#what-changed--retired-superseded-corrected"
    ]
   },
   {
@@ -469,7 +463,15 @@
    "claim": "OPEN issues at 2026-09-23: #60 (arena staging blocks ~30% of a training step), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #374 (the GPU boundary suite's wide-load and dot-pad arms do not straddle their word-addressed boundary).",
    "status": "open",
    "evidence": [
-    "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues"
+    {
+     "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/60"
+    },
+    {
+     "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/71"
+    },
+    {
+     "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/374"
+    }
    ],
    "notes": "#87 (gemm_4bit_grouped int32 offset overflow when max(expert_ids) is large) was listed here until 0.30.1 as 'distinct from the 2 GiB fix in 0.13.2/0.14.0'; that reading was not supported by the issue text. Closed 2026-09-05 by observation in every carrier: PR #342, kernel/test_expert_offset_boundary.py, claim gnf4.kernel.expert-offset-boundary.5090.2026-09-05. Updated 2026-09-23: #319 closed in 0.33.0 (a mislabelled test arm, gnf4.serve.f32-arms-ran-fp8); #73 closed (fixed in 0.12.0 by #74/#76/#79: 1113 -> 56.8 ms/layer, 78% of device); #58 closed (six of eight calls per layer are cache hits, 0.02 s/step; the stall is #60); #353 and #374 added. The claim previously read: OPEN issues at 2026-09-05: #319 (f32 paged compute modes on triton 3.4), #73 (K3 fetch host copy ~71% of a layer), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #60 (arena staging blocks ~30% of a training step), #58 (8 requests per layer where 2 would do). Later the same day: #353 closed (experts4bit-qlora#697 runs the census cross-check in CI against the installed kernel commit's census)."
   },
@@ -490,14 +492,11 @@
     "bench/int4/rows/sk_qwen3_moe_down.json",
     "bench/int4/mx_sweep.py",
     "kernel/test_int4_b32.py",
-    {
-     "path": "CHANGELOG.md",
-     "section": "0.31.0"
-    }
+    "CHANGELOG.md#0310--2026-09-18--batched-int4-decode-plans-split-k-from-the-row-count-two-pre-registered-kernel-lanes-reported-k14-refuted-k15-comparator"
    ],
    "quoted_in": [
     "docs/STATUS.md",
-    "CHANGELOG.md#0.31.0"
+    "CHANGELOG.md#0310--2026-09-18--batched-int4-decode-plans-split-k-from-the-row-count-two-pre-registered-kernel-lanes-reported-k14-refuted-k15-comparator"
    ],
    "notes": "measured_on is the receipt's commit date (PR #357, 2026-09-10); the RESULTS file states no run date. B=1 decode calls the grouped GEMV at R = top_k (4 or 8 for every shipped MoE), so SPLITK_R_FLOOR = 16 leaves every B=1 cell and the licensed serve configuration untouched by construction; kernel/test_int4_b32.py pins R < 16 to a verbatim copy of the old rule, re-derives the worst-cell bound (SK_R_BOUND 1.07; measured 1.064x, granitemoe/down at R = 16) from the receipts, and fails if a shipped model routes to >= 16 experts. sm_count enters the plan, so bitwise equality across boxes must pin sk rather than plan it; within a box the plan is a pure function of (N, K, R)."
   },
@@ -516,14 +515,11 @@
     "kernel/k14_bench.py",
     "kernel/receipts-k14/k14_rows.json",
     "kernel/receipts-k14/k14_bench.log",
-    {
-     "path": "CHANGELOG.md",
-     "section": "0.31.0"
-    }
+    "CHANGELOG.md#0310--2026-09-18--batched-int4-decode-plans-split-k-from-the-row-count-two-pre-registered-kernel-lanes-reported-k14-refuted-k15-comparator"
    ],
    "quoted_in": [
     "docs/STATUS.md",
-    "CHANGELOG.md#0.31.0"
+    "CHANGELOG.md#0310--2026-09-18--batched-int4-decode-plans-split-k-from-the-row-count-two-pre-registered-kernel-lanes-reported-k14-refuted-k15-comparator"
    ],
    "notes": "Prediction 1 (gemm wins on q/o_proj) REFUTED at 1.205x / 1.123x slower; predictions 2 (GEMV_ROWS_MAX = 1 is right) and 3 (k/v launch-bound within 2x of the floor) CONFIRMED. The A2000 dry-run read 0.898 / 1.035 on the same cells -- an sm_86 number does not transfer to sm_120, the rule P39 established. Two bounds the lane did not go looking for, arithmetic under a stated assumption rather than measurements: o_proj runs at 60% of ceiling against q_proj's 106% on the same bytes (about 0.38 ms/step if matched, on the bf16 side), and unfused q/k/v spend three launches where one would do (about 0.44 ms/step at the ceiling). A roofline int4 projection kernel would be worth about 1.29 ms/step; nothing shipped realises it (the kernel built for that arithmetic reaches 22% of the bandwidth it would need). Cost $0.0653 against a $1.50 lane ceiling. Cross-check: the four projections sum to 1.977 ms/step, within 5% of experts4bit-qlora's P42 census share for the same 192 launches."
   },
@@ -542,14 +538,11 @@
     "kernel/k15_marlin_bench.py",
     "kernel/receipts-k15/k15_marlin_rows.json",
     "kernel/receipts-k15/k15_marlin_bench.log",
-    {
-     "path": "CHANGELOG.md",
-     "section": "0.31.0"
-    }
+    "CHANGELOG.md#0310--2026-09-18--batched-int4-decode-plans-split-k-from-the-row-count-two-pre-registered-kernel-lanes-reported-k14-refuted-k15-comparator"
    ],
    "quoted_in": [
     "docs/STATUS.md",
-    "CHANGELOG.md#0.31.0"
+    "CHANGELOG.md#0310--2026-09-18--batched-int4-decode-plans-split-k-from-the-row-count-two-pre-registered-kernel-lanes-reported-k14-refuted-k15-comparator"
    ],
    "notes": "Engines as shipped, across different torch/CUDA builds in different processes, as the pre-registration said; adopting Marlin itself (a GPTQ repack, a dependency, a quality gate) is not established here. k_proj / v_proj are unmeasured: MarlinWorkspace was sized N//64 x 16 = 128 for N=512, below the 170-SM count the kernel requires (fixed in #363; the lane ran out of budget before a box used it). Relative error 0.0000-0.0005 against Marlin's own dequantised reference. Cost $1.1253 against a $1.00 lane ceiling -- over by $0.13, closed rather than extended; four of the six rentals were host draws that failed."
   },
@@ -569,14 +562,11 @@
     "kernel/k16_bench.py",
     "kernel/receipts-k16/5090/k16_rows.json",
     "kernel/receipts-k16/5090/k16_bench.log",
-    {
-     "path": "CHANGELOG.md",
-     "section": "0.32.0"
-    }
+    "CHANGELOG.md#0320--2026-09-19--k16-a-marlin-class-small-m-int4-b32-gemm-for-the-attention-projections-ships-as-int4_smallm-read-on-the-rtx-5090-p1p3-hold-p4-untested-p5-pending-the-consumer-routes-to-it-opt-in"
    ],
    "quoted_in": [
     "docs/STATUS.md",
-    "CHANGELOG.md#0.32.0"
+    "CHANGELOG.md#0320--2026-09-19--k16-a-marlin-class-small-m-int4-b32-gemm-for-the-attention-projections-ships-as-int4_smallm-read-on-the-rtx-5090-p1p3-hold-p4-untested-p5-pending-the-consumer-routes-to-it-opt-in"
    ],
    "notes": "Decision rule applied: P1 and P2 hold, so the consumer route is opened (experts4bit-qlora#578, opt-in E4B_ATTN_INT4_SMALLM=1; P5 read 2026-09-19 in the consumer: HOLDS, and experts4bit-qlora 0.36.2 makes the route the default when this package (>= 0.32.0) is installed) and this row is `measured`, not a model-level claim. Every best config is BLOCK_N=32 / 4 warps; q_proj takes SK=1 at KC=256, k/v SK=4, o_proj SK=8 -- the split follows K/N. The A2000 pilot read 2.21x / 2.41x on q/o where the 5090 reads 1.63x / 2.91x: an sm_86 ratio does not transfer to sm_120 in either direction. Relative error 0.0029-0.0033 against the bf16 reference (contract <= 2^-7). Run 1 of the lane (k16-5090) was a HARNESS_ERROR (no pytest on the image) with no number; cost of both draws about $0.06 against the $0.65 lane ceiling. Marlin comparator figures are cross-process, cross-build, biased in Marlin's favour per the standing correction (K15)."
   },
@@ -598,14 +588,11 @@
     "kernel/receipts-k17/5090/k17_rows.json",
     "kernel/receipts-k17/5090/k17_bench.log",
     "kernel/receipts-k17/5090/tests_compiled.log",
-    {
-     "path": "CHANGELOG.md",
-     "section": "Unreleased"
-    }
+    "CHANGELOG.md#0330--2026-09-23--two-opt-in-int4-b32-gemv-variants-both-exact-and-neither-a-default-k17-fused_reducetrue-k18-gemv_int4_b32_grouped-319-was-a-mislabelled-test-arm-not-an-f32-kernel-defect-87s-int64-expert-offset-promotion-is-now-guarded-by-a-cpu-test-ci-runs"
    ],
    "quoted_in": [
     "docs/STATUS.md",
-    "CHANGELOG.md#Unreleased"
+    "CHANGELOG.md#0330--2026-09-23--two-opt-in-int4-b32-gemv-variants-both-exact-and-neither-a-default-k17-fused_reducetrue-k18-gemv_int4_b32_grouped-319-was-a-mislabelled-test-arm-not-an-f32-kernel-defect-87s-int64-expert-offset-promotion-is-now-guarded-by-a-cpu-test-ci-runs"
    ],
    "notes": "A negative-result row on purpose: the kernel is exact and ships, the hypothesis that its launch was the cost did not survive the card. The P54 census row it targeted (_reduce_partials 0.300 ms/step at B=1 in experts4bit-qlora) is GPU time the kernel spends either way, not a launch removal recovers. Lane k17-5090-1 cost $0.0888 (estimate $0.65); receipts in adertha-receipts 4aff79c. The A2000 pilot (receipts-k17/a2000-pilot.json, free) showed 0.0-2.8 us at R=1 and was recorded as a warning before the launch."
   },
@@ -627,14 +614,11 @@
     "kernel/receipts-k18/5090/k18_rows.json",
     "kernel/receipts-k18/5090/k18_bench.log",
     "kernel/receipts-k18/5090/tests_compiled.log",
-    {
-     "path": "CHANGELOG.md",
-     "section": "Unreleased"
-    }
+    "CHANGELOG.md#0330--2026-09-23--two-opt-in-int4-b32-gemv-variants-both-exact-and-neither-a-default-k17-fused_reducetrue-k18-gemv_int4_b32_grouped-319-was-a-mislabelled-test-arm-not-an-f32-kernel-defect-87s-int64-expert-offset-promotion-is-now-guarded-by-a-cpu-test-ci-runs"
    ],
    "quoted_in": [
     "docs/STATUS.md",
-    "CHANGELOG.md#Unreleased"
+    "CHANGELOG.md#0330--2026-09-23--two-opt-in-int4-b32-gemv-variants-both-exact-and-neither-a-default-k17-fused_reducetrue-k18-gemv_int4_b32_grouped-319-was-a-mislabelled-test-arm-not-an-f32-kernel-defect-87s-int64-expert-offset-promotion-is-now-guarded-by-a-cpu-test-ci-runs"
    ],
    "notes": "A negative-result row on purpose, like K17's: the kernel is exact and stays dormant, and the hypothesis it was built on did not survive the card. Lane k18-5090-1 cost $0.1269 (estimate $0.66); receipts in adertha-receipts 542a4ce. Mechanism not profiled: the rows establish that the loss exists with zero sharing (R=8), and the design runs the same per-row arithmetic on about one program per distinct expert at R=128; which of the added costs dominates was not measured."
   }
