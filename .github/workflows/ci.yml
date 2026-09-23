@@ -184,7 +184,7 @@ jobs:
         run: cd bench/phase1 && python -m pytest test_plan_modes.py -q
 
       - name: packaging allowlist + test-wiring guard + the register/prose checkers' own tests
-        run: cd kernel && python -m pytest test_packaging_covers_kernel.py test_check_readme_links.py test_check_scripts.py test_check_claims_register.py test_check_readme_claims.py test_check_shared_tooling.py -q
+        run: cd kernel && python -m pytest test_packaging_covers_kernel.py test_check_readme_links.py test_check_scripts.py test_check_claims_register.py test_check_readme_claims.py test_check_shared_tooling.py test_check_capabilities_role.py -q
 
   wheel-smoke:
     if: ${{ github.event_name != 'pull_request' || github.event.action == 'ready_for_review' || github.event.label.name == 'ready-to-merge' }}

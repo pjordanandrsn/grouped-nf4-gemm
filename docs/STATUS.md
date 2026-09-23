@@ -1,6 +1,6 @@
 # Status — what this kernel does, what changed, what is open
 
-**As of 2026-09-23, `grouped-nf4-gemm` version 0.33.0.** One page. The README argues; this
+**As of 2026-09-23, `grouped-nf4-gemm` version 0.33.1.** One page. The README argues; this
 page states. Every line here has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
 here that does not.
@@ -233,11 +233,9 @@ was wrong.
   `hot_rows` floor of two layers' experts).
 - **#71** — `PINNED_ROW_FACTOR` is ~2× conservative on cgroup v1; v2
   needs a box the rented pods cannot give.
-- **#353** — the consumer's cross-check of this package's shape census
-  against its claimed architectures exists but no CI runs it; **#374** —
-  the GPU boundary suite's wide-load and dot-pad arms are word-addressed
-  and do not straddle their own 2^31-word boundary (the CPU suite covers
-  that route). (#60, #71, #353 and #374 are `gnf4.open.issues`.)
+- **#374** — the GPU boundary suite's wide-load and dot-pad arms are
+  word-addressed and do not straddle their own 2^31-word boundary (the CPU
+  suite covers that route). (#60, #71 and #374 are `gnf4.open.issues`.)
 - **`docs/context-budgets.md` is rung-one only** (A2000-measured
   KB/token); full-depth real-weight confirmation is pending and the K3
   row is a declared gap. Its own text forbids promoting pending rows to

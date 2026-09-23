@@ -24,8 +24,27 @@ every failure in that run; exit 2 when the check itself cannot run. Checks:
   * every install command's positional targets name the canonical package
     (or a related project's) and never an alias;
   * capability IDs are unique;
+  * ``training_support`` (when present): ``by_model_type`` is keyed by
+    model_type and each entry's six paths (quantize, reference_train,
+    fast_train, batched_train, nvme_train, native_mxfp4_train) carry a status
+    from the schema's enum; every ``supported`` / ``void`` entry cites at
+    least one claim id that exists in docs/claims.json (``supported`` ones
+    must be ACTIVE); a ``refused`` entry carries a reason and cites either a
+    claim id (a measured refusal row) or a ``code_ref`` (``module:Symbol`` of
+    the refusing code, which must resolve in the tree); and when
+    ``headline_path`` is set, ``model_families`` equals the set of model_types
+    whose headline path is ``supported`` -- the list summarises one path,
+    never a flat flag;
   * --related <path/to/other/capabilities.json>: the other project lists this
-    one back (reciprocity), when given.
+    one back (reciprocity), when given;
+  * WARN (never fail): a capability whose PRIMARY mode (``modes[0]``) is
+    ``serving`` cites no claim from the newest serving lane docs/STATUS.md
+    quotes -- the
+    ``area: serve`` claims STATUS names by id, grouped by ``measured_on``; the
+    latest date is the position, and a serving capability that cites none of
+    its ids is headlining an older lane (the 2026-09-05 audit found the
+    capability citing 2026-09-04 rows while STATUS called the bo7 census the
+    position).
 
 Run with --import to also import each ``module:Symbol`` (needs the runtime).
 """
@@ -33,6 +52,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import fnmatch
 import json
 import os
 import re
@@ -158,6 +178,160 @@ def _has_main_guard(tree: ast.Module) -> bool:
     return False
 
 
+TRAINING_PATHS = ("quantize", "reference_train", "fast_train", "batched_train", "nvme_train", "native_mxfp4_train")
+TRAINING_VALUES = frozenset({"supported", "refused", "void", "harness_error", "not_tested", "experimental", "n/a"})
+#: Statuses whose evidence is a receipt: they must cite a claim id that exists.
+TRAINING_CITED = frozenset({"supported", "void"})
+_CODE_REF = re.compile(r"^([A-Za-z_][A-Za-z0-9_.]*):([A-Za-z_][A-Za-z0-9_]*)$")
+
+
+def check_training_support(cap: dict, cid: str, by_id: dict, errors: list[str], resolve_code_ref=None) -> None:
+    """Per-path training support is structured, never a flat flag: every path of every
+    model_type carries an allowed status; ``supported`` / ``void`` cite claim ids
+    that exist (``supported`` ones ACTIVE); ``refused`` says why and cites a
+    claim id or a ``code_ref`` (``module:Symbol``; ``resolve_code_ref(ref)``
+    returns an error string or None when the caller can resolve it against the
+    tree); and when ``headline_path`` is set, ``model_families`` is exactly the
+    model_types whose headline path is ``supported``. The schema check has
+    already enforced the shape and the enum; this is the cross-reference."""
+    ts = cap.get("training_support")
+    if ts is None:
+        return
+    by_mt = ts.get("by_model_type") if isinstance(ts, dict) else None
+    headline = ts.get("headline_path") if isinstance(ts, dict) else None
+    if not isinstance(by_mt, dict) or not by_mt:
+        errors.append(f"{cid}: training_support.by_model_type must be a non-empty object keyed by model_type")
+        return
+    if headline is not None and headline not in TRAINING_PATHS:
+        errors.append(f"{cid}: training_support.headline_path {headline!r} is not one of {TRAINING_PATHS}")
+        return
+    headline_supported = set()
+    for mt, paths in by_mt.items():
+        if not isinstance(paths, dict):
+            errors.append(f"{cid}: training_support[{mt!r}] must be an object")
+            continue
+        for path in TRAINING_PATHS:
+            entry = paths.get(path)
+            if not isinstance(entry, dict) or "status" not in entry:
+                errors.append(f"{cid}: training_support[{mt!r}].{path}: missing status")
+                continue
+            st = entry["status"]
+            if st not in TRAINING_VALUES:
+                errors.append(f"{cid}: training_support[{mt!r}].{path}: status {st!r} not in {sorted(TRAINING_VALUES)}")
+                continue
+            ids = entry.get("claim_ids") or []
+            if st in TRAINING_CITED and not ids:
+                errors.append(f"{cid}: training_support[{mt!r}].{path}: status {st!r} must cite at least one claim id")
+            for claim_id in ids:
+                c = by_id.get(claim_id)
+                if c is None:
+                    errors.append(f"{cid}: training_support[{mt!r}].{path}: claim id not in docs/claims.json: {claim_id}")
+                elif st == "supported" and c["status"] not in ACTIVE_STATUSES:
+                    errors.append(f"{cid}: training_support[{mt!r}].{path}: 'supported' cites {claim_id} with status "
+                                  f"{c['status']!r} -- only {sorted(ACTIVE_STATUSES)} can back a supported path")
+            if st == "refused":
+                if not str(entry.get("reason", "")).strip():
+                    errors.append(f"{cid}: training_support[{mt!r}].{path}: 'refused' must carry a reason")
+                ref = entry.get("code_ref")
+                if not ids and not ref:
+                    errors.append(f"{cid}: training_support[{mt!r}].{path}: 'refused' must cite a claim id or a code_ref")
+                if ref is not None:
+                    if not _CODE_REF.match(str(ref)):
+                        errors.append(f"{cid}: training_support[{mt!r}].{path}: code_ref {ref!r} is not module:Symbol")
+                    elif resolve_code_ref is not None:
+                        problem = resolve_code_ref(str(ref))
+                        if problem:
+                            errors.append(f"{cid}: training_support[{mt!r}].{path}: code_ref {ref}: {problem}")
+            if path == headline and st == "supported":
+                headline_supported.add(mt)
+    if headline is None:
+        return
+    listed = set(cap.get("model_families", []))
+    if listed != headline_supported:
+        errors.append(f"{cid}: model_families {sorted(listed)} must equal the model_types whose {headline} is 'supported' "
+                      f"{sorted(headline_supported)} (training_support is the source; the list summarises the headline path, not a flat flag)")
+
+
+def _code_ref_resolver(root: Path, py: dict, tree_of):
+    """``module:Symbol`` must be a shipped module in the tree binding the symbol at module level."""
+    def resolve(ref: str) -> str | None:
+        mod, sym = ref.split(":", 1)
+        f = module_file(root, mod, py)
+        if not module_shipped(mod, py):
+            return "module is not shipped by pyproject (py-modules / packages)"
+        if f is None:
+            return "module not found in the tree"
+        if sym not in _module_bindings(tree_of(f)):
+            return f"symbol not bound at module level in {f.relative_to(root)}"
+        return None
+    return resolve
+
+
+def _status_id_pattern(by_id: dict) -> re.Pattern | None:
+    """A backticked id in this register's own namespace -- the first dotted segment
+    every id shares (``e4b.`` here, ``gnf4.`` in the kernel repository). ``None`` when
+    the ids share none, so a mixed or empty register quotes nothing instead of
+    guessing whose ids a STATUS line is citing."""
+    heads = {str(cid).split(".", 1)[0] for cid in by_id}
+    if len(heads) != 1:
+        return None
+    return re.compile(r"`(" + re.escape(heads.pop()) + r"\.[A-Za-z0-9._+*-]+)`")
+
+
+def _system_role(root: Path, package: str | None) -> str | None:
+    """``"runtime"`` / ``"kernels"``: the key under ``packages`` in
+    docs/system-manifest.json whose ``package`` is this repository's; ``None`` when
+    the manifest is absent or does not name it."""
+    try:
+        packages = json.loads(read_text(root / "docs" / "system-manifest.json"))["packages"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return next((role for role, p in packages.items() if isinstance(p, dict) and p.get("package") == package), None)
+
+
+def newest_serving_lane(status_text: str, by_id: dict) -> tuple[str | None, set[str]]:
+    """``(measured_on, ids)`` of the newest ``area: serve`` claims docs/STATUS.md
+    quotes by backticked id (globs expanded); ``(None, set())`` when it quotes none."""
+    quoted: set[str] = set()
+    pattern = _status_id_pattern(by_id)
+    if pattern is None:
+        return None, set()
+    for ref in pattern.findall(status_text):
+        if "*" in ref:
+            quoted.update(k for k in by_id if fnmatch.fnmatchcase(k, ref))
+        elif ref in by_id:
+            quoted.add(ref)
+    dated = {cid: str(by_id[cid].get("measured_on")) for cid in quoted
+             if by_id[cid].get("area") == "serve" and by_id[cid].get("measured_on")
+             and by_id[cid].get("status") in ACTIVE_STATUSES}
+    if not dated:
+        return None, set()
+    newest = max(dated.values())
+    return newest, {cid for cid, d in dated.items() if d == newest}
+
+
+def serving_position_warnings(doc: dict, by_id: dict, status_text: str) -> list[str]:
+    newest, ids = newest_serving_lane(status_text, by_id)
+    if not ids:
+        return []
+    out = []
+    for cap in doc["capabilities"]:
+        modes = cap.get("modes") or []
+        if not modes or modes[0] != "serving":
+            continue                                     # the primary mode is the first one listed
+        if not set(cap.get("claim_ids", [])) & ids:
+            out.append(f"{cap['id']}: primary mode 'serving' but claim_ids cite none of the {len(ids)} serve claim(s) "
+                       f"measured {newest} that docs/STATUS.md quotes as the position (e.g. {sorted(ids)[0]}); "
+                       "the capability headlines an older lane")
+    return out
+
+
+def warning_lines(w: str) -> list[str]:
+    """A warning as the log line and as a GitHub Actions ``::warning::`` annotation,
+    so CI surfaces it on the run instead of leaving it in a green step's log."""
+    return [f"WARN: {w}", f"::warning::{w}"]
+
+
 def _check_numbers(cap: dict, cid: str, errors: list[str]) -> None:
     def walk(node, path: str) -> None:
         if isinstance(node, str):
@@ -229,6 +403,7 @@ def main() -> int:
             errors.append(f"{cid}: duplicate capability id")
         ids_seen.add(cid)
         _check_numbers(cap, cid, errors)
+        check_training_support(cap, cid, by_id, errors, resolve_code_ref=_code_ref_resolver(root, py, tree_of))
         for d in cap["documentation"]:
             if not (root / d).exists():
                 errors.append(f"{cid}: documentation path missing: {d}")
@@ -302,6 +477,16 @@ def main() -> int:
         for e in errors:
             print("FAIL:", e)
         return 1
+    # The serving-position rule assumes ONE serving position per repository, which is the
+    # runtime package's: its STATUS names the lane that is the position. The kernel
+    # package's serving capabilities are separate kernels, each on its own lane, and the
+    # rule would warn falsely there, so it runs for the runtime role only -- by name,
+    # rather than by a hard-coded id prefix that happened not to match.
+    status_path = root / str(proj.get("status_file") or "docs/STATUS.md")
+    if _system_role(root, pname) == "runtime" and status_path.is_file():
+        for w in serving_position_warnings(doc, by_id, read_text(status_path)):
+            for line in warning_lines(w):
+                print(line)
     print(f"OK: {a.capabilities}: {len(doc['capabilities'])} capabilities, "
           f"{sum(len(c['claim_ids']) for c in doc['capabilities'])} claim references, canonical package {pname}")
     return 0
