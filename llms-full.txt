@@ -2367,7 +2367,7 @@ python scripts/check_system_manifest.py            # docs/system-manifest.json v
 python scripts/check_dependency_floor.py           # version statements in current docs vs pyproject and the manifest
 python scripts/check_change_impact.py --base origin/main   # docs/change-impact.json: the companions a diff is missing
 python scripts/check_capabilities.py               # docs/capabilities.json vs schema, pyproject, source, claims
-python scripts/check_claims_register.py            # docs/claims.json bookkeeping: evidence resolves at HEAD, ISO measured_on, superseded/retired fields, quoted_in, no placeholder notes
+python scripts/check_claims_register.py            # docs/claims.json against docs/claims-schema.md (one schema, the same file in both repositories); --sibling ../experts4bit-qlora
 python scripts/check_readme_claims.py              # README, STATUS and solution pages quote the register: ids exist, inactive ids say so, README/STATUS tables hold current values
 python scripts/check_discovery_contract.py --bm25 --bm25-min-top1 33   # docs/discovery-queries.json vs the pages; BM25 floor = baseline 35/44 minus two
 python scripts/check_docs_examples.py --root .     # doc code blocks parse, links resolve; --run-cpu-blocks kernel executes the CPU-only ones
@@ -2429,7 +2429,7 @@ a diff is missing, and CI runs it on every pull request. Classes:
   in `docs/system-manifest.json` in both repositories, only after the kernel
   release exists.
 
-**Shared tooling is one file in both repositories.** The scripts listed in `SHARED` in `scripts/check_shared_tooling.py` are byte-identical here and in the sibling repository; grouped-nf4-gemm is their upstream (kernel-first, as for the manifest). Change one there first, then copy it byte-for-byte into experts4bit-qlora, whose CI compares its copies with grouped-nf4-gemm's `main`. A shared script that must behave differently per repository reads the difference from data (`pyproject.toml`, the manifest), never from two copies. The same-named scripts not yet in `SHARED` are forks still to reconcile; `--sibling` lists them.
+**Shared tooling is one file in both repositories.** The files listed in `SHARED` in `scripts/check_shared_tooling.py` are byte-identical here and in the sibling repository — the check scripts, and `docs/claims-schema.md` with its checker, so both claims registers follow ONE schema; grouped-nf4-gemm is their upstream (kernel-first, as for the manifest). Change one there first, then copy it byte-for-byte into experts4bit-qlora, whose CI compares its copies with grouped-nf4-gemm's `main`. A shared script that must behave differently per repository reads the difference from data (`pyproject.toml`, the manifest), never from two copies. The same-named scripts not yet in `SHARED` are forks still to reconcile; `--sibling` lists them.
 
 Then regenerate `llms-full.txt` (`--check` is a CI gate). Release notes follow
 [`docs/RELEASE_NOTES_GUIDE.md`](docs/RELEASE_NOTES_GUIDE.md); releases are `v<version>`

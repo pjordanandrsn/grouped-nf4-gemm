@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased — the claims register has ONE schema, shared with experts4bit-qlora, and this register is migrated to it (repository tooling and data; nothing in the wheel changes)
+
+- **`scripts/check_claims_register.py` and `docs/claims-schema.md` are one file each, byte-identical in both
+  repositories** (both now in `SHARED`). The two copies had drifted into two schemas that refused each other's data (14
+  findings one way, 38 the other). The converged rules, in `docs/claims-schema.md`:
+  - **Locations.** An evidence path or a `quoted_in` entry is `path` or `path#anchor`. The path is a file in the git
+    tree at HEAD, never a directory, annotation or glob. The anchor is `L<n>` / `L<n>-L<m>`, or the anchor
+    **github.com renders** for a Markdown heading, so every location is a working link. The checker's anchors match
+    github.com's on all 371 headings of both repositories' READMEs, CHANGELOGs and docs.
+  - **Evidence** is a location, `{"url"}` (an issue or pull request of a system repository), or
+    `{"repository": <package>, "path": <location>}` (resolved in a `--sibling` checkout). A public-run row's FIRST
+    entry is a location, because the consumer site links it.
+  - **Successors** are direct and named back. `superseded_by` names the active row itself, with no chains, and that
+    row lists it in `supersedes`. A retired row may name its restatement.
+  - **The file is closed.** Unknown row fields and top-level keys are findings, and `area` / `tier` / lane fields take
+    only their values.
+  - The licence, fingerprint, date and placeholder rules are the union of both repositories' old rules.
+- **Tests.** One test file, identical in both repositories, produces every rule's failure. A mutation sweep disabling
+  each of 32 rules in turn was caught every time.
+- **This register's migration.**
+  - `{"path", "section"}` objects became `CHANGELOG.md#<anchor>` locations. The note on `gnf4.kernel.dgrad`'s entry
+    moved to its `notes`.
+  - URL strings became `{"url"}`, and `gnf4.open.issues`'s bare tracker URL became #60 / #71 / #374.
+  - `kernel/receipts-m3/` became its index `m3_manifest.txt`.
+  - Heading-prefix quotes became anchors.
+- **A defect the migration found.** K17's and K18's `{"section": "Unreleased"}` evidence had been resolving, under the
+  old prefix rule, to an unrelated historical `## Unreleased` heading 1,400 lines down. Both now name the 0.33.0 entry
+  that carries them.
+- **CI** now resolves the cross-repository evidence in experts4bit-qlora's `main`, where before it was only listed as
+  SKIP.
+
 ## 0.33.1 — 2026-09-23 — documentation and repository tooling only (every shipped module identical to 0.33.0): the open-issue list and #319's closure corrected across README, STATUS, the register, the capabilities and the solution pages; the CI scripts shared with experts4bit-qlora start to become one file
 
 - **`scripts/check_shared_tooling.py`** (new, byte-identical in experts4bit-qlora): `SHARED` lists the scripts that are one
