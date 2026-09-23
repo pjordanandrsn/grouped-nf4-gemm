@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased — the CI scripts both repositories carry start to become one file (repository tooling; nothing in the wheel changes)
+
+- **`scripts/check_shared_tooling.py`** (new, byte-identical in experts4bit-qlora): `SHARED` lists the scripts that are one
+  file in both repositories. Nine of the thirteen same-named scripts had forked, so one check name enforced two rules; the
+  four already identical, the two reconciled here and the checker itself are in `SHARED`. Without `--sibling` it checks
+  every listed path exists; with `--sibling` it refuses a self-comparison, a sibling outside the system, a shared file
+  missing there and any differing byte, and lists the scripts still forked as NOTEs. This repository is upstream for
+  shared tooling (kernel-first, as for the manifest); the consumer's CI compares its copies with this `main`.
+  `kernel/test_check_shared_tooling.py` produces every failure the check claims and asserts it is detected.
+- **`scripts/check_readme_links.py`** now derives the README tag pin from `CHANGELOG.md`'s latest `## <version> — <date>`
+  heading cross-checked against `pyproject.toml` (experts4bit-qlora's rule). The old copy read `pyproject.toml` alone, so a
+  version bump without its CHANGELOG section passed; it is now refused (calibrated on this repository's files).
+
 ## 0.33.0 — 2026-09-23 — two opt-in int4-b32 GEMV variants, both exact and neither a default (K17 `fused_reduce=True`, K18 `gemv_int4_b32_grouped`); #319 was a mislabelled test arm, not an f32 kernel defect; #87's int64 expert-offset promotion is now guarded by a CPU test CI runs
 
 - **K18: `int4_b32.gemv_int4_b32_grouped(xq, xs, packed, scales, eids, N, K, part=None, out=None, mt=4)` — the split-K

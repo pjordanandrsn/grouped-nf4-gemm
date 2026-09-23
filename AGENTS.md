@@ -95,6 +95,7 @@ python scripts/check_readme_claims.py              # README, STATUS and solution
 python scripts/check_discovery_contract.py --bm25 --bm25-min-top1 33   # docs/discovery-queries.json vs the pages; BM25 floor = baseline 35/44 minus two
 python scripts/check_docs_examples.py --root .     # doc code blocks parse, links resolve; --run-cpu-blocks kernel executes the CPU-only ones
 python scripts/build_llms_bundle.py --check        # llms-full.txt is current
+python scripts/check_shared_tooling.py --sibling ../experts4bit-qlora   # the shared scripts are one file in both repositories
 ```
 
 The two interpreter commands stay separate on purpose: `kernel/conftest.py` raises
@@ -150,6 +151,8 @@ a diff is missing, and CI runs it on every pull request. Classes:
   capabilities environments; a consumer floor is a new `compatibility` record
   in `docs/system-manifest.json` in both repositories, only after the kernel
   release exists.
+
+**Shared tooling is one file in both repositories.** The scripts listed in `SHARED` in `scripts/check_shared_tooling.py` are byte-identical here and in the sibling repository; grouped-nf4-gemm is their upstream (kernel-first, as for the manifest). Change one there first, then copy it byte-for-byte into experts4bit-qlora, whose CI compares its copies with grouped-nf4-gemm's `main`. A shared script that must behave differently per repository reads the difference from data (`pyproject.toml`, the manifest), never from two copies. The same-named scripts not yet in `SHARED` are forks still to reconcile; `--sibling` lists them.
 
 Then regenerate `llms-full.txt` (`--check` is a CI gate). Release notes follow
 [`docs/RELEASE_NOTES_GUIDE.md`](docs/RELEASE_NOTES_GUIDE.md); releases are `v<version>`
