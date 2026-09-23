@@ -54,8 +54,8 @@ their contract (one token per group, `T` in the hundreds), which keeps
 `T * max(K, N)` far below 2^31 without a cast. Pack and reference ops are
 pure torch and index in int64. The straddling regression is
 `kernel/test_expert_offset_boundary.py`: for each kernel carrier except the
-gathers and the `fp8_kv` appenders (promoted by inspection, but no test puts
-them past their boundary: #386), the experts (or
+gathers and the `fp8_kv` appenders (those are covered on CPU only, by the
+interpreter suite below: #386), the experts (or
 pool rows) whose base offsets sit just below and just above 2^31 are compared
 with the pure-torch reference, every above-boundary case in its own process
 (an illegal access poisons the CUDA context). `kernel/test_offsets_2gib.py`
@@ -72,6 +72,23 @@ the correct offset and the wrapped one are **both inside the mapping** and a
 kernel that wraps misreads a decoy tile instead of faulting -- an assertion
 rather than a crash. Every case also asserts the decoy is distinguishable, so a
 geometry that stopped straddling fails instead of passing quietly.
+
+Since 2026-09-23 the interpreter suite also covers the carriers the GPU suite
+never calls (#386):
+- **The int64-word gathers.** These are `host_gather`, `mxfp4_pipelined` and
+  `mxfp4_residency`. They multiply an int32 id or slot by `row_words`, so they
+  wrap at 2^31 words = 16 GiB. An int32 wrap moves an address by 2^32 words, so
+  each case needs ~32 GiB of address space. That is mapped `MAP_NORESERVE`,
+  because the heuristic overcommit check refuses a `torch.empty` larger than
+  RAM + swap and does not charge this mapping.
+- **The `fp8_kv` appenders.** These are byte-addressed, and a case checks WHERE
+  their bytes land: the true row holds the token and the wrapped row keeps its
+  decoy. Their e4m3 rounding stays `test_fp8_kv_append.py`'s GPU-only bitwise
+  gate.
+
+Calibrated against a copy with the five straddling promotions removed: every
+case fails at the wrapped address (`kernel/receipts-386/interp/`, claim
+`gnf4.kernel.boundary-gathers-appenders.interp.2026-09-23`).
 
 Two things that make such a test vacuous if missed, both learned by writing one:
 

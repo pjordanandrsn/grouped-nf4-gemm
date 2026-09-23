@@ -46,11 +46,16 @@ Proof of power (2026-09-21, triton 3.4.0 / torch 2.8.0 / numpy 2.3.2, CPU): run
 against a copy of ``nf4_grouped.py`` with the four ``eid = eid.to(tl.int64)``
 lines removed, the NF4 decode case reads the decoy (rel 1.27 vs the true
 reference, 3.5e-03 vs the decoy) and fails; against the shipped tree it passes.
+The #386 cases at the bottom -- the int64-word slot gathers and the fp8 KV
+appenders -- were calibrated the same way on 2026-09-23: with exactly the five
+straddling promotions removed, all five fail at the wrapped address
+(kernel/receipts-386/interp/).
 
     cd kernel && TRITON_INTERPRET=1 python -m pytest test_offset_boundary_interp.py -q
 """
 from __future__ import annotations
 
+import mmap
 import os
 
 os.environ.setdefault("TRITON_INTERPRET", "1")
@@ -65,13 +70,24 @@ import triton.language as tl                                     # noqa: E402
 
 BOUNDARY = 2 ** 31
 SLACK = 1 << 16
+MAP_NORESERVE = getattr(mmap, "MAP_NORESERVE", 0x4000)          # Linux's value; named from 3.13
 
 
-def _buffer(n_bytes: int) -> torch.Tensor:
+def _buffer(n_bytes: int, *, reserve: bool = False) -> torch.Tensor:
     """Address space only. torch.empty does not touch the pages and Linux
     commits on write, so just the tiles written below are ever resident
-    (measured: 485 MiB RSS for a 16 GiB mapping, all of it torch)."""
-    return torch.empty(n_bytes, dtype=torch.uint8)
+    (measured: 485 MiB RSS for a 16 GiB mapping, all of it torch).
+
+    ``reserve=True`` maps MAP_NORESERVE instead, for the ~32 GiB spans of the
+    int64-word gathers (#386). The heuristic overcommit check refuses a single
+    torch.empty larger than RAM + swap -- a 16 GB CI runner -- and does not
+    charge a MAP_NORESERVE mapping at all; pages still commit only on touch.
+    torch.frombuffer holds the mapping for the tensor's lifetime."""
+    if not reserve:
+        return torch.empty(n_bytes, dtype=torch.uint8)
+    m = mmap.mmap(-1, n_bytes, flags=mmap.MAP_PRIVATE | mmap.MAP_ANONYMOUS | MAP_NORESERVE,
+                  prot=mmap.PROT_READ | mmap.PROT_WRITE)
+    return torch.frombuffer(m, dtype=torch.uint8)
 
 
 def _tiles(n_bytes: int, seed: int):
@@ -80,17 +96,19 @@ def _tiles(n_bytes: int, seed: int):
             for _ in range(3)]                                   # decoy, low, high
 
 
-def _straddling_stack(stride: int, per_expert: int, seed: int, *, unit: int = 1):
+def _straddling_stack(stride: int, per_expert: int, seed: int, *, unit: int = 1,
+                      reserve: bool = False):
     """A stack whose expert ``EID`` has a base offset past 2^31 ELEMENTS.
 
     ``unit`` is bytes per addressing element **as the kernel sees it**. It is 1
     where the wrapper passes the uint8 tensor, and 4 on the routes that pass
     ``B.view(torch.int32)`` (wide loads, dot-pad): those index the stack in
     32-bit words, so their wrap sits at 2^31 WORDS = 8 GiB of packed bytes,
-    four times further out than the byte-addressed routes. Getting that wrong
-    is not a small error -- it makes the case vacuous, because the product
-    never reaches the boundary and the kernel reads correctly with or without
-    the int64 promotion.
+    four times further out than the byte-addressed routes, and 8 for the
+    int64-word gathers (#386; 16 GiB, and pass ``reserve=True`` for the ~32 GiB
+    span). Getting that wrong is not a small error -- it makes the case vacuous,
+    because the product never reaches the boundary and the kernel reads
+    correctly with or without the int64 promotion.
 
     Returns ``(buf, eid, decoy_bytes, base)``.
     """
@@ -101,15 +119,21 @@ def _straddling_stack(stride: int, per_expert: int, seed: int, *, unit: int = 1)
         f"i64 argument and the product cannot wrap whatever the index dtype")
     eid = -(-BOUNDARY // elems)                  # first expert at/above 2^31 elements
     assert eid * elems >= BOUNDARY > (eid - 1) * elems
-    base = BOUNDARY * unit                       # bytes: 2 GiB, or 8 GiB for words
-    buf = _buffer(2 * base + per_expert + SLACK)
+    base = BOUNDARY * unit                       # bytes: 2 GiB, 8 GiB int32 / 16 GiB int64 words
+    buf = _buffer(2 * base + per_expert + SLACK, reserve=reserve)
     decoy, low, high = _tiles(per_expert, seed)
-    wrapped = base + (eid * elems - 2 ** 32) * unit    # the int32 image, in bytes
+    wrapped = _wrapped_offset(eid, stride, unit, base)   # the int32 image, in bytes
     assert 0 <= wrapped < base, (wrapped, base)
     buf[wrapped:wrapped + per_expert] = decoy
     buf[base:base + per_expert] = low
     buf[base + eid * stride:base + eid * stride + per_expert] = high
     return buf, eid, decoy, base
+
+
+def _wrapped_offset(eid: int, stride: int, unit: int, base: int) -> int:
+    """Where an int32 ``eid * (stride // unit)`` lands, in bytes into the buffer:
+    the address a kernel that dropped the promotion reads or WRITES instead."""
+    return base + (eid * (stride // unit) - 2 ** 32) * unit
 
 
 def _rel(got, want) -> float:
@@ -422,3 +446,184 @@ def test_int4_b32_m_tile(i4_case):
                                          t_row0, t_rows, t_group, block_m=16)
     xd = (xq.float() * xs.repeat_interleave(32, dim=1)).index_select(0, order)
     _verdict(got, xd @ w_true.T, xd @ w_decoy.T, 1e-2, "int4-b32 m-tile")
+
+
+# ------------------------------------------------ int64-word slot gathers --
+# #386. host_gather._gather_rows and the mxfp4_pipelined / mxfp4_residency slot
+# gathers move int64 WORDS: they multiply an int32 expert id or slot index by
+# ``row_words``, so their wrap sits at 2^31 words = 16 GiB, and an int32 wrap
+# moves an address by exactly 2^32 words = 32 GiB. Every straddling case here
+# therefore spans ~32 GiB of address space, mapped MAP_NORESERVE (``_buffer``).
+# The interpreter executes every program, so rows are large and grids small:
+# one chunk per slot, and only the slot under test does any work. The gathers
+# COPY bytes, so the verdicts are exact equality.
+GW_TILE = 1024                                   # int64 words compared per case
+
+
+def _copy_verdict(got, true, decoy, tag):
+    assert torch.equal(got, true), (
+        f"{tag}: the row past 2^31 words was not copied"
+        + (" -- it copied the tile at the WRAPPED address" if torch.equal(got, decoy) else ""))
+    assert not torch.equal(true, decoy), (
+        f"{tag}: instrument check failed -- the decoy equals the true tile")
+
+
+HG_ROW_WORDS = 2 ** 20                           # 8 MiB rows: expert 2048 sits at 2^31 words
+
+
+@pytest.fixture(scope="module")
+def host_gather_case():
+    stride = HG_ROW_WORDS * 8                    # rows are contiguous: row_words IS the stride,
+    buf, eid, decoy, base = _straddling_stack(stride, stride, seed=41, unit=8, reserve=True)
+    host = torch.as_strided(buf, (eid + 1, stride), (stride, 1), storage_offset=base)
+    return host, eid, decoy[:GW_TILE * 8]        # so whole rows are allocated; a prefix is compared
+
+
+def test_host_gather_rows(host_gather_case):
+    """``gather_expert_rows`` reads ``src + want * row_words``; the int32 operand
+    is the expert id, loaded from ``ids``. Through the public wrapper."""
+    from host_gather import gather_expert_rows
+    host, eid, decoy = host_gather_case
+    dst = torch.zeros(1, host.shape[1], dtype=torch.uint8)
+    gather_expert_rows(dst, host, torch.tensor([eid], dtype=torch.int32), block=1 << 16)
+    _copy_verdict(dst[0, :GW_TILE * 8], host[eid, :GW_TILE * 8], decoy, "host_gather")
+
+
+SG_ROW_WORDS = 2 ** 21                           # 16 MiB rows: slot 1024 sits at 2^31 words
+
+
+@pytest.fixture(scope="module")
+def slot_gather_case():
+    """The slot gathers WRITE past the boundary (``dst + slot * row_words``;
+    ``slot`` is the int32 program id), so the stack is the destination: slot
+    ``slot_hi``'s row starts 2^31 words in, and its int32 image holds a decoy
+    that a correct store never touches."""
+    stride = SG_ROW_WORDS * 8
+    buf, slot_hi, decoy, base = _straddling_stack(stride, stride, seed=43, unit=8, reserve=True)
+    dst = torch.as_strided(buf, (slot_hi + 1, stride), (stride, 1), storage_offset=base)
+    g = torch.Generator().manual_seed(44)
+    tile = torch.randint(0, 256, (GW_TILE * 8,), generator=g, dtype=torch.uint8)
+    return (buf, dst, slot_hi, decoy[:GW_TILE * 8], _wrapped_offset(slot_hi, stride, 8, base),
+            tile)
+
+
+def _slot_launch_state(case):
+    """Reset what an earlier case wrote, and build tables where ``want == have``
+    for every slot but ``slot_hi``: those programs return at once."""
+    buf, dst, slot_hi, decoy, wrapped, tile = case
+    dst[slot_hi, :tile.numel()] = 0
+    buf[wrapped:wrapped + tile.numel()] = decoy
+    want = torch.zeros(dst.shape[0], dtype=torch.int64)
+    have = torch.zeros(dst.shape[0], dtype=torch.int64)
+    want[slot_hi] = tile.data_ptr()
+    have[slot_hi] = -1
+    return want, have
+
+
+def _slot_verdict(case, tag):
+    buf, dst, slot_hi, decoy, wrapped, tile = case
+    got = dst[slot_hi, :tile.numel()]
+    at_wrap = buf[wrapped:wrapped + tile.numel()]
+    assert torch.equal(got, tile), (
+        f"{tag}: slot {slot_hi} (2^31 words in) did not receive its row"
+        + (" -- the store landed at the WRAPPED address" if torch.equal(at_wrap, tile) else ""))
+    assert torch.equal(at_wrap, decoy), f"{tag}: the int32 image of the slot's address was written"
+    assert not torch.equal(tile, decoy), f"{tag}: instrument check failed -- tile equals decoy"
+
+
+def test_mxfp4_pipelined_slot_gather(slot_gather_case):
+    from mxfp4_pipelined import _gather_kernel
+    buf, dst, slot_hi, decoy, wrapped, tile = slot_gather_case
+    want, have = _slot_launch_state(slot_gather_case)
+    _gather_kernel()[(dst.shape[0], 1)](dst.view(torch.int64), want, have, SG_ROW_WORDS,
+                                        BLOCK=GW_TILE, num_warps=4)
+    _slot_verdict(slot_gather_case, "mxfp4_pipelined gather")
+
+
+def test_mxfp4_residency_perm_gather(slot_gather_case):
+    from mxfp4_residency import _perm_gather_kernel
+    buf, dst, slot_hi, decoy, wrapped, tile = slot_gather_case
+    want, have = _slot_launch_state(slot_gather_case)
+    zero = torch.zeros(1, dtype=torch.int64)                     # one piece: src 0 -> dst 0
+    n = torch.tensor([GW_TILE], dtype=torch.int64)
+    _perm_gather_kernel()[(dst.shape[0], 1)](dst.view(torch.int64), want, have, zero, zero, n,
+                                             SG_ROW_WORDS, BLOCK=GW_TILE, num_warps=4)
+    _slot_verdict(slot_gather_case, "mxfp4_residency perm gather")
+
+
+# ------------------------------------------------- fp8 KV cache appenders --
+# #386. ``fp8_kv_append_t1`` / ``_bt1`` WRITE one token into block-table row
+# ``row`` at ``row * row_bytes``: byte-addressed, so the wrap is at 2^31 bytes
+# and the ordinary 4 GiB span serves. The public wrappers refuse CPU tensors
+# (a triton-less or CPU call must fail as an availability error, not inside
+# triton's driver), so these launch the kernels with the wrappers' arguments.
+# What is checked is WHERE the bytes land, not their e4m3 rounding -- that is
+# test_fp8_kv_append.py's bitwise GPU gate, which the interpreter must never
+# stand in for: the token read back from the true row dequantizes to the input
+# within e4m3's own error, and the row at the int32 image still holds its decoy.
+FP8_H, FP8_D, FP8_BT, FP8_G = 2, 128, 4, 2
+FP8_PAY = FP8_BT * FP8_H * FP8_D                                 # payload bytes per row
+FP8_ROW = FP8_PAY + FP8_BT * FP8_H * FP8_G * 4                   # + the fp32 scales: 1088
+
+
+@pytest.fixture(scope="module")
+def fp8_pool_case():
+    import fp8_kv
+    buf, row_hi, decoy, base = _straddling_stack(FP8_ROW, FP8_ROW, seed=45)
+    return fp8_kv, buf, buf[base:], row_hi, decoy, _wrapped_offset(row_hi, FP8_ROW, 1, base)
+
+
+def _fp8_token(pool, row, fill):
+    """The token at (row, fill), dequantized from the paged layout: payload at
+    ``fill * H * D``, fp32 scales at ``pay + fill * H * groups * 4``."""
+    r = pool[row * FP8_ROW:(row + 1) * FP8_ROW]
+    q = r[fill * FP8_H * FP8_D:(fill + 1) * FP8_H * FP8_D].view(torch.float8_e4m3fn).float()
+    s0 = FP8_PAY + fill * FP8_H * FP8_G * 4
+    s = r[s0:s0 + FP8_H * FP8_G * 4].view(torch.float32)
+    return (q.reshape(FP8_H, FP8_G, -1) * s.reshape(FP8_H, FP8_G, 1)).reshape(FP8_H, FP8_D)
+
+
+def _fp8_reset(case, rows):
+    fp8_kv, buf, pool, row_hi, decoy, wrapped = case
+    for r in rows:
+        pool[r * FP8_ROW:(r + 1) * FP8_ROW] = 0                  # a zero row decodes to 0: rel 1
+    buf[wrapped:wrapped + FP8_ROW] = decoy
+
+
+def _fp8_verdict(case, fill, x, tag):
+    fp8_kv, buf, pool, row_hi, decoy, wrapped = case
+    r = _rel(_fp8_token(pool, row_hi, fill), x)
+    wrote_wrap = not torch.equal(buf[wrapped:wrapped + FP8_ROW], decoy)
+    assert r < 0.1, (f"{tag}: row {row_hi} (past 2^31 bytes) does not hold the token (rel {r:.3e})"
+                     + (" -- the bytes landed at the WRAPPED address" if wrote_wrap else ""))
+    assert not wrote_wrap, f"{tag}: the row at the int32 image of the address was written"
+
+
+def test_fp8_append_t1(fp8_pool_case):
+    fp8_kv, buf, pool, row_hi, decoy, wrapped = fp8_pool_case
+    _fp8_reset(fp8_pool_case, [row_hi])
+    g = torch.Generator().manual_seed(46)
+    x = torch.randn(FP8_H, FP8_D, generator=g)
+    fill = 1
+    fp8_kv._fp8_append_t1_side[(FP8_H,)](
+        x, pool, pool.view(torch.int32), torch.tensor([row_hi], dtype=torch.int32),
+        torch.tensor([fill], dtype=torch.int32), FP8_ROW, FP8_PAY, FP8_BT,
+        H=FP8_H, D=FP8_D, GROUPS=FP8_G, GS=FP8_D // FP8_G, E4M3_MAX=fp8_kv.E4M3_MAX, num_warps=1)
+    _fp8_verdict(fp8_pool_case, fill, x, "fp8 append t1")
+
+
+def test_fp8_append_bt1_spans_the_boundary(fp8_pool_case):
+    """One batched launch appending to a slot whose row is below the boundary
+    and one whose row is above it."""
+    fp8_kv, buf, pool, row_hi, decoy, wrapped = fp8_pool_case
+    _fp8_reset(fp8_pool_case, [0, row_hi])
+    g = torch.Generator().manual_seed(47)
+    x = torch.randn(2, FP8_H, FP8_D, generator=g)
+    fills = (2, 1)
+    fp8_kv._fp8_append_bt1_side[(2, FP8_H)](
+        x, pool, pool.view(torch.int32), torch.tensor([[0], [row_hi]], dtype=torch.int32),
+        torch.tensor([0, 1], dtype=torch.int32), torch.tensor(fills, dtype=torch.int32),
+        1, FP8_ROW, FP8_PAY, FP8_BT,
+        H=FP8_H, D=FP8_D, GROUPS=FP8_G, GS=FP8_D // FP8_G, E4M3_MAX=fp8_kv.E4M3_MAX, num_warps=1)
+    assert _rel(_fp8_token(pool, 0, fills[0]), x[0]) < 0.1, "fp8 append bt1: the low row misread"
+    _fp8_verdict(fp8_pool_case, fills[1], x[1], "fp8 append bt1")

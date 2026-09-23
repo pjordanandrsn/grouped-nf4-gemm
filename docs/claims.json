@@ -201,6 +201,33 @@
    "notes": "Pre-registered (P1: 4/4 pass shipped; P2: 4/4 fail unpromoted) and merged before the rental in #384. Unpromoted misreads: wide rel 1.467 vs the true tile / 1.822e-03 vs the decoy, dot-pad 1.405 / 2.408e-03; no faults. One box, one torch/Triton pair, the NF4 routes only; the byte-addressed routes are covered at their own boundary by gnf4.kernel.expert-offset-boundary.5090.2026-09-05. Run b374-5090-1, $0.0354, teardown proven (kernel/receipts-b374/5090/teardown-proof.json)."
   },
   {
+   "id": "gnf4.kernel.boundary-gathers-appenders.interp.2026-09-23",
+   "area": "kernel",
+   "claim": "The five carriers of the int64 expert-base promotion that no boundary test called are observed past their own 2^31 boundary on CPU, under the Triton interpreter, in CI: host_gather._gather_rows and the mxfp4_pipelined / mxfp4_residency slot gathers past 2^31 int64 words, and the fp8_kv T=1 and batched appenders past 2^31 bytes. All 5 cases of kernel/test_offset_boundary_interp.py pass on the shipped kernels, and all 5 fail at the int32-wrapped address when the five straddling promotions are removed, closing #386.",
+   "value": 5,
+   "unit": "carriers past their boundary, passing shipped and failing unpromoted",
+   "status": "measured",
+   "hardware": "CPU, TRITON_INTERPRET=1 (pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime container): torch 2.8.0 / triton 3.4.0 / numpy 2.3.2",
+   "conditions": "gathers: 8 MiB (host_gather, expert 2048) and 16 MiB (slot gathers, slot 1024) rows, so the straddling row starts at exactly 2^31 words; ~32 GiB of address space mapped MAP_NORESERVE, a few hundred MiB resident; exact-copy verdicts on 1024 words plus an untouched decoy at the wrapped address. fp8 appenders: H=2, D=128, 4 tokens/block, 2 scale groups, 1088-byte rows, row 1973791 past 2^31 bytes; location verdict (the true row dequantizes to the input, rel < 0.1; the wrapped row keeps its decoy), not the e4m3 rounding, which stays a GPU-only bitwise gate. The whole interpreter file (20 cases) passed in the same run.",
+   "measured_on": "2026-09-23",
+   "evidence": [
+    "kernel/receipts-386/interp/unpromoted.log",
+    "kernel/receipts-386/interp/shipped.log",
+    "kernel/receipts-386/interp/unpromote.diff",
+    "kernel/receipts-386/interp/run.sh",
+    "kernel/test_offset_boundary_interp.py",
+    {
+     "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/386"
+    }
+   ],
+   "quoted_in": [
+    "docs/STATUS.md",
+    "docs/KERNEL_CONTRACT.md",
+    "CHANGELOG.md"
+   ],
+   "notes": "Found while writing the B374 read (#385): KERNEL_CONTRACT said the GPU boundary suite covers 'each carrier', and it never called these five. Why CPU and not a rental: device memory is not lazily committed, so a GPU case would need more than 32 GiB of free device memory (more than an RTX 5090 has), while the interpreter executes the same int32/int64 arithmetic (NEP 50; pinned by test_interpreter_arithmetic_still_wraps) against lazily committed host pages. The public fp8 appender wrappers refuse CPU tensors, so those cases launch the kernels with the wrappers' arguments."
+  },
+  {
    "id": "gnf4.serve.decode-anchor-5090",
    "area": "serve",
    "claim": "The certified single-stream decode anchor for Qwen3-30B-A3B on the RTX 5090 class is 7.37 ms/step +-4.2%, about 130-142 tok/s, with the class carrying 8.5% inter-box dispersion while each box repeats to 0.16%.",
@@ -492,7 +519,7 @@
   {
    "id": "gnf4.open.issues",
    "area": "kernel",
-   "claim": "OPEN issues at 2026-09-23: #60 (arena staging blocks ~30% of a training step), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #386 (the boundary suite never calls the gathers or the fp8_kv appenders past 2^31).",
+   "claim": "OPEN issues at 2026-09-23: #60 (arena staging blocks ~30% of a training step), #71 (PINNED_ROW_FACTOR conservative on cgroup v1).",
    "status": "open",
    "evidence": [
     {
@@ -500,12 +527,9 @@
     },
     {
      "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/71"
-    },
-    {
-     "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/386"
     }
    ],
-   "notes": "#87 (gemm_4bit_grouped int32 offset overflow when max(expert_ids) is large) was listed here until 0.30.1 as 'distinct from the 2 GiB fix in 0.13.2/0.14.0'; that reading was not supported by the issue text. Closed 2026-09-05 by observation in every carrier: PR #342, kernel/test_expert_offset_boundary.py, claim gnf4.kernel.expert-offset-boundary.5090.2026-09-05. Updated 2026-09-23: #319 closed in 0.33.0 (a mislabelled test arm, gnf4.serve.f32-arms-ran-fp8); #73 closed (fixed in 0.12.0 by #74/#76/#79: 1113 -> 56.8 ms/layer, 78% of device); #58 closed (six of eight calls per layer are cache hits, 0.02 s/step; the stall is #60); #353 and #374 added. The claim previously read: OPEN issues at 2026-09-05: #319 (f32 paged compute modes on triton 3.4), #73 (K3 fetch host copy ~71% of a layer), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #60 (arena staging blocks ~30% of a training step), #58 (8 requests per layer where 2 would do). Later the same day: #353 closed (experts4bit-qlora#697 runs the census cross-check in CI against the installed kernel commit's census). Later still: #374 closed by observation (lane B374, gnf4.kernel.word-boundary-wide-dotpad.5090.2026-09-23: the wide-load and dot-pad routes past their own 2^31-word boundary on an RTX 5090). #386 added the same day, found while writing that read: KERNEL_CONTRACT listed the gathers and fp8_kv appenders as carriers covered by the boundary suite, which never calls them."
+   "notes": "#87 (gemm_4bit_grouped int32 offset overflow when max(expert_ids) is large) was listed here until 0.30.1 as 'distinct from the 2 GiB fix in 0.13.2/0.14.0'; that reading was not supported by the issue text. Closed 2026-09-05 by observation in every carrier: PR #342, kernel/test_expert_offset_boundary.py, claim gnf4.kernel.expert-offset-boundary.5090.2026-09-05. Updated 2026-09-23: #319 closed in 0.33.0 (a mislabelled test arm, gnf4.serve.f32-arms-ran-fp8); #73 closed (fixed in 0.12.0 by #74/#76/#79: 1113 -> 56.8 ms/layer, 78% of device); #58 closed (six of eight calls per layer are cache hits, 0.02 s/step; the stall is #60); #353 and #374 added. The claim previously read: OPEN issues at 2026-09-05: #319 (f32 paged compute modes on triton 3.4), #73 (K3 fetch host copy ~71% of a layer), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #60 (arena staging blocks ~30% of a training step), #58 (8 requests per layer where 2 would do). Later the same day: #353 closed (experts4bit-qlora#697 runs the census cross-check in CI against the installed kernel commit's census). Later still: #374 closed by observation (lane B374, gnf4.kernel.word-boundary-wide-dotpad.5090.2026-09-23: the wide-load and dot-pad routes past their own 2^31-word boundary on an RTX 5090). #386 added the same day, found while writing that read: KERNEL_CONTRACT listed the gathers and fp8_kv appenders as carriers covered by the boundary suite, which never calls them. Later still: #386 closed by observation on CPU (gnf4.kernel.boundary-gathers-appenders.interp.2026-09-23: the gathers and fp8_kv appenders past their boundary under the Triton interpreter, in CI)."
   },
   {
    "id": "gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10",
