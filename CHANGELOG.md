@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — the claims register has ONE schema, shared with experts4bit-qlora, and this register is migrated to it; lane B374 registered, and a GPU test for the word-addressed decode routes' own 2^31 boundary (repository tooling, data and tests; nothing in the wheel changes)
+## Unreleased — the claims register has ONE schema, shared with experts4bit-qlora, and this register is migrated to it; lane B374 read: the word-addressed decode routes (wide loads, and dot-pad, the default at its census shapes) are observed past their own 2^31 boundary on an RTX 5090, closing #374 (repository tooling, data and tests; nothing in the wheel changes)
 
 - **`scripts/check_claims_register.py` and `docs/claims-schema.md` are one file each, byte-identical in both
   repositories** (both now in `SHARED`). The two copies had drifted into two schemas that refused each other's data (14
@@ -43,6 +43,19 @@
     a copy with all SIX eid promotions removed (P2: all fail).
   - **Why six.** The dot-pad kernels promote in the load itself (`tl.load(eids_ptr + g).to(tl.int64)`), so the four
     `eid = eid.to(tl.int64)` lines alone would leave dot-pad promoted and calibrate nothing.
+- **Lane B374 read (2026-09-23, RTX 5090): P1 and P2 both hold, and #374 is closed.**
+  - **P1.** On the shipped kernels (0.33.1 at `94a9ff4`), all 4 cases pass, none skipped.
+  - **P2.** On the copy with the six promotions stripped, all 4 fail by reading the decoy at the int32-wrapped
+    address, with no faults. Wide: rel 1.467 vs the true tile, 1.822e-03 vs the decoy. Dot-pad: 1.405 / 2.408e-03.
+  - **Where it is recorded.** `kernel/RESULTS-b374-word-boundary-gpu.md`, receipts in `kernel/receipts-b374/5090/`,
+    claim `gnf4.kernel.word-boundary-wide-dotpad.5090.2026-09-23` (measured). The run cost $0.0354 and its teardown
+    is proven.
+  - **Correction.** `gnf4.kernel.expert-offset-boundary.5090.2026-09-05` gains a note: its wide and dot-pad arms
+    straddle 2^31 bytes, not their own boundary. Its value and its other routes stand.
+  - `gnf4.open.issues` drops #374 and adds #386. KERNEL_CONTRACT had said the boundary suite covers "each
+    carrier", but it never calls the gathers (`host_gather`, `mxfp4_pipelined`, `mxfp4_residency`, all
+    word-addressed) or the `fp8_kv` appenders. Their promotion is correct by inspection and untested past 2^31.
+    The sentence now says so. No kernel changed.
 
 ## 0.33.1 — 2026-09-23 — documentation and repository tooling only (every shipped module identical to 0.33.0): the open-issue list and #319's closure corrected across README, STATUS, the register, the capabilities and the solution pages; the CI scripts shared with experts4bit-qlora start to become one file
 

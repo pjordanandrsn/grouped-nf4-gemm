@@ -53,7 +53,9 @@ elements; the decode GEMVs index their rows by program id and are bounded by
 their contract (one token per group, `T` in the hundreds), which keeps
 `T * max(K, N)` far below 2^31 without a cast. Pack and reference ops are
 pure torch and index in int64. The straddling regression is
-`kernel/test_expert_offset_boundary.py`: for each carrier, the experts (or
+`kernel/test_expert_offset_boundary.py`: for each kernel carrier except the
+gathers and the `fp8_kv` appenders (promoted by inspection, but no test puts
+them past their boundary: #386), the experts (or
 pool rows) whose base offsets sit just below and just above 2^31 are compared
 with the pure-torch reference, every above-boundary case in its own process
 (an illegal access poisons the CUDA context). `kernel/test_offsets_2gib.py`
@@ -87,7 +89,13 @@ Two things that make such a test vacuous if missed, both learned by writing one:
   **the wide and dot-pad arms of `test_expert_offset_boundary.py` are built on
   the byte geometry and therefore do not straddle their own boundary** -- the
   0.30.1 note claiming those routes were "observed above 2^31 for the first
-  time" holds for the scalar, split-K and vec routes only.
+  time" holds for the scalar, split-K and vec routes only. Both routes' own
+  boundary is covered on a GPU by `kernel/test_offset_boundary_words_gpu.py`:
+  a real 16 GiB buffer puts the target expert past 2^31 words with a decoy at
+  the wrapped address. Lane B374 observed it on an RTX 5090 on 2026-09-23,
+  with 4/4 cases passing on the shipped kernels and 4/4 reading the decoy with
+  the six promotions stripped (`kernel/RESULTS-b374-word-boundary-gpu.md`,
+  claim `gnf4.kernel.word-boundary-wide-dotpad.5090.2026-09-23`).
 
 **The Triton interpreter does wrap int32 offset arithmetic.** The 0.14.0
 CHANGELOG states that `TRITON_INTERPRET=1` "evaluates offsets with int64

@@ -21,7 +21,8 @@ Proof of power: lane B374 (kernel/PREREG-b374-word-boundary-gpu.md) runs this fi
 against the installed kernels (every case must PASS, none skipped) and against a copy of nf4_grouped.py with
 all SIX eid promotions removed (every case must FAIL reading the decoy). Six, not four: the dot-pad kernels
 promote in the load itself (``eid = tl.load(eids_ptr + g).to(tl.int64)``), so a copy stripped of only the
-four ``eid = eid.to(tl.int64)`` lines leaves dot-pad promoted and would "calibrate" nothing.
+four ``eid = eid.to(tl.int64)`` lines leaves dot-pad promoted and would "calibrate" nothing. Read 2026-09-23
+(RESULTS-b374-word-boundary-gpu.md): 4/4 pass shipped, 4/4 read the decoy unpromoted.
 
     cd kernel && python -m pytest test_offset_boundary_words_gpu.py -q
 """

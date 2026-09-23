@@ -1,0 +1,19 @@
+gnf4 0.33.1 @94a9ff4ffa9a34acc78747711d0fed5616e9b29d
+installed nf4_grouped /opt/conda/lib/python3.11/site-packages/nf4_grouped.py
+removed promotions: 4 eid.to + 2 dot-pad loads
+torch 2.8.0+cu128
+triton 3.4.0
+shipped resolves nf4_grouped to /opt/conda/lib/python3.11/site-packages/nf4_grouped.py
+unpromoted resolves nf4_grouped to /root/b374/unpromoted/nf4_grouped.py
+geometry rc=0
+test_offset_boundary_words_gpu.py::test_wide_loads_past_the_word_boundary[1-scalar] rc=0
+test_offset_boundary_words_gpu.py::test_wide_loads_past_the_word_boundary[4-scalar_splitk] rc=0
+test_offset_boundary_words_gpu.py::test_dotpad_past_the_word_boundary[None-dotpad] rc=0
+test_offset_boundary_words_gpu.py::test_dotpad_past_the_word_boundary[4-dotpad_splitk] rc=0
+geometry rc=0
+test_offset_boundary_words_gpu.py::test_wide_loads_past_the_word_boundary[1-scalar] rc=1
+test_offset_boundary_words_gpu.py::test_wide_loads_past_the_word_boundary[4-scalar_splitk] rc=1
+test_offset_boundary_words_gpu.py::test_dotpad_past_the_word_boundary[None-dotpad] rc=1
+test_offset_boundary_words_gpu.py::test_dotpad_past_the_word_boundary[4-dotpad_splitk] rc=1
+P1 (shipped: 4/4 GPU cases pass, geometry passes, nothing skipped): ok
+P2 (unpromoted: every GPU case fails): ok -- 4/4 failed; misread (decoy) lines 8; fault lines 0

@@ -1,0 +1,29 @@
+.                                                                        [100%]
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED test_offset_boundary_words_gpu.py::test_the_geometry_straddles_the_word_boundary
+1 passed in 0.99s
+===== test_offset_boundary_words_gpu.py::test_wide_loads_past_the_word_boundary[1-scalar]
+.                                                                        [100%]
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED test_offset_boundary_words_gpu.py::test_wide_loads_past_the_word_boundary[1-scalar]
+1 passed in 4.60s
+===== test_offset_boundary_words_gpu.py::test_wide_loads_past_the_word_boundary[4-scalar_splitk]
+.                                                                        [100%]
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED test_offset_boundary_words_gpu.py::test_wide_loads_past_the_word_boundary[4-scalar_splitk]
+1 passed in 1.70s
+===== test_offset_boundary_words_gpu.py::test_dotpad_past_the_word_boundary[None-dotpad]
+.                                                                        [100%]
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED test_offset_boundary_words_gpu.py::test_dotpad_past_the_word_boundary[None-dotpad]
+1 passed in 1.82s
+===== test_offset_boundary_words_gpu.py::test_dotpad_past_the_word_boundary[4-dotpad_splitk]
+.                                                                        [100%]
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED test_offset_boundary_words_gpu.py::test_dotpad_past_the_word_boundary[4-dotpad_splitk]
+1 passed in 1.71s
