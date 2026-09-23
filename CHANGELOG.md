@@ -94,6 +94,8 @@
       exit 2, because the file cannot tell which package it is there.
     - On both `main`s, every CI form gives the same exit code and findings. This repository's checker suite passes
       124/124 unchanged.
+- **`gnf4.open.issues` and STATUS list #393** (filed 2026-09-23): `combine_rows` has no bitwise contract, and
+  experts4bit-qlora runs it by default. The register had said the open issues were #60 and #71 only.
 
 ## 0.33.2 — 2026-09-23 — documentation, register data, tests and repository tooling only (every shipped module identical to 0.33.1): the claims register has ONE schema, shared with experts4bit-qlora; lane B374 observes the word-addressed decode routes (wide loads, and dot-pad, the default at its census shapes) past their own 2^31 boundary on an RTX 5090, closing #374; #386 opened
 
