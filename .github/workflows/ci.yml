@@ -175,7 +175,7 @@ jobs:
       # access poisons the CUDA context, which is why the file runs alone
       # rather than inside the GPU-labelled list above.
       - name: expert-offset boundary (skips legibly without a GPU)
-        run: cd kernel && python -m pytest test_expert_offset_boundary.py -q
+        run: cd kernel && python -m pytest test_expert_offset_boundary.py test_offset_boundary_words_gpu.py -q
 
       # Harness schedule logic (bench/phase1) — pure functions, no GPU. The
       # e2e driver's burn-in plan is the registered remedy for the ten-run
