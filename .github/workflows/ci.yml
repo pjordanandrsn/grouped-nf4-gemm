@@ -249,7 +249,7 @@ jobs:
       - name: prose quotes the register (README, STATUS, solution pages -- every backticked id exists, a superseded/retired id only on a line that says so, README/STATUS results tables hold the register's current values)
         run: python scripts/check_readme_claims.py
       - name: system manifest (names, import surface == capabilities.json, kernel-first floors vs pyproject and tags, evidence vocabulary, capability ownership)
-        run: python scripts/check_system_manifest.py
+        run: python scripts/check_system_manifest.py --require-tags
       - name: version statements in the current docs agree with pyproject and the manifest's current record
         run: python scripts/check_dependency_floor.py
       - name: change-impact contract on pull requests (the companions this diff is missing)

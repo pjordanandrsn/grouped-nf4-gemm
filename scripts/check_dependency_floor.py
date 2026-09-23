@@ -35,7 +35,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from check_system_manifest import current_record, floor_version, range_lower_bound, release_tuple  # noqa: E402
+from check_system_manifest import current_kernel_record, floor_version, range_lower_bound, release_tuple  # noqa: E402
 from discovery_common import load_pyproject, pep503_name, read_text, requirement_name, self_slug  # noqa: E402
 
 CURRENT_DOCS = ["README.md", "AGENTS.md", "llms.txt", "docs/SOLUTIONS.md", "docs/INDEX.md", "docs/capabilities.json"]
@@ -110,7 +110,7 @@ def main() -> int:
     self_link = re.compile(rf"github\.com/{re.escape(slug)}/(?:blob|tree)/v(\d+(?:\.\d+)+)/")
 
     manifest = json.loads(read_text(root / a.manifest))
-    rec = current_record(manifest, name)
+    rec = current_kernel_record(manifest, name)
     floor = floor_version(str(rec["floor"])) if rec else None
     consumer_low = range_lower_bound(str(rec["consumer_versions"])) if rec else None
     torch_floor = _dep_floor(py, "torch")

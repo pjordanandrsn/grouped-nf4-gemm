@@ -33,6 +33,28 @@
   the retired `gnf4.open.f32-compute-modes-triton34` as current and called the capability `unsupported`. All four now
   match `docs/capabilities.json` and STATUS. 0.33.1's cleanup (#381) had fixed the capability, the README and the
   solution page body, but not these.
+- **`scripts/check_system_manifest.py` is one file, shared with experts4bit-qlora** (now in `SHARED`). The two copies
+  had forked by 734 diff lines: gnf4's had 31 rules and e4b's 39, and one check name enforced two different rule sets.
+  - **How it picks its rules.** It reads its role from the manifest, the way `check_capabilities.py` does: the
+    `packages` entry whose `package` is pyproject's name. It runs the rules for that role.
+    - Both roles run every manifest-only rule.
+    - The kernel role runs the kernel-first floor checks against its own pyproject version and LOCAL tags, and never
+      touches the network.
+    - The runtime role runs the consumer's `fast` / CI-pin checks.
+    - Under `--sibling` each role checks the other's side of the contract.
+  - **Strictness.** Where the copies differed, it keeps the stricter reading. It applies a rule found in only one copy
+    to both roles wherever the rule means something in both.
+  - **Parity.** Old and new copies give identical verdicts on both repositories' `main`, in every CI form. 152 mutation
+    runs found no case where an old copy failed and the new file passed. 36 runs fail only under the new file; these
+    are rules that now apply here, and both `main`s pass them.
+  - **Newly checked here.** The `schema_version` key; an import name with no module file; an empty `why`; duplicate
+    ownership ids; whitespace-only invariant fields; and, under `--sibling`, the runtime's kernel-pinning extras and its
+    ownership list.
+  - **Refused as ambiguous.** A bare two-part range such as `"0.37"`. The kernel's old copy read it as `0.37.*` and the
+    runtime's as exactly `0.37.0`.
+  - **API and CI.** `current_record` is renamed `current_kernel_record`, and `check_dependency_floor.py` imports the new
+    name. The runtime's `current_record` is a different function. CI now runs the check with `--require-tags`: the
+    discoverability job already fetches the tags, so the floor-vs-tag comparison can no longer be silently skipped.
 
 ## 0.33.2 — 2026-09-23 — documentation, register data, tests and repository tooling only (every shipped module identical to 0.33.1): the claims register has ONE schema, shared with experts4bit-qlora; lane B374 observes the word-addressed decode routes (wide loads, and dot-pad, the default at its census shapes) past their own 2^31 boundary on an RTX 5090, closing #374; #386 opened
 
