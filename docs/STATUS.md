@@ -258,7 +258,11 @@ was wrong.
   `hot_rows` floor of two layers' experts).
 - **#71** — `PINNED_ROW_FACTOR` is ~2× conservative on cgroup v1; v2
   needs a box the rented pods cannot give.
-  (#60 and #71 are `gnf4.open.issues`.)
+- **#393** — `combine_rows` fuses the MoE weight, slot sum and bf16 cast in
+  one launch and is tested to a tolerance, not bitwise, while experts4bit-qlora
+  runs it on every MoE layer by default (`E4B_FUSE_COMBINE=1`). No registered
+  claim says fused = unfused; the ask is a `torch.equal` GPU test over the
+  census shapes, with a receipt. (#60, #71 and #393 are `gnf4.open.issues`.)
 - **`docs/context-budgets.md` is rung-one only** (A2000-measured
   KB/token); full-depth real-weight confirmation is pending and the K3
   row is a declared gap. Its own text forbids promoting pending rows to
