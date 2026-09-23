@@ -104,10 +104,11 @@ def _straddling_stack(stride: int, per_expert: int, seed: int, *, unit: int = 1,
     where the wrapper passes the uint8 tensor, and 4 on the routes that pass
     ``B.view(torch.int32)`` (wide loads, dot-pad): those index the stack in
     32-bit words, so their wrap sits at 2^31 WORDS = 8 GiB of packed bytes,
-    four times further out than the byte-addressed routes. Getting that wrong
-    is not a small error -- it makes the case vacuous, because the product
-    never reaches the boundary and the kernel reads correctly with or without
-    the int64 promotion.
+    four times further out than the byte-addressed routes, and 8 for the
+    int64-word gathers (#386; 16 GiB, and pass ``reserve=True`` for the ~32 GiB
+    span). Getting that wrong is not a small error -- it makes the case vacuous,
+    because the product never reaches the boundary and the kernel reads
+    correctly with or without the int64 promotion.
 
     Returns ``(buf, eid, decoy_bytes, base)``.
     """
@@ -118,7 +119,7 @@ def _straddling_stack(stride: int, per_expert: int, seed: int, *, unit: int = 1,
         f"i64 argument and the product cannot wrap whatever the index dtype")
     eid = -(-BOUNDARY // elems)                  # first expert at/above 2^31 elements
     assert eid * elems >= BOUNDARY > (eid - 1) * elems
-    base = BOUNDARY * unit                       # bytes: 2 GiB, or 8 GiB for words
+    base = BOUNDARY * unit                       # bytes: 2 GiB, 8 GiB int32 / 16 GiB int64 words
     buf = _buffer(2 * base + per_expert + SLACK, reserve=reserve)
     decoy, low, high = _tiles(per_expert, seed)
     wrapped = _wrapped_offset(eid, stride, unit, base)   # the int32 image, in bytes
