@@ -1,0 +1,5 @@
+geometry rc=0
+test_offset_boundary_words_gpu.py::test_wide_loads_past_the_word_boundary[1-scalar] rc=1
+test_offset_boundary_words_gpu.py::test_wide_loads_past_the_word_boundary[4-scalar_splitk] rc=1
+test_offset_boundary_words_gpu.py::test_dotpad_past_the_word_boundary[None-dotpad] rc=1
+test_offset_boundary_words_gpu.py::test_dotpad_past_the_word_boundary[4-dotpad_splitk] rc=1

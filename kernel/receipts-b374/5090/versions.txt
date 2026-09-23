@@ -1,0 +1,7 @@
+gnf4 0.33.1 @94a9ff4ffa9a34acc78747711d0fed5616e9b29d
+installed nf4_grouped /opt/conda/lib/python3.11/site-packages/nf4_grouped.py
+removed promotions: 4 eid.to + 2 dot-pad loads
+torch 2.8.0+cu128
+triton 3.4.0
+shipped resolves nf4_grouped to /opt/conda/lib/python3.11/site-packages/nf4_grouped.py
+unpromoted resolves nf4_grouped to /root/b374/unpromoted/nf4_grouped.py

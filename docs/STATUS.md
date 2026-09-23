@@ -104,6 +104,19 @@ MXFP4 decode reproduces Kimi K3's own declared reference exactly
 
 ## What changed — retired, superseded, corrected
 
+- **#374 is closed: the word-addressed decode routes are observed past their
+  own 2^31 boundary (lane B374, 2026-09-23, RTX 5090).** The wide-load and
+  dot-pad routes — dot-pad is the default decode route on >= 160-SM parts —
+  address the stack in 32-bit words and wrap at 2^31 words (8 GiB), which the
+  2026-09-05 boundary suite's byte geometry never reached; its green wide and
+  dot-pad arms were not coverage of that boundary.
+  `kernel/test_offset_boundary_words_gpu.py` puts both routes past it in a
+  real 16 GiB buffer with a decoy at the wrapped address: 4/4 cases pass on
+  the shipped kernels, and 4/4 read the decoy when the six int64 promotions
+  are stripped (pre-registered;
+  [`RESULTS-b374-word-boundary-gpu.md`](../kernel/RESULTS-b374-word-boundary-gpu.md);
+  `gnf4.kernel.word-boundary-wide-dotpad.5090.2026-09-23`, measured). No
+  kernel changed.
 - **#73 and #58 are closed; this page listed them as open until 2026-09-23.** #73 (the K3 fetch's
   host copy at ~71% of a layer) was fixed in 0.12.0 by scattering each arena row into per-segment
   staging with `preadv` (#74, #76, #79): 1113 → 56.8 ms per layer on real K3 bytes, 78% of that
@@ -233,9 +246,7 @@ was wrong.
   `hot_rows` floor of two layers' experts).
 - **#71** — `PINNED_ROW_FACTOR` is ~2× conservative on cgroup v1; v2
   needs a box the rented pods cannot give.
-- **#374** — the GPU boundary suite's wide-load and dot-pad arms are
-  word-addressed and do not straddle their own 2^31-word boundary (the CPU
-  suite covers that route). (#60, #71 and #374 are `gnf4.open.issues`.)
+  (#60 and #71 are `gnf4.open.issues`.)
 - **`docs/context-budgets.md` is rung-one only** (A2000-measured
   KB/token); full-depth real-weight confirmation is pending and the K3
   row is a declared gap. Its own text forbids promoting pending rows to

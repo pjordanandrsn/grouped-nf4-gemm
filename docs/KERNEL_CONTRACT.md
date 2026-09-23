@@ -87,7 +87,13 @@ Two things that make such a test vacuous if missed, both learned by writing one:
   **the wide and dot-pad arms of `test_expert_offset_boundary.py` are built on
   the byte geometry and therefore do not straddle their own boundary** -- the
   0.30.1 note claiming those routes were "observed above 2^31 for the first
-  time" holds for the scalar, split-K and vec routes only.
+  time" holds for the scalar, split-K and vec routes only. Both routes' own
+  boundary is covered on a GPU by `kernel/test_offset_boundary_words_gpu.py`:
+  a real 16 GiB buffer puts the target expert past 2^31 words with a decoy at
+  the wrapped address. Lane B374 observed it on an RTX 5090 on 2026-09-23,
+  with 4/4 cases passing on the shipped kernels and 4/4 reading the decoy with
+  the six promotions stripped (`kernel/RESULTS-b374-word-boundary-gpu.md`,
+  claim `gnf4.kernel.word-boundary-wide-dotpad.5090.2026-09-23`).
 
 **The Triton interpreter does wrap int32 offset arithmetic.** The 0.14.0
 CHANGELOG states that `TRITON_INTERPRET=1` "evaluates offsets with int64

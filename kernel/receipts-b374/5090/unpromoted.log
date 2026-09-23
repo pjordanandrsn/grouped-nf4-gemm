@@ -1,0 +1,209 @@
+.                                                                        [100%]
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED test_offset_boundary_words_gpu.py::test_the_geometry_straddles_the_word_boundary
+1 passed in 0.93s
+===== test_offset_boundary_words_gpu.py::test_wide_loads_past_the_word_boundary[1-scalar]
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_______________ test_wide_loads_past_the_word_boundary[1-scalar] _______________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fa6a4b3cf10>
+split_k = 1, label = 'scalar'
+
+    @needs_cuda
+    @pytest.mark.parametrize("split_k, label", [(1, "scalar"), (4, "scalar_splitk")])
+    def test_wide_loads_past_the_word_boundary(monkeypatch, split_k, label):
+        """NF4 decode with wide (uint32-word) loads: N=256, K=1024 (128 KiB per expert) on a 1 MiB stride, so
+        expert 8192's base is exactly 2^31 words (8 GiB) and the wrapped product lands on the stack's base."""
+        monkeypatch.setenv("GNF4_GEMV_WIDE_LOADS", "1")
+        monkeypatch.delenv("GNF4_GEMV_VEC_LOADS", raising=False)
+        monkeypatch.setenv("GNF4_GEMV_DOTPAD", "0")
+        NG, B, A, eid, a, want, decoy, _buf = _case(256, 1024, 1 << 20, seed=31)
+        before = NG.dispatch_counts()
+        got = NG.gemm_4bit_grouped(a, B, A, [1], [eid], decode_config=(64, 2), split_k=split_k)
+        torch.cuda.synchronize()
+        assert _route(NG, before) == [label], f"wide decode routed {_route(NG, before)}, expected [{label!r}]"
+>       _verdict(got, want, decoy, 5e-2, f"nf4 decode wide ({label}), expert {eid}")
+
+test_offset_boundary_words_gpu.py:139: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+got = tensor([[-0.0684, -0.0258,  0.1992,  0.0157, -0.1855,  0.1865, -0.1113,  0.0454,
+         -0.1289,  0.0598,  0.0391,  ... 0.0342, -0.1963, -0.0603,  0.1309, -0.1953,  0.0557,  0.0137, -0.0118]],
+       device='cuda:0', dtype=torch.bfloat16)
+want_true = tensor([[-7.7607e-02, -1.1808e-01, -7.5120e-02,  2.2389e-01, -1.4795e-01,
+          8.4796e-02, -6.6870e-02,  1.3452e-...-02,
+         -9.2393e-02,  3.5082e-02,  1.4351e-01, -1.9306e-01,  2.4042e-01,
+          9.2491e-02]], device='cuda:0')
+want_decoy = tensor([[-0.0685, -0.0257,  0.1993,  0.0157, -0.1857,  0.1865, -0.1112,  0.0455,
+         -0.1293,  0.0598,  0.0391,  ...82, -0.0215,
+          0.0342, -0.1958, -0.0603,  0.1310, -0.1957,  0.0557,  0.0137, -0.0118]],
+       device='cuda:0')
+tol = 0.05, tag = 'nf4 decode wide (scalar), expert 8192'
+
+    def _verdict(got, want_true, want_decoy, tol, tag):
+        """Both halves: the regression (the true tile was read), and the instrument (the decoy is
+        distinguishable, so a pass can never mean the geometry stopped reaching the boundary)."""
+        r_true, r_decoy = _rel(got, want_true), _rel(got, want_decoy)
+>       assert r_true < tol, (f"{tag}: high expert misread (rel {r_true:.3e} vs reference; rel {r_decoy:.3e} vs the "
+                              f"tile at the WRAPPED address" + (" -- the offset wrapped)" if r_decoy < tol else ")"))
+E       AssertionError: nf4 decode wide (scalar), expert 8192: high expert misread (rel 1.467e+00 vs reference; rel 1.822e-03 vs the tile at the WRAPPED address -- the offset wrapped)
+E       assert 1.4673188924789429 < 0.05
+
+test_offset_boundary_words_gpu.py:85: AssertionError
+=========================== short test summary info ============================
+FAILED test_offset_boundary_words_gpu.py::test_wide_loads_past_the_word_boundary[1-scalar]
+1 failed in 1.80s
+===== test_offset_boundary_words_gpu.py::test_wide_loads_past_the_word_boundary[4-scalar_splitk]
+F                                                                        [100%]
+=================================== FAILURES ===================================
+___________ test_wide_loads_past_the_word_boundary[4-scalar_splitk] ____________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f043a1147d0>
+split_k = 4, label = 'scalar_splitk'
+
+    @needs_cuda
+    @pytest.mark.parametrize("split_k, label", [(1, "scalar"), (4, "scalar_splitk")])
+    def test_wide_loads_past_the_word_boundary(monkeypatch, split_k, label):
+        """NF4 decode with wide (uint32-word) loads: N=256, K=1024 (128 KiB per expert) on a 1 MiB stride, so
+        expert 8192's base is exactly 2^31 words (8 GiB) and the wrapped product lands on the stack's base."""
+        monkeypatch.setenv("GNF4_GEMV_WIDE_LOADS", "1")
+        monkeypatch.delenv("GNF4_GEMV_VEC_LOADS", raising=False)
+        monkeypatch.setenv("GNF4_GEMV_DOTPAD", "0")
+        NG, B, A, eid, a, want, decoy, _buf = _case(256, 1024, 1 << 20, seed=31)
+        before = NG.dispatch_counts()
+        got = NG.gemm_4bit_grouped(a, B, A, [1], [eid], decode_config=(64, 2), split_k=split_k)
+        torch.cuda.synchronize()
+        assert _route(NG, before) == [label], f"wide decode routed {_route(NG, before)}, expected [{label!r}]"
+>       _verdict(got, want, decoy, 5e-2, f"nf4 decode wide ({label}), expert {eid}")
+
+test_offset_boundary_words_gpu.py:139: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+got = tensor([[-0.0684, -0.0258,  0.1992,  0.0157, -0.1855,  0.1865, -0.1113,  0.0454,
+         -0.1289,  0.0598,  0.0391,  ... 0.0342, -0.1963, -0.0603,  0.1309, -0.1953,  0.0557,  0.0137, -0.0118]],
+       device='cuda:0', dtype=torch.bfloat16)
+want_true = tensor([[-7.7607e-02, -1.1808e-01, -7.5120e-02,  2.2389e-01, -1.4795e-01,
+          8.4796e-02, -6.6870e-02,  1.3452e-...-02,
+         -9.2393e-02,  3.5082e-02,  1.4351e-01, -1.9306e-01,  2.4042e-01,
+          9.2491e-02]], device='cuda:0')
+want_decoy = tensor([[-0.0685, -0.0257,  0.1993,  0.0157, -0.1857,  0.1865, -0.1112,  0.0455,
+         -0.1293,  0.0598,  0.0391,  ...82, -0.0215,
+          0.0342, -0.1958, -0.0603,  0.1310, -0.1957,  0.0557,  0.0137, -0.0118]],
+       device='cuda:0')
+tol = 0.05, tag = 'nf4 decode wide (scalar_splitk), expert 8192'
+
+    def _verdict(got, want_true, want_decoy, tol, tag):
+        """Both halves: the regression (the true tile was read), and the instrument (the decoy is
+        distinguishable, so a pass can never mean the geometry stopped reaching the boundary)."""
+        r_true, r_decoy = _rel(got, want_true), _rel(got, want_decoy)
+>       assert r_true < tol, (f"{tag}: high expert misread (rel {r_true:.3e} vs reference; rel {r_decoy:.3e} vs the "
+                              f"tile at the WRAPPED address" + (" -- the offset wrapped)" if r_decoy < tol else ")"))
+E       AssertionError: nf4 decode wide (scalar_splitk), expert 8192: high expert misread (rel 1.467e+00 vs reference; rel 1.822e-03 vs the tile at the WRAPPED address -- the offset wrapped)
+E       assert 1.467319130897522 < 0.05
+
+test_offset_boundary_words_gpu.py:85: AssertionError
+=========================== short test summary info ============================
+FAILED test_offset_boundary_words_gpu.py::test_wide_loads_past_the_word_boundary[4-scalar_splitk]
+1 failed in 1.85s
+===== test_offset_boundary_words_gpu.py::test_dotpad_past_the_word_boundary[None-dotpad]
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_______________ test_dotpad_past_the_word_boundary[None-dotpad] ________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f0cdc9db310>
+split_k = None, label = 'dotpad'
+
+    @needs_cuda
+    @pytest.mark.parametrize("split_k, label", [(None, "dotpad"), (4, "dotpad_splitk")])
+    def test_dotpad_past_the_word_boundary(monkeypatch, split_k, label):
+        """NF4 dot-pad decode -- the default route on >= 160-SM parts -- at its gate_up census shape N=1536,
+        K=2048 (1.5 MiB per expert, packed contiguously), so expert 5462's base is 1 MiB past 2^31 words."""
+        import nf4_grouped as NG
+        if (1536, 2048) not in NG._DOTPAD_CONFIGS or NG._sm_count(torch.device(DEV)) < 160:
+            pytest.skip("dot-pad engages only at its census shapes on >= 160-SM parts; this device has "
+                        f"{NG._sm_count(torch.device(DEV))} SMs")
+        monkeypatch.delenv("GNF4_GEMV_DOTPAD", raising=False)                  # the shipped default: on
+        monkeypatch.delenv("GNF4_GEMV_SPLITK", raising=False)
+        NG, B, A, eid, a, want, decoy, _buf = _case(1536, 2048, 1536 * 1024, seed=37)
+        before = NG.dispatch_counts()
+        got = NG.gemm_4bit_grouped(a, B, A, [1], [eid], split_k=split_k)
+        torch.cuda.synchronize()
+        assert _route(NG, before) == [label], f"dot-pad decode routed {_route(NG, before)}, expected [{label!r}]"
+>       _verdict(got, want, decoy, 5e-2, f"nf4 decode dot-pad ({label}), expert {eid}")
+
+test_offset_boundary_words_gpu.py:158: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+got = tensor([[ 0.1455,  0.0256,  0.2031,  ...,  0.1206, -0.1484, -0.1118]],
+       device='cuda:0', dtype=torch.bfloat16)
+want_true = tensor([[ 0.0273,  0.0650, -0.0154,  ..., -0.1320,  0.0467, -0.0341]],
+       device='cuda:0')
+want_decoy = tensor([[ 0.1453,  0.0252,  0.2032,  ...,  0.1206, -0.1486, -0.1120]],
+       device='cuda:0')
+tol = 0.05, tag = 'nf4 decode dot-pad (dotpad), expert 5462'
+
+    def _verdict(got, want_true, want_decoy, tol, tag):
+        """Both halves: the regression (the true tile was read), and the instrument (the decoy is
+        distinguishable, so a pass can never mean the geometry stopped reaching the boundary)."""
+        r_true, r_decoy = _rel(got, want_true), _rel(got, want_decoy)
+>       assert r_true < tol, (f"{tag}: high expert misread (rel {r_true:.3e} vs reference; rel {r_decoy:.3e} vs the "
+                              f"tile at the WRAPPED address" + (" -- the offset wrapped)" if r_decoy < tol else ")"))
+E       AssertionError: nf4 decode dot-pad (dotpad), expert 5462: high expert misread (rel 1.405e+00 vs reference; rel 2.408e-03 vs the tile at the WRAPPED address -- the offset wrapped)
+E       assert 1.4053354263305664 < 0.05
+
+test_offset_boundary_words_gpu.py:85: AssertionError
+=========================== short test summary info ============================
+FAILED test_offset_boundary_words_gpu.py::test_dotpad_past_the_word_boundary[None-dotpad]
+1 failed in 1.75s
+===== test_offset_boundary_words_gpu.py::test_dotpad_past_the_word_boundary[4-dotpad_splitk]
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_____________ test_dotpad_past_the_word_boundary[4-dotpad_splitk] ______________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f2c9c6ca410>
+split_k = 4, label = 'dotpad_splitk'
+
+    @needs_cuda
+    @pytest.mark.parametrize("split_k, label", [(None, "dotpad"), (4, "dotpad_splitk")])
+    def test_dotpad_past_the_word_boundary(monkeypatch, split_k, label):
+        """NF4 dot-pad decode -- the default route on >= 160-SM parts -- at its gate_up census shape N=1536,
+        K=2048 (1.5 MiB per expert, packed contiguously), so expert 5462's base is 1 MiB past 2^31 words."""
+        import nf4_grouped as NG
+        if (1536, 2048) not in NG._DOTPAD_CONFIGS or NG._sm_count(torch.device(DEV)) < 160:
+            pytest.skip("dot-pad engages only at its census shapes on >= 160-SM parts; this device has "
+                        f"{NG._sm_count(torch.device(DEV))} SMs")
+        monkeypatch.delenv("GNF4_GEMV_DOTPAD", raising=False)                  # the shipped default: on
+        monkeypatch.delenv("GNF4_GEMV_SPLITK", raising=False)
+        NG, B, A, eid, a, want, decoy, _buf = _case(1536, 2048, 1536 * 1024, seed=37)
+        before = NG.dispatch_counts()
+        got = NG.gemm_4bit_grouped(a, B, A, [1], [eid], split_k=split_k)
+        torch.cuda.synchronize()
+        assert _route(NG, before) == [label], f"dot-pad decode routed {_route(NG, before)}, expected [{label!r}]"
+>       _verdict(got, want, decoy, 5e-2, f"nf4 decode dot-pad ({label}), expert {eid}")
+
+test_offset_boundary_words_gpu.py:158: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+got = tensor([[ 0.1455,  0.0256,  0.2031,  ...,  0.1206, -0.1484, -0.1118]],
+       device='cuda:0', dtype=torch.bfloat16)
+want_true = tensor([[ 0.0273,  0.0650, -0.0154,  ..., -0.1320,  0.0467, -0.0341]],
+       device='cuda:0')
+want_decoy = tensor([[ 0.1453,  0.0252,  0.2032,  ...,  0.1206, -0.1486, -0.1120]],
+       device='cuda:0')
+tol = 0.05, tag = 'nf4 decode dot-pad (dotpad_splitk), expert 5462'
+
+    def _verdict(got, want_true, want_decoy, tol, tag):
+        """Both halves: the regression (the true tile was read), and the instrument (the decoy is
+        distinguishable, so a pass can never mean the geometry stopped reaching the boundary)."""
+        r_true, r_decoy = _rel(got, want_true), _rel(got, want_decoy)
+>       assert r_true < tol, (f"{tag}: high expert misread (rel {r_true:.3e} vs reference; rel {r_decoy:.3e} vs the "
+                              f"tile at the WRAPPED address" + (" -- the offset wrapped)" if r_decoy < tol else ")"))
+E       AssertionError: nf4 decode dot-pad (dotpad_splitk), expert 5462: high expert misread (rel 1.405e+00 vs reference; rel 2.408e-03 vs the tile at the WRAPPED address -- the offset wrapped)
+E       assert 1.4053354263305664 < 0.05
+
+test_offset_boundary_words_gpu.py:85: AssertionError
+=========================== short test summary info ============================
+FAILED test_offset_boundary_words_gpu.py::test_dotpad_past_the_word_boundary[4-dotpad_splitk]
+1 failed in 1.71s

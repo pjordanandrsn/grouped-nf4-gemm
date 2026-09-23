@@ -131,7 +131,9 @@ def _nf4_check_expert(B, A, N, K, e, tag, *, dotpad_shape=False):
     # and do straddle. Covering wide properly needs a 16 GiB mapping, which
     # kernel/test_offset_boundary_interp.py does on CPU (host memory is
     # lazily committed; device memory is not). Do not read a green wide arm
-    # here as boundary coverage.
+    # here as boundary coverage. Both routes' own boundary is covered on a GPU
+    # by kernel/test_offset_boundary_words_gpu.py (16 GiB device buffer),
+    # observed on an RTX 5090 in lane B374 (RESULTS-b374-word-boundary-gpu.md).
     def decode(label, **kw):
         env = kw.pop("env", {})
         saved = {k: os.environ.get(k) for k in ("GNF4_GEMV_WIDE_LOADS", "GNF4_GEMV_VEC_LOADS",
