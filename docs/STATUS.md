@@ -1,6 +1,6 @@
 # Status — what this kernel does, what changed, what is open
 
-**As of 2026-09-23, `grouped-nf4-gemm` version 0.33.2.** One page. The README argues; this
+**As of 2026-09-24, `grouped-nf4-gemm` version 0.33.2.** One page. The README argues; this
 page states. Every line here has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
 here that does not.
@@ -74,6 +74,27 @@ is **7.37 ms/step ±4.2% (≈130–142 tok/s)** — the class carries 8.5%
 inter-box dispersion while each box repeats itself to 0.16%, so quote
 the range, not a point (`gnf4.serve.decode-anchor-5090`).
 
+**Row-count invariance (sm_120, lane P63).** A token decoded alone and the
+same token inside a 16-, 17- or 160-token call get the same bits from three
+kernels, read on an RTX 5090 at Qwen3-30B-A3B's gate_up on its own
+activations and routing (experts4bit-qlora#708):
+- `gemv_int4_b32`: 1,544 of 1,544 rows bit-equal to their token's own call.
+  Above 64 SMs its split-K plan does not depend on the row count
+  (`gnf4.kernel.int4-gemv-row-invariant.5090.2026-09-24`).
+- the NF4 dot-pad decode GEMV, the default decode route there: 1,544 of 1,544
+  (`gnf4.kernel.nf4-dotpad-gemv-row-invariant.5090.2026-09-24`).
+- `combine_rows`: every row at T = 2 to 160
+  (`gnf4.kernel.combine-rows-row-invariant.5090.2026-09-24`).
+
+Two routes differ only in summation order: the grouped int4 GEMM against the
+GEMV (max row rel L2 4.4e-4) and the scalar NF4 GEMV under
+`GNF4_GEMV_DOTPAD=0`, whose split-K is planned from the rows (2.4e-4)
+(`gnf4.kernel.int4-grouped-gemm-reorder.5090.2026-09-24`,
+`gnf4.kernel.nf4-scalar-gemv-splitk-reorder.5090.2026-09-24`). Every path was
+inside its own operand model's fp64 bound. `kernel/test_row_invariance_gpu.py`
+asserts the three invariant kernels with `torch.equal` on any CUDA part (all
+measured; one box, one shape).
+
 `fp8_paged_decode_attention` takes sliding windows, attention sinks, a
 custom attention scale and per-layer stride overrides (0.24.0), which is
 what lets one engine serve Granite, Gemma-4 and gpt-oss geometries. 35
@@ -127,7 +148,11 @@ MXFP4 decode reproduces Kimi K3's own declared reference exactly
   `gnf4.kernel.combine-rows-accuracy.5090.2026-09-23` and
   `gnf4.kernel.reduce-partials-slot-order.5090.2026-09-23`, measured.) The
   docstrings and the two tests now state and assert that contract. No kernel
-  changed. The end-to-end effect is experts4bit-qlora#708's to size.
+  changed. **Sized end to end 2026-09-24** (experts4bit-qlora#708, lane P63,
+  Qwen3-30B-A3B, T = 1 decode, `E4B_FUSE_COMBINE=0` against the default): on
+  the NF4 stack KL 1.18e-04 nats/token and no argmax flips in 160 positions; on
+  the int4 stack KL 1.70e-02 and 7 flips (4.4 %), between the lane's
+  registered bands.
 - **#386 is closed: every carrier of the int64 expert-base promotion is now
   observed past its own boundary.** The gathers (`host_gather`,
   `mxfp4_pipelined`, `mxfp4_residency`) are int64-word-addressed, and the

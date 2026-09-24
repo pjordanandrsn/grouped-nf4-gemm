@@ -2,6 +2,24 @@
 
 ## Unreleased — #386: the gathers and the fp8 KV appenders are observed past their own 2^31 boundary, on CPU, in CI; the shared capabilities check reads the serving position from STATUS's position section (tests and repository tooling; nothing in the wheel changes)
 
+- **Row-count invariance registered from experts4bit-qlora lane P63 (#708), kernel first.** The lane read, on one
+  RTX 5090 at Qwen3-30B-A3B's gate_up on the model's own activations and routing, whether a token's rows get the same
+  bits alone (T = 1) and inside a 16-, 17- or 160-token call. Every registered prediction held.
+  - **Row-invariant (EXACT):** `gemv_int4_b32` (above 64 SMs its split-K plan is N-only), the NF4 dot-pad decode GEMV,
+    and `combine_rows`. Claims: `gnf4.kernel.int4-gemv-row-invariant.5090.2026-09-24`,
+    `gnf4.kernel.nf4-dotpad-gemv-row-invariant.5090.2026-09-24` and
+    `gnf4.kernel.combine-rows-row-invariant.5090.2026-09-24`.
+  - **Reorder-class:** the grouped int4 GEMM against the GEMV, and the scalar NF4 GEMV under `GNF4_GEMV_DOTPAD=0`
+    (split-K planned from the rows). Claims: `gnf4.kernel.int4-grouped-gemm-reorder.5090.2026-09-24` and
+    `gnf4.kernel.nf4-scalar-gemv-splitk-reorder.5090.2026-09-24`.
+  - **Every path was inside its own operand model's fp64 bound.** The census is in `kernel/receipts-p63/5090/`.
+  - **New test:** `kernel/test_row_invariance_gpu.py` asserts the three invariant kernels with `torch.equal` on any
+    CUDA part. It includes a control that must see a split-K change. It skips on CPU, and on the NAS RTX A2000 it
+    passes 18 of 18 (`kernel/receipts-p63/a2000-tests/`).
+  - **B393's end-to-end size, recorded as that lane asked:** `E4B_FUSE_COMBINE=0` against the default at T = 1 is KL
+    1.18e-04 nats/token on the NF4 stack and 1.70e-02 on the int4 stack (7 of 160 argmax flips). This is added to the
+    note of `gnf4.kernel.combine-rows-accuracy.5090.2026-09-23`.
+  - **No kernel changed.**
 - **Correction (2026-09-24): lane B393's cross-architecture statement is retracted.** The read said neither
   `combine_rows`' bits nor torch's own chain are the same on sm_86 and sm_120. That was inferred from per-case
   count differences between the lane's census and the A2000 rehearsal, not from comparing outputs.

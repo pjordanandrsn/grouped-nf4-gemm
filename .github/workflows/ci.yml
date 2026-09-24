@@ -177,6 +177,14 @@ jobs:
       - name: expert-offset boundary (skips legibly without a GPU)
         run: cd kernel && python -m pytest test_expert_offset_boundary.py test_offset_boundary_words_gpu.py -q
 
+      # Row-count invariance of the kernels experts4bit-qlora lane P63 read
+      # EXACT on an RTX 5090 (gemv_int4_b32, the NF4 dot-pad decode GEMV,
+      # combine_rows), asserted with torch.equal. CUDA-only, so every case
+      # skips on this runner; it ran 18/18 on the NAS A2000
+      # (kernel/receipts-p63/a2000-tests/).
+      - name: row-count invariance (skips without a GPU)
+        run: cd kernel && python -m pytest test_row_invariance_gpu.py -q -rs
+
       # Harness schedule logic (bench/phase1) — pure functions, no GPU. The
       # e2e driver's burn-in plan is the registered remedy for the ten-run
       # first-mode drift; this keeps a refactor from silently dropping it.
