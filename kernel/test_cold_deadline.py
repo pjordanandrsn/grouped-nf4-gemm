@@ -118,10 +118,12 @@ def test_the_decision_records_both_predictions_not_just_the_winner():
 
 # ------------------------------------------------------- the blob reader --
 
-def _blob():
+def _blob(single=18.2):
+    link = {"h2d_64mb": {"gbs": 28.47}}
+    if single is not None:
+        link["h2d_64mb_single"] = {"gbs": single}
     return {"gpu_bench": {"devices": [
-                {"b_vram_triad_gbs": 1574.2,
-                 "b_link": {"h2d_64mb": {"gbs": 28.47}}}]},
+                {"b_vram_triad_gbs": 1574.2, "b_link": link}]},
             "cpu_bench": {"triad_best": {"gbs": 380.1}}}
 
 
@@ -130,6 +132,56 @@ def test_costs_read_the_blobs_own_field_names():
                         bytes_per_expert=3538944)
     assert c.b_vram_gbs == 1574.2 and c.b_link_gbs == 28.47
     assert c.b_dram_gbs == 380.1
+    assert c.link_eff == pytest.approx(18.2 / 28.47) and c.gpu_us_fixed == 0.0
+
+
+def test_an_old_blob_without_the_single_copy_probe_raises_unless_link_eff_is_passed():
+    """#400: a blob from before gnf4-hybrid-calib/2 carries no measured
+    efficiency. Defaulting it to 1.0 would silently restore the model P66
+    refuted, so the caller must say so."""
+    with pytest.raises(KeyError, match="h2d_64mb_single"):
+        Costs.from_blob(_blob(single=None), cpu_us_fixed=55.0,
+                        cpu_us_per_row=2.0, bytes_per_expert=1)
+    c = Costs.from_blob(_blob(single=None), cpu_us_fixed=55.0,
+                        cpu_us_per_row=2.0, bytes_per_expert=1, link_eff=1.0)
+    assert c.link_eff == 1.0
+
+
+def test_link_eff_is_capped_at_one_and_validated():
+    c = Costs.from_blob(_blob(single=40.0), cpu_us_fixed=55.0,
+                        cpu_us_per_row=2.0, bytes_per_expert=1)
+    assert c.link_eff == 1.0                       # a single copy cannot beat the DMA loop
+    with pytest.raises(ValueError, match="link_eff"):
+        Costs.from_blob(_blob(single=None), cpu_us_fixed=55.0,
+                        cpu_us_per_row=2.0, bytes_per_expert=1, link_eff=0.0)
+    with pytest.raises(ValueError, match="gpu_us_fixed"):
+        Costs.from_blob(_blob(), cpu_us_fixed=55.0, cpu_us_per_row=2.0,
+                        bytes_per_expert=1, gpu_us_fixed=-1.0)
+
+
+def test_gpu_us_scales_the_link_by_its_efficiency_and_adds_the_fixed_term_once():
+    """#400, from lane P66: the link term is bytes over b_link * link_eff;
+    the fixed term is per call, never per row or per expert."""
+    base = C._replace(link_eff=1.0, gpu_us_fixed=0.0)
+    half = C._replace(link_eff=0.5, gpu_us_fixed=0.0)
+    fixed = C._replace(link_eff=1.0, gpu_us_fixed=24.7)
+    gb = 4 * C.bytes_per_expert / 1e9
+    link_us = gb / C.b_link_gbs * 1e6
+    assert gpu_us(1, 4, half) - gpu_us(1, 4, base) == pytest.approx(link_us)   # the link term doubled
+    assert gpu_us(1, 4, fixed) - gpu_us(1, 4, base) == pytest.approx(24.7)
+    assert gpu_us(16, 4, fixed) - gpu_us(1, 4, fixed) == pytest.approx(0.0)    # still flat in rows
+    assert gpu_us(1, 8, fixed) - gpu_us(1, 4, fixed) == pytest.approx(
+        gpu_us(1, 8, base) - gpu_us(1, 4, base))                             # fixed does not scale with uniq
+    assert gpu_us(0, 4, fixed) == 0.0                                          # an empty group is free
+
+
+def test_the_defaults_reproduce_the_bytes_only_model():
+    """A Costs built without the #400 fields is the pre-#400 model to the
+    bit, so every consumer that constructs Costs by keyword keeps its
+    numbers until it measures its own."""
+    assert C.link_eff == 1.0 and C.gpu_us_fixed == 0.0
+    gb = 4 * C.bytes_per_expert / 1e9
+    assert gpu_us(1, 4, C) == pytest.approx((gb / C.b_link_gbs + gb / C.b_vram_gbs) * 1e6)
 
 
 def test_a_blob_with_no_gpu_is_an_error_not_a_default():
@@ -182,3 +234,18 @@ def test_first_to_finish_is_the_same_rule_as_minimising_the_layer_join():
     # and the degenerate corners search rarely hits
     for a in ((0, 0, 0, 0), (0, 1, 1, 0), (1, 0, 0, 1), (5, 5, 5, 5)):
         assert first(*a) == join(*a), a
+
+
+def test_the_committed_a2000_blob_reads_as_schema_2():
+    """The first /2 blob (bench/cold-engine/calib-a2000-400/, the NAS A2000, gen 3 x8): the single-copy probe is
+    present, from_blob needs no explicit link_eff, and on that link the two rates agree so the factor is 1.0."""
+    import json
+    path = os.path.join(os.path.dirname(__file__), "..", "bench", "cold-engine", "calib-a2000-400", "calib.json")
+    blob = json.load(open(path))
+    assert blob["schema"] == "gnf4-hybrid-calib/2"
+    link = blob["gpu_bench"]["devices"][0]["b_link"]
+    assert link["h2d_64mb_single"]["reps"] == 10 and link["h2d_64mb_single"]["gbs"] > 0
+    c = Costs.from_blob({"gpu_bench": blob["gpu_bench"],
+                         "cpu_bench": {"triad_best": {"gbs": 22.35}}},   # CPU benches were skipped on that run
+                        cpu_us_fixed=55.0, cpu_us_per_row=2.0, bytes_per_expert=3538944)
+    assert c.link_eff == 1.0 and c.b_link_gbs == link["h2d_64mb"]["gbs"]

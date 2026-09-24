@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- **`kernel/cold_deadline.py`: the GPU cost gets a measured link efficiency and a per-call fixed term (#400, from
+  experts4bit-qlora lane P66).** Scored against a real gather on an RTX 5090 (PCIe gen 4 x16), the bytes-over-link
+  term under-predicted the transfer 1.57–2.02x: the consumer's pipelined gather runs at the box's SINGLE-copy H2D rate
+  (14.72 GB/s probed, 14.44 implied) while the calibration's `b_link` is the 40-deep back-to-back rate (23.07); on a
+  gen 3 x8 A2000 the two agree and the model read 0.97–1.02x. `Costs` gains `link_eff` (default 1.0 = the pre-#400
+  model) and `gpu_us_fixed` (default 0.0; the consumer's own measurement of its path's fixed per-call kernels — P66:
+  +10 launches, +2 copies per layer whatever the cold fraction, 24.7 µs/layer captured, 168 eager on that box), and
+  `gpu_us` is `bytes / (b_link · link_eff) + bytes / b_vram + gpu_us_fixed`, still flat in rows. `Costs.from_blob`
+  derives `link_eff` from the blob's new `b_link.h2d_64mb_single` probe (`bench/calibrate.py`, schema
+  `gnf4-hybrid-calib/2`: the same 64 MB pinned copy one at a time, synchronized on each side, median of 10) and
+  **raises on a /1 blob unless `link_eff=` is passed explicitly** — `bench/cold-engine/gate2/run_gate2.py` passes 1.0
+  for its /1 receipts and says so. Every consumer that builds `Costs` by keyword keeps its numbers (the defaults are
+  the old model to the bit; `test_the_defaults_reproduce_the_bytes_only_model`). Not yet in any blob receipt: the
+  5090 figure is P66's census probe, not this script's — a registered probe on a gen 4 box follows. Still not
+  modelled: PCIe contention, and the gather's per-row compute beyond the fixed term.
+
 ## 0.33.3 — 2026-09-24 — register, tests and repository tooling only (every shipped module behaves as in 0.33.2; only `kernel/int4_b32.py`'s two docstrings changed, to state lane B393's measured contract): lane P63's row-count-invariance kernel claims with `kernel/test_row_invariance_gpu.py` in CI; lane B393 read (#393 closed) and its cross-architecture correction (#398); #386's 2^31 boundary cases observed on CPU; the CI scripts shared with experts4bit-qlora are one file each
 
 - **Row-count invariance registered from experts4bit-qlora lane P63 (#708), kernel first.** The lane read, on one

@@ -35,9 +35,14 @@ New in-repo artifacts use the `hybrid` prefix; gates are G0–G5.
 - `bench/calibrate.py` — orchestrator: hardware detection (CPUID flags incl.
   AVX512F/VBMI/VNNI, L3/CCD topology from sysfs, THP/hugetlb state, governor,
   GPU inventory + power limit), runs each bench serially, assembles the
-  machine-readable calibration blob (`schema: gnf4-hybrid-calib/1`), prints
+  machine-readable calibration blob (`schema: gnf4-hybrid-calib/2`), prints
   the G0 verdict. Torch-side: `B_vram` device triad per GPU, `B_link` pinned
-  H2D/D2H at 8 KB and 64 MB both directions.
+  H2D/D2H at 8 KB and 64 MB both directions, plus (since /2, #400) the same
+  64 MB copy ONE at a time, synchronized on each side — the rate a kernel
+  reading host rows one layer at a time actually gets, which
+  `cold_deadline.Costs.from_blob` carries as `link_eff` (experts4bit-qlora
+  lane P66: 0.64 of the back-to-back rate on a gen 4 x16 RTX 5090, 1.0 on a
+  gen 3 x8 A2000).
 - `bench/hybrid_calib.c` — plain C11 + pthreads microbench (built on the
   target with `cc -O3 -march=native`): STREAM triad (regular + NT stores,
   thread ladder, compact-vs-spread CCD pinning, first-touch by the timing

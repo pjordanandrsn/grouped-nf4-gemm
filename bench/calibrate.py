@@ -3,7 +3,7 @@
 # calibrate.py — Phase-0 calibration orchestrator for the hybrid CPU/GPU tier.
 #
 # Produces one machine-readable calibration blob per box (schema
-# gnf4-hybrid-calib/1) holding *achieved* ceilings, never spec sheets:
+# gnf4-hybrid-calib/2) holding *achieved* ceilings, never spec sheets:
 #
 #   B_dram  — STREAM triad + the G0 gate workload (grouped scattered
 #             per-expert reads), via bench/hybrid_calib.c compiled here with
@@ -222,6 +222,33 @@ def gpu_benches(quick=False):
                 del host, devt
             except RuntimeError as e:
                 link[f"error_{label}"] = str(e)[:200]
+        # ---- the SAME 64 MB pinned copy, ONE at a time, synchronized on each
+        # side (host clock, median of 10 after 2 warm). The 40-deep loop above
+        # is the DMA engine's sustained rate; this is what a kernel that reads
+        # host rows one layer at a time actually gets: experts4bit-qlora lane
+        # P66 measured the pipelined gather at this rate on a gen 4 x16 RTX
+        # 5090 (14.44 GB/s implied vs 14.72 probed vs 23.07 back-to-back) and
+        # at the back-to-back rate on a gen 3 x8 A2000 where the two agree.
+        # cold_deadline.Costs.from_blob reads both and carries their ratio as
+        # link_eff (grouped-nf4-gemm#400); schema gnf4-hybrid-calib/2.
+        try:
+            nbytes = 64 << 20
+            host = torch.empty(nbytes, dtype=torch.uint8, pin_memory=True)
+            devt = torch.empty(nbytes, dtype=torch.uint8, device=dev)
+            ts = []
+            for _ in range(12):
+                torch.cuda.synchronize()
+                t0 = time.perf_counter()
+                devt.copy_(host, non_blocking=True)
+                torch.cuda.synchronize()
+                ts.append(time.perf_counter() - t0)
+            ts = sorted(ts[2:])
+            sec = ts[len(ts) // 2]
+            link["h2d_64mb_single"] = {"gbs": round(nbytes / sec / 1e9, 2),
+                                       "usec": round(sec * 1e6, 1), "reps": 10}
+            del host, devt
+        except RuntimeError as e:
+            link["error_64mb_single"] = str(e)[:200]
         rec["b_link"] = link
         out["devices"].append(rec)
     return out
@@ -244,7 +271,7 @@ def main():
 
     t_start = time.time()
     blob = {
-        "schema": "gnf4-hybrid-calib/1",
+        "schema": "gnf4-hybrid-calib/2",
         "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "quick_mode": bool(args.quick),
         "host": host_fingerprint(),
@@ -329,8 +356,10 @@ def main():
         l = d.get("b_link", {})
         h2d = l.get("h2d_64mb", {}).get("gbs", "?")
         d2h = l.get("d2h_64mb", {}).get("gbs", "?")
+        single = l.get("h2d_64mb_single", {}).get("gbs")
+        eff = (f"{min(1.0, single / h2d):.3f}" if isinstance(h2d, (int, float)) and single else "?")
         print(f"{d['device']} {d['name']}: triad {d.get('b_vram_triad_gbs')} GB/s | "
-              f"link h2d {h2d} / d2h {d2h} GB/s")
+              f"link h2d {h2d} / d2h {d2h} GB/s | h2d single-copy {single} GB/s -> link_eff {eff}")
     if isinstance(cb, dict) and isinstance(cb.get("nvme"), dict):
         pts = cb["nvme"].get("points") or []
         best_seq = max((p["gbs"] for p in pts if p.get("ok") and p["mode"] == "seq"), default=None)
