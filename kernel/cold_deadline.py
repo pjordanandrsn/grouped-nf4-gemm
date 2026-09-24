@@ -32,6 +32,23 @@ sum, PCIe contention between concurrent transfers, or the possibility that
 CPU and GPU work genuinely overlap rather than serialize. Its predictions
 are recorded alongside the outcome (see `Decision.record`) precisely so the
 model can be scored against reality instead of trusted.
+
+**Scored once, corrected twice (experts4bit-qlora lane P66, 2026-09-24,
+grouped-nf4-gemm#400).** On an RTX 5090 (PCIe gen 4 x16) the consumer's
+pipelined gather moved cold rows at 11-16 GB/s while this module was given
+a 23.07 GB/s ``b_link`` -- the bytes-over-link term under-predicted the
+measured transfer 1.57-2.02x. The calibration's ``b_link`` is a 40-deep
+back-to-back copy loop; the gather runs at the SINGLE-copy rate the same box
+probes at 14.72 GB/s (on a gen 3 x8 A2000 the two rates agree and the model
+read 0.97-1.02x). So the link term now carries a measured ``link_eff``
+(``Costs.from_blob`` derives it from ``b_link.h2d_64mb_single`` /
+``b_link.h2d_64mb`` -- ``bench/calibrate.py`` records both since schema
+``gnf4-hybrid-calib/2``). The same lane found the pipelined residency
+path's own kernels a FIXED per-layer count (+10 launches, +2 copies,
+0 syncs, 1.184 ms/token captured on 48 layers), never a per-cold-expert
+term: that is ``gpu_us_fixed``, a consumer-measured per-call constant like
+``cpu_us_fixed``, default 0. Still not modelled: contention, and the
+gather's per-row compute beyond that fixed term.
 """
 from __future__ import annotations
 
@@ -45,24 +62,55 @@ class Costs(NamedTuple):
     cpu_us_per_row: float        # marginal cost per routed row
     b_dram_gbs: float            # grouped-scatter read bandwidth
     b_vram_gbs: float            # device triad
-    b_link_gbs: float            # H2D at transfer size (64 MB figure)
+    b_link_gbs: float            # H2D at transfer size (64 MB, back-to-back)
     bytes_per_expert: int
+    link_eff: float = 1.0        # single-copy H2D / back-to-back H2D, measured (#400); 1.0 = the pre-#400 model
+    gpu_us_fixed: float = 0.0    # per-call floor of the GPU residency path's own kernels, consumer-measured (#400)
 
     @classmethod
     def from_blob(cls, calib: dict, *, cpu_us_fixed: float,
-                  cpu_us_per_row: float, bytes_per_expert: int) -> "Costs":
+                  cpu_us_per_row: float, bytes_per_expert: int,
+                  link_eff: "float | None" = None,
+                  gpu_us_fixed: float = 0.0) -> "Costs":
         """Read the ceilings out of a gnf4 calibration blob by its own field
         names. A missing field is an error, not a default: a silent fallback
-        would put a guessed number into a scheduling decision."""
+        would put a guessed number into a scheduling decision.
+
+        ``link_eff`` comes from the blob's single-copy probe
+        (``b_link.h2d_64mb_single``, schema ``gnf4-hybrid-calib/2``) as
+        ``single / back-to-back``, capped at 1. A blob from before that probe
+        has no measured figure, so it raises unless the caller passes
+        ``link_eff`` explicitly -- ``1.0`` reproduces the pre-#400 model, and
+        that choice must be visible at the call site, not defaulted here.
+        ``gpu_us_fixed`` is the consumer's own measurement (lane P66: the
+        pipelined path's fixed per-layer kernels), never in the blob."""
         dev = calib["gpu_bench"]["devices"]
         if not dev:
             raise ValueError("calibration blob has no GPU device entry")
         b_vram = max(d["b_vram_triad_gbs"] for d in dev)
-        b_link = max(d["b_link"]["h2d_64mb"]["gbs"] for d in dev)
+        best = max(dev, key=lambda d: d["b_link"]["h2d_64mb"]["gbs"])
+        b_link = best["b_link"]["h2d_64mb"]["gbs"]
+        single = best["b_link"].get("h2d_64mb_single")
+        if single is not None:
+            eff = min(1.0, float(single["gbs"]) / float(b_link))
+        elif link_eff is not None:
+            eff = float(link_eff)
+        else:
+            raise KeyError(
+                "b_link.h2d_64mb_single: this calibration blob predates the "
+                "single-copy link probe (gnf4-hybrid-calib/2); re-run "
+                "bench/calibrate.py, or pass link_eff= explicitly (1.0 is the "
+                "pre-#400 bytes-over-link model, which under-predicted a gen 4 "
+                "x16 gather 1.57-2.02x in experts4bit-qlora lane P66)")
+        if not (0.0 < eff <= 1.0):
+            raise ValueError(f"link_eff must be in (0, 1], got {eff}")
+        if gpu_us_fixed < 0:
+            raise ValueError("gpu_us_fixed must be >= 0")
         b_dram = calib["cpu_bench"]["triad_best"]["gbs"]
         return cls(cpu_us_fixed=cpu_us_fixed, cpu_us_per_row=cpu_us_per_row,
                    b_dram_gbs=b_dram, b_vram_gbs=b_vram, b_link_gbs=b_link,
-                   bytes_per_expert=int(bytes_per_expert))
+                   bytes_per_expert=int(bytes_per_expert), link_eff=eff,
+                   gpu_us_fixed=float(gpu_us_fixed))
 
 
 def cpu_us(rows: int, uniq: int, c: Costs) -> float:
@@ -87,15 +135,24 @@ def gpu_us(rows: int, uniq: int, c: Costs) -> float:
 
     Dominated by ONE H2D per unique expert — flat in rows, which is exactly
     why the two engines cross over as batch grows: the CPU term scales with
-    rows and the GPU term does not. The device-side read is included at
-    ``b_vram``; the kernel's own compute is deliberately not modelled,
-    because at these shapes the path is transfer-bound and adding an
+    rows and the GPU term does not. The link term is bytes over
+    ``b_link * link_eff``: the gather is a kernel reading host memory one
+    row at a time, and lane P66 measured it at the box's single-copy rate,
+    not the back-to-back rate the calibration's ``b_link`` is (0.64 of it on
+    a gen 4 x16 RTX 5090, 1.0 on a gen 3 x8 A2000). The device-side read is
+    included at ``b_vram``. ``gpu_us_fixed`` is the path's own fixed
+    per-call cost, measured by the consumer (P66: +10 launches, +2 copies
+    per layer whatever the cold fraction -- 24.7 us/layer captured and
+    168 us/layer eager on that 5090), added once per call and never per
+    row or per expert. The gather's per-row compute beyond that is still
+    not modelled: at these shapes the path is transfer-bound and an
     unmeasured compute term would be inventing precision.
     """
     if rows <= 0:
         return 0.0
     gb = uniq * c.bytes_per_expert / 1e9
-    return (gb / max(c.b_link_gbs, 1e-9) + gb / max(c.b_vram_gbs, 1e-9)) * 1e6
+    link = max(c.b_link_gbs, 1e-9) * c.link_eff
+    return (gb / link + gb / max(c.b_vram_gbs, 1e-9)) * 1e6 + c.gpu_us_fixed
 
 
 class Decision(NamedTuple):

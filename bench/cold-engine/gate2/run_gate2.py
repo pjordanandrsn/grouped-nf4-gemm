@@ -60,10 +60,16 @@ def main():
     idx = load_index(a.arena)
     L, E, rb = idx["n_layers"], idx["n_experts_per_layer"], idx["row_bytes"]
     calib = json.load(open(a.calib))
+    # link_eff=1.0 is passed EXPLICITLY: gate 2's blobs predate the single-copy
+    # link probe (gnf4-hybrid-calib/2, #400), and the gate-2 receipts were read
+    # with the bytes-over-link model as it stood. A re-run on a /2 blob gets the
+    # measured efficiency from the blob (drop the argument).
     costs = cold_deadline.Costs.from_blob(
         calib, cpu_us_fixed=a.cpu_us_fixed,
-        cpu_us_per_row=a.cpu_us_per_row, bytes_per_expert=rb)
-    print("costs: cpu %.0f+%.1f/row us | b_dram %.1f b_vram %.1f b_link %.2f"
+        cpu_us_per_row=a.cpu_us_per_row, bytes_per_expert=rb,
+        link_eff=1.0 if "h2d_64mb_single" not in
+        calib["gpu_bench"]["devices"][0].get("b_link", {}) else None)
+    print("costs: cpu %.0f+%.1f/row us | b_dram %.1f b_vram %.1f b_link %.2f (link_eff %.3f)"
           % (costs.cpu_us_fixed, costs.cpu_us_per_row, costs.b_dram_gbs,
              costs.b_vram_gbs, costs.b_link_gbs))
 
