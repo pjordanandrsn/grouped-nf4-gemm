@@ -2051,6 +2051,17 @@ was wrong.
 
 ## What is open
 
+- **The cold cost model's link term is now a per-host measurement (#400, #402; lane P69 read 2026-09-24).**
+  experts4bit-qlora's lane P66 scored `cold_deadline.gpu_us` against a real gather on a gen 4 x16 RTX 5090 and found
+  bytes-over-`b_link` under-predicting it 1.57–2.02x: the gather runs at the box's single-copy H2D rate, and the
+  calibration's `b_link` is the 40-deep back-to-back rate. #402 gives `Costs` a `link_eff` read from a new
+  `bench/calibrate.py` probe (schema `gnf4-hybrid-calib/2`: the same 64 MB copy one at a time) and a consumer-passed
+  `gpu_us_fixed` for the path's own fixed per-call kernels; a /1 blob is refused unless `link_eff` is passed
+  explicitly. Measured so far: **0.64** on P66's 5090 host (EPYC 7C13), **0.873 / 0.960** on P69's (EPYC 7663;
+  `gnf4.calib.link-efficiency.5090.2026-09-24`, the registered [0.55, 0.75] REFUTED there), **1.0** on the gen 3 x8
+  A2000 (`bench/cold-engine/calib-a2000-400/`). So the factor is the box's, not the card class's, and it lives in each
+  box's own blob. Open: why two gen 4 x16 hosts differ (idle link state, NUMA placement of the pinned buffer, the DMA
+  engine — none measured), and the hybrid tier's mixed-layer dispatch term, which `cold_dest="deadline"` still omits.
 - **#60** — arena staging blocks ~30% of a training step; the next
   layer's rows are prefetchable (guarded by a CUDA event, with a
   `hot_rows` floor of two layers' experts).
@@ -2618,6 +2629,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - gnf4.kernel.combine-rows-row-invariant.5090.2026-09-24 [measured]: int4_b32.combine_rows is row-count invariant on an RTX 5090: token t's combined row from one call over T tokens is bit-equal to its row from a one-token call at T = 2, 16, 17, 64 and 160, at Qwen3's (top_k 8, hidden 2048), within the fp32-summation bound everywhere (max ratio 0.9954) -- one program per token, slot order, a block size that does not depend on T.
 - gnf4.kernel.int4-grouped-gemm-reorder.5090.2026-09-24 [measured]: gemm_int4_b32_grouped_captured computes the same function as gemv_int4_b32 in a different summation order on an RTX 5090: against the GEMV's T = 1 rows, 119/128, 127/136 and 1,122/1,280 rows are bit-equal at 16, 17 and 160 tokens (max row rel L2 4.4e-4, 1 bf16 ULP), with the same int8 activations, int4 weights and exact int32 block dots, and both inside their own model's fp64 bound (ratio <= 0.172).
 - gnf4.kernel.nf4-scalar-gemv-splitk-reorder.5090.2026-09-24 [measured]: The scalar NF4 decode GEMV (GNF4_GEMV_DOTPAD=0) is reorder-class across row counts on an RTX 5090: its split-K count is planned from the rows, so against its own T = 1 rows 116/128, 124/136 and 1,123/1,280 rows are bit-equal at 16, 17 and 160 tokens (max row rel L2 2.4e-4, 1 bf16 ULP), inside its fp64 bound everywhere (ratio <= 0.896).
+- gnf4.calib.link-efficiency.5090.2026-09-24 [measured]: Lane P69: bench/calibrate.py (schema gnf4-hybrid-calib/2, #402) run twice on one rented RTX 5090 (PCIe gen 4 x16, host AMD EPYC 7663) reads the pinned 64 MB H2D copy at 20.58 / 20.72 GB/s forty back-to-back and at 17.97 / 19.90 GB/s one synchronized copy at a time, so cold_deadline's link_eff on that host is 0.873 / 0.960 (mean 0.917; the two runs within 10 %); the registered prediction of [0.55, 0.75] -- lane P66's census probe on another gen 4 x16 RTX 5090 (14.72 / 23.07 = 0.638, host AMD EPYC 7C13) -- is REFUTED on this host: link_eff is a per-host measurement, not a constant of the card class, and Costs.from_blob reads it from each box's own blob.
 
 Open items (no evidence either way):
 
@@ -2628,4 +2640,4 @@ Projections (arithmetic, not runs):
 
 - gnf4.projection.multiarch [projected]: PROJECTED (stamped pre-silicon): the pure-waterfall gen5 row is falsified; the revised gen4 band 2.4-3.0 tok/s is confirmed (L40S 2.60-2.61); the revised gen5 band 4.0-5.0 missed narrowly (H100 PCIe 3.924); unified-memory rows are ceilings only (17-22 tok/s on 128 GB boxes). NF4-vs-bf16 is a 3.56x byte reduction, not 4x.
 
-(39 active claims listed, 2 open, 1 projected; retired and superseded claims are omitted on purpose.)
+(40 active claims listed, 2 open, 1 projected; retired and superseded claims are omitted on purpose.)

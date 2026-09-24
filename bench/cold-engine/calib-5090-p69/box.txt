@@ -1,0 +1,7 @@
+NVIDIA GeForce RTX 5090, 580.95.05, 32607 MiB, 1, 4, 16, 16, 600.00 W
+---CPU
+CPU(s):                                  224
+Model name:                              AMD EPYC 7663 56-Core Processor
+NUMA node(s):                            2
+---TORCH
+2.8.0+cu128 12.8

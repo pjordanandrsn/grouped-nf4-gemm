@@ -1,0 +1,3 @@
+run1: schema gnf4-hybrid-calib/2  back-to-back 20.58 GB/s  single 17.97 GB/s  link_eff 0.873
+run2: schema gnf4-hybrid-calib/2  back-to-back 20.72 GB/s  single 19.9 GB/s  link_eff 0.960
+spread run1 vs run2: {'h2d_64mb': '0.7%', 'h2d_64mb_single': '9.7%', 'link_eff': '9.1%'}

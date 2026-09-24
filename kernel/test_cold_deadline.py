@@ -249,3 +249,17 @@ def test_the_committed_a2000_blob_reads_as_schema_2():
                          "cpu_bench": {"triad_best": {"gbs": 22.35}}},   # CPU benches were skipped on that run
                         cpu_us_fixed=55.0, cpu_us_per_row=2.0, bytes_per_expert=3538944)
     assert c.link_eff == 1.0 and c.b_link_gbs == link["h2d_64mb"]["gbs"]
+
+
+def test_the_committed_5090_blob_reads_as_schema_2():
+    """Lane P69's receipt (bench/cold-engine/calib-5090-p69/, a gen 4 x16 RTX 5090): from_blob needs no explicit
+    link_eff and reads 0.873 on run 1 -- a per-host figure, not the 0.64 lane P66's other 5090 host gave."""
+    import json
+    path = os.path.join(os.path.dirname(__file__), "..", "bench", "cold-engine", "calib-5090-p69", "run1", "calib.json")
+    blob = json.load(open(path))
+    assert blob["schema"] == "gnf4-hybrid-calib/2"
+    c = Costs.from_blob({"gpu_bench": blob["gpu_bench"], "cpu_bench": {"triad_best": {"gbs": 1.0}}},
+                        cpu_us_fixed=55.0, cpu_us_per_row=2.0, bytes_per_expert=2_654_208)
+    assert c.b_link_gbs == 20.58 and c.link_eff == pytest.approx(17.97 / 20.58)
+    # the link term the consumer sees: 14 % longer than the bytes-over-b_link model on this host
+    assert gpu_us(1, 1, c) / gpu_us(1, 1, c._replace(link_eff=1.0)) == pytest.approx(1.143, abs=0.003)
