@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.33.4 — 2026-09-24 — `kernel/cold_deadline.py`: the GPU cost carries a measured per-host link efficiency (`link_eff`, from `bench/calibrate.py`'s new single-copy probe, schema `gnf4-hybrid-calib/2`) and a consumer-passed per-call fixed term (`gpu_us_fixed`); a /1 blob is refused unless `link_eff` is passed explicitly (#400, #402, from experts4bit-qlora lane P66); lane P69's read: the factor is 0.873 / 0.960 on one gen 4 x16 RTX 5090 against 0.64 on another and 1.0 on a gen 3 x8 A2000 — per host, not per card class (#403); every other shipped module identical to 0.33.3
 
 - **Lane P69 read (experts4bit-qlora #741, for #400): `link_eff` is a per-host measurement, not a 5090-class constant.**
   `bench/calibrate.py` at #402's commit, run twice on a rented gen 4 x16 RTX 5090 (host EPYC 7663), reads the 64 MB
