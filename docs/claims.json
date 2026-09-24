@@ -223,13 +223,14 @@
     },
     {
      "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/393"
-    }
+    },
+    "kernel/receipts-b393/5090-fma-attribution/README.md"
    ],
    "quoted_in": [
     "docs/STATUS.md",
     "CHANGELOG.md"
    ],
-   "notes": "Pre-registered in #396 (outcome B of A/B/C: not bit-equal, fused_bound_ratio <= 1 everywhere). Readings: vs the chain 49/144 cases bit-equal, max 53 bf16 ULP; vs the separately-rounded slot-order sum 58/144, max 44; the chain vs that sum 80/144, max 64 -- ULPs are unbounded near cancellation, so they are reported, not decided on. The torch chain meets the same bound at the same max ratio: the fused kernel is exactly as accurate as what it replaced. Attribution, a follow-up diagnostic on an RTX A2000 (sm_86), not this row's reading: the kernel equals the slot-order sum with a fused multiply-add bit-for-bit in 144/144 cases and its PTX accumulates with fma.rn.f32 only. On sm_120 its per-case differences against the same deterministic reference differ from sm_86's in >= 35 of 144 cases, and torch's own chain differs across the two architectures in >= 41 -- neither is bitwise-stable across GPUs; the accuracy bound holds on both. End-to-end size is experts4bit-qlora#708's (E4B_FUSE_COMBINE=0 control). Run b393-5090-1, $0.0299, teardown proven (kernel/receipts-b393/5090/teardown-proof.json)."
+   "notes": "Pre-registered in #396 (outcome B of A/B/C: not bit-equal, fused_bound_ratio <= 1 everywhere). Readings: vs the chain 49/144 cases bit-equal, max 53 bf16 ULP; vs the separately-rounded slot-order sum 58/144, max 44; the chain vs that sum 80/144, max 64 -- ULPs are unbounded near cancellation, so they are reported, not decided on. The torch chain meets the same bound at the same max ratio: the fused kernel is exactly as accurate as what it replaced. Attribution, a follow-up diagnostic on an RTX A2000 (sm_86), not this row's reading: the kernel equals the slot-order sum with a fused multiply-add bit-for-bit in 144/144 cases and its PTX accumulates with fma.rn.f32 only. Corrected 2026-09-24: this row first said neither the kernel nor torch's chain is bitwise-stable across GPUs, inferred from per-case count differences between two census runs. Output hashes refute it: the fused output, torch's chain and the sequential sum are bit-identical on sm_86 and sm_120 in 144/144 cases, and the kernel equals the FMA slot-order sum on sm_120 too (kernel/receipts-b393/5090-fma-attribution/). The lane box's own census disagreeing with both hash-checked runs in 37 cases is unexplained; the accuracy bound held on every box. End-to-end size is experts4bit-qlora#708's (E4B_FUSE_COMBINE=0 control). Run b393-5090-1, $0.0299, teardown proven (kernel/receipts-b393/5090/teardown-proof.json)."
   },
   {
    "id": "gnf4.kernel.reduce-partials-slot-order.5090.2026-09-23",

@@ -36,7 +36,7 @@ cancellation, so they are reported and not decided on.
 
 - **`reduce_partials` adds in slot order, bit-exactly.** It equals the sequential sum in 270/270 cases, with 0
   elements differing. Its whole difference from the chain is torch's reduction order in `.sum(0)`.
-- **`combine_rows` is, on sm_86 exactly, the slot-order sum with a fused multiply-add.** On the RTX 5090 it differs
+- **`combine_rows` is exactly the slot-order sum with a fused multiply-add, on sm_86 and on sm_120.** On the RTX 5090 it differs
   from both the chain and the separately-rounded sequential sum. That was the registered attribution's stopping
   point: "the kernel's own arithmetic differs too". A follow-up diagnostic ran one candidate down on the NAS RTX A2000 (sm_86), and it is
   **not** this lane's reading; see [`receipts-b393/a2000-fma-attribution/`](receipts-b393/a2000-fma-attribution/).
@@ -46,27 +46,38 @@ cancellation, so they are reported and not decided on.
   - its PTX accumulates with `fma.rn.f32` only, with no separate `mul.f32` or `add.f32` in any of the three
     compiled variants.
 
-  On sm_86, Triton contracts `acc += x * w` into one rounding, while the chain and the sequential reference round
+  Triton contracts `acc += x * w` into one rounding (sm_86 here; sm_120 in the correction below, by the same diagnostic), while the chain and the sequential reference round
   the product first.
 
 ## What it does NOT say, including against the diagnostic
 
-**Neither the kernel's bits nor torch's own chain are the same across GPU architectures.**
-- **The comparison.** Against the same sequential reference, the per-case differences on the 5090 and on the A2000
-  change in 35 of 144 `combine_rows` cases on the count of differing elements (37 counting the max ULP;
-  `vs_sequential`), and in 41 of 144 for the torch chain itself (`chain_vs_sequential`). Equal counts do not prove
-  equal bits, so these are lower bounds. No T=1 case changes, which is what its element count predicts.
-- **Why the reference is fixed.** The sequential reference is elementwise IEEE arithmetic, so it does not change: on
-  the A2000 its GPU and CPU outputs are bit-equal in 144/144.
-- **What follows.** `combine_rows` on sm_120 is not bit-identical to `combine_rows` on sm_86, and torch's `sum(dim=1)`
-  on sm_120 is not bit-identical to torch's on sm_86.
-- **What stays open.** The FMA attribution is exact on sm_86. What sm_120's kernel computes in the elements where it
-  differs is open. The diagnostic is written to answer it on the next 5090 box: it records per-case output hashes
-  and keeps the PTX.
+### Correction (2026-09-24): the cross-architecture statement is RETRACTED
 
-**This bears on any bitwise contract, not only this one.** A contract "bitwise equal to the torch chain" would be a
-contract with a reference that is itself not bitwise-stable across architectures. The accuracy bound is
-architecture-free: every result on both boxes is within it.
+**What this page first said.** "Neither the kernel's bits nor torch's own chain are the same across GPU
+architectures." It said `combine_rows` on sm_120 is not bit-identical to sm_86's, and torch's `sum(dim=1)` neither.
+
+**Why that was said.** The census on the lane's 5090 box and the A2000 rehearsal gave different per-case difference
+counts against the same deterministic sequential reference: in 35 of 144 `combine_rows` cases, and in 41 for the chain.
+From that I inferred that the fused output and the chain had different bits on the two architectures. **That was an
+inference from counts, not a comparison of outputs.**
+
+**What direct measurement shows.** The attribution diagnostic records a sha256 of every output. It was run again on a
+second RTX 5090 (experts4bit-qlora lane P63's box, [`receipts-b393/5090-fma-attribution/`](receipts-b393/5090-fma-attribution/)),
+and compared by hash with the A2000 run:
+- **the fused output, torch's chain, the sequential sum and the FMA sum are bit-identical on sm_86 and sm_120 in
+  144/144 cases**;
+- `combine_rows` equals the FMA slot-order sum in 144/144 on sm_120 too, with PTX `fma.rn.f32` only.
+
+**What stays unexplained.** The lane's own census run on its box (`b393-5090-1`, driver 595.91.07) disagrees with both
+hash-checked runs in 37 of 144 cases. The second 5090 ran driver 595.71.05, so that is one box's run against two
+others, not an architecture property. The census does not record output hashes, so which tensor differed on that box
+cannot be recovered from its receipt. **The lane's decision is unaffected:** every result, on every box, is within the
+fp32-summation bound, and outcome B does not depend on this.
+
+**What replaces it.** `combine_rows` is the FMA-contracted slot-order sum, bit-exactly, on both architectures
+measured, and it is not bitwise torch's chain. torch's chain itself was bit-identical across the two architectures at
+these cases. The accuracy bound is still the contract, because it is the property #393 asked about. The kernel and
+torch's chain are two different correct fp32 orders, not one order with noise.
 
 **`reduce_partials` is architecture-stable at these shapes.** Its three readings match the A2000 rehearsal case for
 case: 270/270 equal to sequential on both, and the same 111 elements from the chain.
