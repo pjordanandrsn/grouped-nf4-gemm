@@ -1749,7 +1749,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
 
 # Status — what this kernel does, what changed, what is open
 
-**As of 2026-09-23, `grouped-nf4-gemm` version 0.33.2.** One page. The README argues; this
+**As of 2026-09-24, `grouped-nf4-gemm` version 0.33.2.** One page. The README argues; this
 page states. Every line here has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
 here that does not.
@@ -1823,6 +1823,27 @@ is **7.37 ms/step ±4.2% (≈130–142 tok/s)** — the class carries 8.5%
 inter-box dispersion while each box repeats itself to 0.16%, so quote
 the range, not a point (`gnf4.serve.decode-anchor-5090`).
 
+**Row-count invariance (sm_120, lane P63).** A token decoded alone and the
+same token inside a 16-, 17- or 160-token call get the same bits from three
+kernels, read on an RTX 5090 at Qwen3-30B-A3B's gate_up on its own
+activations and routing (experts4bit-qlora#708):
+- `gemv_int4_b32`: 1,544 of 1,544 rows bit-equal to their token's own call.
+  Above 64 SMs its split-K plan does not depend on the row count
+  (`gnf4.kernel.int4-gemv-row-invariant.5090.2026-09-24`).
+- the NF4 dot-pad decode GEMV, the default decode route there: 1,544 of 1,544
+  (`gnf4.kernel.nf4-dotpad-gemv-row-invariant.5090.2026-09-24`).
+- `combine_rows`: every row at T = 2 to 160
+  (`gnf4.kernel.combine-rows-row-invariant.5090.2026-09-24`).
+
+Two routes differ only in summation order: the grouped int4 GEMM against the
+GEMV (max row rel L2 4.4e-4) and the scalar NF4 GEMV under
+`GNF4_GEMV_DOTPAD=0`, whose split-K is planned from the rows (2.4e-4)
+(`gnf4.kernel.int4-grouped-gemm-reorder.5090.2026-09-24`,
+`gnf4.kernel.nf4-scalar-gemv-splitk-reorder.5090.2026-09-24`). Every path was
+inside its own operand model's fp64 bound. `kernel/test_row_invariance_gpu.py`
+asserts the three invariant kernels with `torch.equal` on any CUDA part (all
+measured; one box, one shape).
+
 `fp8_paged_decode_attention` takes sliding windows, attention sinks, a
 custom attention scale and per-layer stride overrides (0.24.0), which is
 what lets one engine serve Granite, Gemma-4 and gpt-oss geometries. 35
@@ -1876,7 +1897,11 @@ MXFP4 decode reproduces Kimi K3's own declared reference exactly
   `gnf4.kernel.combine-rows-accuracy.5090.2026-09-23` and
   `gnf4.kernel.reduce-partials-slot-order.5090.2026-09-23`, measured.) The
   docstrings and the two tests now state and assert that contract. No kernel
-  changed. The end-to-end effect is experts4bit-qlora#708's to size.
+  changed. **Sized end to end 2026-09-24** (experts4bit-qlora#708, lane P63,
+  Qwen3-30B-A3B, T = 1 decode, `E4B_FUSE_COMBINE=0` against the default): on
+  the NF4 stack KL 1.18e-04 nats/token and no argmax flips in 160 positions; on
+  the int4 stack KL 1.70e-02 and 7 flips (4.4 %), between the lane's
+  registered bands.
 - **#386 is closed: every carrier of the int64 expert-base promotion is now
   observed past its own boundary.** The gathers (`host_gather`,
   `mxfp4_pipelined`, `mxfp4_residency`) are int64-word-addressed, and the
@@ -2588,6 +2613,11 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19 [measured]: K16 (pre-registered 2026-09-18): the small-M int4-b32 GEMM int4_smallm.gemm_int4_b32_smallm (in-register int4 dequantisation, per-32-block scaling inside the tile, bf16 tensor-core MMA over K chunks of 128-256, split-K with the reduction fused into the launch) at M=16 on Qwen3-30B-A3B's attention projections on the RTX 5090: q_proj 6.35 us (this package's bf16 dequant path 10.37, K14's grouped GEMM 12.56), k_proj 4.37 (6.23), v_proj 4.49 (6.29), o_proj 6.39 (18.61, K14 20.73); launch floor 4.61 us. P1 (within 1.4x of Marlin g128, <= 8.9 / 11.6 us) HOLDS at 1.00x / 0.77x of K15's Marlin rows; P2 (beats the bf16 path on q/o) HOLDS; P3 (k/v within 1.2x of bf16) HOLDS; P4 (single-scale control) NOT TESTED -- the bench carried no control arm; P5 (>= 0.4 ms/step at B=16 once routed) HOLDS in the consumer (experts4bit-qlora lane k16-p5, bench/k16/RESULTS-k16-p5.md, 2026-09-19): the bf16 GEMM family carrying the attention projections falls 2.35 ms/step and this kernel costs 1.30 in its place, the timed B=16 step 12.25 -> 11.19 ms (-1.06, -8.6%); the consumer's route defaults to auto from 0.36.2.
 - gnf4.kernel.k17-fused-splitk-gemv.5090.2026-09-21 [measured]: K17 (pre-registered 2026-09-21, #372): the int4-b32 GEMV gemv_int4_b32 can fold its split-K reduce into its own launch (FUSED_REDUCE epilogue: fp32 partials, acq_rel atomic counter per (row, column block), last arriver sums in split order and casts once; opt-in via fused_reduce=True / GNF4_GEMV_FUSED_REDUCE=1). On the RTX 5090, six Qwen3-30B-A3B shapes x R in {1,8,16,128}: P1 bitwise identity HOLDS 24/24 (interpreter 197/197, compiled 27/27, counter re-arms to zero after 800+ graph replays); P2 (R=1 saving 3-6 us per call on every shape) REFUTED -- expert_gate_up +2.04 us, attn_kv +0.87, the other four <= 0.02 us (two-launch and fused both 6.20 us): the removed _reduce_partials launch was overlapped in the graph, not on the critical path; P3 (R=128 expert shapes within -0.10x..+0.15x) HOLDS at the slow end, fused/two-launch 1.094 (gate_up) and 1.061 (down); unregistered but in the rows, every attention shape is 6-12 % slower fused at R=128 and the SK=8 shapes at R=16. Timings sit on a ~2.05 us grid (instrument note in the results). Decision rule: P1 and not P2 -> ships opt-in, default off at every R; the consumer's step-level read (P4) is lane P57 in experts4bit-qlora.
 - gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22 [measured]: K18 (pre-registered 2026-09-22, #377): gemv_int4_b32_grouped, the int4-b32 split-K GEMV with each program serving up to 4 rows of one expert (the expert's weight slice loaded once per program, rows computed with the served arithmetic, partials at their original index). On the RTX 5090, replaying experts4bit-qlora P60's recorded Qwen3-30B-A3B B=16 routing (128 steps x 48 layers, gate_up + down, one CUDA graph per step): P1 bitwise identity HOLDS (0 of 256 step x projection checks differ; 12/12 small-R rows equal; interpreter 21 + 190, compiled 28/28 on the box); P2 (served - grouped >= 0.5 ms/step) REFUTED -- grouped 9.689 ms/step against served 6.520 (1.49x, 3.17 ms slower; dedup 5.564 reproduces P60's 5.560); P3 (within +3 % at R = 8/16 on the six K17 shapes) REFUTED -- 1.00-1.65x, worst at R=8 where every row is a distinct expert and nothing can be shared, so the loss is overhead the kernel adds. Decision rule: P1 and not P2 -> exact-and-not-faster, not shipped as a lever; the entrypoint stays dormant as the evidence. It also withdraws P60's reading of its 0.92 ms dedup gap as weight re-streaming: sharing the loads while keeping every row's arithmetic did not recover it, and P60's sorted arm had already shown locality is not the constraint.
+- gnf4.kernel.int4-gemv-row-invariant.5090.2026-09-24 [measured]: gemv_int4_b32 is row-count invariant on an RTX 5090: every row of one call over 16, 17 or 160 tokens' routed rows (128, 136, 1,280 rows) is bit-equal to that token's own 8-row call, at Qwen3-30B-A3B's gate_up shape on its own activations and routing -- because above SPLITK_R_TERM_MAX_SMS (64) the split-K plan is N-only, so every row count gets the same split count and the same reduce order.
+- gnf4.kernel.nf4-dotpad-gemv-row-invariant.5090.2026-09-24 [measured]: The NF4 dot-pad decode GEMV -- the default decode route at its census shapes on >= 160-SM parts -- is row-count invariant on an RTX 5090: every row of one call over 16, 17 or 160 tokens' routed rows (128, 136, 1,280 rows) is bit-equal to that token's own 8-row call, at Qwen3-30B-A3B's gate_up shape on its own activations and routing (one program per row, no split-K unless GNF4_GEMV_SPLITK is set).
+- gnf4.kernel.combine-rows-row-invariant.5090.2026-09-24 [measured]: int4_b32.combine_rows is row-count invariant on an RTX 5090: token t's combined row from one call over T tokens is bit-equal to its row from a one-token call at T = 2, 16, 17, 64 and 160, at Qwen3's (top_k 8, hidden 2048), within the fp32-summation bound everywhere (max ratio 0.9954) -- one program per token, slot order, a block size that does not depend on T.
+- gnf4.kernel.int4-grouped-gemm-reorder.5090.2026-09-24 [measured]: gemm_int4_b32_grouped_captured computes the same function as gemv_int4_b32 in a different summation order on an RTX 5090: against the GEMV's T = 1 rows, 119/128, 127/136 and 1,122/1,280 rows are bit-equal at 16, 17 and 160 tokens (max row rel L2 4.4e-4, 1 bf16 ULP), with the same int8 activations, int4 weights and exact int32 block dots, and both inside their own model's fp64 bound (ratio <= 0.172).
+- gnf4.kernel.nf4-scalar-gemv-splitk-reorder.5090.2026-09-24 [measured]: The scalar NF4 decode GEMV (GNF4_GEMV_DOTPAD=0) is reorder-class across row counts on an RTX 5090: its split-K count is planned from the rows, so against its own T = 1 rows 116/128, 124/136 and 1,123/1,280 rows are bit-equal at 16, 17 and 160 tokens (max row rel L2 2.4e-4, 1 bf16 ULP), inside its fp64 bound everywhere (ratio <= 0.896).
 
 Open items (no evidence either way):
 
@@ -2598,4 +2628,4 @@ Projections (arithmetic, not runs):
 
 - gnf4.projection.multiarch [projected]: PROJECTED (stamped pre-silicon): the pure-waterfall gen5 row is falsified; the revised gen4 band 2.4-3.0 tok/s is confirmed (L40S 2.60-2.61); the revised gen5 band 4.0-5.0 missed narrowly (H100 PCIe 3.924); unified-memory rows are ceilings only (17-22 tok/s on 128 GB boxes). NF4-vs-bf16 is a 3.56x byte reduction, not 4x.
 
-(34 active claims listed, 2 open, 1 projected; retired and superseded claims are omitted on purpose.)
+(39 active claims listed, 2 open, 1 projected; retired and superseded claims are omitted on purpose.)

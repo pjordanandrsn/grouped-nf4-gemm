@@ -1,0 +1,27 @@
+[2026-09-24T13:14:17Z] lock taken
+NVIDIA RTX A2000 12GB, 575.64.05, 12282 MiB
+2.8.0+cu128 3.4.0 26 SMs
+51798e077af0d6b30d709f868079a3f3d7e8c8d83d1f4e0b867c6106323ab1ba  test_row_invariance_gpu.py
+7a9a0066eb27f605f3af8727bf067e210db5b5e23f3a80f93a6689229cef6fcd  int4_b32.py
+debb90a084b39dabf69bd7fa435537541e17dedc2e3a12df2f0dc384949a6cd9  nf4_grouped.py
+c50c26b3895e0c4ec0bfe8b5763dff4d783f32ec408258e98a8a42c390448406  int4_pack_ref.py
+4510f2c94436bd258ec9c4f8cb2b341fd3ca5aed3219e5252154140f03826925  nf4_pack_ref.py
+test_row_invariance_gpu.py::test_int4_gemv_rows_are_their_own_single_token_call[16-1536-2048] PASSED [  5%]
+test_row_invariance_gpu.py::test_int4_gemv_rows_are_their_own_single_token_call[16-2048-768] PASSED [ 11%]
+test_row_invariance_gpu.py::test_int4_gemv_rows_are_their_own_single_token_call[17-1536-2048] PASSED [ 16%]
+test_row_invariance_gpu.py::test_int4_gemv_rows_are_their_own_single_token_call[17-2048-768] PASSED [ 22%]
+test_row_invariance_gpu.py::test_int4_gemv_rows_are_their_own_single_token_call[160-1536-2048] PASSED [ 27%]
+test_row_invariance_gpu.py::test_int4_gemv_rows_are_their_own_single_token_call[160-2048-768] PASSED [ 33%]
+test_row_invariance_gpu.py::test_nf4_dotpad_rows_are_their_own_single_token_call[16-1536-2048] PASSED [ 38%]
+test_row_invariance_gpu.py::test_nf4_dotpad_rows_are_their_own_single_token_call[16-2048-768] PASSED [ 44%]
+test_row_invariance_gpu.py::test_nf4_dotpad_rows_are_their_own_single_token_call[17-1536-2048] PASSED [ 50%]
+test_row_invariance_gpu.py::test_nf4_dotpad_rows_are_their_own_single_token_call[17-2048-768] PASSED [ 55%]
+test_row_invariance_gpu.py::test_nf4_dotpad_rows_are_their_own_single_token_call[160-1536-2048] PASSED [ 61%]
+test_row_invariance_gpu.py::test_nf4_dotpad_rows_are_their_own_single_token_call[160-2048-768] PASSED [ 66%]
+test_row_invariance_gpu.py::test_the_check_sees_a_split_k_change PASSED  [ 72%]
+test_row_invariance_gpu.py::test_combine_rows_rows_are_their_own_single_token_call[8-2048] PASSED [ 77%]
+test_row_invariance_gpu.py::test_combine_rows_rows_are_their_own_single_token_call[8-1536] PASSED [ 83%]
+test_row_invariance_gpu.py::test_combine_rows_rows_are_their_own_single_token_call[2-4096] PASSED [ 88%]
+test_row_invariance_gpu.py::test_combine_rows_rows_are_their_own_single_token_call[4-2880] PASSED [ 94%]
+test_row_invariance_gpu.py::test_combine_rows_rows_are_their_own_single_token_call[8-2816] PASSED [100%]
+[2026-09-24T13:15:05Z] container rc=0

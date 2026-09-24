@@ -1,6 +1,6 @@
 {
  "package": "grouped-nf4-gemm",
- "generated": "2026-09-23",
+ "generated": "2026-09-24",
  "schema": "docs/claims-schema.md",
  "status_vocabulary": {
   "confirmed": "pre-registered, OpenTimestamps-stamped blind confirmatory run; protocol and pass/fail fixed before data",
@@ -224,13 +224,17 @@
     {
      "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/393"
     },
-    "kernel/receipts-b393/5090-fma-attribution/README.md"
+    "kernel/receipts-b393/5090-fma-attribution/README.md",
+    {
+     "repository": "experts4bit-qlora",
+     "path": "bench/p63/P63-PREREG.md"
+    }
    ],
    "quoted_in": [
     "docs/STATUS.md",
     "CHANGELOG.md"
    ],
-   "notes": "Pre-registered in #396 (outcome B of A/B/C: not bit-equal, fused_bound_ratio <= 1 everywhere). Readings: vs the chain 49/144 cases bit-equal, max 53 bf16 ULP; vs the separately-rounded slot-order sum 58/144, max 44; the chain vs that sum 80/144, max 64 -- ULPs are unbounded near cancellation, so they are reported, not decided on. The torch chain meets the same bound at the same max ratio: the fused kernel is exactly as accurate as what it replaced. Attribution, a follow-up diagnostic on an RTX A2000 (sm_86), not this row's reading: the kernel equals the slot-order sum with a fused multiply-add bit-for-bit in 144/144 cases and its PTX accumulates with fma.rn.f32 only. Corrected 2026-09-24: this row first said neither the kernel nor torch's chain is bitwise-stable across GPUs, inferred from per-case count differences between two census runs. Output hashes refute it: the fused output, torch's chain and the sequential sum are bit-identical on sm_86 and sm_120 in 144/144 cases, and the kernel equals the FMA slot-order sum on sm_120 too (kernel/receipts-b393/5090-fma-attribution/). The lane box's own census disagreeing with both hash-checked runs in 37 cases is unexplained; the accuracy bound held on every box. End-to-end size is experts4bit-qlora#708's (E4B_FUSE_COMBINE=0 control). Run b393-5090-1, $0.0299, teardown proven (kernel/receipts-b393/5090/teardown-proof.json)."
+   "notes": "Pre-registered in #396 (outcome B of A/B/C: not bit-equal, fused_bound_ratio <= 1 everywhere). Readings: vs the chain 49/144 cases bit-equal, max 53 bf16 ULP; vs the separately-rounded slot-order sum 58/144, max 44; the chain vs that sum 80/144, max 64 -- ULPs are unbounded near cancellation, so they are reported, not decided on. The torch chain meets the same bound at the same max ratio: the fused kernel is exactly as accurate as what it replaced. Attribution, a follow-up diagnostic on an RTX A2000 (sm_86), not this row's reading: the kernel equals the slot-order sum with a fused multiply-add bit-for-bit in 144/144 cases and its PTX accumulates with fma.rn.f32 only. Corrected 2026-09-24: this row first said neither the kernel nor torch's chain is bitwise-stable across GPUs, inferred from per-case count differences between two census runs. Output hashes refute it: the fused output, torch's chain and the sequential sum are bit-identical on sm_86 and sm_120 in 144/144 cases, and the kernel equals the FMA slot-order sum on sm_120 too (kernel/receipts-b393/5090-fma-attribution/). The lane box's own census disagreeing with both hash-checked runs in 37 cases is unexplained; the accuracy bound held on every box. End-to-end size (experts4bit-qlora#708, lane P63's P5, 2026-09-24, RTX 5090, Qwen3-30B-A3B, T = 1 decode, E4B_FUSE_COMBINE=0 against the default): NF4 stack KL mean 1.18e-04 nats/token (max 2.02e-03), 0 argmax flips in 160, first difference at layer 40 -- held (<= 0.01 and <= 3 %); int4 stack KL mean 1.70e-02 (max 0.220), 7 flips in 160 (4.4 %), first difference at layer 0 -- between the registered bands (neither held nor refuted, refuted only above 0.03). Run b393-5090-1, $0.0299, teardown proven (kernel/receipts-b393/5090/teardown-proof.json)."
   },
   {
    "id": "gnf4.kernel.reduce-partials-slot-order.5090.2026-09-23",
@@ -741,6 +745,172 @@
     "CHANGELOG.md#0330--2026-09-23--two-opt-in-int4-b32-gemv-variants-both-exact-and-neither-a-default-k17-fused_reducetrue-k18-gemv_int4_b32_grouped-319-was-a-mislabelled-test-arm-not-an-f32-kernel-defect-87s-int64-expert-offset-promotion-is-now-guarded-by-a-cpu-test-ci-runs"
    ],
    "notes": "A negative-result row on purpose, like K17's: the kernel is exact and stays dormant, and the hypothesis it was built on did not survive the card. Lane k18-5090-1 cost $0.1269 (estimate $0.66); receipts in adertha-receipts 542a4ce. Mechanism not profiled: the rows establish that the loss exists with zero sharing (R=8), and the design runs the same per-row arithmetic on about one program per distinct expert at R=128; which of the added costs dominates was not measured."
+  },
+  {
+   "id": "gnf4.kernel.int4-gemv-row-invariant.5090.2026-09-24",
+   "area": "kernel",
+   "claim": "gemv_int4_b32 is row-count invariant on an RTX 5090: every row of one call over 16, 17 or 160 tokens' routed rows (128, 136, 1,280 rows) is bit-equal to that token's own 8-row call, at Qwen3-30B-A3B's gate_up shape on its own activations and routing -- because above SPLITK_R_TERM_MAX_SMS (64) the split-K plan is N-only, so every row count gets the same split count and the same reduce order.",
+   "value": 1544,
+   "unit": "rows bit-equal to their token's T = 1 call, of 1,544 (128 + 136 + 1,280)",
+   "status": "measured",
+   "hardware": "RTX 5090 (sm_120, 170 SMs, 475 W power limit, driver 595.71.05), torch 2.8.0+cu128 / triton 3.4.0, rented host (Vast)",
+   "conditions": "grouped-nf4-gemm 0.33.2 installed at f88df1e (experts4bit-qlora 0.37.3 at 75c83bd); Qwen/Qwen3-30B-A3B layer-0 gate_up (N 1536, K 2048), the model's own layer-0 activations and top-8 routing over a 160-token fixture; each path at T = 1 per token (8 rows) against one call over T in {16, 17, 160} tokens (128, 136, 1,280 rows); every row compared bit for bit with the token's own T = 1 call, and every path scored against the exact fp64 product of its logical operands; the two-launch split-K reduce (GNF4_GEMV_FUSED_REDUCE unset)",
+   "measured_on": "2026-09-24",
+   "evidence": [
+    "kernel/receipts-p63/README.md",
+    "kernel/receipts-p63/5090/kernel_census.json",
+    "kernel/receipts-p63/5090/versions.txt",
+    {
+     "repository": "experts4bit-qlora",
+     "path": "bench/p63/P63-PREREG.md"
+    },
+    {
+     "repository": "experts4bit-qlora",
+     "path": "bench/p63/p63_probe.py"
+    },
+    {
+     "url": "https://github.com/pjordanandrsn/experts4bit-qlora/issues/708"
+    },
+    "kernel/test_row_invariance_gpu.py",
+    "kernel/receipts-p63/a2000-tests/pytest.txt"
+   ],
+   "quoted_in": [
+    "docs/STATUS.md",
+    "CHANGELOG.md"
+   ],
+   "notes": "Bound ratio against fp64 0.092 at T = 1, <= 0.172 at T = 160. This is the kernel under experts4bit-qlora's FORCE_SINGLETON_GROUPS route and its DEVICE_GROUPING decode GEMV (<= 256 routed rows), both of which the lane's module replay read exact in 48/48 layers. On a part with <= 64 SMs the plan's row term can change the split count with the rows; that is not claimed (the lane's NAS A2000 rehearsal read it exact at OLMoE's gate_up only because each split owned one KU iteration). kernel/test_row_invariance_gpu.py asserts the > 64-SM plan with torch.equal on any CUDA part; 18/18 on an RTX A2000 (kernel/receipts-p63/a2000-tests/). Lane P63 (experts4bit-qlora#708), pre-registered before the run; run p63-5090-1, $0.2881, teardown proven (kernel/receipts-p63/5090/teardown-proof.json), after the proving rental p63-prove-1 at the same commit. One box, one shape, one family."
+  },
+  {
+   "id": "gnf4.kernel.nf4-dotpad-gemv-row-invariant.5090.2026-09-24",
+   "area": "kernel",
+   "claim": "The NF4 dot-pad decode GEMV -- the default decode route at its census shapes on >= 160-SM parts -- is row-count invariant on an RTX 5090: every row of one call over 16, 17 or 160 tokens' routed rows (128, 136, 1,280 rows) is bit-equal to that token's own 8-row call, at Qwen3-30B-A3B's gate_up shape on its own activations and routing (one program per row, no split-K unless GNF4_GEMV_SPLITK is set).",
+   "value": 1544,
+   "unit": "rows bit-equal to their token's T = 1 call, of 1,544 (128 + 136 + 1,280)",
+   "status": "measured",
+   "hardware": "RTX 5090 (sm_120, 170 SMs, 475 W power limit, driver 595.71.05), torch 2.8.0+cu128 / triton 3.4.0, rented host (Vast)",
+   "conditions": "grouped-nf4-gemm 0.33.2 installed at f88df1e (experts4bit-qlora 0.37.3 at 75c83bd); Qwen/Qwen3-30B-A3B layer-0 gate_up (N 1536, K 2048), the model's own layer-0 activations and top-8 routing over a 160-token fixture; each path at T = 1 per token (8 rows) against one call over T in {16, 17, 160} tokens (128, 136, 1,280 rows); every row compared bit for bit with the token's own T = 1 call, and every path scored against the exact fp64 product of its logical operands; dispatch read off nf4_grouped.dispatch_counts() (dot-pad engaged); GNF4_GEMV_SPLITK unset",
+   "measured_on": "2026-09-24",
+   "evidence": [
+    "kernel/receipts-p63/README.md",
+    "kernel/receipts-p63/5090/kernel_census.json",
+    "kernel/receipts-p63/5090/versions.txt",
+    {
+     "repository": "experts4bit-qlora",
+     "path": "bench/p63/P63-PREREG.md"
+    },
+    {
+     "repository": "experts4bit-qlora",
+     "path": "bench/p63/p63_probe.py"
+    },
+    {
+     "url": "https://github.com/pjordanandrsn/experts4bit-qlora/issues/708"
+    },
+    "kernel/test_row_invariance_gpu.py",
+    "kernel/receipts-p63/a2000-tests/pytest.txt"
+   ],
+   "quoted_in": [
+    "docs/STATUS.md",
+    "CHANGELOG.md"
+   ],
+   "notes": "Bound ratio against fp64 0.177 at T = 1, <= 0.405 at T = 160. This is the kernel under experts4bit-qlora's FORCE_SINGLETON_GROUPS route on the NF4 stack, which the lane's module replay read exact in 48/48 layers. The M-tile that the default grouped route takes at T > 1 is a different function (TF32 vs bf16-rounded weights: 0 rows equal, max rel L2 2.7e-3) and the scalar decode GEMV under GNF4_GEMV_DOTPAD=0 plans split-K from its rows (gnf4.kernel.nf4-scalar-gemv-splitk-reorder.5090.2026-09-24). kernel/test_row_invariance_gpu.py forces the dot-pad dispatch and asserts torch.equal on any CUDA part. Lane P63 (experts4bit-qlora#708), pre-registered before the run; run p63-5090-1, $0.2881, teardown proven (kernel/receipts-p63/5090/teardown-proof.json), after the proving rental p63-prove-1 at the same commit. One box, one shape, one family."
+  },
+  {
+   "id": "gnf4.kernel.combine-rows-row-invariant.5090.2026-09-24",
+   "area": "kernel",
+   "claim": "int4_b32.combine_rows is row-count invariant on an RTX 5090: token t's combined row from one call over T tokens is bit-equal to its row from a one-token call at T = 2, 16, 17, 64 and 160, at Qwen3's (top_k 8, hidden 2048), within the fp32-summation bound everywhere (max ratio 0.9954) -- one program per token, slot order, a block size that does not depend on T.",
+   "value": 5,
+   "unit": "row counts T > 1 at which every row is bit-equal to its T = 1 call (of 5)",
+   "status": "measured",
+   "hardware": "RTX 5090 (sm_120, 170 SMs, 475 W power limit, driver 595.71.05), torch 2.8.0+cu128 / triton 3.4.0, rented host (Vast)",
+   "conditions": "grouped-nf4-gemm 0.33.2 installed at f88df1e; random bf16 expert outputs and fp32 softmax routing weights (seed 0) at (top_k 8, hidden 2048), T in {1, 2, 16, 17, 64, 160}; the same census in each of the lane's three stacks",
+   "measured_on": "2026-09-24",
+   "evidence": [
+    "kernel/receipts-p63/README.md",
+    "kernel/receipts-p63/5090/kernel_census.json",
+    "kernel/receipts-p63/5090/versions.txt",
+    {
+     "repository": "experts4bit-qlora",
+     "path": "bench/p63/P63-PREREG.md"
+    },
+    {
+     "repository": "experts4bit-qlora",
+     "path": "bench/p63/p63_probe.py"
+    },
+    {
+     "url": "https://github.com/pjordanandrsn/experts4bit-qlora/issues/708"
+    },
+    "kernel/test_row_invariance_gpu.py",
+    "kernel/receipts-p63/a2000-tests/pytest.txt"
+   ],
+   "quoted_in": [
+    "docs/STATUS.md",
+    "CHANGELOG.md"
+   ],
+   "notes": "Beside it, as B393 read (gnf4.kernel.combine-rows-accuracy.5090.2026-09-23): the kernel is bit-equal to torch's chain on these rows at T <= 17 and not at 64 or 160. Row-count invariance is a separate property from bit-equality with the chain. kernel/test_row_invariance_gpu.py asserts it with torch.equal at five (top_k, hidden) pairs, B393's families. Lane P63 (experts4bit-qlora#708), pre-registered before the run; run p63-5090-1, $0.2881, teardown proven (kernel/receipts-p63/5090/teardown-proof.json), after the proving rental p63-prove-1 at the same commit. One box, one shape, one family."
+  },
+  {
+   "id": "gnf4.kernel.int4-grouped-gemm-reorder.5090.2026-09-24",
+   "area": "kernel",
+   "claim": "gemm_int4_b32_grouped_captured computes the same function as gemv_int4_b32 in a different summation order on an RTX 5090: against the GEMV's T = 1 rows, 119/128, 127/136 and 1,122/1,280 rows are bit-equal at 16, 17 and 160 tokens (max row rel L2 4.4e-4, 1 bf16 ULP), with the same int8 activations, int4 weights and exact int32 block dots, and both inside their own model's fp64 bound (ratio <= 0.172).",
+   "value": 0.000442,
+   "unit": "max row relative L2 vs the int4 GEMV's T = 1 rows (reorder class)",
+   "status": "measured",
+   "hardware": "RTX 5090 (sm_120, 170 SMs, 475 W power limit, driver 595.71.05), torch 2.8.0+cu128 / triton 3.4.0, rented host (Vast)",
+   "conditions": "grouped-nf4-gemm 0.33.2 installed at f88df1e (experts4bit-qlora 0.37.3 at 75c83bd); Qwen/Qwen3-30B-A3B layer-0 gate_up (N 1536, K 2048), the model's own layer-0 activations and top-8 routing over a 160-token fixture; each path at T = 1 per token (8 rows) against one call over T in {16, 17, 160} tokens (128, 136, 1,280 rows); every row compared bit for bit with the token's own T = 1 call, and every path scored against the exact fp64 product of its logical operands; expert-major tiles from build_group_tiles_device (block_m 16)",
+   "measured_on": "2026-09-24",
+   "evidence": [
+    "kernel/receipts-p63/README.md",
+    "kernel/receipts-p63/5090/kernel_census.json",
+    "kernel/receipts-p63/5090/versions.txt",
+    {
+     "repository": "experts4bit-qlora",
+     "path": "bench/p63/P63-PREREG.md"
+    },
+    {
+     "repository": "experts4bit-qlora",
+     "path": "bench/p63/p63_probe.py"
+    },
+    {
+     "url": "https://github.com/pjordanandrsn/experts4bit-qlora/issues/708"
+    }
+   ],
+   "quoted_in": [
+    "docs/STATUS.md",
+    "CHANGELOG.md"
+   ],
+   "notes": "Reorder class: nothing may claim bit-identity through it; its quality licence stands. It is the route experts4bit-qlora's DEVICE_GROUPING takes above 256 routed rows (here, the 160-token prefill). Lane P63 (experts4bit-qlora#708), pre-registered before the run; run p63-5090-1, $0.2881, teardown proven (kernel/receipts-p63/5090/teardown-proof.json), after the proving rental p63-prove-1 at the same commit. One box, one shape, one family."
+  },
+  {
+   "id": "gnf4.kernel.nf4-scalar-gemv-splitk-reorder.5090.2026-09-24",
+   "area": "kernel",
+   "claim": "The scalar NF4 decode GEMV (GNF4_GEMV_DOTPAD=0) is reorder-class across row counts on an RTX 5090: its split-K count is planned from the rows, so against its own T = 1 rows 116/128, 124/136 and 1,123/1,280 rows are bit-equal at 16, 17 and 160 tokens (max row rel L2 2.4e-4, 1 bf16 ULP), inside its fp64 bound everywhere (ratio <= 0.896).",
+   "value": 0.000239,
+   "unit": "max row relative L2 vs its own T = 1 rows (reorder class)",
+   "status": "measured",
+   "hardware": "RTX 5090 (sm_120, 170 SMs, 475 W power limit, driver 595.71.05), torch 2.8.0+cu128 / triton 3.4.0, rented host (Vast)",
+   "conditions": "grouped-nf4-gemm 0.33.2 installed at f88df1e (experts4bit-qlora 0.37.3 at 75c83bd); Qwen/Qwen3-30B-A3B layer-0 gate_up (N 1536, K 2048), the model's own layer-0 activations and top-8 routing over a 160-token fixture; each path at T = 1 per token (8 rows) against one call over T in {16, 17, 160} tokens (128, 136, 1,280 rows); every row compared bit for bit with the token's own T = 1 call, and every path scored against the exact fp64 product of its logical operands; GNF4_GEMV_DOTPAD=0, split-K from _decode_plan (the sm >= 160 K1 winners at T = 8)",
+   "measured_on": "2026-09-24",
+   "evidence": [
+    "kernel/receipts-p63/README.md",
+    "kernel/receipts-p63/5090/kernel_census.json",
+    "kernel/receipts-p63/5090/versions.txt",
+    {
+     "repository": "experts4bit-qlora",
+     "path": "bench/p63/P63-PREREG.md"
+    },
+    {
+     "repository": "experts4bit-qlora",
+     "path": "bench/p63/p63_probe.py"
+    },
+    {
+     "url": "https://github.com/pjordanandrsn/experts4bit-qlora/issues/708"
+    }
+   ],
+   "quoted_in": [
+    "docs/STATUS.md",
+    "CHANGELOG.md"
+   ],
+   "notes": "Not the default route on this part (dot-pad is: gnf4.kernel.nf4-dotpad-gemv-row-invariant.5090.2026-09-24). On parts where the scalar path IS the default, whether it is row-invariant depends on its plan at the shape; the lane's A2000 rehearsal read it exact at OLMoE's gate_up, which is not claimed. Lane P63 (experts4bit-qlora#708), pre-registered before the run; run p63-5090-1, $0.2881, teardown proven (kernel/receipts-p63/5090/teardown-proof.json), after the proving rental p63-prove-1 at the same commit. One box, one shape, one family."
   }
  ]
 }
