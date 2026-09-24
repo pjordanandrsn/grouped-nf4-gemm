@@ -15,7 +15,9 @@ Result (`fma_attribution.json`):
 - 144/144 GPU-sequential equal to CPU-sequential;
 - the PTX accumulates with `fma.rn.f32` only, in all three compiled variants (k = 2, 4, 8).
 
-**What it does not show.** It does not show what the RTX 5090's kernel computes. Against the same deterministic
+**Corrected 2026-09-24.** The paragraph below was superseded when the same script ran on an RTX 5090. On that box every output hash equals this A2000's, in 144/144 cases (see [`../5090-fma-attribution/`](../5090-fma-attribution/)). The paragraph is kept as the record of what was first inferred.
+
+**What it does not show (superseded).** It does not show what the RTX 5090's kernel computes. Against the same deterministic
 sequential reference, the 5090's per-case difference counts differ from sm_86's in at least 35 of 144 cases. So the
 fma identity is exact on sm_86 and not bit-identical on sm_120. Running this same script on a 5090 box would record
 the hashes and PTX needed to say what differs.

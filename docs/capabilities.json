@@ -490,7 +490,7 @@
    "limitations": [
     "The composition timing and the paired perplexity deltas are measured-private (claim gnf4.serve.decode-glue-kernels): real runs through the consumer on the RTX 5090 whose receipts live in a private audit tree; what is checkable here is each kernel's parity test",
     "int4_b32 imports triton at module level and is not importable without it",
-    "combine_rows and reduce_partials carry an accuracy contract, not a bitwise one: each is within the error bound of a correct fp32 summation in every census case on an RTX 5090, and neither is bitwise the torch chain it replaced (lane B393; gnf4.kernel.combine-rows-accuracy.5090.2026-09-23, gnf4.kernel.reduce-partials-slot-order.5090.2026-09-23); neither their bits nor torch's chain are the same across GPU architectures"
+    "combine_rows and reduce_partials carry an accuracy contract, not a bitwise one: each is within the error bound of a correct fp32 summation in every census case on an RTX 5090, and neither is bitwise the torch chain it replaced (lane B393; gnf4.kernel.combine-rows-accuracy.5090.2026-09-23, gnf4.kernel.reduce-partials-slot-order.5090.2026-09-23); the kernel's output and torch's chain were each bit-identical on sm_86 and sm_120 at the census cases (corrected 2026-09-24)"
    ],
    "status": "measured-private"
   },

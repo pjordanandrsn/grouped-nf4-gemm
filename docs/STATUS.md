@@ -116,9 +116,12 @@ MXFP4 decode reproduces Kimi K3's own declared reference exactly
   accurate as what it replaced.
   - `reduce_partials` is bitwise the slot-order sum.
   - `combine_rows` is the slot-order sum with a fused multiply-add, exactly so
-    on sm_86. That is a follow-up diagnostic, not the reading.
-  - Neither the kernel's bits nor torch's chain are the same across GPU
-    architectures. The accuracy bound holds on both.
+    on sm_86 and on sm_120. That is a follow-up diagnostic, not the reading.
+  - **Corrected 2026-09-24:** the first read said neither the kernel's bits nor
+    torch's chain are the same across architectures. That was an inference from
+    counts, and output hashes refute it: all four outputs are bit-identical on
+    sm_86 and sm_120 in 144/144 cases. One box's census disagreeing with two
+    others stays unexplained.
 
   ([`RESULTS-b393-combine-reduce-bitwise.md`](../kernel/RESULTS-b393-combine-reduce-bitwise.md);
   `gnf4.kernel.combine-rows-accuracy.5090.2026-09-23` and

@@ -1589,7 +1589,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
    "limitations": [
     "The composition timing and the paired perplexity deltas are measured-private (claim gnf4.serve.decode-glue-kernels): real runs through the consumer on the RTX 5090 whose receipts live in a private audit tree; what is checkable here is each kernel's parity test",
     "int4_b32 imports triton at module level and is not importable without it",
-    "combine_rows and reduce_partials carry an accuracy contract, not a bitwise one: each is within the error bound of a correct fp32 summation in every census case on an RTX 5090, and neither is bitwise the torch chain it replaced (lane B393; gnf4.kernel.combine-rows-accuracy.5090.2026-09-23, gnf4.kernel.reduce-partials-slot-order.5090.2026-09-23); neither their bits nor torch's chain are the same across GPU architectures"
+    "combine_rows and reduce_partials carry an accuracy contract, not a bitwise one: each is within the error bound of a correct fp32 summation in every census case on an RTX 5090, and neither is bitwise the torch chain it replaced (lane B393; gnf4.kernel.combine-rows-accuracy.5090.2026-09-23, gnf4.kernel.reduce-partials-slot-order.5090.2026-09-23); the kernel's output and torch's chain were each bit-identical on sm_86 and sm_120 at the census cases (corrected 2026-09-24)"
    ],
    "status": "measured-private"
   },
@@ -1865,9 +1865,12 @@ MXFP4 decode reproduces Kimi K3's own declared reference exactly
   accurate as what it replaced.
   - `reduce_partials` is bitwise the slot-order sum.
   - `combine_rows` is the slot-order sum with a fused multiply-add, exactly so
-    on sm_86. That is a follow-up diagnostic, not the reading.
-  - Neither the kernel's bits nor torch's chain are the same across GPU
-    architectures. The accuracy bound holds on both.
+    on sm_86 and on sm_120. That is a follow-up diagnostic, not the reading.
+  - **Corrected 2026-09-24:** the first read said neither the kernel's bits nor
+    torch's chain are the same across architectures. That was an inference from
+    counts, and output hashes refute it: all four outputs are bit-identical on
+    sm_86 and sm_120 in 144/144 cases. One box's census disagreeing with two
+    others stays unexplained.
 
   ([`RESULTS-b393-combine-reduce-bitwise.md`](../kernel/RESULTS-b393-combine-reduce-bitwise.md);
   `gnf4.kernel.combine-rows-accuracy.5090.2026-09-23` and

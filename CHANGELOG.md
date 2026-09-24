@@ -2,6 +2,17 @@
 
 ## Unreleased — #386: the gathers and the fp8 KV appenders are observed past their own 2^31 boundary, on CPU, in CI; the shared capabilities check reads the serving position from STATUS's position section (tests and repository tooling; nothing in the wheel changes)
 
+- **Correction (2026-09-24): lane B393's cross-architecture statement is retracted.** The read said neither
+  `combine_rows`' bits nor torch's own chain are the same on sm_86 and sm_120. That was inferred from per-case
+  count differences between the lane's census and the A2000 rehearsal, not from comparing outputs.
+  - **What refutes it.** The attribution diagnostic, which records a sha256 of every output, ran on a second RTX 5090
+    (experts4bit-qlora P63's box). The fused output, torch's chain and the sequential sum are **bit-identical on the
+    two architectures in 144/144 cases**, and `combine_rows` is the FMA slot-order sum on sm_120 too
+    (`kernel/receipts-b393/5090-fma-attribution/`).
+  - **What is left unexplained.** The lane box's own census disagrees with both hash-checked runs in 37 cases.
+  - **Corrected in** `RESULTS-b393-combine-reduce-bitwise.md`, STATUS, the `combine_rows` docstring, the
+    capabilities limitation and the claim note of `gnf4.kernel.combine-rows-accuracy.5090.2026-09-23`.
+  - **What stands.** Outcome B, the accuracy contract and both claims' values.
 - **Lane B393 read (#393 closed): `combine_rows` and `reduce_partials` carry an accuracy contract, not a bitwise one.**
   The lane was pre-registered in #396 and run on one RTX 5090 for $0.0299, with teardown proven. The census covered
   414 cases at the served shapes, and the result is outcome B for both kernels.
@@ -13,8 +24,9 @@
   - **Attribution.** `reduce_partials` is bitwise the slot-order sum. A follow-up diagnostic on the NAS A2000 (sm_86)
     shows `combine_rows` equal bit-for-bit to the slot-order sum with a fused multiply-add. Its PTX has `fma.rn.f32`
     only (`kernel/receipts-b393/a2000-fma-attribution/`).
-  - **Found while reading it.** Neither the kernel's bits nor torch's own chain are the same across sm_86 and sm_120.
-    The accuracy bound holds on both.
+  - ~~**Found while reading it.** Neither the kernel's bits nor torch's own chain are the same across sm_86 and sm_120.~~
+    **Retracted 2026-09-24** (see the correction entry above): output hashes show both are bit-identical on the two
+    architectures. The accuracy bound holds on both.
   - **Docstrings corrected.** `combine_rows` said "fp32 in slot order, as the torch chain's is". Neither half held.
   - **Tests.** `test_combine_rows_matches_torch` and `test_reduce_partials_matches_torch` replace the whole-tensor
     `max|d| <= max|ref| * 2**-7` with the per-element bound. Under `TRITON_INTERPRET=1` the cast term is one full ULP;

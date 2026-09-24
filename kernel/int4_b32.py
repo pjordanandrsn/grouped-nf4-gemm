@@ -748,14 +748,14 @@ def combine_rows(dn: torch.Tensor, w: torch.Tensor, k: int):
     """``dn [T*k, H]`` (bf16 expert outputs, token-major, k slots per
     token) and ``w [T*k]`` (routing weights) -> ``[T, H]`` bf16, one
     launch. Summation is fp32 in slot order with the multiply-add
-    contracted by the compiler (``fma.rn.f32`` in its sm_86 PTX: one
-    rounding per slot, not two), so it is NOT bitwise the torch chain
+    contracted by the compiler (``fma.rn.f32`` in its sm_86 and sm_120
+    PTX: one rounding per slot, not two), so it is NOT bitwise the torch chain
     ``(dn.float() * w[:, None]).view(T, k, H).sum(1)``, which rounds
     each product and does not sum in slot order. Lane B393 measured the contract that holds: every element is
     within the error of a correct fp32 sum in some order, then the bf16
     cast (kernel/RESULTS-b393-combine-reduce-bitwise.md; 144 of 144
-    census cases on an RTX 5090). Neither this kernel's bits nor the
-    torch chain's are the same across GPU architectures."""
+    census cases on an RTX 5090). Its output was bit-identical on an RTX
+    A2000 (sm_86) and an RTX 5090 (sm_120) at those cases."""
     TK, H = dn.shape
     T = TK // k
     out = torch.empty(T, H, dtype=torch.bfloat16, device=dn.device)
