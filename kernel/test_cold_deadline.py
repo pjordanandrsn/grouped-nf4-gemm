@@ -234,3 +234,18 @@ def test_first_to_finish_is_the_same_rule_as_minimising_the_layer_join():
     # and the degenerate corners search rarely hits
     for a in ((0, 0, 0, 0), (0, 1, 1, 0), (1, 0, 0, 1), (5, 5, 5, 5)):
         assert first(*a) == join(*a), a
+
+
+def test_the_committed_a2000_blob_reads_as_schema_2():
+    """The first /2 blob (bench/cold-engine/calib-a2000-400/, the NAS A2000, gen 3 x8): the single-copy probe is
+    present, from_blob needs no explicit link_eff, and on that link the two rates agree so the factor is 1.0."""
+    import json
+    path = os.path.join(os.path.dirname(__file__), "..", "bench", "cold-engine", "calib-a2000-400", "calib.json")
+    blob = json.load(open(path))
+    assert blob["schema"] == "gnf4-hybrid-calib/2"
+    link = blob["gpu_bench"]["devices"][0]["b_link"]
+    assert link["h2d_64mb_single"]["reps"] == 10 and link["h2d_64mb_single"]["gbs"] > 0
+    c = Costs.from_blob({"gpu_bench": blob["gpu_bench"],
+                         "cpu_bench": {"triad_best": {"gbs": 22.35}}},   # CPU benches were skipped on that run
+                        cpu_us_fixed=55.0, cpu_us_per_row=2.0, bytes_per_expert=3538944)
+    assert c.link_eff == 1.0 and c.b_link_gbs == link["h2d_64mb"]["gbs"]
