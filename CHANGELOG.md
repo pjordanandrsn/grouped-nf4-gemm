@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — #386: the gathers and the fp8 KV appenders are observed past their own 2^31 boundary, on CPU, in CI; the shared capabilities check reads the serving position from STATUS's position section (tests and repository tooling; nothing in the wheel changes)
+## 0.33.3 — 2026-09-24 — register, tests and repository tooling only (every shipped module behaves as in 0.33.2; only `kernel/int4_b32.py`'s two docstrings changed, to state lane B393's measured contract): lane P63's row-count-invariance kernel claims with `kernel/test_row_invariance_gpu.py` in CI; lane B393 read (#393 closed) and its cross-architecture correction (#398); #386's 2^31 boundary cases observed on CPU; the CI scripts shared with experts4bit-qlora are one file each
 
 - **Row-count invariance registered from experts4bit-qlora lane P63 (#708), kernel first.** The lane read, on one
   RTX 5090 at Qwen3-30B-A3B's gate_up on the model's own activations and routing, whether a token's rows get the same
