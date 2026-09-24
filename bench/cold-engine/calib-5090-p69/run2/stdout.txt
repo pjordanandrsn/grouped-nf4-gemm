@@ -1,0 +1,7 @@
+Welcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.
+Have fun!
+[calibrate] running GPU benches...
+
+calibration blob: /root/p69/run2/calib.json
+host: AMD EPYC 7663 56-Core Processor | 224 cpus | quota 30.71999 | flags ['avx2']
+cuda:0 NVIDIA GeForce RTX 5090: triad 1570.2 GB/s | link h2d 20.72 / d2h 26.85 GB/s | h2d single-copy 19.9 GB/s -> link_eff 0.960

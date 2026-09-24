@@ -1,0 +1,21 @@
+{
+ "runs": {
+  "1": {
+   "schema": "gnf4-hybrid-calib/2",
+   "h2d_64mb": 20.58,
+   "h2d_64mb_single": 17.97,
+   "link_eff": 0.8731778425655977
+  },
+  "2": {
+   "schema": "gnf4-hybrid-calib/2",
+   "h2d_64mb": 20.72,
+   "h2d_64mb_single": 19.9,
+   "link_eff": 0.9604247104247104
+  }
+ },
+ "spread": {
+  "h2d_64mb": 0.006756756756756785,
+  "h2d_64mb_single": 0.09698492462311557,
+  "link_eff": 0.09084196492667415
+ }
+}

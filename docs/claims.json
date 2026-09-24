@@ -911,6 +911,40 @@
     "CHANGELOG.md"
    ],
    "notes": "Not the default route on this part (dot-pad is: gnf4.kernel.nf4-dotpad-gemv-row-invariant.5090.2026-09-24). On parts where the scalar path IS the default, whether it is row-invariant depends on its plan at the shape; the lane's A2000 rehearsal read it exact at OLMoE's gate_up, which is not claimed. Lane P63 (experts4bit-qlora#708), pre-registered before the run; run p63-5090-1, $0.2881, teardown proven (kernel/receipts-p63/5090/teardown-proof.json), after the proving rental p63-prove-1 at the same commit. One box, one shape, one family."
+  },
+  {
+   "id": "gnf4.calib.link-efficiency.5090.2026-09-24",
+   "area": "offload",
+   "claim": "Lane P69: bench/calibrate.py (schema gnf4-hybrid-calib/2, #402) run twice on one rented RTX 5090 (PCIe gen 4 x16, host AMD EPYC 7663) reads the pinned 64 MB H2D copy at 20.58 / 20.72 GB/s forty back-to-back and at 17.97 / 19.90 GB/s one synchronized copy at a time, so cold_deadline's link_eff on that host is 0.873 / 0.960 (mean 0.917; the two runs within 10 %); the registered prediction of [0.55, 0.75] -- lane P66's census probe on another gen 4 x16 RTX 5090 (14.72 / 23.07 = 0.638, host AMD EPYC 7C13) -- is REFUTED on this host: link_eff is a per-host measurement, not a constant of the card class, and Costs.from_blob reads it from each box's own blob.",
+   "value": 0.917,
+   "unit": "link_eff = h2d_64mb_single / h2d_64mb, mean of two runs (0.873, 0.960) on one host; P66's other 5090 host 0.638",
+   "status": "measured",
+   "hardware": "RTX 5090 (sm_120, 600 W, driver 580.95.05, PCIe gen 4 x16) on an AMD EPYC 7663 (224 CPUs, 2 NUMA nodes), one rented Vast.ai verified/secure host (instance 52492112)",
+   "conditions": "grouped-nf4-gemm bench/calibrate.py at 54ac2a44 (sha256 2cb420c3...), --skip-cpu (GPU benches only), twice back to back in the pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel image (torch 2.8.0+cu128), nothing installed; h2d_64mb = 40 non-blocking 64 MB pinned copies timed by CUDA events; h2d_64mb_single = 12 copies each synchronized on both sides, host clock, median of the last 10; nvidia-smi read PCIe gen 1 current / gen 4 max at the idle pre-run read",
+   "measured_on": "2026-09-24",
+   "evidence": [
+    "bench/cold-engine/calib-5090-p69/README.md",
+    "bench/cold-engine/calib-5090-p69/run1/calib.json",
+    "bench/cold-engine/calib-5090-p69/run2/calib.json",
+    "bench/cold-engine/calib-5090-p69/read.json",
+    "bench/cold-engine/calib-5090-p69/box.txt",
+    {
+     "repository": "experts4bit-qlora",
+     "path": "bench/p69/P69-PREREG.md"
+    },
+    {
+     "repository": "experts4bit-qlora",
+     "path": "bench/p69/p69_drive.sh"
+    },
+    {
+     "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/400"
+    },
+    "kernel/test_cold_deadline.py"
+   ],
+   "quoted_in": [
+    "CHANGELOG.md"
+   ],
+   "notes": "Pre-registered in experts4bit-qlora #741 (P1 [0.55, 0.75] REFUTED; P2 [20, 30] GB/s HELD; P3 [12, 18] GB/s refuted on run 2; P4 <= 10 % spread HELD at 9.7 %). The decision rule's refuted branch: the two hosts' difference is stated, not explained (idle link state, NUMA placement of the pinned buffer and the DMA engine's behaviour were not measured); a second box is a new draw under its own amendment. The gen 3 x8 control (the NAS A2000, bench/cold-engine/calib-a2000-400/) reads 1.0. Lane cost $0.0146 (one refused pre-rental launch at $0: a dirty receipts worktree), teardown proven."
   }
  ]
 }
