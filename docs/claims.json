@@ -942,6 +942,7 @@
     "kernel/test_cold_deadline.py"
    ],
    "quoted_in": [
+    "docs/STATUS.md",
     "CHANGELOG.md"
    ],
    "notes": "Pre-registered in experts4bit-qlora #741 (P1 [0.55, 0.75] REFUTED; P2 [20, 30] GB/s HELD; P3 [12, 18] GB/s refuted on run 2; P4 <= 10 % spread HELD at 9.7 %). The decision rule's refuted branch: the two hosts' difference is stated, not explained (idle link state, NUMA placement of the pinned buffer and the DMA engine's behaviour were not measured); a second box is a new draw under its own amendment. The gen 3 x8 control (the NAS A2000, bench/cold-engine/calib-a2000-400/) reads 1.0. Lane cost $0.0146 (one refused pre-rental launch at $0: a dirty receipts worktree), teardown proven."

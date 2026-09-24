@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Lane P69 read (experts4bit-qlora #741, for #400): `link_eff` is a per-host measurement, not a 5090-class constant.**
+  `bench/calibrate.py` at #402's commit, run twice on a rented gen 4 x16 RTX 5090 (host EPYC 7663), reads the 64 MB
+  pinned copy at 20.58 / 20.72 GB/s back-to-back and 17.97 / 19.90 GB/s one at a time — `link_eff` **0.873 / 0.960**,
+  against the registered [0.55, 0.75] from lane P66's census probe on another gen 4 x16 host (0.638, EPYC 7C13): P1
+  REFUTED, P2 held, P4 (repeatability) held at 9.7 %. The two hosts' difference is stated, not explained. Receipt
+  `bench/cold-engine/calib-5090-p69/`; claim `gnf4.calib.link-efficiency.5090.2026-09-24`; a test loads the blob.
+  Nothing moves: `Costs.from_blob` already reads each box's own figure, which this read shows is the only correct place
+  for it.
 - **`kernel/cold_deadline.py`: the GPU cost gets a measured link efficiency and a per-call fixed term (#400, from
   experts4bit-qlora lane P66).** Scored against a real gather on an RTX 5090 (PCIe gen 4 x16), the bytes-over-link
   term under-predicted the transfer 1.57–2.02x: the consumer's pipelined gather runs at the box's SINGLE-copy H2D rate
