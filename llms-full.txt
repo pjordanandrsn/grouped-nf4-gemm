@@ -364,9 +364,9 @@ Linux, NVIDIA GPU sm_80 or newer, `triton>=3.4` (Linux-only distribution), `torc
 pip install "experts4bit-qlora[fast]"
 ```
 
-## Two compute paths, two support states
+## Two compute paths, two capability entries
 
-One kernel, two numerical paths, and [`capabilities.json`](../capabilities.json) carries them as two entries because a single status cannot be true of both.
+One kernel, two numerical paths, and [`capabilities.json`](../capabilities.json) carries them as two entries because their requirements and evidence differ: both are supported, on different hardware and with different receipts.
 
 | path | entry in `capabilities.json` | who takes it | requirements (the predicate is `fp8_paged_attn.fp8_compute_unsupported`; the default selector and the path's own asserts share it) | measured on | status |
 |---|---|---|---|---|---|
