@@ -25,7 +25,7 @@ Kernel package (the minimum route):
 pip install grouped-nf4-gemm
 ```
 
-Linux, NVIDIA GPU sm_80 or newer, `triton>=3.4` (Linux-only distribution), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. The fp8 compute path needs sm_89 or newer; sm_80–sm_88 take the f32 path, which is open (below). `fp8_kv` and `paged_attn_ref` are pure torch. Through the model consumer:
+Linux, NVIDIA GPU sm_80 or newer, `triton>=3.4` (Linux-only distribution), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. The fp8 compute path needs sm_89 or newer; sm_80–sm_88 take the f32 path, supported since #319's close (below). `fp8_kv` and `paged_attn_ref` are pure torch. Through the model consumer:
 
 ```bash
 pip install "experts4bit-qlora[fast]"

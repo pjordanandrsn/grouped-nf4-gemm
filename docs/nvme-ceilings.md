@@ -2,7 +2,7 @@
 
 **The number the design uses: `S ≈ 3.45 GB/s` sustained achieved read
 bandwidth at expert-sized requests (13–50 MiB, QD ≥ 4) on the first owned
-measurement box.** `S` is a per-box constant, exactly like the transfer law's
+measurement box** (claim `gnf4.nvme.tier-batch-only`, measured). `S` is a per-box constant, exactly like the transfer law's
 `L` and `c_box`: it is measured by `bench/nvme/nvme_microbench.py` on the box
 that will serve the tier, never carried across hosts.
 
@@ -128,8 +128,9 @@ The receipts in this lane were taken on the operator's own hardware. For
 publication the NAS **hostname is redacted** in the receipt `probe` blocks
 (replaced by an explicit `host_redacted` field rather than silently
 removed — a quietly altered receipt is worse than a disclosed one), and
-box-specific paths in `night_h2d_leg.sh` are parameterized via
-`GNF4_BENCH_DIR` / `DOCKER_BIN`. Every measurement, device identifier,
+box-specific paths in the H2D-leg script (`night_h2d_leg.sh`) were
+parameterised via `GNF4_BENCH_DIR` / `DOCKER_BIN`; that script is not in
+this repository, and its receipts are `bench/nvme/receipts/night/h2d_*.json`. Every measurement, device identifier,
 kernel version and timing figure is unchanged.
 
 ## Scope of this document

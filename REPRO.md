@@ -2,7 +2,10 @@
 
 > **This document pins a FROZEN commit on purpose.** It reproduces the Gate-2
 > decode verdict exactly as it was adjudicated, at `ad2bef0`, where the property
-> suite was **35 tests**. At `main` the suite has grown to **44** and the kernel
+> suite was **35 tests**. At `main` the suite has grown past the **44** the July
+> confirmatories record (the dgrad tests joined it on 2026-08-05 and a dot-pad
+> arm on 2026-08-26; `python -m pytest kernel/test_nf4_grouped.py --collect-only -q`
+> prints the current count) and the kernel
 > has moved on (v4/v6 mainloop, config rules) — so if you run these commands at
 > HEAD the counts below will not match, and that is expected, not a failure.
 > For the current state start from the README; come here to re-adjudicate the

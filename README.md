@@ -17,20 +17,20 @@ MoE serving path needs around it. **Canonical package:** `grouped-nf4-gemm` on P
 `grouped-mxfp4-gemm` are lookup aliases. **Two repositories:** this one is the kernel side —
 GEMMs, decode kernels, packers, references, host and NVMe primitives;
 [`experts4bit-qlora`](https://github.com/pjordanandrsn/experts4bit-qlora)
-is the consumer that loads and quantises models, trains adapters, places
+(e4b) is the consumer that loads and quantises models, trains adapters, places
 bytes across tiers and serves, and installs this package through its
 `[fast]` extra (the kernel version each consumer release requires is the
 `compatibility` record in
 [`docs/system-manifest.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/system-manifest.json),
 not a number copied here). **Environment:** Linux, an NVIDIA GPU of sm_80 or newer
-with Triton ≥ 3.4 for the kernels (sm_120 is the primary serving target;
+with Triton ≥ 3.4 and torch ≥ 2.8 (pre-releases accepted) for the kernels (sm_120 is the primary serving target;
 Python 3.11 is what CI tests); the pack references, `dequant_ref`, the
 relocation arena bake and the provenance hashing are pure torch (the NF4
 quantise-bake, `nvme_bake_nf4.bake_nf4`, needs bitsandbytes and CUDA
 unless a `quantize_fn` is injected). **The material
 limitation:** the fused path is not faster everywhere — at small shapes
 and against a CUDA-graphed per-expert loop at some decode shapes it loses,
-and the register says so. Machine-readable capabilities and evidence:
+and the claims register says so. Machine-readable capabilities and evidence:
 [`docs/capabilities.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/capabilities.json)
 and [`docs/claims.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/claims.json).
 
@@ -113,13 +113,13 @@ tiers for models that do not fit.
 | [`experts4bit-qlora`](https://github.com/pjordanandrsn/experts4bit-qlora) | the consumer package (`pip install "experts4bit-qlora[fast]"` installs this one) |
 | [PyPI: grouped-nf4-gemm](https://pypi.org/project/grouped-nf4-gemm/) | the canonical distribution |
 | [`llms.txt`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/llms.txt) · [`AGENTS.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/AGENTS.md) | orientation for language models and coding agents |
-| The routing page for this project on cerinamroth.com (problem-first index, status, compatibility) | [https://cerinamroth.com/ml/grouped-nf4-gemm/](https://cerinamroth.com/ml/grouped-nf4-gemm/) |
+| [cerinamroth.com/ml/grouped-nf4-gemm/](https://cerinamroth.com/ml/grouped-nf4-gemm/) | the routing page for this project (problem-first index, status, compatibility) |
 
 ## See it on your own hardware first
 
 ```bash
 pip install grouped-nf4-gemm bitsandbytes
-python examples/dequant_tax.py          # ~1 min, one GPU, no model download
+python examples/dequant_tax.py          # from a checkout of this repository (the wheel ships the modules, not examples/); ~1 min, one GPU, no model download
 ```
 
 [`examples/dequant_tax.py`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.33.4/examples/dequant_tax.py)
@@ -208,8 +208,8 @@ That's the same instrument the 144/144 training receipt used.
 | **host DRAM**, all rows pinned | `mxfp4_pipelined.Mxfp4PipelinedGptOss` |
 | **NVMe**, too big for DRAM | `mxfp4_residency.Mxfp4NvmeResidency` over a baked arena |
 | nowhere yet — you need to make an arena | `nvme_arena.bake_expert_tensors(...)` (relocates MXFP4) or `nvme_bake_nf4.bake_nf4` (re-quantises bf16) |
-| a checkpoint you want to **verify**, not run | `verify_provenance` |
-| **VRAM**, int4-b32-packed, one projection, ≤ 16 rows (the K16 lane) | `int4_smallm.gemm_int4_b32_smallm(...)`; `plan_smallm` picks (BLOCK_N, KC, SK), `smallm_workspace` preallocates — measured on the 5090 class (`gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19`); nothing here routes to it, the consumer's route is opt-in |
+| a checkpoint you want to **verify**, not run | `python -m verify_provenance --artifact run_artifact.json --model openai/gpt-oss-120b` (in-process: `mxfp4_loader.provenance_table`, `nvme_arena.verify`) |
+| **VRAM**, int4-b32-packed, one projection, ≤ 16 rows (the K16 lane) | `int4_smallm.gemm_int4_b32_smallm(...)`; `plan_smallm` picks (BLOCK_N, KC, SK), `smallm_workspace` preallocates — measured on the 5090 class (`gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19`); nothing here routes to it on its own; experts4bit-qlora's int4 attention route selects it by default from its 0.36.2 (`E4B_ATTN_INT4_SMALLM=auto`: on when the installed kernel package carries `int4_smallm`; `=0` keeps the cached-bf16 path) |
 | **VRAM**, int4-b32-packed experts, several rows per expert (batch-16 decode; the K18 lane) | `int4_b32.gemv_int4_b32_grouped(...)` — `gemv_int4_b32`'s arguments and bitwise its result, each expert's weights read once per four of its rows — **measured slower** on the 5090 (9.689 vs 6.520 ms/step on recorded B=16 routing, `gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22`); dormant evidence, use `gemv_int4_b32` |
 
 **Do not quantise-bake a checkpoint that is already MXFP4.** Relocation
@@ -237,7 +237,7 @@ private audit tree, so you cannot check it from this repository.
 | Real OLMoE QLoRA finetune, fused vs per-expert loop, real prose | 4.50× (4090), 4.75× (H100) | confirmed | `gnf4.kernel.e2e-training-real-prose` |
 | vs Unsloth's own kernel, 4-bit-storage regime, decode | 1.70× (H100, their TMA live), 2.79× (4090) | confirmed | `gnf4.kernel.h2h-unsloth` |
 | vs `torch._grouped_mm` on bf16, Qwen3-30B cell (RTX 5090) | 2.1–6.0×, on half the bytes | measured | `gnf4.kernel.sm120-census-vs-grouped-mm` |
-| Training backward in one launch, E=256 step | 403.7 → 26.5 ms | measured | `gnf4.kernel.dgrad` |
+| Training backward in one launch, E=256 step (A2000) | 403.7 → 26.5 ms | measured | `gnf4.kernel.dgrad` |
 | Single-stream decode anchor, Qwen3-30B-A3B on the 5090 class | 7.37 ms/step ±4.2% (≈130–142 tok/s) | measured | `gnf4.serve.decode-anchor-5090` |
 | Qwen3-235B-A22B from pinned host RAM on ≤16 GB VRAM | 4.3–4.4 tok/s, five pods; `t ≈ c_box + bytes/link` | confirmed | `gnf4.flagship.235b-phaseB` |
 | gpt-oss-120b served on its exact MXFP4 bytes | ppl 26.72 vs shipped reference 26.75; the NF4 requant tax deleted | confirmed | `gnf4.mxfp4.serve-tax-deleted` |
@@ -301,23 +301,30 @@ What each document is for, and whether it is current:
 
 Kept findable in `docs/STATUS.md` and as `retired` entries in
 `docs/claims.json`: the "sm_120 parked" roadmap line (sm_120 has been the
-primary serving target since 0.15.0); split-K on the decode GEMV
-(refuted, ships dormant as the evidence); a fixed fraction-of-waterfall
-as the offload law; the cold-engine "free floor" premise; expert
+primary serving target since 0.15.0); split-K on the NF4 dot-pad decode
+GEMV (K7, refuted; the `GNF4_GEMV_SPLITK` plan ships dormant as the
+evidence — the int4-b32 GEMV's own split-K is a separate, shipped plan); a
+fixed fraction-of-waterfall as the offload law (the law that held is
+`t ≈ c_box + bytes/link`, `gnf4.flagship.235b-phaseB`); the cold-engine
+"free floor" premise (bitsandbytes' CPU dequant as a ready-made decode arm,
+refuted on its target box: `gnf4.cold-engine.phase0-premise-refuted`); expert
 prefetch (closed, negative, four arcs). The "4.67× vs the grouped-bf16
 execution class" number is superseded by the head-to-head — that backend
 never ran Unsloth's own kernel.
 
 ## What is open
 
-#60 arena staging (~30% of a training step; the next layer's rows are prefetchable); #71 pinned-row factor, conservative on cgroup v1 (v2 unmeasured).
+[#60](https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/60) arena staging (~30% of a training step; the next layer's rows are prefetchable); [#71](https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/71) pinned-row factor, conservative on cgroup v1 (v2 unmeasured).
 [#87](https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/87) (int32
 offset overflow at large `max(expert_ids)`) is closed by observation in
 every carrier (PR #342; boundary test `kernel/test_expert_offset_boundary.py`;
 GPU run on an RTX 5090 2026-09-05: 10 passed; claim
-`gnf4.kernel.expert-offset-boundary.5090.2026-09-05`). Every non-CUDA row is a
-`port target` — `PROJECTIONS-multiarch.md` is stamped arithmetic that
-invites refutation, and `docs/PORTABILITY.md` is the hazard register.
+`gnf4.kernel.expert-offset-boundary.5090.2026-09-05`). Every non-CUDA backend is a
+`port target`, not supported —
+[`PROJECTIONS-multiarch.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/PROJECTIONS-multiarch.md)
+is stamped arithmetic that invites refutation, and
+[`docs/PORTABILITY.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/PORTABILITY.md)
+is the hazard register.
 
 ## Reproduce
 

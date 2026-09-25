@@ -35,7 +35,7 @@ Ported from `kernel/nf4_grouped.py`. The decode gemv path is the first target
   **high** nibble of byte `j`, element `2j+1` the low nibble (`(byte>>4)&0xF`
   then `byte&0xF`).
 - **Codebook** `NF4_LUT[16]` (fp32) — the exact bitsandbytes NF4 values, copied
-  from the parent (`-1.0, -0.696…, …, 1.0`). Pinned in `nf4_common.hpp`.
+  from the parent (`-1.0, -0.696…, …, 1.0`). Pinned in `nf4_gemv_sycl.cpp`.
 - **Scale** `absmax[E, N, K/64]` fp32 — one blockwise scale per 64-element
   K-block (`BLOCKSIZE = 64`, locked).
 - **Compute**: `out[g, n] = sum_k ( LUT[nibble(B[eid,n,k])] * absmax[eid,n,k/64] ) * a[g,k]`,
@@ -49,7 +49,7 @@ Ported from `kernel/nf4_grouped.py`. The decode gemv path is the first target
 
 ## Milestones
 
-- **M0 — toolchain gate (in progress).** `hello_sycl.cpp`: does a containerized
+- **M0 — toolchain gate (done: the Gen9.x runtime recipe above).** `hello_sycl.cpp`: does a containerized
   DPC++ (`icpx -fsycl`) build see the P630 as a SYCL *GPU* device and run a
   kernel on it? The P630 is Gen9.5; recent `intel-compute-runtime` moved Gen9.x
   to a legacy branch (the exact NEO-version regime the OpenVINO fixes live in),

@@ -64,3 +64,9 @@ rather than done silently. **No registered content changed** — question,
 fixture, outcomes D1/D2/D3, the 0.999 band and the no-re-runs rule are
 byte-for-byte as registered pre-data; the pre-data text is in the git
 history of this file.*
+
+*Note (2026-09-25): `bench/nvme/receipts/n5b/`, named under Fixture as where
+the comparator manifest was banked, is not in this repository; the published
+receipt of the comparison is `bench/nvme/receipts/determinism-l40s-vs-a2000.json`,
+which records the outcome (segments compared and matched, D1, D3), not the
+comparator manifest. The registered text above is unchanged.*

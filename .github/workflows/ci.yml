@@ -1,11 +1,11 @@
 name: ci
 
-# Device-free gates that guard the contract on every push/PR — no GPU runner
-# needed. The 44-test GPU property suite + the blind confirmatories remain the
-# hardware-side gates (run manually on rented/home silicon); these two jobs
-# make the parts that CAN run on free runners run automatically, so an external
-# contributor or confirmatory-filer can't silently break the contract or the
-# projection anchors.
+# Device-free gates that guard the contract — no GPU runner needed. The GPU
+# property suite (kernel/test_nf4_grouped.py) + the blind confirmatories remain
+# the hardware-side gates (run manually on rented/home silicon); the jobs below
+# make the parts that CAN run on free runners run automatically (when: see the
+# `on:` block), so an external contributor or confirmatory-filer can't silently
+# break the contract or the projection anchors.
 
 # CI runs on `main` and on a pull request ONLY when the gate holder applies the
 # `ready-to-merge` label (or the PR leaves draft) -- never on every push
@@ -142,7 +142,7 @@ jobs:
       # that were not in py-modules and therefore not in the wheel. This also
       # asserts every kernel/test_*.py is named somewhere in THIS file -- the
       # step that would otherwise let the next guard be added and never run.
-      # These 8 were in the tree and invoked by nothing. They need triton (which
+      # These were in the tree and invoked by nothing. They need triton (which
       # this job installs) but not a device, so CPU CI can run them.
       - name: CPU-reachable suites that CI never ran
         run: cd kernel && python -m pytest test_gptq_pack.py test_arena_moe_patch.py test_k3_oracle.py test_moonshot_gather.py test_mxfp4_arena_layout.py test_mxfp4_oracle.py test_mxfp4_provenance.py test_group_tiles_readonly.py test_mxfp4_interp.py test_mxfp4_gemv_b32.py test_mxfp4_e2m1_table.py test_mxfp4_v4.py test_triton_shim.py -q

@@ -6,7 +6,7 @@ weights to bf16 and read them back. This times that round trip against computing
 the packed bytes directly, at a census shape, across three points on the M axis.
 Synthetic weights, no download.
 
-    pip install grouped-nf4-gemm && python examples/dequant_tax.py   # --sweep: more
+    pip install grouped-nf4-gemm bitsandbytes && python examples/dequant_tax.py   # from a repo checkout; --sweep: more
 """
 import argparse, statistics, sys, time  # noqa: E401 — one-file example
 
@@ -38,8 +38,8 @@ Edit SHAPE at the top of this file for your own N/K/E/top_k and re-run."""
 
 def build_stack(N, K, E, dev, seed=0):
     """bnb's layout IS this kernel's, so with bnb the dequant arm gets its OPTIMIZED
-    CUDA decode. Without it, the reference decode — an oracle, not a fast path — so
-    the ratio becomes an upper bound and the output labels it."""
+    CUDA decode. Without it the dequant arm runs the reference decode — an oracle, not
+    a fast path — so the ratio becomes an upper bound and the output labels it."""
     g = torch.Generator().manual_seed(seed)
     draw = lambda: (torch.randn(N, K, generator=g) * 0.02).to(dev)  # noqa: E731
     try:

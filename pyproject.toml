@@ -43,7 +43,12 @@ keywords = [
     "paged-attention", "gpu-offload", "nvme", "llm-inference", "model-serving", "nvidia-gpu",
 ]
 classifiers = [
+    "Environment :: GPU :: NVIDIA CUDA",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
@@ -86,7 +91,7 @@ py-modules = [
     # 0.3.0's headline surface. These were absent from this allowlist, so the
     # NVMe residency tier and the MXFP4 residency engine -- K3_RESIDENCY_KINDS,
     # fuse_gate_up_segments, Mxfp4NvmeResidency -- shipped in the CHANGELOG and
-    # NOT in the wheel. tests/test_packaging_covers_kernel.py now fails if any
+    # NOT in the wheel. kernel/test_packaging_covers_kernel.py now fails if any
     # non-test kernel/*.py is missing here.
     "mxfp4_residency", "nvme_residency", "row_pool", "fp8_kv", "fp8_paged_attn",
     "nf4_qlora",

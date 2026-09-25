@@ -44,8 +44,8 @@ KV(C) = slope × C  +  per_sliding_layer × n_sliding × min(C, window − 1)
 
 so the `floor` column applies only once `C ≥ window − 1` (every column in the
 table below is past that point for both hybrid models). Below it the floor term
-scales with context too — Gemma-4 at C=512 costs 110 MB, not the 220 MB a
-flat-floor formula would claim. Cache dtype fp16/bf16
+scales with context too — Gemma-4 at C=512 costs 110 MB, not the ~210 MB
+(the 199.8 MB floor plus 10 MB of slope) a flat-floor formula would claim. Cache dtype fp16/bf16
 (2 B/elem) — the transformers default; see *KV quantization* for the q8/q4 path.
 
 | model | KB/token | floor | 4K | 8K | 32K | 128K | tier |

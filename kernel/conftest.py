@@ -2,8 +2,9 @@
 """Keep interpreter-mode tests out of a compiled-mode pytest process.
 
 ``TRITON_INTERPRET`` is read by triton when it is first imported and latches
-for the life of the PROCESS. Two files here turn it on at import time
-(``test_interp_contract.py``, ``test_mxfp4_interp.py``) so they can validate
+for the life of the PROCESS. Eight files here turn it on at import time (the
+``_INTERP_FILES`` set below; ``test_packaging_covers_kernel.py`` keeps it equal
+to the files that assign the variable at module scope) so they can validate
 kernel semantics on CPU with no GPU. Every other kernel test needs the normal
 compiled path.
 
@@ -20,14 +21,14 @@ which is the honest resolution of a genuinely process-global flag.
 **Only when a CUDA device is actually present.** The crash needs a test that
 launches a real kernel, which needs a device. With no device those tests skip,
 so mixing is harmless — and that is exactly CI's situation: the
-"CPU-reachable suites" step deliberately runs ``test_mxfp4_interp.py``
-alongside eight compiled-path files and passes (verified: 55 passed, 9
-skipped). Refusing on filenames alone would break that green step. Gating on
+"CPU-reachable suites" step deliberately runs ``test_mxfp4_interp.py`` and
+``test_mxfp4_gemv_b32.py`` alongside eleven compiled-path files and passes.
+Refusing on filenames alone would break that green step. Gating on
 the device keeps CI working and still catches the real hazard.
 
 The gate is deliberately coarser than "will this test launch a kernel", which
 is not knowable at collection time. So on a GPU box this can still refuse a
-combination that would have been fine — the eight CPU-only files above are the
+combination that would have been fine — the eleven CPU-only files above are the
 known example. That is the conservative direction (a clear message with a
 bypass, instead of a process abort), but it is why the bypass exists.
 

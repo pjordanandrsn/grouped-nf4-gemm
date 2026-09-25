@@ -1,4 +1,4 @@
-<!-- Keep what applies; delete what does not. The claims register, not this text, decides whether a number is current. -->
+<!-- Keep what applies; delete what does not. The claims register, not this text, decides whether a number is current. The `ci` workflow runs on a pull request only once the maintainer applies `ready-to-merge` (or the pull request leaves draft); after a new push the label is removed and re-applied. The private-marker guard runs on every push. -->
 
 ## What changed and why
 
@@ -10,7 +10,8 @@
 - [ ] **Claims**: every number in new prose links an ACTIVE claim ID in `docs/claims.json`; no retired or superseded claim is repeated as current; `docs/STATUS.md` updated if the position moved.
 - [ ] **llms bundle** regenerated (`python scripts/build_llms_bundle.py`; `--check` passes) when README opening, SOLUTIONS, STATUS, capabilities or the listed docs changed.
 - [ ] **Discovery contract**: `python scripts/check_discovery_contract.py` passes (queries still route to pages that carry their concepts, canonical install route and limitations).
-- [ ] **PyPI metadata**: `pyproject.toml` description/keywords/urls/extras still accurate; if an extra or dependency floor changed, README install section, `docs/capabilities.json` install commands and `AGENTS.md` say so.
+- [ ] **Contract checks** pass locally: `python scripts/check_claims_register.py`, `check_readme_claims.py`, `check_system_manifest.py`, `check_dependency_floor.py`, `check_change_impact.py --base origin/main` and `check_shared_tooling.py` (a shared script changes here first, then is copied byte-for-byte into experts4bit-qlora).
+- [ ] **PyPI metadata**: `pyproject.toml` description/keywords/classifiers/urls still accurate; if a dependency floor changed, README install section, `docs/capabilities.json` install commands and `AGENTS.md` say so.
 - [ ] **README routing** (Use this when / Do not use this when / Start here) still accurate.
 - [ ] **Examples** in new docs are executed in CI, executed in a hardware lane, or explicitly marked as needing GPU / network / model download / large storage. No example silently falls back.
 - [ ] **Related repository** updated (or an issue filed there) if the kernel/consumer contract changed.
