@@ -2,13 +2,22 @@
 
 *Phase 0.4. Said first, by us. This is the brand item.*
 
+*Status (2026-09-25): the suite this document specifies is
+`kernel/test_nf4_grouped.py` (`test_pfid_and_brel` asserts P-fid and B-rel per
+model shape), and the blind confirmatories
+(`kernel/RESULTS-v2…v6-confirmatory.md`) record its runs. Item 3's "empty groups" is a
+caller-side rule: the grouped GEMM never launches a 0-row tile (the
+`kernel/nf4_grouped.py` module docstring) and takes `sizes` all `> 0`. The
+registered bound below is unchanged.*
+
 ## Why the output is NOT bit-identical to dequantize+linear
 
 The per-element dequantization itself is **exact and identical**: `codebook[nibble] × absmax`,
 the same arithmetic `dequantize_4bit` performs. All divergence comes from **GEMM reduction
 order** — the fused kernel accumulates in fp32 down its own K-tile schedule, while the
 dequant path hands a materialized bf16 weight to cuBLAS with its own split-K order. This is
-the same property our own gemm_4bit-routing commit documented (§9a of METHODOLOGY pinned
+the same property our own gemm_4bit-routing commit documented (§9a of experts4bit-qlora's
+[`docs/METHODOLOGY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/METHODOLOGY.md) pinned
 bit-exactness only because both paths there shared one reduction; a fused MMA mainloop does
 not). Floating-point addition is not associative; different orders → different last bits.
 

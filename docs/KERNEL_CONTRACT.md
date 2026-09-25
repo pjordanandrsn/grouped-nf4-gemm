@@ -14,12 +14,26 @@ and the **merged** #1949 `gemm_4bit` kernel family (bnb main, milestone v0.50.0,
 > next section is the current layout summary for every shipped format; the
 > consumer's stores are built to it, and moving a layout is a
 > `public-api-change` under `docs/change-impact.json`.
+>
+> Three more places where the record below is the design, not the shipped
+> code: (1) the *Inputs* table and *Op naming* — the shipped entry point is
+> `nf4_grouped.gemm_4bit_grouped(a_cat, B, absmax, sizes, expert_ids, ...)` in
+> this package, with `absmax [E, N, K//64]` fp32 and `sizes` the per-group
+> token counts (no `group_offsets`, `shapeB`, `quant_type` or `bias`
+> arguments, and no `bitsandbytes::` op); its docstring is the signature of
+> record. (2) *Regimes*: the backward did not stay on the dequant path — it
+> ships in one launch as `dgrad_4bit_grouped`, the `nf4_qlora` default since
+> the 0.10.0 release (`gnf4.kernel.dgrad`). (3) *Fallback contract*: what
+> ships is a floor, not a ceiling — `nf4_grouped.decode_dispatch` sends a
+> decode call under `DECODE_MIN_FUSED_BYTES` of weight+absmax traffic to the
+> dequant path, and integrations route it there; the op itself always runs
+> fused (`gnf4.kernel.decode-speed-census`).
 
 ## Layouts at a glance (current)
 
 | format (module) | packed | scales | notes |
 |---|---|---|---|
-| NF4 (`nf4_grouped`) | `[E, N, K//2]` uint8, high nibble first — the bitsandbytes `gemm_4bit` layout | absmax `[E, N, K//64]` fp32 | `K % 64 == 0`; `nf4_grouped.repack_from_bnb` builds these from per-expert `quantize_4bit` state and de-nests `compress_statistics` |
+| NF4 (`nf4_grouped`) | `[E, N, K//2]` uint8, high nibble first (even `k` in the high nibble, odd in the low) — the bitsandbytes `gemm_4bit` layout | absmax `[E, N, K//64]` fp32 | `K % 64 == 0`; `nf4_grouped.repack_from_bnb` builds these from per-expert `quantize_4bit` state and de-nests `compress_statistics` |
 | MXFP4 (`mxfp4_grouped`) | blocks `[E, N, K//2]` uint8, low nibble first (even element) | e8m0 `[E, N, K//32]` uint8 | `K % 32 == 0`; gpt-oss `[E, N, K//32, 16]` blocks flatten to that width as a contiguous view (`mxfp4_loader.to_kernel_shapes`) |
 | int4-b32 (`int4_b32`) | `[E, N, K//2]` uint8, levels -8..7 stored offset-binary, even `k` in the low nibble | `[E, N, K//32]` fp16 | `K % 32 == 0`; `int4_pack_ref.pack_int4_b32` (round-to-nearest) and `gptq_pack.gptq_pack_int4_b32` (calibrated) emit the same bytes |
 | fp8 KV (`fp8_kv`) | 16-token packed rows, e4m3 payload plus fp32 scales (`pack_kv_block`, `kv_block_bytes`) | per-(token, head), or `k_groups` sub-row groups | `fp8_paged_attn.fp8_paged_decode_attention` reads them through a block table; `k_row_bytes` / `v_row_bytes` override the stride per layer |
@@ -105,8 +119,9 @@ Two things that make such a test vacuous if missed, both learned by writing one:
   gives the wide route its own 16 GiB-of-address-space case;
   **the wide and dot-pad arms of `test_expert_offset_boundary.py` are built on
   the byte geometry and therefore do not straddle their own boundary** -- the
-  0.30.1 note claiming those routes were "observed above 2^31 for the first
-  time" holds for the scalar, split-K and vec routes only. Both routes' own
+  0.30.1 note, which counts the wide-load and dot-pad forms among the routes
+  its boundary file samples above 2^31, holds for the scalar, split-K and vec
+  routes only. Both routes' own
   boundary is covered on a GPU by `kernel/test_offset_boundary_words_gpu.py`:
   a real 16 GiB buffer puts the target expert past 2^31 words with a decoy at
   the wrapped address. Lane B374 observed it on an RTX 5090 on 2026-09-23,

@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased — documentation, issue and PR templates, and package metadata only (no kernel body changes; the one shipped-module edit is `gnf4_native/build.py`'s docstring)
+
+- **The contributor process says what happens.** `AGENTS.md` §10, `CONTRIBUTING.md` and the PR template: the maintainer
+  reviews every pull request, his own included, and squash-merges it once the required checks are green; `ci` runs on
+  a pull request only after `ready-to-merge` (or leaving draft), the private-marker guard on every push; a release is a
+  GitHub Release on the tag (`publish.yml`'s trigger). CONTRIBUTING no longer asks for RTX 5090 runs (sm_120 is the
+  primary serving target), records the 2026-07-22 MI300X confirmatory, drops the `out-of-scope` label the repository
+  does not have, and names the pre-push hook; the hardware-wanted form now applies `needs-triage` like the other two.
+- **Stale statements corrected.** The README: the K16 small-M route is experts4bit-qlora's default from its 0.36.2, not
+  opt-in; `examples/dequant_tax.py` needs a repository checkout (the wheel ships modules only); the torch floor is
+  stated; the retired split-K is the NF4 dot-pad GEMV's (K7), not the int4-b32 GEMV's. The fp8 solution page's Install
+  paragraph and `llms.txt` no longer call the f32 compute path open (#319 closed in 0.33.0). `docs/STATUS.md` moves the
+  K17 and K18 reads (closed, negative) to *What changed*. `docs/INDEX.md` points at the serving kernels' solution pages
+  and lists `router_probe/`, `sycl/` and `kernel/ERRATA.md`. The int4 solution page names the small-M GEMM and the two
+  opt-in GEMV variants with their public claims. `docs/KERNEL_CONTRACT.md`'s status note says which parts of the Gate-0
+  record are design, not the shipped signature.
+- **Research records annotated, not rewritten.** Dated notes on the MXFP4 seam map (its three STOP items resolved), the
+  hybrid-tier architecture notes, the tolerance contract and the NVMe determinism pre-registration; `kernel/ERRATA.md`
+  cross-lists the 2026-08-15 `registered_utc` erratum.
+- **Metadata.** Trove classifiers name the CUDA environment, the audiences and the Python CI tests (3.11);
+  `CITATION.cff`'s `url` is the package page. `gnf4_native/build.py`'s docstring said a failed native build falls back
+  to the reference path; it raises, as `kernel/cpu_grouped.py` documents.
+- The historical `## Unreleased` heading between 0.10.0 and 0.9.0 is renamed: that section (the `dgrad_kernel`
+  default) shipped in 0.10.0, and there was no 0.9.1.
+
 ## 0.33.4 — 2026-09-24 — `kernel/cold_deadline.py`: the GPU cost carries a measured per-host link efficiency (`link_eff`, from `bench/calibrate.py`'s new single-copy probe, schema `gnf4-hybrid-calib/2`) and a consumer-passed per-call fixed term (`gpu_us_fixed`); a /1 blob is refused unless `link_eff` is passed explicitly (#400, #402, from experts4bit-qlora lane P66); lane P69's read: the factor is 0.873 / 0.960 on one gen 4 x16 RTX 5090 against 0.64 on another and 1.0 on a gen 3 x8 A2000 — per host, not per card class (#403); every other shipped module identical to 0.33.3
 
 - **Lane P69 read (experts4bit-qlora #741, for #400): `link_eff` is a per-host measurement, not a 5090-class constant.**
@@ -1722,7 +1747,7 @@ key it searched for, plus either the near-miss names the checkpoint really has o
 layout is fused, that this path does not support it. `--prefix` and `--moe` are exposed on
 the CLI; `bake_nf4()` always accepted them.
 
-## Unreleased
+## Shipped in 0.10.0: the `dgrad_kernel` default (merged 2026-08-12, after 0.9.0, under an "Unreleased" heading; there was no 0.9.1)
 
 **`dgrad_kernel` now defaults to `True`.** The single-launch dgrad has been
 opt-in since 0.7.0, so the QLoRA backward took the per-expert decode loop unless

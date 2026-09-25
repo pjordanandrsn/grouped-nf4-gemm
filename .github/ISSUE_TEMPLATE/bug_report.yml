@@ -45,6 +45,10 @@ body:
       options:
         - fused GEMM (gemm_4bit_grouped / dgrad_4bit_grouped)
         - MXFP4 native lane
+        - fp8 paged decode attention (fp8_paged_attn / fp8_kv)
+        - int4-b32 decode GEMV, small-M GEMM or calibrated packer (int4_b32 / int4_smallm / gptq_pack)
+        - decode glue kernels (int4_b32 rmsnorm / rope / router epilogue / combine_rows / reduce_partials)
+        - hybrid CPU kernels (cpu_grouped / gnf4_native)
         - training (nf4_qlora / mxfp4_qlora)
         - NVMe arena / residency
         - provenance / verification
@@ -58,9 +62,11 @@ body:
       label: Before filing
       options:
         - label: >-
-            I checked this is not the documented CPU limitation (the fused GEMM
-            is CUDA-only and says so loudly; `nf4_pack_ref` imports triton,
-            which is Linux-only today)
+            I checked this is not a documented platform limitation (the fused
+            GEMM is CUDA-only and says so loudly; triton is Linux-only, and
+            `int4_b32` imports it directly, so it is not importable without it;
+            the pack references, `dequant_ref` and provenance import through
+            `_triton_shim` and run without triton)
           required: false
         - label: >-
             If it is a wrong-values report, I compared against `dequant_ref` —

@@ -19,7 +19,7 @@ body:
     attributes:
       label: Which claim
       description: The doc and the line, or paste the sentence.
-      placeholder: "README 'Benchmark this on real text' — 4.50x on RTX 4090"
+      placeholder: "claim gnf4.kernel.e2e-training-real-prose (README 'What is measured') — 4.50x on RTX 4090"
     validations:
       required: true
   - type: textarea

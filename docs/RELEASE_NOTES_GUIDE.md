@@ -31,3 +31,8 @@ Example opening:
 > otherwise. No new number: the register has no entry for these kernels, and
 > the glue position they extend is claim `gnf4.serve.decode-glue-kernels`
 > (measured-private), which does not yet include them.
+
+The example's last sentence was true at 0.30.0; the register has since gained
+`gnf4.kernel.combine-rows-accuracy.5090.2026-09-23` and
+`gnf4.kernel.reduce-partials-slot-order.5090.2026-09-23` (measured), which is
+why a number in a note is a quote of the entry, not the other way round.

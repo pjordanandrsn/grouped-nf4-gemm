@@ -123,7 +123,7 @@
     "gnf4.kernel.energy-104-of-112"
    ],
    "limitations": [
-    "Loses to a CUDA-graphed per-expert baseline at some decode shapes (claim gnf4.kernel.graphed-baseline-decode-loses); shapes below the routing threshold go back to the reference path (docs/STATUS.md)",
+    "Loses to a CUDA-graphed per-expert baseline at some decode shapes (claim gnf4.kernel.graphed-baseline-decode-loses); shapes below the dispatch floor belong to the dequant path: nf4_grouped.decode_dispatch says so and the caller routes them there, while the op itself always runs fused (docs/STATUS.md)",
     "CUDA + Triton only; calling the kernel on CPU raises and names dequant_ref",
     "The fidelity claim is measured against fp32 accumulation on NVIDIA tensor cores; other backends must re-measure (docs/PORTABILITY.md)",
     "Every speed figure is per card -- the census is sm_86, the head-to-head and the real-finetune cells are RTX 4090 / H100, the torch._grouped_mm cell is RTX 5090 -- and none is an architecture-wide statement; the registered comparator is this repository's own per-expert dequantize-then-GEMM loop, and no registered cell times bitsandbytes' own packed 2-D inference forward (0.50.0 and later)"
@@ -276,7 +276,7 @@
    ],
    "limitations": [
     "The int4-b32 GEMV and the calibrated packer are measured-private (claims gnf4.serve.int4-b32-gemv, gnf4.serve.gptq-pack-int4-b32): the receipts live in the consumer's private audit tree",
-    "Split-K on the decode GEMV was refuted once and ships dormant (claim gnf4.retired.splitk-gemv records the refutation); the shipped plan is the measured one",
+    "Split-K on the NF4 dot-pad decode GEMV (nf4_grouped, GNF4_GEMV_SPLITK, lane K7) was refuted once and ships dormant there (the retired claim gnf4.retired.splitk-gemv records the refutation); the int4-b32 GEMV's own split-K is the shipped, measured plan (int4_b32._plan, reduced by reduce_partials)",
     "Split-K on the int4-b32 GEMV is planned from (N, K, R, SM count) for R >= 16 activation rows on parts with <= 64 SMs (claim gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10); B=1 decode (R = top_k) and parts above 64 SMs keep the N-only plan, and bitwise equality across boxes must pin sk rather than plan it",
     "Whether int4 experts pass a quality gate is the consumer's per-family question (experts4bit-qlora docs/STATUS.md): small-active-parameter models fail it with round-to-nearest packing",
     "The single-stream decode anchor (claim gnf4.serve.decode-anchor-5090) is a consumer-measured anchor of the serving class on a knob-off basis, not a measurement of this lane, and is not cited here as its evidence",
@@ -531,7 +531,7 @@
     "special_requirements": [
      "pinned host RAM sized from measured free memory (capacity_for_bytes)",
      "a local NVMe or fast block device for the arena; O_DIRECT reads",
-     "torch>=2.8",
+     "torch>=2.8 (pre-releases accepted)",
      "bitsandbytes and CUDA for the NF4 quantise bake (nvme_bake_nf4.bake_nf4 with the default quantiser); the geometry/manifest path is pure torch when a quantize_fn is injected"
     ]
    },

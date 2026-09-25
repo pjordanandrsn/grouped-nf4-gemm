@@ -10,7 +10,7 @@ authors:
     given-names: Jordan
     email: jordan@cerinamroth.com
 repository-code: "https://github.com/pjordanandrsn/grouped-nf4-gemm"
-url: "https://cerinamroth.com/ml/"
+url: "https://cerinamroth.com/ml/grouped-nf4-gemm/"
 license: MIT
 keywords:
   - mixture-of-experts

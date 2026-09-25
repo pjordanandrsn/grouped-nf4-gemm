@@ -8,8 +8,10 @@ runtime-CPU decision anyway, and the kernel contract requires the binary to
 match the measured box. The cache key is (source sha256, compiler id,
 flags), so editing the C source or changing boxes rebuilds automatically.
 
-Failure is soft: `available()` returns False and the torch-facing wrappers
-in kernel/cpu_grouped.py fall back to the exact (slow) reference path.
+Failure is loud: `available()` returns False, `load()` raises
+`RuntimeError("gnf4_native unavailable: ...")`, and the torch-facing wrappers
+in kernel/cpu_grouped.py raise rather than fall back. The exact (slow) path is
+`cpu_grouped.ref_gemv_grouped`, called explicitly.
 """
 
 from __future__ import annotations

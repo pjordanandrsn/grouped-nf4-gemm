@@ -1,5 +1,12 @@
 # Hybrid CPU/GPU execution tier — architecture notes (gnf4 side)
 
+*Note (2026-09-25): Phase 2 shipped as `kernel/cpu_grouped.py` (the
+torch-facing wrappers) plus the `gnf4_native` package (the compile-at-first-use
+C kernels; `pyproject.toml` `packages = ["gnf4_native"]`, with the `.c` source
+as package data) — packaging option (b) below. No `kernel/cpu_dispatch.py`
+exists. The source line numbers cited on this page are from the tree it was
+written against and no longer point at the lines described.*
+
 Pre-work map for the hybrid-tier program (Stage 1 Phases 0–5, gated G0–G5):
 where each phase hooks into this repo, which existing seams are reused, and
 which decisions are still open. Runtime-side notes live in

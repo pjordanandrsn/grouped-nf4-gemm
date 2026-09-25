@@ -26,20 +26,20 @@ MoE serving path needs around it. **Canonical package:** `grouped-nf4-gemm` on P
 `grouped-mxfp4-gemm` are lookup aliases. **Two repositories:** this one is the kernel side —
 GEMMs, decode kernels, packers, references, host and NVMe primitives;
 [`experts4bit-qlora`](https://github.com/pjordanandrsn/experts4bit-qlora)
-is the consumer that loads and quantises models, trains adapters, places
+(e4b) is the consumer that loads and quantises models, trains adapters, places
 bytes across tiers and serves, and installs this package through its
 `[fast]` extra (the kernel version each consumer release requires is the
 `compatibility` record in
 [`docs/system-manifest.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/system-manifest.json),
 not a number copied here). **Environment:** Linux, an NVIDIA GPU of sm_80 or newer
-with Triton ≥ 3.4 for the kernels (sm_120 is the primary serving target;
+with Triton ≥ 3.4 and torch ≥ 2.8 (pre-releases accepted) for the kernels (sm_120 is the primary serving target;
 Python 3.11 is what CI tests); the pack references, `dequant_ref`, the
 relocation arena bake and the provenance hashing are pure torch (the NF4
 quantise-bake, `nvme_bake_nf4.bake_nf4`, needs bitsandbytes and CUDA
 unless a `quantize_fn` is injected). **The material
 limitation:** the fused path is not faster everywhere — at small shapes
 and against a CUDA-graphed per-expert loop at some decode shapes it loses,
-and the register says so. Machine-readable capabilities and evidence:
+and the claims register says so. Machine-readable capabilities and evidence:
 [`docs/capabilities.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/capabilities.json)
 and [`docs/claims.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/claims.json).
 
@@ -122,13 +122,13 @@ tiers for models that do not fit.
 | [`experts4bit-qlora`](https://github.com/pjordanandrsn/experts4bit-qlora) | the consumer package (`pip install "experts4bit-qlora[fast]"` installs this one) |
 | [PyPI: grouped-nf4-gemm](https://pypi.org/project/grouped-nf4-gemm/) | the canonical distribution |
 | [`llms.txt`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/llms.txt) · [`AGENTS.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/AGENTS.md) | orientation for language models and coding agents |
-| The routing page for this project on cerinamroth.com (problem-first index, status, compatibility) | [https://cerinamroth.com/ml/grouped-nf4-gemm/](https://cerinamroth.com/ml/grouped-nf4-gemm/) |
+| [cerinamroth.com/ml/grouped-nf4-gemm/](https://cerinamroth.com/ml/grouped-nf4-gemm/) | the routing page for this project (problem-first index, status, compatibility) |
 
 ## See it on your own hardware first
 
 ```bash
 pip install grouped-nf4-gemm bitsandbytes
-python examples/dequant_tax.py          # ~1 min, one GPU, no model download
+python examples/dequant_tax.py          # from a checkout of this repository (the wheel ships the modules, not examples/); ~1 min, one GPU, no model download
 ```
 
 [`examples/dequant_tax.py`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.33.4/examples/dequant_tax.py)
@@ -217,8 +217,8 @@ That's the same instrument the 144/144 training receipt used.
 | **host DRAM**, all rows pinned | `mxfp4_pipelined.Mxfp4PipelinedGptOss` |
 | **NVMe**, too big for DRAM | `mxfp4_residency.Mxfp4NvmeResidency` over a baked arena |
 | nowhere yet — you need to make an arena | `nvme_arena.bake_expert_tensors(...)` (relocates MXFP4) or `nvme_bake_nf4.bake_nf4` (re-quantises bf16) |
-| a checkpoint you want to **verify**, not run | `verify_provenance` |
-| **VRAM**, int4-b32-packed, one projection, ≤ 16 rows (the K16 lane) | `int4_smallm.gemm_int4_b32_smallm(...)`; `plan_smallm` picks (BLOCK_N, KC, SK), `smallm_workspace` preallocates — measured on the 5090 class (`gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19`); nothing here routes to it, the consumer's route is opt-in |
+| a checkpoint you want to **verify**, not run | `python -m verify_provenance --artifact run_artifact.json --model openai/gpt-oss-120b` (in-process: `mxfp4_loader.provenance_table`, `nvme_arena.verify`) |
+| **VRAM**, int4-b32-packed, one projection, ≤ 16 rows (the K16 lane) | `int4_smallm.gemm_int4_b32_smallm(...)`; `plan_smallm` picks (BLOCK_N, KC, SK), `smallm_workspace` preallocates — measured on the 5090 class (`gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19`); nothing here routes to it on its own; experts4bit-qlora's int4 attention route selects it by default from its 0.36.2 (`E4B_ATTN_INT4_SMALLM=auto`: on when the installed kernel package carries `int4_smallm`; `=0` keeps the cached-bf16 path) |
 | **VRAM**, int4-b32-packed experts, several rows per expert (batch-16 decode; the K18 lane) | `int4_b32.gemv_int4_b32_grouped(...)` — `gemv_int4_b32`'s arguments and bitwise its result, each expert's weights read once per four of its rows — **measured slower** on the 5090 (9.689 vs 6.520 ms/step on recorded B=16 routing, `gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22`); dormant evidence, use `gemv_int4_b32` |
 
 **Do not quantise-bake a checkpoint that is already MXFP4.** Relocation
@@ -358,15 +358,15 @@ Kernel package (the minimum route):
 pip install grouped-nf4-gemm
 ```
 
-Linux, NVIDIA GPU sm_80 or newer, `triton>=3.4` (Linux-only distribution), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. The fp8 compute path needs sm_89 or newer; sm_80–sm_88 take the f32 path, which is open (below). `fp8_kv` and `paged_attn_ref` are pure torch. Through the model consumer:
+Linux, NVIDIA GPU sm_80 or newer, `triton>=3.4` (Linux-only distribution), `torch>=2.8` (pre-releases accepted); CI tests Python 3.11. The fp8 compute path needs sm_89 or newer; sm_80–sm_88 take the f32 path, supported since #319's close (below). `fp8_kv` and `paged_attn_ref` are pure torch. Through the model consumer:
 
 ```bash
 pip install "experts4bit-qlora[fast]"
 ```
 
-## Two compute paths, two support states
+## Two compute paths, two capability entries
 
-One kernel, two numerical paths, and [`capabilities.json`](../capabilities.json) carries them as two entries because a single status cannot be true of both.
+One kernel, two numerical paths, and [`capabilities.json`](../capabilities.json) carries them as two entries because their requirements and evidence differ: both are supported, on different hardware and with different receipts.
 
 | path | entry in `capabilities.json` | who takes it | requirements (the predicate is `fp8_paged_attn.fp8_compute_unsupported`; the default selector and the path's own asserts share it) | measured on | status |
 |---|---|---|---|---|---|
@@ -462,7 +462,7 @@ Register: [`claims.json`](../claims.json). Measured, fp8 compute path: claim `gn
 ## Source: docs/solutions/int4-decode-gemv.md (https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/int4-decode-gemv.md)
 
 # How do I run a single-token INT4 decode GEMV over routed MoE experts, and pack calibrated (GPTQ) weights for it?
-<!-- summary: gemv_int4_b32 runs the batch-1 int4-b32 decode GEMV with exact integer accumulation, and gptq_pack_int4_b32 packs calibrated weights onto the same bytes; its numbers are measured-private. -->
+<!-- summary: gemv_int4_b32 runs the batch-1 int4-b32 decode GEMV with exact integer accumulation, and gptq_pack_int4_b32 packs calibrated weights onto the same bytes; the served GEMV's throughput and the calibrated pack's quality are measured-private, while its split-K planner, the small-M GEMM and the two opt-in GEMV variants are measured in public. -->
 
 Use the int4-b32 lane of `grouped-nf4-gemm`: `int4_pack_ref.pack_int4_b32` packs a weight onto a uniform symmetric int4 grid with one fp16 scale per 32 elements, `int4_b32.gemv_int4_b32` runs the decode GEMV on int8-quantised activations with exact integer accumulation and split-K partials, and `gptq_pack.gptq_pack_int4_b32` chooses grid points against calibration activations while emitting byte-identical format.
 
@@ -560,6 +560,8 @@ The CPU block passes its assertions and prints two output errors; on skewed chan
 - `int4_b32.quant_x_rows(x [R, K]) -> (int8 [R, K], fp32 [R, K//32])`; `gemv_int4_b32(..., part=None)` accepts a preallocated partials buffer under capture; `int4_b32.reduce_partials(part, sk, R, N)` is the split-K reduce plus bf16 cast in one launch.
 - Batched decode: `int4_b32.gemm_int4_b32_grouped_captured(aq_sorted, as_sorted, packed, scales, t_row0, t_rows, t_group)` over tiles from `nf4_grouped.build_group_tiles_device`, legal inside CUDA-graph capture; rows return sorted and the caller scatters by the inverse of `order`.
 - Calibration: `gptq_pack.HessianAccumulator(in_features, device=None)` computes each batch's Gram where the activations are and can keep the Hessian off-device (`device="cpu"`); `gptq_pack_int4_b32(w, hessian, damp=0.01, blocksize=128)`.
+- Small-M GEMM: `int4_smallm.gemm_int4_b32_smallm(x, packed, scales, ...)` runs `M <= 16` rows of one projection against the same bytes in one launch (in-register dequant, split-K reduced in the launch); `plan_smallm` picks its configuration and `smallm_workspace` preallocates for capture. Nothing in this package routes to it on its own (claim `gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19`, measured).
+- Opt-in, default off: `gemv_int4_b32(..., fused_reduce=True)` (or `GNF4_GEMV_FUSED_REDUCE=1`) folds the split-K reduce into the GEMV's own launch, bitwise the served GEMV and not faster (`gnf4.kernel.k17-fused-splitk-gemv.5090.2026-09-21`, measured); `int4_b32.gemv_int4_b32_grouped` serves up to `mt` rows of one expert per program (four by default), bitwise the served GEMV and measured slower, so it stays dormant as the evidence (`gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22`, measured).
 - The decode glue kernels (`rmsnorm_rows`, `rope_norm_heads`, `router_epilogue`, `swiglu_rows`, `combine_rows`, and the rest) also live in `int4_b32`: [`fp8-paged-attention-for-moe-serving.md`](fp8-paged-attention-for-moe-serving.md).
 
 ## Limitations
@@ -570,7 +572,7 @@ The CPU block passes its assertions and prints two output errors; on skewed chan
 - Pack from source weights only; quantising onto an already-quantised grid compounds the cost (`int4_pack_ref` docstring).
 - Time under CUDA-graph replay, never eager: eager sweeps anti-select split-K. Split-K on the NF4 decode GEMV was refuted and ships dormant as the evidence ([`STATUS.md`](../STATUS.md)).
 - `int4_b32` is not importable without triton; no ROCm or XPU ([`PORTABILITY.md`](../PORTABILITY.md)).
-- This lane's throughput and quality numbers are measured-private: real runs whose receipts live in a private audit tree, not checkable here.
+- The served GEMV's throughput and the calibrated pack's quality numbers are measured-private: real runs whose receipts live in a private audit tree, not checkable here. The split-K planner, the small-M GEMM, the two opt-in variants and the row-invariance reads are measured, with public receipts (Evidence, below).
 
 ## Related
 
@@ -578,7 +580,7 @@ The CPU block passes its assertions and prints two output errors; on skewed chan
 
 ## Evidence
 
-Register: [`claims.json`](../claims.json). Measured-private, labelled as such: claim `gnf4.serve.int4-b32-gemv` (dense and grouped decode cells, plus the M-tile GEMM), claim `gnf4.serve.gptq-pack-int4-b32` (calibrated attention packs on Qwen3-30B-A3B). Nothing on this page is at the confirmed tier. What is checkable here is correctness: `kernel/test_int4_b32.py` pins the GEMV and grouped GEMM against `dequant_int4_ref`; `kernel/test_gptq_pack.py` pins format identity and the calibrated-versus-rounding margin on CPU.
+Register: [`claims.json`](../claims.json). Measured-private, labelled as such: claim `gnf4.serve.int4-b32-gemv` (dense and grouped decode cells, plus the M-tile GEMM), claim `gnf4.serve.gptq-pack-int4-b32` (calibrated attention packs on Qwen3-30B-A3B). Measured: claim `gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10` (the split-K planner takes the row count and SM count), claim `gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19` (the small-M GEMM), claims `gnf4.kernel.k17-fused-splitk-gemv.5090.2026-09-21` and `gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22` (the two opt-in variants), claims `gnf4.kernel.int4-gemv-row-invariant.5090.2026-09-24` and `gnf4.kernel.int4-grouped-gemm-reorder.5090.2026-09-24` (row-count invariance, `kernel/test_row_invariance_gpu.py`); the K14 refutation and the K15 comparator are claims `gnf4.kernel.k14-smallm-int4-gemm-refuted.5090.2026-09-11` and `gnf4.kernel.k15-marlin-comparator.5090.2026-09-11`. Nothing on this page is at the confirmed tier. What is checkable here is correctness: `kernel/test_int4_b32.py` pins the GEMV and grouped GEMM against `dequant_int4_ref`; `kernel/test_gptq_pack.py` pins format identity and the calibrated-versus-rounding margin on CPU.
 
 ## Source: docs/solutions/native-mxfp4-moe-inference.md (https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/native-mxfp4-moe-inference.md)
 
@@ -599,7 +601,7 @@ MXFP4 (OCP MX v1.0) is a different codebook from NF4: sixteen e2m1 values, ±{0,
 
 ## Which project solves it
 
-`grouped-nf4-gemm` owns the native MXFP4 kernels (`gemm_mxfp4_grouped`; `gemv_mxfp4_b32`, the packed MXFP4 decode GEMV — optimising that GEMV is a change in this kernel repository, per AGENTS.md section 8, not in the consumer), the pack/decode reference, the loader helpers that map checkpoint shapes to kernel shapes without copying (`mxfp4_loader.to_kernel_shapes`), the arena source for per-expert releases (`arena_experts.ArenaExpertSource`), and the training wrapper (`mxfp4_qlora`). [experts4bit-qlora](https://github.com/pjordanandrsn/experts4bit-qlora) ([PyPI](https://pypi.org/project/experts4bit-qlora/)) drives them from a model; `mxfp4_native_load.build_native_qlora_model(snap, r, alpha)` here is the gpt-oss-specific loader that builds a QLoRA model without entering the dequant path.
+`grouped-nf4-gemm` owns the native MXFP4 kernels (`gemm_mxfp4_grouped`; `gemv_mxfp4_b32`, the packed MXFP4 decode GEMV — optimising that GEMV is a change in this kernel repository, per AGENTS.md section 2, not in the consumer), the pack/decode reference, the loader helpers that map checkpoint shapes to kernel shapes without copying (`mxfp4_loader.to_kernel_shapes`), the arena source for per-expert releases (`arena_experts.ArenaExpertSource`), and the training wrapper (`mxfp4_qlora`). [experts4bit-qlora](https://github.com/pjordanandrsn/experts4bit-qlora) ([PyPI](https://pypi.org/project/experts4bit-qlora/)) drives them from a model; `mxfp4_native_load.build_native_qlora_model(snap, r, alpha)` here is the gpt-oss-specific loader that builds a QLoRA model without entering the dequant path.
 
 ## Install
 
@@ -1222,7 +1224,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
     "gnf4.kernel.energy-104-of-112"
    ],
    "limitations": [
-    "Loses to a CUDA-graphed per-expert baseline at some decode shapes (claim gnf4.kernel.graphed-baseline-decode-loses); shapes below the routing threshold go back to the reference path (docs/STATUS.md)",
+    "Loses to a CUDA-graphed per-expert baseline at some decode shapes (claim gnf4.kernel.graphed-baseline-decode-loses); shapes below the dispatch floor belong to the dequant path: nf4_grouped.decode_dispatch says so and the caller routes them there, while the op itself always runs fused (docs/STATUS.md)",
     "CUDA + Triton only; calling the kernel on CPU raises and names dequant_ref",
     "The fidelity claim is measured against fp32 accumulation on NVIDIA tensor cores; other backends must re-measure (docs/PORTABILITY.md)",
     "Every speed figure is per card -- the census is sm_86, the head-to-head and the real-finetune cells are RTX 4090 / H100, the torch._grouped_mm cell is RTX 5090 -- and none is an architecture-wide statement; the registered comparator is this repository's own per-expert dequantize-then-GEMM loop, and no registered cell times bitsandbytes' own packed 2-D inference forward (0.50.0 and later)"
@@ -1375,7 +1377,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
    ],
    "limitations": [
     "The int4-b32 GEMV and the calibrated packer are measured-private (claims gnf4.serve.int4-b32-gemv, gnf4.serve.gptq-pack-int4-b32): the receipts live in the consumer's private audit tree",
-    "Split-K on the decode GEMV was refuted once and ships dormant (claim gnf4.retired.splitk-gemv records the refutation); the shipped plan is the measured one",
+    "Split-K on the NF4 dot-pad decode GEMV (nf4_grouped, GNF4_GEMV_SPLITK, lane K7) was refuted once and ships dormant there (the retired claim gnf4.retired.splitk-gemv records the refutation); the int4-b32 GEMV's own split-K is the shipped, measured plan (int4_b32._plan, reduced by reduce_partials)",
     "Split-K on the int4-b32 GEMV is planned from (N, K, R, SM count) for R >= 16 activation rows on parts with <= 64 SMs (claim gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10); B=1 decode (R = top_k) and parts above 64 SMs keep the N-only plan, and bitwise equality across boxes must pin sk rather than plan it",
     "Whether int4 experts pass a quality gate is the consumer's per-family question (experts4bit-qlora docs/STATUS.md): small-active-parameter models fail it with round-to-nearest packing",
     "The single-stream decode anchor (claim gnf4.serve.decode-anchor-5090) is a consumer-measured anchor of the serving class on a knob-off basis, not a measurement of this lane, and is not cited here as its evidence",
@@ -1630,7 +1632,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
     "special_requirements": [
      "pinned host RAM sized from measured free memory (capacity_for_bytes)",
      "a local NVMe or fast block device for the arena; O_DIRECT reads",
-     "torch>=2.8",
+     "torch>=2.8 (pre-releases accepted)",
      "bitsandbytes and CUDA for the NF4 quantise bake (nvme_bake_nf4.bake_nf4 with the default quantiser); the geometry/manifest path is pure torch when a quantize_fn is injected"
     ]
    },
@@ -1750,9 +1752,10 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
 # Status — what this kernel does, what changed, what is open
 
 **As of 2026-09-24, `grouped-nf4-gemm` version 0.33.4.** One page. The README argues; this
-page states. Every line here has an entry in
-[`docs/claims.json`](claims.json) with its evidence path, and nothing is
-here that does not.
+page states. The positions here name their entries in
+[`docs/claims.json`](claims.json), which carry the evidence paths; a line
+without a claim ID records an issue closure, a correction still outstanding
+in a research document, or a rule for reading the numbers.
 
 Evidence tiers, unchanged from the rest of the repo: **confirmed** =
 pre-registered, stamped, blind confirmatory run; **measured** = a run
@@ -1762,8 +1765,8 @@ happened and the number is real, but the receipt lives in a private
 audit tree, so *you cannot check it from this repository*. Those are
 marked. Treat them as you would any unverifiable number. The vocabulary is
 `status_vocabulary` in [`claims.json`](claims.json) and `evidence_vocabulary`
-in [`system-manifest.json`](system-manifest.json); every line below names
-its claim ID.
+in [`system-manifest.json`](system-manifest.json); each position below
+names its claim ID.
 
 ---
 
@@ -1783,7 +1786,7 @@ cell (`gnf4.kernel.fused-more-accurate-than-dequant-bf16`).
 | Real OLMoE QLoRA finetune, fused vs per-expert loop (prose) | 4.50× (4090), 4.75× (H100) | confirmed | `gnf4.kernel.e2e-training-real-prose` |
 | vs Unsloth's own kernel, 4-bit-storage regime, decode | 1.70× (H100), 2.79× (4090) | confirmed | `gnf4.kernel.h2h-unsloth` |
 | vs `torch._grouped_mm` on bf16, Qwen3-30B cell (RTX 5090) | 2.1–6.0×, on half the bytes | measured | `gnf4.kernel.sm120-census-vs-grouped-mm` |
-| Training backward, one launch, E=256 step | 403.7 → 26.5 ms | measured | `gnf4.kernel.dgrad` |
+| Training backward, one launch, E=256 step (A2000) | 403.7 → 26.5 ms | measured | `gnf4.kernel.dgrad` |
 
 **Three things that limit those numbers, stated here rather than in a
 footnote:**
@@ -1952,7 +1955,7 @@ MXFP4 decode reproduces Kimi K3's own declared reference exactly
   reduce (`gemv_int4_b32(..., fused_reduce=True)` / `GNF4_GEMV_FUSED_REDUCE=1`) and K18's grouped expert
   GEMV (`gemv_int4_b32_grouped`) are both bitwise the served GEMV and neither pays: K17 saves at most
   2 µs per call at R=1 and made the consumer's decode step slower at B=1 and B=16, and K18 is 1.49× slower
-  on recorded B=16 routing (the two reads under *What is open*). With `FUSED_REDUCE=0` the served kernel's
+  on recorded B=16 routing (the K17 and K18 reads below). With `FUSED_REDUCE=0` the served kernel's
   body is byte-for-byte the 0.32.1 one, and no default changes. The same release closes #87 with a CPU boundary test CI runs, and records that #319 was a
   mislabelled test arm (above).
 
@@ -1970,8 +1973,9 @@ MXFP4 decode reproduces Kimi K3's own declared reference exactly
 Kept here because a claim that quietly disappears is worse than one that
 was wrong.
 
-- **`sm_120` is no longer "parked".** The README's roadmap still says
-  three cloud provisioning failures parked Blackwell work. That was true
+- **`sm_120` is no longer "parked".** The README's roadmap once said
+  three cloud provisioning failures parked Blackwell work (that line is
+  gone; the README's *What was retired* section records it). That was true
   in July; since 0.15.0 the RTX 5090 has been the *primary* serving
   target — the M=1 config retune, the sm_120 census, the decode anchor,
   the M3 defaults, the int4 lanes and the paged attention were all
@@ -1984,9 +1988,12 @@ was wrong.
   the README with that caveat attached, not rescaled
   (`gnf4.kernel.comparators-v6-execution-class`, superseded by
   `gnf4.kernel.h2h-unsloth`).
-- **Split-K on the decode GEMV is refuted** (flat at `gate_up`, ~14%
-  worse at `down`). The kernel ships dormant *as the evidence*
-  (the retired claim `gnf4.retired.splitk-gemv`).
+- **Split-K on the NF4 dot-pad decode GEMV is refuted** (K7: flat at
+  `gate_up`, ~14% worse at `down`). That plan ships dormant behind
+  `GNF4_GEMV_SPLITK` *as the evidence*
+  (the retired claim `gnf4.retired.splitk-gemv`); the scalar NF4 route's
+  split-K (`_decode_plan`) and the int4-b32 GEMV's split-K are separate,
+  shipped plans.
 - **The int4-b32 split-K planner takes the row count (0.31.0).**
   `_plan(N, K)` sized split-K from `N` alone, so at large `R` every expert
   projection ran a configuration chosen for a batch it was not in and paid
@@ -2009,6 +2016,17 @@ was wrong.
   int4 projection kernel would be worth ≈ 1.29 ms/step and nothing shipped
   realises it (`gnf4.kernel.k14-smallm-int4-gemm-refuted.5090.2026-09-11`,
   measured).
+- **K17 read (2026-09-21, RTX 5090): folding the int4-b32 GEMV's split-K reduce into its own launch is exact
+  (24/24 rows bitwise, counter re-arms under graph replay) but was not the cost** — at R=1 the removed
+  `_reduce_partials` launch was overlapped in the graph (savings 0–2 µs; P2 refuted by its own clause), and the
+  fused epilogue is 6–12 % slower at R=128. Ships **opt-in** (`GNF4_GEMV_FUSED_REDUCE=1`), default off at every
+  R. `kernel/RESULTS-k17-fused-splitk-gemv.md`; register row
+  `gnf4.kernel.k17-fused-splitk-gemv.5090.2026-09-21`; the consumer's step-level read is experts4bit-qlora lane P57.
+- **K18 read (2026-09-22, RTX 5090): a grouped split-K int4-b32 expert GEMV — each expert's weight slice loaded once
+  for up to 4 of its rows — is exact and slower.** On experts4bit-qlora P60's recorded Qwen3-30B-A3B B=16 routing it
+  runs 9.689 ms/step against the served GEMV's 6.520 (P2 refuted), and 1.00–1.65× the served call at R = 8/16 (P3
+  refuted), worst where nothing can be shared. Not a lever; `gemv_int4_b32_grouped` stays dormant as the evidence.
+  `kernel/RESULTS-k18-grouped-expert-gemv.md`; register row `gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22`.
 - **A fixed fraction-of-waterfall is retired as a law** (two 0.77
   readings were a two-host coincidence).
 - **The cold-engine "free floor" premise is refuted** on its target box:
@@ -2037,9 +2055,11 @@ was wrong.
   predicate as it stood at the 2026-08-27 run; `fp8_compute_unsupported`
   has admitted `(1, 2, 4, 8, 16)` since 0.26.0 and the sentence now says
   so, with the measurement unchanged. Every `evidence` entry in
-  `claims.json` is now a path that resolves at HEAD (structured forms for
-  changelog sections, globs and cross-repository receipts:
-  [`claims-schema.md`](claims-schema.md)); every measured, measured-private
+  `claims.json` is now a path that resolves at HEAD (at the time through
+  structured forms for changelog sections, globs and cross-repository
+  receipts; 0.33.2's shared schema replaced the first two — a changelog
+  section is now a `CHANGELOG.md#<anchor>` location and globs are refused —
+  and kept the cross-repository form: [`claims-schema.md`](claims-schema.md)); every measured, measured-private
   and confirmed row carries an ISO `measured_on` taken from its receipt or,
   where the receipt states no run date, the receipt's first commit;
   the retired `gnf4.retired.splitk-gemv` carries its `retired_reason`; and
@@ -2095,17 +2115,6 @@ was wrong.
   the route is the consumer's default from 0.36.2. Nothing in this package
   routes to it on its own
   (`gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19`, measured).
-- **K17 read (2026-09-21, RTX 5090): folding the int4-b32 GEMV's split-K reduce into its own launch is exact
-  (24/24 rows bitwise, counter re-arms under graph replay) but was not the cost** — at R=1 the removed
-  `_reduce_partials` launch was overlapped in the graph (savings 0–2 µs; P2 refuted by its own clause), and the
-  fused epilogue is 6–12 % slower at R=128. Ships **opt-in** (`GNF4_GEMV_FUSED_REDUCE=1`), default off at every
-  R. `kernel/RESULTS-k17-fused-splitk-gemv.md`; register row
-  `gnf4.kernel.k17-fused-splitk-gemv.5090.2026-09-21`; the consumer's step-level read is experts4bit-qlora lane P57.
-- **K18 read (2026-09-22, RTX 5090): a grouped split-K int4-b32 expert GEMV — each expert's weight slice loaded once
-  for up to 4 of its rows — is exact and slower.** On experts4bit-qlora P60's recorded Qwen3-30B-A3B B=16 routing it
-  runs 9.689 ms/step against the served GEMV's 6.520 (P2 refuted), and 1.00–1.65× the served call at R = 8/16 (P3
-  refuted), worst where nothing can be shared. Not a lever; `gemv_int4_b32_grouped` stays dormant as the evidence.
-  `kernel/RESULTS-k18-grouped-expert-gemv.md`; register row `gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22`.
 - **Every non-CUDA row is a `port target`.** ROCm/XPU numbers do not
   exist; `PROJECTIONS-multiarch.md` is arithmetic, stamped before the
   silicon, and explicitly invites refutation (`gnf4.projection.multiarch`,
@@ -2166,12 +2175,26 @@ and the **merged** #1949 `gemm_4bit` kernel family (bnb main, milestone v0.50.0,
 > next section is the current layout summary for every shipped format; the
 > consumer's stores are built to it, and moving a layout is a
 > `public-api-change` under `docs/change-impact.json`.
+>
+> Three more places where the record below is the design, not the shipped
+> code: (1) the *Inputs* table and *Op naming* — the shipped entry point is
+> `nf4_grouped.gemm_4bit_grouped(a_cat, B, absmax, sizes, expert_ids, ...)` in
+> this package, with `absmax [E, N, K//64]` fp32 and `sizes` the per-group
+> token counts (no `group_offsets`, `shapeB`, `quant_type` or `bias`
+> arguments, and no `bitsandbytes::` op); its docstring is the signature of
+> record. (2) *Regimes*: the backward did not stay on the dequant path — it
+> ships in one launch as `dgrad_4bit_grouped`, the `nf4_qlora` default since
+> the 0.10.0 release (`gnf4.kernel.dgrad`). (3) *Fallback contract*: what
+> ships is a floor, not a ceiling — `nf4_grouped.decode_dispatch` sends a
+> decode call under `DECODE_MIN_FUSED_BYTES` of weight+absmax traffic to the
+> dequant path, and integrations route it there; the op itself always runs
+> fused (`gnf4.kernel.decode-speed-census`).
 
 ## Layouts at a glance (current)
 
 | format (module) | packed | scales | notes |
 |---|---|---|---|
-| NF4 (`nf4_grouped`) | `[E, N, K//2]` uint8, high nibble first — the bitsandbytes `gemm_4bit` layout | absmax `[E, N, K//64]` fp32 | `K % 64 == 0`; `nf4_grouped.repack_from_bnb` builds these from per-expert `quantize_4bit` state and de-nests `compress_statistics` |
+| NF4 (`nf4_grouped`) | `[E, N, K//2]` uint8, high nibble first (even `k` in the high nibble, odd in the low) — the bitsandbytes `gemm_4bit` layout | absmax `[E, N, K//64]` fp32 | `K % 64 == 0`; `nf4_grouped.repack_from_bnb` builds these from per-expert `quantize_4bit` state and de-nests `compress_statistics` |
 | MXFP4 (`mxfp4_grouped`) | blocks `[E, N, K//2]` uint8, low nibble first (even element) | e8m0 `[E, N, K//32]` uint8 | `K % 32 == 0`; gpt-oss `[E, N, K//32, 16]` blocks flatten to that width as a contiguous view (`mxfp4_loader.to_kernel_shapes`) |
 | int4-b32 (`int4_b32`) | `[E, N, K//2]` uint8, levels -8..7 stored offset-binary, even `k` in the low nibble | `[E, N, K//32]` fp16 | `K % 32 == 0`; `int4_pack_ref.pack_int4_b32` (round-to-nearest) and `gptq_pack.gptq_pack_int4_b32` (calibrated) emit the same bytes |
 | fp8 KV (`fp8_kv`) | 16-token packed rows, e4m3 payload plus fp32 scales (`pack_kv_block`, `kv_block_bytes`) | per-(token, head), or `k_groups` sub-row groups | `fp8_paged_attn.fp8_paged_decode_attention` reads them through a block table; `k_row_bytes` / `v_row_bytes` override the stride per layer |
@@ -2257,8 +2280,9 @@ Two things that make such a test vacuous if missed, both learned by writing one:
   gives the wide route its own 16 GiB-of-address-space case;
   **the wide and dot-pad arms of `test_expert_offset_boundary.py` are built on
   the byte geometry and therefore do not straddle their own boundary** -- the
-  0.30.1 note claiming those routes were "observed above 2^31 for the first
-  time" holds for the scalar, split-K and vec routes only. Both routes' own
+  0.30.1 note, which counts the wide-load and dot-pad forms among the routes
+  its boundary file samples above 2^31, holds for the scalar, split-K and vec
+  routes only. Both routes' own
   boundary is covered on a GPU by `kernel/test_offset_boundary_words_gpu.py`:
   a real 16 GiB buffer puts the target expert past 2^31 words with a decoy at
   the wrapped address. Lane B374 observed it on an RTX 5090 on 2026-09-23,
@@ -2467,7 +2491,7 @@ shipping is not publishing.
 
 ```bash
 pip install -e . pytest numpy                      # CPU torch + triton (Linux) run the interpreter suites
-cd kernel && TRITON_INTERPRET=1 python -m pytest test_interp_contract.py test_mxfp4_interp.py test_mxfp4_gemv_b32.py -q   # the _INTERP_FILES members, alone
+cd kernel && TRITON_INTERPRET=1 python -m pytest test_interp_contract.py test_mxfp4_interp.py test_mxfp4_gemv_b32.py -q   # three of the eight _INTERP_FILES members (kernel/conftest.py), no compiled-path file
 cd kernel && TRITON_INTERPRET=1 python -m pytest test_int4_b32.py -q             # a compiled-path file: its own process (why: below)
 cd kernel && python -m pytest test_packaging_covers_kernel.py test_check_readme_links.py -q
 python examples/dequant_tax.py                     # prints the CPU note without a GPU; ~1 min on one GPU
@@ -2487,14 +2511,16 @@ python scripts/check_shared_tooling.py --sibling ../experts4bit-qlora   # the sh
 
 The two interpreter commands stay separate on purpose: `kernel/conftest.py` raises
 `pytest.UsageError` when a CUDA device is present and an `_INTERP_FILES` member
-(`test_interp_contract.py`, `test_mxfp4_interp.py`, `test_mxfp4_gemv_b32.py`) is
+(one of the eight files `kernel/conftest.py` lists, such as `test_interp_contract.py`) is
 collected in the same process as a compiled-path file such as `test_int4_b32.py`, because
 `TRITON_INTERPRET` latches process-wide at triton's first import; CI's CPU-only runner
 never trips that guard, a GPU box does. An interpreter-mode file
 must be registered in `_INTERP_FILES` and named in the CI step
 (`test_packaging_covers_kernel.py` enforces both). CI (`.github/workflows/ci.yml`)
 runs the anchor gate, the CPU example, the interpreter suites, the wheel smoke and
-the `discoverability` job (every `scripts/check_*.py` above), asserting triton is importable so a skip is never silent.
+the `discoverability` job (every `scripts/check_*.py` above except the README link
+check, which runs in `wheel-smoke` with the release tag mapped to the tree under test),
+asserting triton is importable so a skip is never silent.
 
 ## 7. Rules that have bitten
 
@@ -2542,8 +2568,10 @@ a diff is missing, and CI runs it on every pull request. Classes:
 **Shared tooling is one file in both repositories.** The files listed in `SHARED` in `scripts/check_shared_tooling.py` are byte-identical here and in the sibling repository — the check scripts, and `docs/claims-schema.md` with its checker, so both claims registers follow ONE schema; grouped-nf4-gemm is their upstream (kernel-first, as for the manifest). Change one there first, then copy it byte-for-byte into experts4bit-qlora, whose CI compares its copies with grouped-nf4-gemm's `main`. A shared script that must behave differently per repository reads the difference from data (`pyproject.toml`, the manifest), never from two copies. The same-named scripts not yet in `SHARED` are forks still to reconcile; `--sibling` lists them.
 
 Then regenerate `llms-full.txt` (`--check` is a CI gate). Release notes follow
-[`docs/RELEASE_NOTES_GUIDE.md`](docs/RELEASE_NOTES_GUIDE.md); releases are `v<version>`
-tags cut by the maintainer (`publish.yml` refuses a tag that disagrees with `pyproject.toml`), never from a branch.
+[`docs/RELEASE_NOTES_GUIDE.md`](docs/RELEASE_NOTES_GUIDE.md); a release is a GitHub Release on a
+`v<version>` tag cut by the maintainer, never from a branch. `publish.yml` fires when the release is
+published (a tag push alone publishes nothing; `workflow_dispatch` with the tag is the recovery path)
+and refuses a tag that disagrees with `pyproject.toml`.
 
 ## 9. Platform caveats
 
@@ -2563,12 +2591,16 @@ was a test-harness defect, and the claim that they miss their reference,
 
 ## 10. Contributing
 
-- A change starts from an issue and ends as a pull request that cites it. Every
-  pull request gets one independent review — by someone who did not write it —
-  before it merges. Nobody merges their own. CI runs on `main` and on a pull
-  request once it carries the `ready-to-merge` label (or leaves draft), never on
-  every push; a head with no CI run is not green, so remove and re-apply the
-  label after a new push.
+- A change starts from an issue and ends as a pull request that cites it. The
+  maintainer reviews every pull request himself, his own included, and
+  squash-merges it (one commit per pull request, titled `… (#N)`) once the
+  required checks are green and every review thread is resolved; no second
+  reviewer or bot review is waited for. The required checks are `guard` (the
+  private-marker guard, which runs on every push and pull request) and the `ci`
+  workflow's `anchor-gate`, `example-runs`, `interp-contract`, `wheel-smoke` and
+  `discoverability`. `ci` runs on `main` and on a pull request once it carries
+  the `ready-to-merge` label (or leaves draft), never on every push; a head with
+  no CI run is not green, so remove and re-apply the label after a new push.
 - A task pull request never moves a gate, a threshold, a compiled-kernel default
   or a registered claim. If the task needs one, stop and say so on the issue.
   **Kernel changes need the GPU tests run on the named hardware, with the receipt

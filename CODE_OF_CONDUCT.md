@@ -44,8 +44,8 @@ permanent ban.
 
 ## A note on AI-assisted contributions
 
-They are welcome and this project uses them openly: commits carry
-`Co-Authored-By` and an AI-disclosure trailer by default. The bar is unchanged —
+They are welcome and this project uses them openly: commits carry a
+`Co-Authored-By` trailer naming the model by default. The bar is unchanged —
 **you** are the author, you have read and run what you are submitting, and the
 claims carry receipts. An unreviewed dump fails on the second point, not the
 first.

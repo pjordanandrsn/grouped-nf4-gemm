@@ -1,5 +1,5 @@
 # How do I run a single-token INT4 decode GEMV over routed MoE experts, and pack calibrated (GPTQ) weights for it?
-<!-- summary: gemv_int4_b32 runs the batch-1 int4-b32 decode GEMV with exact integer accumulation, and gptq_pack_int4_b32 packs calibrated weights onto the same bytes; its numbers are measured-private. -->
+<!-- summary: gemv_int4_b32 runs the batch-1 int4-b32 decode GEMV with exact integer accumulation, and gptq_pack_int4_b32 packs calibrated weights onto the same bytes; the served GEMV's throughput and the calibrated pack's quality are measured-private, while its split-K planner, the small-M GEMM and the two opt-in GEMV variants are measured in public. -->
 
 Use the int4-b32 lane of `grouped-nf4-gemm`: `int4_pack_ref.pack_int4_b32` packs a weight onto a uniform symmetric int4 grid with one fp16 scale per 32 elements, `int4_b32.gemv_int4_b32` runs the decode GEMV on int8-quantised activations with exact integer accumulation and split-K partials, and `gptq_pack.gptq_pack_int4_b32` chooses grid points against calibration activations while emitting byte-identical format.
 
@@ -97,6 +97,8 @@ The CPU block passes its assertions and prints two output errors; on skewed chan
 - `int4_b32.quant_x_rows(x [R, K]) -> (int8 [R, K], fp32 [R, K//32])`; `gemv_int4_b32(..., part=None)` accepts a preallocated partials buffer under capture; `int4_b32.reduce_partials(part, sk, R, N)` is the split-K reduce plus bf16 cast in one launch.
 - Batched decode: `int4_b32.gemm_int4_b32_grouped_captured(aq_sorted, as_sorted, packed, scales, t_row0, t_rows, t_group)` over tiles from `nf4_grouped.build_group_tiles_device`, legal inside CUDA-graph capture; rows return sorted and the caller scatters by the inverse of `order`.
 - Calibration: `gptq_pack.HessianAccumulator(in_features, device=None)` computes each batch's Gram where the activations are and can keep the Hessian off-device (`device="cpu"`); `gptq_pack_int4_b32(w, hessian, damp=0.01, blocksize=128)`.
+- Small-M GEMM: `int4_smallm.gemm_int4_b32_smallm(x, packed, scales, ...)` runs `M <= 16` rows of one projection against the same bytes in one launch (in-register dequant, split-K reduced in the launch); `plan_smallm` picks its configuration and `smallm_workspace` preallocates for capture. Nothing in this package routes to it on its own (claim `gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19`, measured).
+- Opt-in, default off: `gemv_int4_b32(..., fused_reduce=True)` (or `GNF4_GEMV_FUSED_REDUCE=1`) folds the split-K reduce into the GEMV's own launch, bitwise the served GEMV and not faster (`gnf4.kernel.k17-fused-splitk-gemv.5090.2026-09-21`, measured); `int4_b32.gemv_int4_b32_grouped` serves up to `mt` rows of one expert per program (four by default), bitwise the served GEMV and measured slower, so it stays dormant as the evidence (`gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22`, measured).
 - The decode glue kernels (`rmsnorm_rows`, `rope_norm_heads`, `router_epilogue`, `swiglu_rows`, `combine_rows`, and the rest) also live in `int4_b32`: [`fp8-paged-attention-for-moe-serving.md`](fp8-paged-attention-for-moe-serving.md).
 
 ## Limitations
@@ -107,7 +109,7 @@ The CPU block passes its assertions and prints two output errors; on skewed chan
 - Pack from source weights only; quantising onto an already-quantised grid compounds the cost (`int4_pack_ref` docstring).
 - Time under CUDA-graph replay, never eager: eager sweeps anti-select split-K. Split-K on the NF4 decode GEMV was refuted and ships dormant as the evidence ([`STATUS.md`](../STATUS.md)).
 - `int4_b32` is not importable without triton; no ROCm or XPU ([`PORTABILITY.md`](../PORTABILITY.md)).
-- This lane's throughput and quality numbers are measured-private: real runs whose receipts live in a private audit tree, not checkable here.
+- The served GEMV's throughput and the calibrated pack's quality numbers are measured-private: real runs whose receipts live in a private audit tree, not checkable here. The split-K planner, the small-M GEMM, the two opt-in variants and the row-invariance reads are measured, with public receipts (Evidence, below).
 
 ## Related
 
@@ -115,4 +117,4 @@ The CPU block passes its assertions and prints two output errors; on skewed chan
 
 ## Evidence
 
-Register: [`claims.json`](../claims.json). Measured-private, labelled as such: claim `gnf4.serve.int4-b32-gemv` (dense and grouped decode cells, plus the M-tile GEMM), claim `gnf4.serve.gptq-pack-int4-b32` (calibrated attention packs on Qwen3-30B-A3B). Nothing on this page is at the confirmed tier. What is checkable here is correctness: `kernel/test_int4_b32.py` pins the GEMV and grouped GEMM against `dequant_int4_ref`; `kernel/test_gptq_pack.py` pins format identity and the calibrated-versus-rounding margin on CPU.
+Register: [`claims.json`](../claims.json). Measured-private, labelled as such: claim `gnf4.serve.int4-b32-gemv` (dense and grouped decode cells, plus the M-tile GEMM), claim `gnf4.serve.gptq-pack-int4-b32` (calibrated attention packs on Qwen3-30B-A3B). Measured: claim `gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10` (the split-K planner takes the row count and SM count), claim `gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19` (the small-M GEMM), claims `gnf4.kernel.k17-fused-splitk-gemv.5090.2026-09-21` and `gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22` (the two opt-in variants), claims `gnf4.kernel.int4-gemv-row-invariant.5090.2026-09-24` and `gnf4.kernel.int4-grouped-gemm-reorder.5090.2026-09-24` (row-count invariance, `kernel/test_row_invariance_gpu.py`); the K14 refutation and the K15 comparator are claims `gnf4.kernel.k14-smallm-int4-gemm-refuted.5090.2026-09-11` and `gnf4.kernel.k15-marlin-comparator.5090.2026-09-11`. Nothing on this page is at the confirmed tier. What is checkable here is correctness: `kernel/test_int4_b32.py` pins the GEMV and grouped GEMM against `dequant_int4_ref`; `kernel/test_gptq_pack.py` pins format identity and the calibrated-versus-rounding margin on CPU.

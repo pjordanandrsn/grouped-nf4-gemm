@@ -1,9 +1,10 @@
 # Status — what this kernel does, what changed, what is open
 
 **As of 2026-09-24, `grouped-nf4-gemm` version 0.33.4.** One page. The README argues; this
-page states. Every line here has an entry in
-[`docs/claims.json`](claims.json) with its evidence path, and nothing is
-here that does not.
+page states. The positions here name their entries in
+[`docs/claims.json`](claims.json), which carry the evidence paths; a line
+without a claim ID records an issue closure, a correction still outstanding
+in a research document, or a rule for reading the numbers.
 
 Evidence tiers, unchanged from the rest of the repo: **confirmed** =
 pre-registered, stamped, blind confirmatory run; **measured** = a run
@@ -13,8 +14,8 @@ happened and the number is real, but the receipt lives in a private
 audit tree, so *you cannot check it from this repository*. Those are
 marked. Treat them as you would any unverifiable number. The vocabulary is
 `status_vocabulary` in [`claims.json`](claims.json) and `evidence_vocabulary`
-in [`system-manifest.json`](system-manifest.json); every line below names
-its claim ID.
+in [`system-manifest.json`](system-manifest.json); each position below
+names its claim ID.
 
 ---
 
@@ -34,7 +35,7 @@ cell (`gnf4.kernel.fused-more-accurate-than-dequant-bf16`).
 | Real OLMoE QLoRA finetune, fused vs per-expert loop (prose) | 4.50× (4090), 4.75× (H100) | confirmed | `gnf4.kernel.e2e-training-real-prose` |
 | vs Unsloth's own kernel, 4-bit-storage regime, decode | 1.70× (H100), 2.79× (4090) | confirmed | `gnf4.kernel.h2h-unsloth` |
 | vs `torch._grouped_mm` on bf16, Qwen3-30B cell (RTX 5090) | 2.1–6.0×, on half the bytes | measured | `gnf4.kernel.sm120-census-vs-grouped-mm` |
-| Training backward, one launch, E=256 step | 403.7 → 26.5 ms | measured | `gnf4.kernel.dgrad` |
+| Training backward, one launch, E=256 step (A2000) | 403.7 → 26.5 ms | measured | `gnf4.kernel.dgrad` |
 
 **Three things that limit those numbers, stated here rather than in a
 footnote:**
@@ -203,7 +204,7 @@ MXFP4 decode reproduces Kimi K3's own declared reference exactly
   reduce (`gemv_int4_b32(..., fused_reduce=True)` / `GNF4_GEMV_FUSED_REDUCE=1`) and K18's grouped expert
   GEMV (`gemv_int4_b32_grouped`) are both bitwise the served GEMV and neither pays: K17 saves at most
   2 µs per call at R=1 and made the consumer's decode step slower at B=1 and B=16, and K18 is 1.49× slower
-  on recorded B=16 routing (the two reads under *What is open*). With `FUSED_REDUCE=0` the served kernel's
+  on recorded B=16 routing (the K17 and K18 reads below). With `FUSED_REDUCE=0` the served kernel's
   body is byte-for-byte the 0.32.1 one, and no default changes. The same release closes #87 with a CPU boundary test CI runs, and records that #319 was a
   mislabelled test arm (above).
 
@@ -221,8 +222,9 @@ MXFP4 decode reproduces Kimi K3's own declared reference exactly
 Kept here because a claim that quietly disappears is worse than one that
 was wrong.
 
-- **`sm_120` is no longer "parked".** The README's roadmap still says
-  three cloud provisioning failures parked Blackwell work. That was true
+- **`sm_120` is no longer "parked".** The README's roadmap once said
+  three cloud provisioning failures parked Blackwell work (that line is
+  gone; the README's *What was retired* section records it). That was true
   in July; since 0.15.0 the RTX 5090 has been the *primary* serving
   target — the M=1 config retune, the sm_120 census, the decode anchor,
   the M3 defaults, the int4 lanes and the paged attention were all
@@ -235,9 +237,12 @@ was wrong.
   the README with that caveat attached, not rescaled
   (`gnf4.kernel.comparators-v6-execution-class`, superseded by
   `gnf4.kernel.h2h-unsloth`).
-- **Split-K on the decode GEMV is refuted** (flat at `gate_up`, ~14%
-  worse at `down`). The kernel ships dormant *as the evidence*
-  (the retired claim `gnf4.retired.splitk-gemv`).
+- **Split-K on the NF4 dot-pad decode GEMV is refuted** (K7: flat at
+  `gate_up`, ~14% worse at `down`). That plan ships dormant behind
+  `GNF4_GEMV_SPLITK` *as the evidence*
+  (the retired claim `gnf4.retired.splitk-gemv`); the scalar NF4 route's
+  split-K (`_decode_plan`) and the int4-b32 GEMV's split-K are separate,
+  shipped plans.
 - **The int4-b32 split-K planner takes the row count (0.31.0).**
   `_plan(N, K)` sized split-K from `N` alone, so at large `R` every expert
   projection ran a configuration chosen for a batch it was not in and paid
@@ -260,6 +265,17 @@ was wrong.
   int4 projection kernel would be worth ≈ 1.29 ms/step and nothing shipped
   realises it (`gnf4.kernel.k14-smallm-int4-gemm-refuted.5090.2026-09-11`,
   measured).
+- **K17 read (2026-09-21, RTX 5090): folding the int4-b32 GEMV's split-K reduce into its own launch is exact
+  (24/24 rows bitwise, counter re-arms under graph replay) but was not the cost** — at R=1 the removed
+  `_reduce_partials` launch was overlapped in the graph (savings 0–2 µs; P2 refuted by its own clause), and the
+  fused epilogue is 6–12 % slower at R=128. Ships **opt-in** (`GNF4_GEMV_FUSED_REDUCE=1`), default off at every
+  R. `kernel/RESULTS-k17-fused-splitk-gemv.md`; register row
+  `gnf4.kernel.k17-fused-splitk-gemv.5090.2026-09-21`; the consumer's step-level read is experts4bit-qlora lane P57.
+- **K18 read (2026-09-22, RTX 5090): a grouped split-K int4-b32 expert GEMV — each expert's weight slice loaded once
+  for up to 4 of its rows — is exact and slower.** On experts4bit-qlora P60's recorded Qwen3-30B-A3B B=16 routing it
+  runs 9.689 ms/step against the served GEMV's 6.520 (P2 refuted), and 1.00–1.65× the served call at R = 8/16 (P3
+  refuted), worst where nothing can be shared. Not a lever; `gemv_int4_b32_grouped` stays dormant as the evidence.
+  `kernel/RESULTS-k18-grouped-expert-gemv.md`; register row `gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22`.
 - **A fixed fraction-of-waterfall is retired as a law** (two 0.77
   readings were a two-host coincidence).
 - **The cold-engine "free floor" premise is refuted** on its target box:
@@ -288,9 +304,11 @@ was wrong.
   predicate as it stood at the 2026-08-27 run; `fp8_compute_unsupported`
   has admitted `(1, 2, 4, 8, 16)` since 0.26.0 and the sentence now says
   so, with the measurement unchanged. Every `evidence` entry in
-  `claims.json` is now a path that resolves at HEAD (structured forms for
-  changelog sections, globs and cross-repository receipts:
-  [`claims-schema.md`](claims-schema.md)); every measured, measured-private
+  `claims.json` is now a path that resolves at HEAD (at the time through
+  structured forms for changelog sections, globs and cross-repository
+  receipts; 0.33.2's shared schema replaced the first two — a changelog
+  section is now a `CHANGELOG.md#<anchor>` location and globs are refused —
+  and kept the cross-repository form: [`claims-schema.md`](claims-schema.md)); every measured, measured-private
   and confirmed row carries an ISO `measured_on` taken from its receipt or,
   where the receipt states no run date, the receipt's first commit;
   the retired `gnf4.retired.splitk-gemv` carries its `retired_reason`; and
@@ -346,17 +364,6 @@ was wrong.
   the route is the consumer's default from 0.36.2. Nothing in this package
   routes to it on its own
   (`gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19`, measured).
-- **K17 read (2026-09-21, RTX 5090): folding the int4-b32 GEMV's split-K reduce into its own launch is exact
-  (24/24 rows bitwise, counter re-arms under graph replay) but was not the cost** — at R=1 the removed
-  `_reduce_partials` launch was overlapped in the graph (savings 0–2 µs; P2 refuted by its own clause), and the
-  fused epilogue is 6–12 % slower at R=128. Ships **opt-in** (`GNF4_GEMV_FUSED_REDUCE=1`), default off at every
-  R. `kernel/RESULTS-k17-fused-splitk-gemv.md`; register row
-  `gnf4.kernel.k17-fused-splitk-gemv.5090.2026-09-21`; the consumer's step-level read is experts4bit-qlora lane P57.
-- **K18 read (2026-09-22, RTX 5090): a grouped split-K int4-b32 expert GEMV — each expert's weight slice loaded once
-  for up to 4 of its rows — is exact and slower.** On experts4bit-qlora P60's recorded Qwen3-30B-A3B B=16 routing it
-  runs 9.689 ms/step against the served GEMV's 6.520 (P2 refuted), and 1.00–1.65× the served call at R = 8/16 (P3
-  refuted), worst where nothing can be shared. Not a lever; `gemv_int4_b32_grouped` stays dormant as the evidence.
-  `kernel/RESULTS-k18-grouped-expert-gemv.md`; register row `gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22`.
 - **Every non-CUDA row is a `port target`.** ROCm/XPU numbers do not
   exist; `PROJECTIONS-multiarch.md` is arithmetic, stamped before the
   silicon, and explicitly invites refutation (`gnf4.projection.multiarch`,

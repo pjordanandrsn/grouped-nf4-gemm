@@ -80,7 +80,7 @@ shipping is not publishing.
 
 ```bash
 pip install -e . pytest numpy                      # CPU torch + triton (Linux) run the interpreter suites
-cd kernel && TRITON_INTERPRET=1 python -m pytest test_interp_contract.py test_mxfp4_interp.py test_mxfp4_gemv_b32.py -q   # the _INTERP_FILES members, alone
+cd kernel && TRITON_INTERPRET=1 python -m pytest test_interp_contract.py test_mxfp4_interp.py test_mxfp4_gemv_b32.py -q   # three of the eight _INTERP_FILES members (kernel/conftest.py), no compiled-path file
 cd kernel && TRITON_INTERPRET=1 python -m pytest test_int4_b32.py -q             # a compiled-path file: its own process (why: below)
 cd kernel && python -m pytest test_packaging_covers_kernel.py test_check_readme_links.py -q
 python examples/dequant_tax.py                     # prints the CPU note without a GPU; ~1 min on one GPU
@@ -100,14 +100,16 @@ python scripts/check_shared_tooling.py --sibling ../experts4bit-qlora   # the sh
 
 The two interpreter commands stay separate on purpose: `kernel/conftest.py` raises
 `pytest.UsageError` when a CUDA device is present and an `_INTERP_FILES` member
-(`test_interp_contract.py`, `test_mxfp4_interp.py`, `test_mxfp4_gemv_b32.py`) is
+(one of the eight files `kernel/conftest.py` lists, such as `test_interp_contract.py`) is
 collected in the same process as a compiled-path file such as `test_int4_b32.py`, because
 `TRITON_INTERPRET` latches process-wide at triton's first import; CI's CPU-only runner
 never trips that guard, a GPU box does. An interpreter-mode file
 must be registered in `_INTERP_FILES` and named in the CI step
 (`test_packaging_covers_kernel.py` enforces both). CI (`.github/workflows/ci.yml`)
 runs the anchor gate, the CPU example, the interpreter suites, the wheel smoke and
-the `discoverability` job (every `scripts/check_*.py` above), asserting triton is importable so a skip is never silent.
+the `discoverability` job (every `scripts/check_*.py` above except the README link
+check, which runs in `wheel-smoke` with the release tag mapped to the tree under test),
+asserting triton is importable so a skip is never silent.
 
 ## 7. Rules that have bitten
 
@@ -155,8 +157,10 @@ a diff is missing, and CI runs it on every pull request. Classes:
 **Shared tooling is one file in both repositories.** The files listed in `SHARED` in `scripts/check_shared_tooling.py` are byte-identical here and in the sibling repository — the check scripts, and `docs/claims-schema.md` with its checker, so both claims registers follow ONE schema; grouped-nf4-gemm is their upstream (kernel-first, as for the manifest). Change one there first, then copy it byte-for-byte into experts4bit-qlora, whose CI compares its copies with grouped-nf4-gemm's `main`. A shared script that must behave differently per repository reads the difference from data (`pyproject.toml`, the manifest), never from two copies. The same-named scripts not yet in `SHARED` are forks still to reconcile; `--sibling` lists them.
 
 Then regenerate `llms-full.txt` (`--check` is a CI gate). Release notes follow
-[`docs/RELEASE_NOTES_GUIDE.md`](docs/RELEASE_NOTES_GUIDE.md); releases are `v<version>`
-tags cut by the maintainer (`publish.yml` refuses a tag that disagrees with `pyproject.toml`), never from a branch.
+[`docs/RELEASE_NOTES_GUIDE.md`](docs/RELEASE_NOTES_GUIDE.md); a release is a GitHub Release on a
+`v<version>` tag cut by the maintainer, never from a branch. `publish.yml` fires when the release is
+published (a tag push alone publishes nothing; `workflow_dispatch` with the tag is the recovery path)
+and refuses a tag that disagrees with `pyproject.toml`.
 
 ## 9. Platform caveats
 
@@ -176,12 +180,16 @@ was a test-harness defect, and the claim that they miss their reference,
 
 ## 10. Contributing
 
-- A change starts from an issue and ends as a pull request that cites it. Every
-  pull request gets one independent review — by someone who did not write it —
-  before it merges. Nobody merges their own. CI runs on `main` and on a pull
-  request once it carries the `ready-to-merge` label (or leaves draft), never on
-  every push; a head with no CI run is not green, so remove and re-apply the
-  label after a new push.
+- A change starts from an issue and ends as a pull request that cites it. The
+  maintainer reviews every pull request himself, his own included, and
+  squash-merges it (one commit per pull request, titled `… (#N)`) once the
+  required checks are green and every review thread is resolved; no second
+  reviewer or bot review is waited for. The required checks are `guard` (the
+  private-marker guard, which runs on every push and pull request) and the `ci`
+  workflow's `anchor-gate`, `example-runs`, `interp-contract`, `wheel-smoke` and
+  `discoverability`. `ci` runs on `main` and on a pull request once it carries
+  the `ready-to-merge` label (or leaves draft), never on every push; a head with
+  no CI run is not green, so remove and re-apply the label after a new push.
 - A task pull request never moves a gate, a threshold, a compiled-kernel default
   or a registered claim. If the task needs one, stop and say so on the issue.
   **Kernel changes need the GPU tests run on the named hardware, with the receipt

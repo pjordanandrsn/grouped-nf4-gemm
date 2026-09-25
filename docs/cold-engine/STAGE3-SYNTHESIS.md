@@ -97,7 +97,12 @@ Gate 3 (adaptive residency — promotion and demotion driven by observed
 reuse) is **now scored offline and the answer is yes** — see the verdict
 table. ~~It remains the live thread, and R2, R3, R4 and R7–R10 remain
 untested~~ — **all of R1–R10 are now scored**; the per-prediction verdicts are
-in the table below and the documents it cites. The VRAM
+in the table above and the documents it cites, and the four it has no row for
+are scored in their own documents: R2 in `bench/cold-engine/RESULTS-r2-wall.md`
+(its premise in `bench/cold-engine/routing-trace/RESULTS-r2.md`), R6 in
+`bench/cold-engine/RESULTS-r6.md`, R8 and R9 in
+`bench/cold-engine/routing-trace/RESULTS-r8.md`, `RESULTS-r9.md` and
+`RESULTS-r9-policy.md`. The VRAM
 side of reclaimable residency now has that real routing trace
 (`bench/cold-engine/routing-trace/olmoe_routing_seq.jsonl`, 512 autoregressive
 decode steps of OLMoE), and it was worth taking: sized far below the expert
@@ -107,7 +112,7 @@ the first real captured routing **sequence** in this repo, which is what R4 was
 registered against; R4 is scored above.
 
 **One correction still outstanding.** The measurement-window defect that
-distorted R1 is also present in `run_gate1.py`, and is fixed there — but
+distorted R1 is also present in `bench/cold-engine/gate1-5090-zen5/run_gate1.py`, and is fixed there — but
 **gate 1's published read counts were taken with it and are uncorrected.**
 They are warmup-inclusive where they claim decode-only, by roughly the
 factor R1 measured (six sevenths of the traffic was warmup). A second,

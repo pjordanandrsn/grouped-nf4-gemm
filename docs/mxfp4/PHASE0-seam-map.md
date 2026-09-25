@@ -86,3 +86,23 @@ needed, that is the R1 red flag to report, not work around).
 bytes, dequant-ref, and unit-test *against the A4 oracle* (device-free first,
 then GPU). Interpreter-contract tests extend the existing 18 with the format
 parameter. No pod spend until the oracle agrees on CPU.
+
+## Resolution (note added 2026-09-25)
+
+The three STOP items were adjudicated in Phase 1; the outcomes are locked in
+`kernel/mxfp4_pack_ref.py` and pinned by `kernel/test_mxfp4_oracle.py`:
+
+1. **Nibble order**: element 2j is the LOW nibble (`NIBBLE_LOW_FIRST = True`),
+   the opposite of bitsandbytes NF4 — row 4's hypothesis held.
+2. **e8m0 `0xFF`**: the reference matches transformers' oracle, which
+   implements no `0xFF`→NaN reservation, so the NaN guard in row 2 of the
+   table above did not ship; real checkpoints do not contain the byte.
+3. **Scale application**: the reference applies the scale with
+   `torch.ldexp(x, s-127)`, as the oracle does; the GPU kernels
+   (`kernel/mxfp4_grouped.py`) multiply by `exp2(e - 127)`, and the `0xFF`
+   edge where the two differ cannot arise on real checkpoints (the
+   `kernel/mxfp4_grouped.py` docstring).
+
+The body above is kept as written;
+[`../solutions/native-mxfp4-moe-inference.md`](../solutions/native-mxfp4-moe-inference.md)
+states the shipped behaviour.
