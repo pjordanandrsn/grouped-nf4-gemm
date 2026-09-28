@@ -35,8 +35,9 @@ def _index_add_ordered_(out, rows, src):
     does when a prefill token meets two of its experts in one chunk, that row's terms
     land in whatever order the threads win. The fp32 sum then changes from call to
     call, and so, now and then, do its bf16 bits. On the RTX A2000, 50 identical calls
-    at Kimi-K3 geometry gave 50 different fp32 outputs, and the downstream top-16
-    routing drifted from process to process (experts4bit-qlora#761).
+    at Kimi-K3 geometry gave 50 different fp32 outputs, and in the full Kimi-K3 forward
+    the engine returned different bits for identical inputs from one process to the
+    next (#408, experts4bit-qlora#761).
 
     Here no two threads ever add into one address. Pass ``r`` adds the ``r``-th
     occurrence of every row, so each ``index_add_`` call sees unique rows. The result
