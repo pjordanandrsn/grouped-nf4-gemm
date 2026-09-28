@@ -28,6 +28,40 @@ def _align8(n: int) -> int:
     return (n + 7) & ~7
 
 
+def _index_add_ordered_(out, rows, src):
+    """``out.index_add_(0, rows, src)`` with each row's terms added in index order.
+
+    On CUDA ``index_add_`` accumulates with float atomics. When ``rows`` repeats, as it
+    does when a prefill token meets two of its experts in one chunk, that row's terms
+    land in whatever order the threads win. The fp32 sum then changes from call to
+    call, and so, now and then, do its bf16 bits. On the RTX A2000, 50 identical calls
+    at Kimi-K3 geometry gave 50 different fp32 outputs, and the downstream top-16
+    routing drifted from process to process (experts4bit-qlora#761).
+
+    Here no two threads ever add into one address. Pass ``r`` adds the ``r``-th
+    occurrence of every row, so each ``index_add_`` call sees unique rows. The result
+    is bitwise the sequential ``for i in range(len(rows)): out[rows[i]] += src[i]``,
+    on CPU and on CUDA. The cost is a sort of ``rows``, one host sync for the pass
+    count, and one ``index_add_`` per pass. The pass count is the largest number of
+    times any row repeats (at most ``topk`` on the prefill path).
+    """
+    n = rows.numel()
+    if n == 0:
+        return out
+    srt, perm = torch.sort(rows, stable=True)
+    # occurrence number of each sorted position: its distance from its row's first
+    occ = torch.arange(n, device=rows.device) - torch.searchsorted(srt, srt)
+    by_occ = torch.argsort(occ, stable=True)
+    _, per_pass = torch.unique_consecutive(occ.index_select(0, by_occ), return_counts=True)
+    pos = perm.index_select(0, by_occ)                     # positions in `rows`, pass by pass
+    lo = 0
+    for cnt in per_pass.tolist():
+        sel = pos[lo:lo + cnt]
+        out.index_add_(0, rows.index_select(0, sel), src.index_select(0, sel))
+        lo += cnt
+    return out
+
+
 _KERNEL = None
 
 
@@ -413,8 +447,12 @@ class Mxfp4PipelinedGptOss:
                                     self.slot_eids[:len(chunk)]).to(torch.float32)
             if self.down_bias is not None:
                 dn = dn + self.down_bias.index_select(0, eids).to(torch.float32)
-            # weight each pair by its own router score, then sum into its token
-            out.index_add_(0, rows, dn * wt.index_select(0, order[pstart:pstart + npairs])[:, None])
+            # weight each pair by its own router score, then sum into its token. The
+            # chunks run in ascending expert id and the pairs inside one are expert-sorted,
+            # so each token's terms are added in ascending expert id, one fp32 rounding
+            # each: the same bits on every call (see _index_add_ordered_)
+            _index_add_ordered_(
+                out, rows, dn * wt.index_select(0, order[pstart:pstart + npairs])[:, None])
             pstart += npairs
 
         return out.to(device=in_dev, dtype=in_dtype)
