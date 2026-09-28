@@ -84,7 +84,7 @@ are wrong, and several have been.
 `bench/` for a measurement lane. Nothing is pushed to `main` directly — every
 change lands through a PR and is squash-merged, so `main` is one commit per PR
 titled `… (#N)` and the discussion stays on the PR. The maintainer reviews and
-merges every PR, his own included.
+merges every PR, including the maintainer's own.
 
 **What review actually blocks on**, in order:
 

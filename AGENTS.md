@@ -181,7 +181,7 @@ was a test-harness defect, and the claim that they miss their reference,
 ## 10. Contributing
 
 - A change starts from an issue and ends as a pull request that cites it. The
-  maintainer reviews every pull request himself, his own included, and
+  maintainer reviews every pull request, including the maintainer's own, and
   squash-merges it (one commit per pull request, titled `… (#N)`) once the
   required checks are green and every review thread is resolved; no second
   reviewer or bot review is waited for. The required checks are `guard` (the

@@ -1,9 +1,10 @@
 # Changelog
 
-## Unreleased — documentation, issue and PR templates, and package metadata only (no kernel body changes; the one shipped-module edit is `gnf4_native/build.py`'s docstring)
+## 0.33.5 — 2026-09-28 — `kernel/int4_smallm.py` imports on the declared Python 3.9 floor (a postponed-annotations import; no kernel body change), a static CI guard that every shipped module holds the declared floor, and documentation, issue and PR templates and package metadata (the only other shipped-module edit is `gnf4_native/build.py`'s docstring)
 
+- **`int4_smallm` imports on 3.9.** `requires-python` is `>=3.9` and the dependencies support it (torch 2.8, triton 3.4 ships cp39), but `int4_smallm.py:115` had `dot_bf16: bool | None` in a module-level signature without `from __future__ import annotations`, which raises `TypeError` at import below 3.10. The future import fixes it; `int4_b32.py` and `nf4_grouped.py` already pair it with `@triton.jit`. On an RTX A2000 the module's contract passes 9/9 interpreted and 9/9 compiled. **New guard:** `kernel/test_requires_python_floor.py` (in CI) reads `requires-python` and fails on grammar newer than the floor or on a PEP 604 annotation evaluated at import in a module without the future import; it fails on the unfixed module at exactly line 115. CI still runs 3.11 only; the guard is static. (#406)
 - **The contributor process says what happens.** `AGENTS.md` §10, `CONTRIBUTING.md` and the PR template: the maintainer
-  reviews every pull request, his own included, and squash-merges it once the required checks are green; `ci` runs on
+  reviews every pull request, including the maintainer's own, and squash-merges it once the required checks are green; `ci` runs on
   a pull request only after `ready-to-merge` (or leaving draft), the private-marker guard on every push; a release is a
   GitHub Release on the tag (`publish.yml`'s trigger). CONTRIBUTING no longer asks for RTX 5090 runs (sm_120 is the
   primary serving target), records the 2026-07-22 MI300X confirmatory, drops the `out-of-scope` label the repository
