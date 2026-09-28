@@ -16,6 +16,8 @@ dequant-then-GEMM path's, without materialising the bf16 weight.
 Contract (registered before any perf number): deterministic for a fixed config; within one bf16 output
 ulp of ``x @ dequant_int4_ref(packed, scales).T`` on every shape; within one bf16 ulp across SK.
 """
+from __future__ import annotations
+
 import torch
 
 from _triton_shim import triton, tl
