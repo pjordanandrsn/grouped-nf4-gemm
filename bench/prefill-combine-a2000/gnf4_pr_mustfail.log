@@ -1,0 +1,6 @@
+torch 2.8.0+cu128  NVIDIA RTX A2000 12GB  helper -> plain index_add_
+  FAILED as expected             test_repeated_cuda_calls_are_bitwise_identical(6, 96)
+  FAILED as expected             test_repeated_cuda_calls_are_bitwise_identical(90, 1440)
+  FAILED as expected             test_equals_the_sequential_loop_bitwise('cuda', 6, 96)
+  FAILED as expected             test_equals_the_sequential_loop_bitwise('cuda', 90, 1440)
+  PASSED (control did NOT fail)  test_equals_the_sequential_loop_bitwise('cuda', 1, 7)

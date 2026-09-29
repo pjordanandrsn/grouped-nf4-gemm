@@ -1,0 +1,36 @@
+============================= test session starts ==============================
+platform linux -- Python 3.10.12, pytest-9.1.1, pluggy-1.6.0 -- /workspace/venv34/bin/python
+rootdir: /workspace/k3-rel-20260928/v5-det/gnf4-pr/kernel
+plugins: anyio-4.14.2
+collecting ... collected 28 items
+
+test_mxfp4_prefill_combine.py::test_equals_the_sequential_loop_bitwise[1-7-cpu] PASSED [  3%]
+test_mxfp4_prefill_combine.py::test_equals_the_sequential_loop_bitwise[1-7-cuda] PASSED [  7%]
+test_mxfp4_prefill_combine.py::test_equals_the_sequential_loop_bitwise[6-96-cpu] PASSED [ 10%]
+test_mxfp4_prefill_combine.py::test_equals_the_sequential_loop_bitwise[6-96-cuda] PASSED [ 14%]
+test_mxfp4_prefill_combine.py::test_equals_the_sequential_loop_bitwise[90-1440-cpu] PASSED [ 17%]
+test_mxfp4_prefill_combine.py::test_equals_the_sequential_loop_bitwise[90-1440-cuda] PASSED [ 21%]
+test_mxfp4_prefill_combine.py::test_equals_the_sequential_loop_bitwise[40-30-cpu] PASSED [ 25%]
+test_mxfp4_prefill_combine.py::test_equals_the_sequential_loop_bitwise[40-30-cuda] PASSED [ 28%]
+test_mxfp4_prefill_combine.py::test_equals_the_sequential_loop_bitwise[5-0-cpu] PASSED [ 32%]
+test_mxfp4_prefill_combine.py::test_equals_the_sequential_loop_bitwise[5-0-cuda] PASSED [ 35%]
+test_mxfp4_prefill_combine.py::test_unique_rows_equal_plain_index_add[cpu] PASSED [ 39%]
+test_mxfp4_prefill_combine.py::test_unique_rows_equal_plain_index_add[cuda] PASSED [ 42%]
+test_mxfp4_prefill_combine.py::test_returns_out_and_writes_in_place PASSED [ 46%]
+test_mxfp4_prefill_combine.py::test_repeated_cuda_calls_are_bitwise_identical[6-96] PASSED [ 50%]
+test_mxfp4_prefill_combine.py::test_repeated_cuda_calls_are_bitwise_identical[90-1440] PASSED [ 53%]
+test_mxfp4_pipelined.py::test_every_K_matches_reference[0] PASSED        [ 57%]
+test_mxfp4_pipelined.py::test_every_K_matches_reference[2] PASSED        [ 60%]
+test_mxfp4_pipelined.py::test_every_K_matches_reference[4] PASSED        [ 64%]
+test_mxfp4_pipelined.py::test_every_K_matches_reference[8] PASSED        [ 67%]
+test_mxfp4_pipelined.py::test_pure_stream_equals_fully_resident PASSED   [ 71%]
+test_mxfp4_pipelined.py::test_traffic_counters PASSED                    [ 75%]
+test_mxfp4_pipelined.py::test_cuda_graph_replay_parity PASSED            [ 78%]
+test_mxfp4_pipelined.py::test_prefill_equals_running_the_tokens_one_at_a_time[False] PASSED [ 82%]
+test_mxfp4_pipelined.py::test_prefill_equals_running_the_tokens_one_at_a_time[True] PASSED [ 85%]
+test_mxfp4_pipelined.py::test_prefill_chunks_the_expert_set_to_the_slot_budget PASSED [ 89%]
+test_mxfp4_pipelined.py::test_prefill_reads_each_distinct_expert_once_not_once_per_token PASSED [ 92%]
+test_mxfp4_pipelined.py::test_prefill_combine_is_ordered_and_reproducible PASSED [ 96%]
+test_mxfp4_pipelined.py::test_one_token_still_takes_the_decode_path PASSED [100%]
+
+============================== 28 passed in 6.98s ==============================

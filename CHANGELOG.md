@@ -26,6 +26,9 @@
   engine routes its combine through the helper, and repeated prefill calls give identical bits).
   Found by experts4bit-qlora#761, where Kimi-K3's p(' Paris') moved from process to process on one
   build. (#408)
+- **#410's receipts are registered.** `bench/prefill-combine-a2000/` holds the kernel replay (`combine_repeat`,
+  `combine_pr`), the GPU test run (28 passed on the A2000 at `f180045`) and the must-fail control, with SHA256SUMS.
+  New claim `gnf4.kernel.mxfp4-prefill-combine-ordered.a2000.2026-09-28` (measured). `gnf4.open.issues` adds #409.
 
 ## 0.33.5 — 2026-09-28 — `kernel/int4_smallm.py` imports on the declared Python 3.9 floor (a postponed-annotations import; no kernel body change), a static CI guard that every shipped module holds the declared floor, and documentation, issue and PR templates and package metadata (the only other shipped-module edit is `gnf4_native/build.py`'s docstring)
 

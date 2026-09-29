@@ -126,6 +126,18 @@ MXFP4 decode reproduces Kimi K3's own declared reference exactly
 
 ## What changed — retired, superseded, corrected
 
+- **#408 is closed: the MXFP4 prefill combine returns the same bits on every
+  call (#410, 2026-09-28, RTX A2000).** `Mxfp4PipelinedGptOss._forward_prefill`
+  summed each token's expert outputs with `out.index_add_`, whose CUDA float
+  atomics reorder a token's terms from call to call. Replayed at Kimi-K3
+  geometry, 50 identical calls gave 50 different fp32 outputs. It now adds
+  through `_index_add_ordered_`, which gives each `index_add_` call unique rows.
+  The result is bitwise the sequential sum in ascending expert id: 1 distinct
+  output in 50 at T = 6, 90 and 512, at 287–330 µs more per chunk
+  (`gnf4.kernel.mxfp4-prefill-combine-ordered.a2000.2026-09-28`, measured). In nine
+  Kimi-K3 processes (experts4bit-qlora#766) it was the only run-to-run
+  difference in the forward, the drift #761 recorded. The MXFP4 QLoRA fused path has the same pattern, in bf16
+  (#409, open).
 - **#393 is closed, answered with an accuracy contract, not a bitwise one
   (lane B393, 2026-09-23, RTX 5090).** `combine_rows` (the fused MoE top-k
   weight-and-sum experts4bit-qlora runs on every MoE layer by default) and
@@ -335,7 +347,10 @@ was wrong.
   layer's rows are prefetchable (guarded by a CUDA event, with a
   `hot_rows` floor of two layers' experts).
 - **#71** — `PINNED_ROW_FACTOR` is ~2× conservative on cgroup v1; v2
-  needs a box the rented pods cannot give. (#60 and #71 are `gnf4.open.issues`.)
+  needs a box the rented pods cannot give.
+- **#409** — `mxfp4_qlora._forward_fused` combines with one bf16
+  `index_add_` over repeated token rows, the pattern #410 removed from the
+  prefill engine; not measured. (#60, #71 and #409 are `gnf4.open.issues`.)
 - **`docs/context-budgets.md` is rung-one only** (A2000-measured
   KB/token); full-depth real-weight confirmation is pending and the K3
   row is a declared gap. Its own text forbids promoting pending rows to
