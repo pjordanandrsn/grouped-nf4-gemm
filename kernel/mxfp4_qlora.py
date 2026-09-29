@@ -325,7 +325,14 @@ class ExpertsMxfp4LoRA(nn.Module):
 
         w = routing_weights[tok_of_pair, pos_of_pair, None]
         next_states = torch.zeros_like(hidden_states)
-        next_states.index_add_(0, tok_of_pair, (dn * w).to(hidden_states.dtype))
+        # NOT a bare index_add_ (#409): every token appears k times in tok_of_pair, and on
+        # CUDA index_add_ adds a repeated row's terms with float atomics in whatever order
+        # the threads win -- here in bf16, so each order rounds k times. The ordered
+        # helper (#408/#410) gives each pass unique rows and equals the sequential sum
+        # bit for bit; its backward is a gather. Imported here: the fused path already
+        # needs the MXFP4 kernels, the loop path must not.
+        from mxfp4_pipelined import _index_add_ordered_
+        _index_add_ordered_(next_states, tok_of_pair, (dn * w).to(hidden_states.dtype))
         return next_states
 
     def _lora_rows(self, x, eids_sorted, A, B):
