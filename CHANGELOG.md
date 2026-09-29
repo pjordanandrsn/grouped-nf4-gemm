@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.33.6 — 2026-09-29 — `kernel/mxfp4_pipelined.py`: the MXFP4 prefill combine adds in a fixed order, so identical inputs give identical bits on CUDA (#408, #410); its RTX A2000 receipts and claim (#411); every other shipped module identical to 0.33.5
+
+**0.33.6.** The MXFP4 residency engines' prefill (`Mxfp4PipelinedGptOss._forward_prefill`, T > 1, which the NVMe, Kimi-K3 and DeepSeek-V4 subclasses inherit) no longer returns different bits for identical inputs on CUDA. Its combine added each token's expert outputs with float-atomic `index_add_`, so a forward through it could change from run to run. experts4bit-qlora's Kimi-K3 bench on an RTX A2000 drifted from process to process this way. This affects MXFP4 prefill through these engines on NVIDIA GPUs. Decode (T = 1), the NF4 grouped GEMM, the int4-b32 GEMVs and the MXFP4 QLoRA training path are untouched; the last has the same pattern (#409, open). Upgrade if you compare runs or need reproducible prefill outputs. Prefill values move at the fp32-rounding level, one fixed summation order in place of a varying one, at 287–330 µs more per chunk on the A2000 (`gnf4.kernel.mxfp4-prefill-combine-ordered.a2000.2026-09-28`). No floor change for experts4bit-qlora.
 
 - **The MXFP4 prefill combine adds in a fixed order, so repeated calls give the same bits.**
   `Mxfp4PipelinedGptOss._forward_prefill` summed each token's routed-expert outputs with
@@ -25,10 +27,10 @@
   `test_prefill_combine_is_ordered_and_reproducible` in `kernel/test_mxfp4_pipelined.py` (the
   engine routes its combine through the helper, and repeated prefill calls give identical bits).
   Found by experts4bit-qlora#761, where Kimi-K3's p(' Paris') moved from process to process on one
-  build. (#408)
+  build. (#408, #410)
 - **#410's receipts are registered.** `bench/prefill-combine-a2000/` holds the kernel replay (`combine_repeat`,
   `combine_pr`), the GPU test run (28 passed on the A2000 at `f180045`) and the must-fail control, with SHA256SUMS.
-  New claim `gnf4.kernel.mxfp4-prefill-combine-ordered.a2000.2026-09-28` (measured). `gnf4.open.issues` adds #409.
+  New claim `gnf4.kernel.mxfp4-prefill-combine-ordered.a2000.2026-09-28` (measured). `gnf4.open.issues` adds #409. (#411)
 
 ## 0.33.5 — 2026-09-28 — `kernel/int4_smallm.py` imports on the declared Python 3.9 floor (a postponed-annotations import; no kernel body change), a static CI guard that every shipped module holds the declared floor, and documentation, issue and PR templates and package metadata (the only other shipped-module edit is `gnf4_native/build.py`'s docstring)
 
