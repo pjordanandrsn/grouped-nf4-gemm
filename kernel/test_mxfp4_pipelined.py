@@ -284,6 +284,33 @@ def test_prefill_reads_each_distinct_expert_once_not_once_per_token():
         f"{T} tokens over 4 distinct experts should be ONE chunk, got {len(calls)}")
 
 
+def test_prefill_combine_is_ordered_and_reproducible(monkeypatch):
+    """Each token's expert outputs are summed through `_index_add_ordered_`, not a raw
+    `index_add_`, whose float atomics reorder a repeated row's terms from call to call
+    (experts4bit-qlora#761). So identical inputs give identical bits, call after call.
+    k = 4 of E = 8 splits the set into two chunks, and a token meets about two of its
+    four experts in each, so the rows really do repeat."""
+    _needs_gather_kernel()
+    import mxfp4_pipelined
+    stacks, E, H, _ = _prefill_engine()
+    topk, T = 4, 6
+    eng = _build(stacks, E, topk, bias=True)
+    idx, sc = _routes(T, E, topk, seed=5)
+    g = torch.Generator(device="cuda").manual_seed(21)
+    x = torch.randn(T, H, dtype=torch.bfloat16, device="cuda", generator=g)
+
+    first = eng.forward(x, idx, sc)
+    for _ in range(9):
+        assert torch.equal(eng.forward(x, idx, sc), first)
+
+    seen = []
+    real = mxfp4_pipelined._index_add_ordered_
+    monkeypatch.setattr(mxfp4_pipelined, "_index_add_ordered_",
+                        lambda out, rows, src: (seen.append(rows.numel()), real(out, rows, src))[1])
+    eng.forward(x, idx, sc)
+    assert len(seen) > 1 and sum(seen) == T * topk, seen
+
+
 def test_one_token_still_takes_the_decode_path():
     """Decode is the validated path and its reduction order is part of what was
     validated, so T == 1 must not silently start going through prefill."""

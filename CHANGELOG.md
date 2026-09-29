@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+- **The MXFP4 prefill combine adds in a fixed order, so repeated calls give the same bits.**
+  `Mxfp4PipelinedGptOss._forward_prefill` summed each token's routed-expert outputs with
+  `out.index_add_(0, rows, ...)`. On CUDA that accumulates with float atomics, and a token that meets
+  two of its experts in one chunk has its terms added in whatever order the threads win. Replaying the
+  combine at Kimi-K3 geometry (topk 16 of 896, 16 slots per chunk, width 7168) on the NAS RTX A2000,
+  50 identical calls gave 50 different fp32 outputs at T = 6 and at T = 90, and 2 and 4 different
+  bf16 outputs after the cast. The new `_index_add_ordered_` gives every `index_add_` call unique
+  rows: pass `r` adds the `r`-th occurrence of each row. Each token's terms now land in ascending
+  expert id, one fp32 rounding each, which is bitwise the sequential loop on CPU and on CUDA. The
+  decode path (T = 1) is unchanged. It sums the k slots with `.sum(0)` and never used `index_add_`.
+  In Kimi-K3's full forward on the same card (experts4bit-qlora#761's driver, 6-token prefill), three
+  processes with this file were bit-identical at every one of the 92 MoE calls, and identical to
+  `torch.use_deterministic_algorithms(True)` on the shipped file. Three processes on the shipped
+  file differed from each other at 3 to 8 of the 92 calls, each time with identical inputs.
+  **Cost:** the replayed combine takes 287 to 330 µs more per chunk (69 → 399 µs at T = 6, 67 →
+  354 µs at T = 90, 139 → 462 µs at T = 512), for the sort, one host sync and one `index_add_` per
+  pass. On a 6-token Kimi-K3 prefill that is at most about 0.2 s (arithmetic: at most 6 chunks
+  per layer × 92 layers × 0.33 ms), against the 175 to 185 s the prefill takes on that card.
+  **New tests:** `kernel/test_mxfp4_prefill_combine.py` (CPU and CUDA: bitwise equal to the
+  sequential loop; 50 repeated CUDA calls bitwise identical) and
+  `test_prefill_combine_is_ordered_and_reproducible` in `kernel/test_mxfp4_pipelined.py` (the
+  engine routes its combine through the helper, and repeated prefill calls give identical bits).
+  Found by experts4bit-qlora#761, where Kimi-K3's p(' Paris') moved from process to process on one
+  build. (#408)
+
 ## 0.33.5 — 2026-09-28 — `kernel/int4_smallm.py` imports on the declared Python 3.9 floor (a postponed-annotations import; no kernel body change), a static CI guard that every shipped module holds the declared floor, and documentation, issue and PR templates and package metadata (the only other shipped-module edit is `gnf4_native/build.py`'s docstring)
 
 - **`int4_smallm` imports on 3.9.** `requires-python` is `>=3.9` and the dependencies support it (torch 2.8, triton 3.4 ships cp39), but `int4_smallm.py:115` had `dot_bf16: bool | None` in a module-level signature without `from __future__ import annotations`, which raises `TypeError` at import below 3.10. The future import fixes it; `int4_b32.py` and `nf4_grouped.py` already pair it with `@triton.jit`. On an RTX A2000 the module's contract passes 9/9 interpreted and 9/9 compiled. **New guard:** `kernel/test_requires_python_floor.py` (in CI) reads `requires-python` and fails on grammar newer than the floor or on a PEP 604 annotation evaluated at import in a module without the future import; it fails on the unfixed module at exactly line 115. CI still runs 3.11 only; the guard is static. (#406)
