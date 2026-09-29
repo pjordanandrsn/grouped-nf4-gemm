@@ -294,7 +294,7 @@
     "sliding window and attention sinks in paged decode",
     "fp8 compute mode paged attention sm_89 sm_120"
    ],
-   "solution": "fp8_kv quantises and appends KV blocks in e4m3 with per-(token, head) or grouped scales; fp8_paged_decode_attention is the paged decode kernel with sliding windows, sinks, custom scale and per-layer KV geometry, asserted against paged_attn_ref. With GNF4_ATTN_COMPUTE unset it selects the fp8 compute path wherever fp8_compute_unsupported returns None, an explicit request is never downgraded, and compute_counts records which path ran.",
+   "solution": "fp8_kv quantises and appends KV blocks in e4m3 with per-(token, head) or grouped scales (the fused appends fp8_kv_append_t1 / fp8_kv_append_bt1 write quantize_kv_fp8's bytes exactly: one per-group helper, _e4m3_group, with an IEEE-rounded quotient, gated in fp32 on any CUDA card by test_group_math_is_the_reference_fp32_math -- e4b#771); fp8_paged_decode_attention is the paged decode kernel with sliding windows, sinks, custom scale and per-layer KV geometry, asserted against paged_attn_ref. With GNF4_ATTN_COMPUTE unset it selects the fp8 compute path wherever fp8_compute_unsupported returns None, an explicit request is never downgraded, and compute_counts records which path ran.",
    "modes": [
     "serving",
     "inference"
@@ -333,6 +333,7 @@
    "entrypoints": [
     "fp8_kv:quantize_kv_fp8",
     "fp8_kv:fp8_kv_append_t1",
+    "fp8_kv:fp8_kv_append_bt1",
     "fp8_paged_attn:fp8_paged_decode_attention",
     "fp8_paged_attn:paged_attn_ref",
     "fp8_paged_attn:paged_attn_available",
