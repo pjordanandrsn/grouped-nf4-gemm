@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- **The fused fp8 KV append now writes `quantize_kv_fp8`'s bytes exactly: its quotient is IEEE-rounded (e4b#771).**
+  - `fp8_kv_append_t1` / `fp8_kv_append_bt1` computed each group's `x / scale` with Triton's default fp32 `/`, which is not IEEE-rounded. torch's tensor divide, in the reference, is.
+  - Probed in fp32 on the NAS RTX A2000 (arch-independent): the scale matched on every row, but ~30% of quotients differed, and ~6e-8 of the stored e4m3 bytes (18 of 302M, using torch's cast in place of the hardware one).
+  - That is rare, but a 48-layer Qwen3 appends ~790K values per decode step. e4b's eager step (`append_many`, the reference) and its CUDA-graph bucket step (`append_graph_bt1`, this kernel) decoded different tokens within 67–129 steps at identical rows and grouping (e4b lane P81).
+  - The per-group math now lives in one jit helper, `_e4m3_group`, that both sides call. The scale keeps Triton's default `/`: it matches torch's scalar divide, and an IEEE `div_rn` would not. The quotient uses `tl.math.div_rn`: 0 fp32 mismatches in 302M values.
+  - `quantize_kv_fp8`'s arithmetic is factored into `_quantize_kv_fp32`, byte-identical to before on 24 cases.
+- **A gate that can see it, on any CUDA card.** `test_group_math_is_the_reference_fp32_math` compares the fused math's fp32 scale and quotient, before the e4m3 cast, with `_quantize_kv_fp32`, bitwise, over ~25K groups at three group sizes. It includes all-zero groups and single-spike groups.
+  - No fp8 cast is involved, so it runs below sm_89. The byte-level gates need sm_89+ and are too small to see 6e-8.
+  - On the A2000 it passes, and with the quotient reverted to `/` it fails (~27% of quotients).
+  - Not yet measured: the end-to-end effect on e4b's eager-vs-graph token streams, which needs an sm_89+ box.
+
 ## 0.33.6 — 2026-09-29 — `kernel/mxfp4_pipelined.py`: the MXFP4 prefill combine adds in a fixed order, so identical inputs give identical bits on CUDA (#408, #410); its RTX A2000 receipts and claim (#411); every other shipped module identical to 0.33.5
 
 **0.33.6.** The MXFP4 residency engines' prefill (`Mxfp4PipelinedGptOss._forward_prefill`, T > 1, which the NVMe, Kimi-K3 and DeepSeek-V4 subclasses inherit) no longer returns different bits for identical inputs on CUDA. Its combine added each token's expert outputs with float-atomic `index_add_`, so a forward through it could change from run to run. experts4bit-qlora's Kimi-K3 bench on an RTX A2000 drifted from process to process this way. This affects MXFP4 prefill through these engines on NVIDIA GPUs. Decode (T = 1), the NF4 grouped GEMM, the int4-b32 GEMVs and the MXFP4 QLoRA training path are untouched; the last has the same pattern (#409, open). Upgrade if you compare runs or need reproducible prefill outputs. Prefill values move at the fp32-rounding level, one fixed summation order in place of a varying one, at 287–330 µs more per chunk on the A2000 (`gnf4.kernel.mxfp4-prefill-combine-ordered.a2000.2026-09-28`). No floor change for experts4bit-qlora.
