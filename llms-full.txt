@@ -57,8 +57,8 @@ and its calibrated packer, the **decode glue kernels** (fused RMSNorm,
 residual-fold, rotary, router epilogue), and the host-streaming and NVMe
 tiers for models that do not fit.
 
-**Current position, one page:** [`docs/STATUS.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.33.7/docs/STATUS.md).
-**Every number, with its evidence and tier:** [`docs/claims.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.33.7/docs/claims.json).
+**Current position, one page:** [`docs/STATUS.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.33.8/docs/STATUS.md).
+**Every number, with its evidence and tier:** [`docs/claims.json`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.33.8/docs/claims.json).
 
 ## Use this when
 
@@ -131,7 +131,7 @@ pip install grouped-nf4-gemm bitsandbytes
 python examples/dequant_tax.py          # from a checkout of this repository (the wheel ships the modules, not examples/); ~1 min, one GPU, no model download
 ```
 
-[`examples/dequant_tax.py`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.33.7/examples/dequant_tax.py)
+[`examples/dequant_tax.py`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/v0.33.8/examples/dequant_tax.py)
 times the dequantise-then-GEMM round trip against computing on the
 packed bytes at three points on the M axis, prints a **self-pair** beside
 every ratio (a ratio inside the instrument's own spread is not a
@@ -1752,7 +1752,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
 
 # Status — what this kernel does, what changed, what is open
 
-**As of 2026-09-29, `grouped-nf4-gemm` version 0.33.7.** One page. The README argues; this
+**As of 2026-09-29, `grouped-nf4-gemm` version 0.33.8.** One page. The README argues; this
 page states. The positions here name their entries in
 [`docs/claims.json`](claims.json), which carry the evidence paths; a line
 without a claim ID records an issue closure, a correction still outstanding
@@ -1888,8 +1888,8 @@ MXFP4 decode reproduces Kimi K3's own declared reference exactly
   output in 50 at T = 6, 90 and 512, at 287–330 µs more per chunk
   (`gnf4.kernel.mxfp4-prefill-combine-ordered.a2000.2026-09-28`, measured). In nine
   Kimi-K3 processes (experts4bit-qlora#766) it was the only run-to-run
-  difference in the forward, the drift #761 recorded. The MXFP4 QLoRA fused path has the same pattern, in bf16
-  (#409, open).
+  difference in the forward, the drift #761 recorded. The MXFP4 QLoRA fused path had the same pattern, in bf16
+  (#409). #416 fixed it the same way, and it ships in 0.33.8.
 - **#393 is closed, answered with an accuracy contract, not a bitwise one
   (lane B393, 2026-09-23, RTX 5090).** `combine_rows` (the fused MoE top-k
   weight-and-sum experts4bit-qlora runs on every MoE layer by default) and
@@ -2099,10 +2099,7 @@ was wrong.
   layer's rows are prefetchable (guarded by a CUDA event, with a
   `hot_rows` floor of two layers' experts).
 - **#71** — `PINNED_ROW_FACTOR` is ~2× conservative on cgroup v1; v2
-  needs a box the rented pods cannot give.
-- **#409** — `mxfp4_qlora._forward_fused` combines with one bf16
-  `index_add_` over repeated token rows, the pattern #410 removed from the
-  prefill engine; not measured. (#60, #71 and #409 are `gnf4.open.issues`.)
+  needs a box the rented pods cannot give. (#60 and #71 are `gnf4.open.issues`.)
 - **`docs/context-budgets.md` is rung-one only** (A2000-measured
   KB/token); full-depth real-weight confirmation is pending and the K3
   row is a declared gap. Its own text forbids promoting pending rows to
@@ -2683,7 +2680,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 Open items (no evidence either way):
 
 - gnf4.open.context-budgets-rung-two [open]: OPEN: context-budgets.md's KB/token table is rung-one (A2000) measured; full-depth real-weight confirmation is pending and the K3 row is a declared gap. Its own text forbids promoting pending rows to READMEs.
-- gnf4.open.issues [open]: OPEN issues at 2026-09-28: #60 (arena staging blocks ~30% of a training step), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #409 (mxfp4_qlora._forward_fused combines with one bf16 index_add_ over repeated token rows, so it is not reproducible on CUDA).
+- gnf4.open.issues [open]: OPEN issues at 2026-09-29: #60 (arena staging blocks ~30% of a training step), #71 (PINNED_ROW_FACTOR conservative on cgroup v1).
 
 Projections (arithmetic, not runs):
 
