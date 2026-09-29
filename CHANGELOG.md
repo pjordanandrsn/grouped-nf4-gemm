@@ -12,6 +12,7 @@
   - No fp8 cast is involved, so it runs below sm_89. The byte-level gates need sm_89+ and are too small to see 6e-8.
   - On the A2000 it passes, and with the quotient reverted to `/` it fails (~27% of quotients).
   - Not yet measured: the end-to-end effect on e4b's eager-vs-graph token streams, which needs an sm_89+ box.
+- **The fused append's byte gates skip by name below sm_89 instead of failing to compile.** `test_bitwise_against_eager_path`, `test_untouched_bytes_stay_untouched` and `test_bt1_bitwise_against_t1_loop` gated only on "CUDA available", but the fused append's e4m3 cast (`fp8e4nv`) compiles only on sm_89+. On the NAS RTX A2000 (sm_86) the 12 of them failed with `CompilationError: type fp8e4nv not supported in this architecture`. They now skip with that reason, and the fp32 gate (`test_group_math_is_the_reference_fp32_math`, no cast) still runs on any CUDA card.
 
 ## 0.33.6 — 2026-09-29 — `kernel/mxfp4_pipelined.py`: the MXFP4 prefill combine adds in a fixed order, so identical inputs give identical bits on CUDA (#408, #410); its RTX A2000 receipts and claim (#411); every other shipped module identical to 0.33.5
 

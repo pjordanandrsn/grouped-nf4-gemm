@@ -21,6 +21,13 @@ needs_cuda = pytest.mark.skipif(not torch.cuda.is_available(),
                                 reason="bitwise e4m3 gate is hardware-cast "
                                        "specific; interp would certify the "
                                        "wrong instruction")
+# The fused appends cast to e4m3 (Triton ``fp8e4nv``), which compiles only on
+# sm_89+. Below that (an sm_86 A2000) the kernel refuses to build -- a fact
+# about the card, so those gates skip by name instead of failing as a
+# CompilationError. The fp32 gate below needs no cast and runs on any CUDA card.
+needs_fp8 = pytest.mark.skipif(
+    not torch.cuda.is_available() or torch.cuda.get_device_capability() < (8, 9),
+    reason="the fused append's e4m3 cast (fp8e4nv) needs sm_89+")
 
 if fp8_kv.HAS_TRITON:
     import triton
@@ -84,7 +91,7 @@ def _reference_row(x, bt, H, D, groups, fill):
     return row
 
 
-@needs_cuda
+@needs_fp8
 @pytest.mark.parametrize("groups", [1, 2, 4])
 @pytest.mark.parametrize("fill", [0, 1, 7])
 def test_bitwise_against_eager_path(groups, fill):
@@ -124,7 +131,7 @@ def test_bitwise_against_eager_path(groups, fill):
         assert int(lens) == blk * bt + fill, "kernel must not touch lens"
 
 
-@needs_cuda
+@needs_fp8
 def test_untouched_bytes_stay_untouched():
     """The kernel writes exactly one token's payload+scales; every other
     byte of the arena — other rows, other fills — must be bit-stable."""
@@ -201,7 +208,7 @@ def test_cpu_tensors_refuse_cleanly():
         fp8_kv_append_t1(x, pool, row, lens, 2048, 1024, 16, 4)
 
 
-@needs_cuda
+@needs_fp8
 @pytest.mark.parametrize("groups", [1, 4])
 def test_bt1_bitwise_against_t1_loop(groups):
     """The batched-slot append must write BYTE-IDENTICAL pool content to
