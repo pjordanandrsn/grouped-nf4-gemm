@@ -1,6 +1,6 @@
 # Status — what this kernel does, what changed, what is open
 
-**As of 2026-09-29, `grouped-nf4-gemm` version 0.33.7.** One page. The README argues; this
+**As of 2026-09-29, `grouped-nf4-gemm` version 0.33.8.** One page. The README argues; this
 page states. The positions here name their entries in
 [`docs/claims.json`](claims.json), which carry the evidence paths; a line
 without a claim ID records an issue closure, a correction still outstanding
@@ -136,8 +136,8 @@ MXFP4 decode reproduces Kimi K3's own declared reference exactly
   output in 50 at T = 6, 90 and 512, at 287–330 µs more per chunk
   (`gnf4.kernel.mxfp4-prefill-combine-ordered.a2000.2026-09-28`, measured). In nine
   Kimi-K3 processes (experts4bit-qlora#766) it was the only run-to-run
-  difference in the forward, the drift #761 recorded. The MXFP4 QLoRA fused path has the same pattern, in bf16
-  (#409, open).
+  difference in the forward, the drift #761 recorded. The MXFP4 QLoRA fused path had the same pattern, in bf16
+  (#409). #416 fixed it the same way, and it ships in 0.33.8.
 - **#393 is closed, answered with an accuracy contract, not a bitwise one
   (lane B393, 2026-09-23, RTX 5090).** `combine_rows` (the fused MoE top-k
   weight-and-sum experts4bit-qlora runs on every MoE layer by default) and
@@ -347,10 +347,7 @@ was wrong.
   layer's rows are prefetchable (guarded by a CUDA event, with a
   `hot_rows` floor of two layers' experts).
 - **#71** — `PINNED_ROW_FACTOR` is ~2× conservative on cgroup v1; v2
-  needs a box the rented pods cannot give.
-- **#409** — `mxfp4_qlora._forward_fused` combines with one bf16
-  `index_add_` over repeated token rows, the pattern #410 removed from the
-  prefill engine; not measured. (#60, #71 and #409 are `gnf4.open.issues`.)
+  needs a box the rented pods cannot give. (#60 and #71 are `gnf4.open.issues`.)
 - **`docs/context-budgets.md` is rung-one only** (A2000-measured
   KB/token); full-depth real-weight confirmation is pending and the K3
   row is a declared gap. Its own text forbids promoting pending rows to

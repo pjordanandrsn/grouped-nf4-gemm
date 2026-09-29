@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.33.8 — 2026-09-29 — `kernel/mxfp4_qlora.py`: the MXFP4 QLoRA fused training path adds its combine in a fixed order, so identical inputs give identical outputs and gradients on CUDA (#409, #416); every other shipped module identical to 0.33.7
+
+**0.33.8.** Training through `ExpertsMxfp4LoRA` in fused mode (`mode="fused"`) no longer returns different outputs, input gradients or adapter gradients for identical inputs on CUDA. Its combine summed each token's k expert rows with one bf16 `index_add_`, which is float atomics, and it now uses the ordered add that 0.33.6 gave the prefill engine. This affects MXFP4 QLoRA training in fused mode on NVIDIA GPUs. The loop mode, inference, the prefill and decode engines, and the NF4 and int4 kernels are untouched. Upgrade if you compare training runs or need them to repeat bit for bit. Fused-mode values move at the bf16-rounding level (one fixed summation order in place of a varying one). No new number: the evidence is `test_fused_repeated_calls_are_bitwise_identical`, which passes on the RTX A2000 and fails with the bare `index_add_` restored. No floor change for experts4bit-qlora.
 
 - **The MXFP4 QLoRA fused training path adds its combine in a fixed order, so repeated calls give the same bits (#409).**
   - **What was wrong.** `ExpertsMxfp4LoRA._forward_fused` summed each token's k expert rows with one bf16 `index_add_` over `tok_of_pair`, which repeats every token k times. That is CUDA float atomics, so identical inputs could give different outputs, dL/dx and adapter gradients from call to call. Same class as #408.
@@ -8,6 +10,7 @@
   - **Test.** `test_fused_repeated_calls_are_bitwise_identical`, CUDA, k = 4 of 8 experts, 256 tokens. On the NAS RTX A2000 it passes, and fails with the bare `index_add_` restored, differing in the output, dL/dx and both B gradients.
   - The gather's backward (`hidden_states[tok_of_pair]`) proved deterministic already: with the combine fixed, every gradient repeats.
   - The loop path is unchanged, and so is `test_fused_matches_loop`.
+- **The register and STATUS stop listing #409 as open.** `gnf4.open.issues` now reads #60 and #71, with its previous text in the notes. The STATUS #408 bullet says #416 fixed #409, and "What is open" drops it.
 
 ## 0.33.7 — 2026-09-29 — `kernel/fp8_kv.py`: the fused KV append writes `quantize_kv_fp8`'s bytes exactly, its quotient now IEEE-rounded (experts4bit-qlora#771, #413); the append's byte gates skip by name below sm_89 (#414); every other shipped module identical to 0.33.6
 
