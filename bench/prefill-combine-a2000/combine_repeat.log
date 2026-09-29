@@ -1,0 +1,11 @@
+torch 2.8.0+cu128  NVIDIA RTX A2000 12GB  reps 50
+
+T=6: 6 chunks, 96 pairs, max rows-per-token within a chunk 5 (chunks with a repeat: 6/6)
+  plain    distinct fp32 outputs 50/50   distinct after bf16 cast  2/50   == CPU sequential: False  two distinct fp32 outputs differ in 873 of 43008 elements, max 9.537e-07
+  det      distinct fp32 outputs  1/50   distinct after bf16 cast  1/50   == CPU sequential: True
+  ordered  distinct fp32 outputs  1/50   distinct after bf16 cast  1/50   == CPU sequential: True
+
+T=90: 45 chunks, 1440 pairs, max rows-per-token within a chunk 3 (chunks with a repeat: 44/45)
+  plain    distinct fp32 outputs 50/50   distinct after bf16 cast  4/50   == CPU sequential: False  two distinct fp32 outputs differ in 3024 of 645120 elements, max 9.537e-07
+  det      distinct fp32 outputs  1/50   distinct after bf16 cast  1/50   == CPU sequential: True
+  ordered  distinct fp32 outputs  1/50   distinct after bf16 cast  1/50   == CPU sequential: True

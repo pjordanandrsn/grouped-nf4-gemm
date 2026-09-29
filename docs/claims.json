@@ -269,6 +269,41 @@
    "notes": "Pre-registered in #396 (outcome B). The whole difference from the chain is torch's reduction order: fused and the chain differ in the same 111 elements the chain and the slot-order sum do. kernel/test_int4_b32.py::test_reduce_partials_is_the_slot_order_sum now asserts it with torch.equal on silicon (skipped under TRITON_INTERPRET, whose bf16 cast does not round to nearest). Run b393-5090-1, $0.0299, teardown proven."
   },
   {
+   "id": "gnf4.kernel.mxfp4-prefill-combine-ordered.a2000.2026-09-28",
+   "area": "kernel",
+   "claim": "Mxfp4PipelinedGptOss._forward_prefill's combine returns the same bits on every call since #410 (_index_add_ordered_), and they are the sequential fp32 sum in ascending expert id. Replayed at Kimi-K3 geometry on an RTX A2000, 50 identical calls give 1 distinct output at T = 6, 90 and 512, equal to a CPU sequential sum. The out.index_add_ it replaces gave 50 distinct fp32 outputs in 50 at every T. The ordered add costs 287 to 330 us more per chunk.",
+   "value": 1,
+   "unit": "distinct outputs in 50 identical calls (the replaced index_add_: 50)",
+   "status": "measured",
+   "hardware": "RTX A2000 12 GB (sm_86, driver 575.64.05) in the NAS gpu-dev container, torch 2.8.0+cu128 / triton 3.4.0",
+   "conditions": "#410's tested commit f180045 for the ordered add, against the index_add_ of 0.33.4 (identical in 0.33.5); the combine loop replayed on seeded synthetic inputs at topk 16 of 896 experts, k = 16 slots per chunk, width 7168; T in {6, 90, 512}; 50 calls per arm; timing is the combine alone, CUDA events, median of 20 after 3 warm-ups, with the sdxl sidecar resident on the card",
+   "measured_on": "2026-09-28",
+   "evidence": [
+    "bench/prefill-combine-a2000/README.md",
+    "bench/prefill-combine-a2000/combine_pr.log",
+    "bench/prefill-combine-a2000/combine_pr.py",
+    "bench/prefill-combine-a2000/combine_repeat.log",
+    "bench/prefill-combine-a2000/gnf4_pr_tests.log",
+    "bench/prefill-combine-a2000/gnf4_pr_mustfail.log",
+    "bench/prefill-combine-a2000/SHA256SUMS",
+    "kernel/test_mxfp4_prefill_combine.py",
+    {
+     "repository": "experts4bit-qlora",
+     "path": "bench/kimi-k3-a2000/RESULTS-kimi-k3-a2000.md"
+    },
+    {
+     "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/408"
+    },
+    {
+     "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/pull/410"
+    }
+   ],
+   "quoted_in": [
+    "docs/STATUS.md"
+   ],
+   "notes": "torch.use_deterministic_algorithms(True) on the replaced index_add_ gives the same single output, equal to the CPU sequential sum. Model level is experts4bit-qlora's row e4b.parity.kimi-k3.prefill-drift-is-the-combine.a2000.2026-09-28: in Kimi-K3's full forward, three processes with this combine are bit-identical at all 92 MoE calls; three with the replaced one differ pairwise at 3 to 8 calls. The time is the combine alone (a sort, one host sync, one index_add_ per pass); on a 6-token K3 prefill of 175 to 185 s that is at most about 0.2 s (arithmetic). Must-fail: 4 of the 5 new CUDA test cases fail on the replaced index_add_, and the (1, 7) case does not. Decode (T = 1) never used index_add_. The MXFP4 QLoRA fused path has the same pattern (#409, open)."
+  },
+  {
    "id": "gnf4.kernel.boundary-gathers-appenders.interp.2026-09-23",
    "area": "kernel",
    "claim": "The five carriers of the int64 expert-base promotion that no boundary test called are observed past their own 2^31 boundary on CPU, under the Triton interpreter, in CI: host_gather._gather_rows and the mxfp4_pipelined / mxfp4_residency slot gathers past 2^31 int64 words, and the fp8_kv T=1 and batched appenders past 2^31 bytes. All 5 cases of kernel/test_offset_boundary_interp.py pass on the shipped kernels, and all 5 fail at the int32-wrapped address when the five straddling promotions are removed, closing #386.",
@@ -587,7 +622,7 @@
   {
    "id": "gnf4.open.issues",
    "area": "kernel",
-   "claim": "OPEN issues at 2026-09-23: #60 (arena staging blocks ~30% of a training step), #71 (PINNED_ROW_FACTOR conservative on cgroup v1).",
+   "claim": "OPEN issues at 2026-09-28: #60 (arena staging blocks ~30% of a training step), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #409 (mxfp4_qlora._forward_fused combines with one bf16 index_add_ over repeated token rows, so it is not reproducible on CUDA).",
    "status": "open",
    "evidence": [
     {
@@ -595,9 +630,12 @@
     },
     {
      "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/71"
+    },
+    {
+     "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/409"
     }
    ],
-   "notes": "#87 (gemm_4bit_grouped int32 offset overflow when max(expert_ids) is large) was listed here until 0.30.1 as 'distinct from the 2 GiB fix in 0.13.2/0.14.0'; that reading was not supported by the issue text. Closed 2026-09-05 by observation in every carrier: PR #342, kernel/test_expert_offset_boundary.py, claim gnf4.kernel.expert-offset-boundary.5090.2026-09-05. Updated 2026-09-23: #319 closed in 0.33.0 (a mislabelled test arm, gnf4.serve.f32-arms-ran-fp8); #73 closed (fixed in 0.12.0 by #74/#76/#79: 1113 -> 56.8 ms/layer, 78% of device); #58 closed (six of eight calls per layer are cache hits, 0.02 s/step; the stall is #60); #353 and #374 added. The claim previously read: OPEN issues at 2026-09-05: #319 (f32 paged compute modes on triton 3.4), #73 (K3 fetch host copy ~71% of a layer), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #60 (arena staging blocks ~30% of a training step), #58 (8 requests per layer where 2 would do). Later the same day: #353 closed (experts4bit-qlora#697 runs the census cross-check in CI against the installed kernel commit's census). Later still: #374 closed by observation (lane B374, gnf4.kernel.word-boundary-wide-dotpad.5090.2026-09-23: the wide-load and dot-pad routes past their own 2^31-word boundary on an RTX 5090). #386 added the same day, found while writing that read: KERNEL_CONTRACT listed the gathers and fp8_kv appenders as carriers covered by the boundary suite, which never calls them. Later still: #386 closed by observation on CPU (gnf4.kernel.boundary-gathers-appenders.interp.2026-09-23: the gathers and fp8_kv appenders past their boundary under the Triton interpreter, in CI). #393 was filed the same day at 15:53Z: combine_rows is tested to a tolerance (max|d| <= max|ref| * 2^-7), not torch.equal, and no registered claim covers it; the ask is a bitwise GPU test on named hardware. Later still: #393 closed as answered by lane B393 (gnf4.kernel.combine-rows-accuracy.5090.2026-09-23, gnf4.kernel.reduce-partials-slot-order.5090.2026-09-23): no bitwise contract, a measured accuracy contract instead."
+   "notes": "#87 (gemm_4bit_grouped int32 offset overflow when max(expert_ids) is large) was listed here until 0.30.1 as 'distinct from the 2 GiB fix in 0.13.2/0.14.0'; that reading was not supported by the issue text. Closed 2026-09-05 by observation in every carrier: PR #342, kernel/test_expert_offset_boundary.py, claim gnf4.kernel.expert-offset-boundary.5090.2026-09-05. Updated 2026-09-23: #319 closed in 0.33.0 (a mislabelled test arm, gnf4.serve.f32-arms-ran-fp8); #73 closed (fixed in 0.12.0 by #74/#76/#79: 1113 -> 56.8 ms/layer, 78% of device); #58 closed (six of eight calls per layer are cache hits, 0.02 s/step; the stall is #60); #353 and #374 added. The claim previously read: OPEN issues at 2026-09-05: #319 (f32 paged compute modes on triton 3.4), #73 (K3 fetch host copy ~71% of a layer), #71 (PINNED_ROW_FACTOR conservative on cgroup v1), #60 (arena staging blocks ~30% of a training step), #58 (8 requests per layer where 2 would do). Later the same day: #353 closed (experts4bit-qlora#697 runs the census cross-check in CI against the installed kernel commit's census). Later still: #374 closed by observation (lane B374, gnf4.kernel.word-boundary-wide-dotpad.5090.2026-09-23: the wide-load and dot-pad routes past their own 2^31-word boundary on an RTX 5090). #386 added the same day, found while writing that read: KERNEL_CONTRACT listed the gathers and fp8_kv appenders as carriers covered by the boundary suite, which never calls them. Later still: #386 closed by observation on CPU (gnf4.kernel.boundary-gathers-appenders.interp.2026-09-23: the gathers and fp8_kv appenders past their boundary under the Triton interpreter, in CI). #393 was filed the same day at 15:53Z: combine_rows is tested to a tolerance (max|d| <= max|ref| * 2^-7), not torch.equal, and no registered claim covers it; the ask is a bitwise GPU test on named hardware. Later still: #393 closed as answered by lane B393 (gnf4.kernel.combine-rows-accuracy.5090.2026-09-23, gnf4.kernel.reduce-partials-slot-order.5090.2026-09-23): no bitwise contract, a measured accuracy contract instead. Updated 2026-09-28: #408 (the MXFP4 prefill combine's index_add_ atomics, experts4bit-qlora#761's Kimi-K3 drift) was filed and closed the same day by #410 (gnf4.kernel.mxfp4-prefill-combine-ordered.a2000.2026-09-28), and #409 was added, the same pattern in the QLoRA fused path. The claim previously read: OPEN issues at 2026-09-23: #60 (arena staging blocks ~30% of a training step), #71 (PINNED_ROW_FACTOR conservative on cgroup v1)."
   },
   {
    "id": "gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10",

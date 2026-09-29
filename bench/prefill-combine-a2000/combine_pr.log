@@ -1,0 +1,22 @@
+torch 2.8.0+cu128  NVIDIA RTX A2000 12GB  reps 50  helper from /workspace/k3-rel-20260928/v5-det/gnf4-pr/kernel/mxfp4_pipelined.py
+
+T=6: 6 chunks, 96 pairs
+  plain  distinct fp32 50/50  distinct bf16  2/50  == CPU sequential: False
+  det    distinct fp32  1/50  distinct bf16  1/50  == CPU sequential: True
+  pr     distinct fp32  1/50  distinct bf16  1/50  == CPU sequential: True
+  time plain  median     413.8 us per combine (   69.0 us per chunk)
+  time pr     median    2396.2 us per combine (  399.4 us per chunk)
+
+T=90: 45 chunks, 1440 pairs
+  plain  distinct fp32 50/50  distinct bf16  4/50  == CPU sequential: False
+  det    distinct fp32  1/50  distinct bf16  1/50  == CPU sequential: True
+  pr     distinct fp32  1/50  distinct bf16  1/50  == CPU sequential: True
+  time plain  median    3019.9 us per combine (   67.1 us per chunk)
+  time pr     median   15930.9 us per combine (  354.0 us per chunk)
+
+T=512: 56 chunks, 8192 pairs
+  plain  distinct fp32 50/50  distinct bf16  1/50  == CPU sequential: False
+  det    distinct fp32  1/50  distinct bf16  1/50  == CPU sequential: True
+  pr     distinct fp32  1/50  distinct bf16  1/50  == CPU sequential: True
+  time plain  median    7802.2 us per combine (  139.3 us per chunk)
+  time pr     median   25888.7 us per combine (  462.3 us per chunk)
