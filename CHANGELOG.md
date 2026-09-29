@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.33.7 — 2026-09-29 — `kernel/fp8_kv.py`: the fused KV append writes `quantize_kv_fp8`'s bytes exactly, its quotient now IEEE-rounded (experts4bit-qlora#771, #413); the append's byte gates skip by name below sm_89 (#414); every other shipped module identical to 0.33.6
+
+**0.33.7.** `fp8_kv_append_t1` / `fp8_kv_append_bt1`, the fused fp8 KV appends, now store exactly the bytes `quantize_kv_fp8` stores. Before, their quotient `x / scale` went through Triton's default fp32 divide, which is not IEEE-rounded. On an RTX 5090 with the hardware e4m3 cast, **21 of 5.4×10⁸ stored bytes differed under 0.33.6's append, 0 under this one** (experts4bit-qlora lane B771).
+- **Who is affected.** Anyone mixing the fused append with the eager quantize in one cache, or comparing a fused-append run with an eager one: in e4b, the bucketed CUDA-graph decode against the eager runner. Rare byte flips there moved greedy tokens after tens of steps.
+- **Values.** They move only where the old divide rounded differently, about once in 25 million values.
+- **Nothing else changed.** No kernel besides the two appends changed, and no speed was measured.
 
 - **The fused fp8 KV append now writes `quantize_kv_fp8`'s bytes exactly: its quotient is IEEE-rounded (e4b#771).**
   - `fp8_kv_append_t1` / `fp8_kv_append_bt1` computed each group's `x / scale` with Triton's default fp32 `/`, which is not IEEE-rounded. torch's tensor divide, in the reference, is.
@@ -11,7 +16,7 @@
 - **A gate that can see it, on any CUDA card.** `test_group_math_is_the_reference_fp32_math` compares the fused math's fp32 scale and quotient, before the e4m3 cast, with `_quantize_kv_fp32`, bitwise, over ~25K groups at three group sizes. It includes all-zero groups and single-spike groups.
   - No fp8 cast is involved, so it runs below sm_89. The byte-level gates need sm_89+ and are too small to see 6e-8.
   - On the A2000 it passes, and with the quotient reverted to `/` it fails (~27% of quotients).
-  - Not yet measured: the end-to-end effect on e4b's eager-vs-graph token streams, which needs an sm_89+ box.
+  - Measured end to end in experts4bit-qlora lane B771 (RTX 5090, hardware cast): 21 of 5.4×10⁸ bytes differed before, 0 after. e4b's eager-vs-graph token divergence had a second, independent cause in e4b itself (a bucket-of-one append to a scratch slot, experts4bit-qlora#777); this fix removes the append's share.
 - **The fused append's byte gates skip by name below sm_89 instead of failing to compile.** `test_bitwise_against_eager_path`, `test_untouched_bytes_stay_untouched` and `test_bt1_bitwise_against_t1_loop` gated only on "CUDA available", but the fused append's e4m3 cast (`fp8e4nv`) compiles only on sm_89+. On the NAS RTX A2000 (sm_86) the 12 of them failed with `CompilationError: type fp8e4nv not supported in this architecture`. They now skip with that reason, and the fp32 gate (`test_group_math_is_the_reference_fp32_math`, no cast) still runs on any CUDA card.
 
 ## 0.33.6 — 2026-09-29 — `kernel/mxfp4_pipelined.py`: the MXFP4 prefill combine adds in a fixed order, so identical inputs give identical bits on CUDA (#408, #410); its RTX A2000 receipts and claim (#411); every other shipped module identical to 0.33.5
