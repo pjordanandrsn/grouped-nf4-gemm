@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **The MXFP4 QLoRA fused training path adds its combine in a fixed order, so repeated calls give the same bits (#409).**
+  - **What was wrong.** `ExpertsMxfp4LoRA._forward_fused` summed each token's k expert rows with one bf16 `index_add_` over `tok_of_pair`, which repeats every token k times. That is CUDA float atomics, so identical inputs could give different outputs, dL/dx and adapter gradients from call to call. Same class as #408.
+  - **What changed.** It now uses `mxfp4_pipelined._index_add_ordered_` (#410): unique rows per pass, the sequential sum bit for bit, and a gather in the backward.
+  - **Test.** `test_fused_repeated_calls_are_bitwise_identical`, CUDA, k = 4 of 8 experts, 256 tokens. On the NAS RTX A2000 it passes, and fails with the bare `index_add_` restored, differing in the output, dL/dx and both B gradients.
+  - The gather's backward (`hidden_states[tok_of_pair]`) proved deterministic already: with the combine fixed, every gradient repeats.
+  - The loop path is unchanged, and so is `test_fused_matches_loop`.
+
 ## 0.33.7 — 2026-09-29 — `kernel/fp8_kv.py`: the fused KV append writes `quantize_kv_fp8`'s bytes exactly, its quotient now IEEE-rounded (experts4bit-qlora#771, #413); the append's byte gates skip by name below sm_89 (#414); every other shipped module identical to 0.33.6
 
 **0.33.7.** `fp8_kv_append_t1` / `fp8_kv_append_bt1`, the fused fp8 KV appends, now store exactly the bytes `quantize_kv_fp8` stores. Before, their quotient `x / scale` went through Triton's default fp32 divide, which is not IEEE-rounded. On an RTX 5090 with the hardware e4m3 cast, **21 of 5.4×10⁸ stored bytes differed under 0.33.6's append, 0 under this one** (experts4bit-qlora lane B771).
