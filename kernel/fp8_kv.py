@@ -67,14 +67,27 @@ def quantize_kv_fp8(x: torch.Tensor, group: int | None = None):
         group = d
     if group < 1 or d % group:
         raise ValueError(f"group {group} must divide head_dim {d}")
+    y, scale = _quantize_kv_fp32(x, group)
+    q = y.to(FP8_DTYPE)
+    return q, (scale.squeeze(-1) if group == d else scale)
+
+
+def _quantize_kv_fp32(x: torch.Tensor, group: int):
+    """quantize_kv_fp8's arithmetic before the cast: ``(x / scale`` in fp32 with x's shape,
+    ``scale`` fp32 ``x.shape[:-1] + (D // group,)``). The fused Triton appends must reproduce
+    exactly these bits (``_e4m3_group``); ``test_fp8_kv_append`` compares the two here, where
+    no fp8 cast is needed, so the gate runs on any CUDA card (e4b#771)."""
+    d = x.shape[-1]
     xf = x.float()
     xg = xf.reshape(*xf.shape[:-1], d // group, group)
     amax = xg.abs().amax(dim=-1)
     # amax == 0 -> scale 1.0: the group is all zeros and round-trips
     # exactly, where amax/E4M3_MAX would make dequant 0*0 and quant 0/0.
+    # NB this scalar divide is NOT an IEEE divide on CUDA (it differed from
+    # an IEEE div_rn on ~59% of rows probed, e4b#771); _e4m3_group matches
+    # it with Triton's default `/`, which agreed on every row probed.
     scale = torch.where(amax > 0, amax / E4M3_MAX, torch.ones_like(amax))
-    q = (xg / scale.unsqueeze(-1)).reshape(xf.shape).to(FP8_DTYPE)
-    return q, (scale.squeeze(-1) if group == d else scale)
+    return (xg / scale.unsqueeze(-1)).reshape(xf.shape), scale
 
 
 def dequant_kv_fp8_ref(q: torch.Tensor, scale: torch.Tensor,
@@ -206,11 +219,17 @@ def unpack_kv_block_grouped(row: torch.Tensor, block_tokens: int,
 # Stage A census). This kernel does one SIDE's address-math + quantize +
 # store in a single launch. The math is quantize_kv_fp8's exactly: fp32
 # amax per group, scale = amax/E4M3_MAX with the all-zero group pinned to
-# 1.0, x/scale cast to e4m3 (saturating RNE on both paths); fp32 max and
-# same-operand divides carry no reduction-order rounding, so the fused
-# path is BITWISE against the reference -- asserted by
-# test_fp8_kv_append.py on randomized states, and re-asserted on-box
-# before any timed arm.
+# 1.0, x/scale cast to e4m3 (saturating RNE on both paths), in ONE helper
+# (_e4m3_group) both sides call. "Exactly" needs care with the divides:
+# torch's scale (a Python-scalar divisor) is not IEEE-rounded on CUDA, its
+# quotient (tensor by tensor) is. Triton's default fp32 `/` matched the
+# first on every row probed but NOT the second -- it is not IEEE-rounded --
+# so the quotient uses tl.math.div_rn. Before that, ~30% of fp32
+# quotients and ~6e-8 of stored e4m3 bytes differed from the reference
+# (e4b#771): too rare for the small bitwise gate below to see, enough to
+# move a 48-layer model's greedy tokens within ~100 steps. The fp32 half is
+# now gated on any CUDA card (test_group_math_is_the_reference_fp32_math),
+# the byte half on sm_89+ as before.
 
 try:  # triton is Linux-only (see pyproject); the torch surface above
     import triton  # must stay importable without it
@@ -221,6 +240,17 @@ except Exception:  # pragma: no cover - non-Linux
     HAS_TRITON = False
 
 if HAS_TRITON:
+    @triton.jit
+    def _e4m3_group(x, E4M3_MAX: tl.constexpr):
+        """One quantization group in fp32 -> ``(x / scale, scale)``, bit for bit
+        ``_quantize_kv_fp32``'s: the scale by Triton's default ``/`` (it matched
+        torch's scalar divide on every row probed; an IEEE ``div_rn`` did not),
+        the quotient by ``div_rn`` (torch's tensor divide is IEEE-rounded;
+        Triton's ``/`` is not). Gated by test_fp8_kv_append (e4b#771)."""
+        amax = tl.max(tl.abs(x), axis=0)
+        scale = tl.where(amax > 0, amax / E4M3_MAX, 1.0)
+        return tl.math.div_rn(x, scale), scale
+
     @triton.jit
     def _fp8_append_t1_side(
         x_ptr,            # [H, D] input (bf16/fp16/fp32), contiguous
@@ -250,9 +280,8 @@ if HAS_TRITON:
         for g in tl.static_range(GROUPS):
             offs = tl.arange(0, GS)
             x = tl.load(x_ptr + h * D + g * GS + offs).to(tl.float32)
-            amax = tl.max(tl.abs(x), axis=0)
-            scale = tl.where(amax > 0, amax / E4M3_MAX, 1.0)
-            q = (x / scale).to(tl.float8e4nv).to(tl.uint8, bitcast=True)
+            y, scale = _e4m3_group(x, E4M3_MAX)
+            q = y.to(tl.float8e4nv).to(tl.uint8, bitcast=True)
             tl.store(pool_u8 + pay + g * GS + offs, q)
             tl.store(pool_i32 + sc // 4 + g,
                      scale.to(tl.float32).to(tl.int32, bitcast=True))
@@ -342,9 +371,8 @@ if HAS_TRITON:
             offs = tl.arange(0, GS)
             x = tl.load(x_ptr + s * (H * D) + h * D + g * GS + offs
                         ).to(tl.float32)
-            amax = tl.max(tl.abs(x), axis=0)
-            scale = tl.where(amax > 0, amax / E4M3_MAX, 1.0)
-            q = (x / scale).to(tl.float8e4nv).to(tl.uint8, bitcast=True)
+            y, scale = _e4m3_group(x, E4M3_MAX)
+            q = y.to(tl.float8e4nv).to(tl.uint8, bitcast=True)
             tl.store(pool_u8 + pay + g * GS + offs, q)
             tl.store(pool_i32 + sc // 4 + g,
                      scale.to(tl.float32).to(tl.int32, bitcast=True))

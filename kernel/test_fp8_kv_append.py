@@ -15,12 +15,59 @@ import pytest
 import torch
 
 import fp8_kv
-from fp8_kv import E4M3_MAX, FP8_DTYPE, fp8_kv_append_t1, quantize_kv_fp8
+from fp8_kv import E4M3_MAX, FP8_DTYPE, _quantize_kv_fp32, fp8_kv_append_t1, quantize_kv_fp8
 
 needs_cuda = pytest.mark.skipif(not torch.cuda.is_available(),
                                 reason="bitwise e4m3 gate is hardware-cast "
                                        "specific; interp would certify the "
                                        "wrong instruction")
+
+if fp8_kv.HAS_TRITON:
+    import triton
+    import triton.language as tl
+    from fp8_kv import _e4m3_group
+
+    @triton.jit
+    def _group_probe(x_ptr, y_ptr, s_ptr, GS: tl.constexpr, E4M3_MAX: tl.constexpr):
+        # the fused appends' per-group arithmetic, stored in fp32 BEFORE the e4m3 cast
+        r = tl.program_id(0)
+        offs = tl.arange(0, GS)
+        x = tl.load(x_ptr + r * GS + offs).to(tl.float32)
+        y, scale = _e4m3_group(x, E4M3_MAX)
+        tl.store(y_ptr + r * GS + offs, y)
+        tl.store(s_ptr + r, scale)
+
+
+@needs_cuda
+@pytest.mark.skipif(not fp8_kv.HAS_TRITON, reason="needs triton")
+@pytest.mark.parametrize("gs", [128, 64, 32])
+def test_group_math_is_the_reference_fp32_math(gs):
+    """e4b#771: the fused append's fp32 scale and quotient -- what the e4m3 cast
+    consumes -- bit for bit against quantize_kv_fp8's (``_quantize_kv_fp32``).
+    No fp8 cast, so it runs on any CUDA card (the byte-level gates below need
+    sm_89+). Triton's default ``/`` for the quotient differed in ~30% of values
+    here and ~6e-8 of stored bytes; a byte-level gate this size cannot see that,
+    an fp32 one sees it at once. Includes all-zero groups (scale pinned to 1.0),
+    single-spike groups and three activation scales."""
+    torch.manual_seed(771 + gs)
+    rows = []
+    for mul in (1.0, 30.0, 1e-3):
+        rows.append(torch.randn(1 << 13, gs) * mul)
+    spike = torch.zeros(64, gs)
+    spike[torch.arange(64), torch.randint(0, gs, (64,))] = torch.randn(64) * 5
+    rows += [torch.zeros(16, gs), spike]
+    x = torch.cat(rows).to(torch.bfloat16).cuda().contiguous()
+    R = x.shape[0]
+    y = torch.empty(R, gs, dtype=torch.float32, device="cuda")
+    s = torch.empty(R, dtype=torch.float32, device="cuda")
+    _group_probe[(R,)](x, y, s, GS=gs, E4M3_MAX=E4M3_MAX, num_warps=1)
+    y_ref, s_ref = _quantize_kv_fp32(x, gs)
+    s_ref = s_ref.reshape(R)
+    bad_s = (s.view(torch.int32) != s_ref.view(torch.int32)).sum().item()
+    bad_y = (y.view(torch.int32) != y_ref.view(torch.int32)).sum().item()
+    assert bad_s == 0 and bad_y == 0, (
+        f"fused group math diverged from quantize_kv_fp8's: {bad_s}/{R} scales, "
+        f"{bad_y}/{R * gs} quotients differ in fp32 bits")
 
 
 def _reference_row(x, bt, H, D, groups, fill):
