@@ -341,3 +341,32 @@ def test_provenance_module_hashes_match_file_ranges(tmp_path):
     table = module.expert_bytes_sha256()
     for name in names:
         assert table[name] == file_tensor_sha256(p, name), name
+
+
+@cuda
+def test_fused_repeated_calls_are_bitwise_identical():
+    """#409: the fused path's combine summed each token's k expert rows with one bf16
+    ``index_add_`` (CUDA float atomics), so identical inputs could give different bits
+    call to call. Forward, dL/dx and every adapter gradient must now repeat exactly.
+    k = 4 of 8 experts and 256 tokens: two terms from zero commute exactly (a + b == b + a),
+    so this needs k >= 3, and enough rows for the atomics to interleave."""
+    pytest.importorskip("triton")
+    m = _make(seed=10)
+    fused = _lora(m, "cuda", mode="fused", seed=31)
+    x, idx, sc = _route(m, T=256, k=4, seed=29)
+    params = [fused.gate_up_lora_A, fused.gate_up_lora_B, fused.down_lora_A, fused.down_lora_B]
+
+    def once():
+        for p in params:
+            p.grad = None
+        xg = x.clone().requires_grad_(True)
+        out = fused(xg, idx, sc)
+        out.float().pow(2).sum().backward()
+        return [out.detach().clone(), xg.grad.clone()] + [p.grad.clone() for p in params]
+
+    names = ["out", "dL/dx", "gate_up_A", "gate_up_B", "down_A", "down_B"]
+    first = once()
+    for rep in range(1, 8):
+        again = once()
+        diff = [n for n, a, b in zip(names, first, again) if not torch.equal(a, b)]
+        assert not diff, f"repeat {rep} differs bitwise from the first call in {diff}"
