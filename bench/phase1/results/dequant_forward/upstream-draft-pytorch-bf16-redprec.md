@@ -10,9 +10,9 @@ accompanied by human commentary explaining its relevance, with a human
 understanding and taking responsibility for the work. It also forbids using AI
 to shift verification burden onto reviewers.
 
-So this draft is written to be **filed by Jordan, with his own analysis added**,
+So this draft is written to be **filed by a human maintainer, with their own analysis added**,
 or not filed at all. The measurements below are real and reproducible; the
-judgement about whether they are worth an upstream maintainer's time is his.
+judgement about whether they are worth an upstream maintainer's time is theirs.
 
 ---
 
@@ -126,7 +126,7 @@ instances. The standalone reproducer above was written afterwards to isolate
 the cause, and it does: with reduced-precision reduction off, every shape
 collapses to a uniform 1.656e-3–1.664e-3.
 
-## Before filing — checklist for Jordan
+## Before filing — checklist for the filer
 
 - [ ] Decide whether this clears the bar for a maintainer's time. It is a small
       finding; "not worth filing" is a legitimate outcome.

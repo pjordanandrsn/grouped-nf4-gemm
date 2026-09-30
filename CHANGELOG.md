@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Owner quotes and name credits are removed from the documents (docs, and one docstring).**
+  - Verbatim chat quotes and name credits are removed from the kernel pre-registrations (B374, B393, K17, K18), two RESULTS pages, an upstream draft, the CI workflow comment and the `kernel/gguf_reader.py` module docstring. That docstring is text only, so no behaviour changes. Directives are paraphrased or reduced to their date; no criterion, band, measurement or date moved.
+  - Two OpenTimestamps-anchored documents were edited: `kernel/RESULTS-gate2-confirmatory.md` and `kernel/RESULTS-v2-confirmatory.md`. Each now ends with a note that its `.ots` anchors the version before the edit, which git history keeps.
+
 ## 0.33.8 — 2026-09-29 — `kernel/mxfp4_qlora.py`: the MXFP4 QLoRA fused training path adds its combine in a fixed order, so identical inputs give identical outputs and gradients on CUDA (#409, #416); every other shipped module identical to 0.33.7
 
 **0.33.8.** Training through `ExpertsMxfp4LoRA` in fused mode (`mode="fused"`) no longer returns different outputs, input gradients or adapter gradients for identical inputs on CUDA. Its combine summed each token's k expert rows with one bf16 `index_add_`, which is float atomics, and it now uses the ordered add that 0.33.6 gave the prefill engine. This affects MXFP4 QLoRA training in fused mode on NVIDIA GPUs. The loop mode, inference, the prefill and decode engines, and the NF4 and int4 kernels are untouched. Upgrade if you compare training runs or need them to repeat bit for bit. Fused-mode values move at the bf16-rounding level (one fixed summation order in place of a varying one). No new number: the evidence is `test_fused_repeated_calls_are_bitwise_identical`, which passes on the RTX A2000 and fails with the bare `index_add_` restored. No floor change for experts4bit-qlora.

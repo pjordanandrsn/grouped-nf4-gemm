@@ -10,7 +10,7 @@ does I/O beyond what you hand it).
 Not a general GGUF toolkit on purpose: no mmap policy, no writing, no
 alignment-rewriting. gguf-py exists for that; this reader exists so the
 serving path has a dependency-free, auditable parse of exactly the fields it
-uses. Jordan has fuzzed GGUF parsers professionally — every length here is
+uses. It is written for hostile input: every length here is
 bounds-checked against the buffer before use, and a truncated header raises
 `NeedMoreBytes(minimum_total)` rather than guessing.
 

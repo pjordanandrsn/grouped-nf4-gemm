@@ -1,6 +1,6 @@
 # Pre-registration — lane K17: fold the split-K reduce into the int4-b32 GEMV's own launch (registered 2026-09-21, before any kernel code)
 
-Owner directive (Jordan, 2026-09-21): *"main thing needed is throughput work."* Record: experts4bit-qlora#652.
+Owner directive (2026-09-21): throughput work first. Record: experts4bit-qlora#652.
 
 ## What the census says, read from receipts (not a guess)
 

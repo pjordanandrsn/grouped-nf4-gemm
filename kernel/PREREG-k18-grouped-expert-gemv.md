@@ -1,6 +1,6 @@
 # K18 — a grouped split-K int4-b32 expert GEMV: each expert's weight slice read once per program for up to 4 of its rows (registered 2026-09-22, before the 5090 read)
 
-Owner directive (Jordan, 2026-09-22): *"go on"* — the throughput list. Licensed by experts4bit-qlora **P60** (`bench/p60/RESULTS-p60.md`, #686): replaying Qwen3-30B-A3B's **recorded** B=16 routing through the shipped `gemv_int4_b32` on an RTX 5090 reproduced the served kernel row (6.155 vs the census's 6.340 ms/step), and **one row per distinct expert instead of one per routed row runs 0.92 ms/step faster** (6.479 → 5.560) — the cost of re-streaming each expert's slice once per row. Row order is worth nothing (−0.55 %: L2 already serves repeats), so the lever is to read each expert once for all its rows, inside the kernel.
+Owner directive (2026-09-22): continue the throughput list. Licensed by experts4bit-qlora **P60** (`bench/p60/RESULTS-p60.md`, #686): replaying Qwen3-30B-A3B's **recorded** B=16 routing through the shipped `gemv_int4_b32` on an RTX 5090 reproduced the served kernel row (6.155 vs the census's 6.340 ms/step), and **one row per distinct expert instead of one per routed row runs 0.92 ms/step faster** (6.479 → 5.560) — the cost of re-streaming each expert's slice once per row. Row order is worth nothing (−0.55 %: L2 already serves repeats), so the lever is to read each expert once for all its rows, inside the kernel.
 
 ## Prior art, and why this is not it
 

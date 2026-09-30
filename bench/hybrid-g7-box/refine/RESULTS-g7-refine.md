@@ -1,6 +1,6 @@
 # G7 refinement round — the kernel clause resolves
 
-Post-merge refinement on Jordan's "squeeze more". Qualified box: RTX 5090,
+Post-merge refinement, at the owner's request for more throughput. Qualified box: RTX 5090,
 600 W / 3135 MHz max SM, driver 595.84, triad 1574.1–1575.0 GB/s across
 the session (`instrument.txt`; qualification protocol below).
 
