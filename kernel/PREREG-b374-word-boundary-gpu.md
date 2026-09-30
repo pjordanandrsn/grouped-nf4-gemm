@@ -1,7 +1,7 @@
 # PREREG B374 — the word-addressed NF4 decode routes past THEIR 2^31 boundary, on an RTX 5090 (#374)
 
-Registered 2026-09-23, before any run. Lane B374. Owner authorization: "you have rental ability" (Jordan,
-2026-09-23, chat), within the standing caps. The work item is grouped-nf4-gemm#374.
+Registered 2026-09-23, before any run. Lane B374. Owner authorization (2026-09-23):
+rentals within the standing caps. The work item is grouped-nf4-gemm#374.
 
 ## Question
 

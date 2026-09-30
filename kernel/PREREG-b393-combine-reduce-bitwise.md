@@ -1,8 +1,7 @@
 # PREREG B393 — are `combine_rows` and `reduce_partials` bitwise equal to the torch chains they replace? (#393)
 
-Registered 2026-09-23, before any run. Lane B393; the work item is grouped-nf4-gemm#393. Owner authorization:
-"go ahead with the #703 rental and the issues from the other session" (Jordan, 2026-09-23, chat), within
-the standing caps.
+Registered 2026-09-23, before any run. Lane B393; the work item is grouped-nf4-gemm#393. Owner authorization
+(2026-09-23): the #703 rental and the issues from the other session, within the standing caps.
 
 ## Question
 

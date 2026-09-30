@@ -145,10 +145,14 @@ Ratio = dequant_ms / fused_ms (min over 3 reps); energy = fused_J / dequant_J
 ## Consequences
 
 - The **repo-public flip** and the **#1949 coordination comment** remain
-  Jordan's calls; if flipped, the README leads with the narrowed claim above
+  the owner's calls; if flipped, the README leads with the narrowed claim above
   (energy + fidelity everywhere; speed census-median with named misses).
 - **Next engineering, in order of what this data motivates:** (1) decode
   cost model / cached runtime autotune — fixes both the off-census parity
   and the cross-instance census misses; (2) profile `Phi-3.5-MoE down`
   (4096×6400) and `gpt-oss down` (2880×2880) as the named regression
   shapes; (3) prefill parity (unchanged).
+
+---
+
+*Edited 2026-09-30, after this anchor: one attribution above was reworded; no measurement, criterion or date changed. `RESULTS-gate2-confirmatory.md.ots` anchors the version before that edit, which git history keeps.*

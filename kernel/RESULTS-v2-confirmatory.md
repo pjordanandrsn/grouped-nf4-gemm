@@ -151,5 +151,9 @@ The two config sweeps that motivated the constant are committed alongside
 3. Sweep methodology note for the record: bare-kernel batched-per-config
    timing under-predicts harness-context config sensitivity on small-SM
    parts; future sweeps should interleave configs.
-4. The repo-flip and #1949-comment decisions remain Jordan's; the cumulative
+4. The repo-flip and #1949-comment decisions remain the owner's; the cumulative
    claim above is the current honest README basis.
+
+---
+
+*Edited 2026-09-30, after this anchor: one attribution above was reworded; no measurement, criterion or date changed. `RESULTS-v2-confirmatory.md.ots` anchors the version before that edit, which git history keeps.*
