@@ -80,6 +80,12 @@ _CPU_PATH = {
         "x.bfloat16() @ int4_pack_ref.dequant_int4_ref(packed, scales, N, K).T "
         "— the pure-torch reference test_int4_smallm_interp pins the small-M "
         "GEMM against (the interpreter job runs that file on CPU).",
+    "nf4_smallm":
+        "For a CPU-checkable result over the same NF4 bytes, use "
+        "x.float() @ nf4_grouped.dequant_ref(packed[e], absmax[e], N, K).T per "
+        "row (rounded to bfloat16 for the compiled kernel's weight operand) — "
+        "the pure-torch reference test_nf4_grouped_smallm_interp pins K25 "
+        "against (the interpreter job runs that file on CPU).",
     "int4_b32":
         "For a CPU-checkable result over the same int4-b32 bytes, use "
         "(xq.float() * xs.repeat_interleave(32, dim=1)) @ "
