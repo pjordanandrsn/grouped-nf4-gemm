@@ -1,0 +1,69 @@
+{
+ "device": "NVIDIA RTX A2000 12GB",
+ "sm": 26,
+ "torch": "2.8.0+cu128",
+ "steps": 8,
+ "arms": {
+  "served": {
+   "step_ms_median": 79.28271102905273,
+   "step_ms": [
+    79.11731338500977,
+    79.63075256347656,
+    79.35710525512695,
+    78.78300857543945,
+    79.01247787475586,
+    79.25271987915039,
+    79.31270217895508,
+    79.40908813476562
+   ],
+   "launches_per_step": 96,
+   "kernel_ms_per_step": {
+    "_gemv_int4_b32": 78.45792431250003,
+    "_reduce_partials": 0.530759499999995
+   },
+   "kernel_total_ms": 78.98868381250003
+  },
+  "k16_each": {
+   "step_ms_median": 73.30915069580078,
+   "step_ms": [
+    72.18852996826172,
+    72.4814567565918,
+    70.18574523925781,
+    73.37764739990234,
+    77.28432083129883,
+    75.34648132324219,
+    73.24065399169922,
+    75.83656311035156
+   ],
+   "launches_per_step": 5294,
+   "kernel_ms_per_step": {
+    "_gemm_int4_b32_smallm": 55.410581875000084,
+    "void at::native::(anonymous namespace)::indexSelectSmallIndex<c10::BFloat16, long, unsigned int, 2, 2, -2>(at::cuda::detail::TensorInfo<c10::BFloat16, unsigned int>, at::cuda::detail::TensorInfo<c10::BFloat16 const, unsigned int>, at::cuda::detail::TensorInfo<long const, unsigned int>, int, int, unsigned int, long)": 14.209871937500074
+   },
+   "kernel_total_ms": 69.62045381250016
+  },
+  "k19": {
+   "step_ms_median": 41.88430404663086,
+   "step_ms": [
+    40.91391944885254,
+    40.960161209106445,
+    39.982255935668945,
+    41.942848205566406,
+    44.203983306884766,
+    42.436702728271484,
+    41.82575988769531,
+    42.986576080322266
+   ],
+   "launches_per_step": 144,
+   "kernel_ms_per_step": {
+    "_gemm_int4_b32_grouped_smallm": 41.745395437499994,
+    "_tile_table_r1": 1.156939500000004,
+    "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<int>, std::array<char*, 1ul> >(int, at::native::FillFunctor<int>, std::array<char*, 1ul>)": 0.25129243750001445
+   },
+   "kernel_total_ms": 43.15362737500001
+  }
+ },
+ "numerics": {
+  "max_abs_diff_over_max_ref": 0.0072115384973585606
+ }
+}
