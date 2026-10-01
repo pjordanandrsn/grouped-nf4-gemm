@@ -5,7 +5,9 @@ Guards: (1) every sorted output row within one bf16 output ulp of ``x[src] @ deq
 (2) bit-identical to K16 (``gemm_int4_b32_smallm``, sk=1, the same block_n/kc) on each expert's rows -- grouping
 changes no arithmetic, because a row's MMA output does not depend on the tile's other rows; (3) the in-kernel gather
 (``order``) is bit-identical to gathering first and passing sorted rows; (4) an expert with more than 16 rows spans
-several tiles and still matches; (5) deterministic; (6) a layout mismatch is refused before any launch. Set by
+several tiles and still matches; (5) deterministic; (6) a layout mismatch is refused before any launch; (7) lane K23's
+``scatter`` store is bit-identical to the caller's ``index_copy_`` unsort, with and without the gather; (8) K23's
+``gather_div`` reads token rows exactly as the gather reads their ``repeat_interleave`` expansion. Set by
 conftest/CI: TRITON_INTERPRET=1 (the dot runs with fp32 operands there); the same file compiled on a GPU
 (TRITON_INTERPRET=0) exercises the bf16 tensor-core arithmetic and owns the numerics claim.
 """
@@ -131,3 +133,52 @@ def test_plans_are_bit_identical_compiled(K):
     for bn, kc, wp, st in [(32, 256, 4, 2), (64, 256, 8, 3), (128, 128, 4, 3), (32, 64, 4, 2), (256, 128, 8, 2)]:
         y = gemm_int4_b32_grouped_smallm(*args, block_n=bn, kc=kc, warps=wp, stages=st)
         assert torch.equal(y, ref), f"plan ({bn}, {kc}, {wp}, {st}) moved an output bit at K={K}"
+
+
+@pytest.mark.parametrize("E,N,K,eids,label", CASES, ids=[c[-1] for c in CASES])
+def test_scatter_is_the_unsort(E, N, K, eids, label):
+    """K23: ``scatter=order`` stores sorted row i at row order[i] -- the same bits as ``index_copy_`` of the sorted
+    result, both for the gathered first projection and for the sorted-input second one."""
+    x, packed, scales, _deq, _e, (row0, rows, grp, order, _c) = _case(E, N, K, eids)
+    w = (packed.to(DEV), scales.to(DEV), row0, rows, grp)
+    xs = x.to(DEV)
+    y = gemm_int4_b32_grouped_smallm(xs, *w, order)
+    got = gemm_int4_b32_grouped_smallm(xs, *w, order, scatter=order)
+    assert torch.equal(got, torch.empty_like(y).index_copy_(0, order, y)), label
+    x_sorted = xs.index_select(0, order).contiguous()
+    y2 = gemm_int4_b32_grouped_smallm(x_sorted, *w)
+    got2 = gemm_int4_b32_grouped_smallm(x_sorted, *w, scatter=order)
+    assert torch.equal(got2, torch.empty_like(y2).index_copy_(0, order, y2)), label
+
+
+def test_scatter_length_is_checked():
+    x, packed, scales, _deq, _e, (row0, rows, grp, order, _c) = _case(*CASES[0][:4])
+    with pytest.raises(ValueError, match="scatter has"):
+        gemm_int4_b32_grouped_smallm(x.to(DEV), packed.to(DEV), scales.to(DEV), row0, rows, grp, order,
+                                     scatter=order[:-1])
+
+
+@pytest.mark.parametrize("k", [1, 2, 4])
+def test_gather_div_reads_token_rows_as_their_expansion(k):
+    """K23: x = T token rows, gather_div=k, order over T*k (token, slot) rows -- the same bits as handing K19 the
+    expansion ``x.repeat_interleave(k, 0)``, with scatter too."""
+    E, N, K = 4, 64, 128
+    T = 6
+    eids = [(3 * t + s) % E for t in range(T) for s in range(k)]
+    x, packed, scales, _deq, _e, (row0, rows, grp, order, _c) = _case(E, N, K, eids, seed=k)
+    xt = x[:T].to(DEV)
+    w = (packed.to(DEV), scales.to(DEV), row0, rows, grp)
+    expanded = xt.repeat_interleave(k, 0)
+    for kw in ({}, {"scatter": order}):
+        want = gemm_int4_b32_grouped_smallm(expanded, *w, order, **kw)
+        got = gemm_int4_b32_grouped_smallm(xt, *w, order, gather_div=k, **kw)
+        assert torch.equal(got, want), (k, kw.keys())
+
+
+def test_gather_div_is_checked():
+    x, packed, scales, _deq, _e, (row0, rows, grp, order, _c) = _case(*CASES[0][:4])
+    w = (packed.to(DEV), scales.to(DEV), row0, rows, grp)
+    with pytest.raises(ValueError, match="gather_div=2 needs order"):
+        gemm_int4_b32_grouped_smallm(x.to(DEV), *w, order, gather_div=2)       # 12 token rows x 2 != 12
+    with pytest.raises(ValueError, match="gather_div=2 needs order"):
+        gemm_int4_b32_grouped_smallm(x[:6].to(DEV), *w, None, gather_div=2)    # no order

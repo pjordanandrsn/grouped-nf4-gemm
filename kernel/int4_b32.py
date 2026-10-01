@@ -572,9 +572,11 @@ def gemm_int4_b32_grouped_captured(aq_sorted, as_sorted, packed, scales,
 # ------------------------------------------------ tail-fusion kernels --
 @triton.jit
 def _tile_table_r1(eids_ptr, row0_ptr, rows_ptr, grp_ptr, order_ptr,
-                   counts_ptr, R: tl.constexpr, RB: tl.constexpr,
+                   counts_ptr, sids_ptr, R: tl.constexpr, RB: tl.constexpr,
                    E: tl.constexpr, EB: tl.constexpr, TB: tl.constexpr,
-                   BM: tl.constexpr, MAXT: tl.constexpr):
+                   BM: tl.constexpr, MAXT: tl.constexpr,
+                   TBB: tl.constexpr = 1, SELF_ZERO: tl.constexpr = False,
+                   SIDS: tl.constexpr = False):
     """ONE launch builds the whole expert-major tile table for decode
     shapes: counts, exclusive row offsets, a STABLE counting-sort order,
     and the (row0, rows, grp) tile slots -- the work the chained
@@ -586,7 +588,14 @@ def _tile_table_r1(eids_ptr, row0_ptr, rows_ptr, grp_ptr, order_ptr,
     order exactly as a stable argsort does. Decode-only by contract
     (R <= a few hundred): the O(R^2) rank compare is one small block
     here and would not scale to prefill chunks -- the caller keeps the
-    chained builder for those, where launches amortize."""
+    chained builder for those, where launches amortize.
+
+    Lane K23 (opt-in, ``lean=True`` on the wrapper): ``SELF_ZERO`` writes
+    the padding slots ``[total tiles, TB)`` itself, so the caller's three
+    pre-zero fills go; live lanes cover exactly ``[0, total)`` (tiles are
+    contiguous per expert), so no address is written twice. ``SIDS``
+    also stores the expert-major sorted ids (``ids[order]``, the caller's
+    index_select). With both off this is the kernel as it was."""
     r = tl.arange(0, RB)
     rmask = r < R
     e = tl.load(eids_ptr + r, mask=rmask, other=E).to(tl.int32)
@@ -602,6 +611,8 @@ def _tile_table_r1(eids_ptr, row0_ptr, rows_ptr, grp_ptr, order_ptr,
     rank = tl.sum(same.to(tl.int32), axis=1)             # [RB]
     dst = tl.sum(tl.where(hits, row_off[:, None], 0), axis=0) + rank
     tl.store(order_ptr + dst, r.to(tl.int64), mask=rmask)
+    if SIDS:
+        tl.store(sids_ptr + dst, e.to(sids_ptr.dtype.element_ty), mask=rmask)
     # tile slots: expert e owns tiles [tile_off[e], tile_off[e]+tpe[e])
     tpe = (counts + BM - 1) // BM
     tile_off = tl.cumsum(tpe, axis=0) - tpe
@@ -624,15 +635,33 @@ def _tile_table_r1(eids_ptr, row0_ptr, rows_ptr, grp_ptr, order_ptr,
                                        (EB * MAXT,)), mask=lf)
     tl.store(grp_ptr + sf, tl.reshape(grp_v.to(tl.int32),
                                       (EB * MAXT,)), mask=lf)
+    if SELF_ZERO:
+        tb = tl.arange(0, TBB)
+        dead = (tb >= tl.sum(tpe, axis=0)) & (tb < TB)
+        z = tl.zeros([TBB], dtype=tl.int32)
+        tl.store(rows_ptr + tb, z, mask=dead)
+        tl.store(row0_ptr + tb, z, mask=dead)
+        tl.store(grp_ptr + tb, z, mask=dead)
 
 
 def build_group_tiles_fused(expert_ids, n_experts: int, block_m: int,
-                            tiles_budget: int | None = None):
+                            tiles_budget: int | None = None, *,
+                            lean: bool = False, sorted_ids: bool = False,
+                            warps: int = 4):
     """Drop-in for ``nf4_grouped.build_group_tiles_device`` on DECODE
     shapes (R <= 256): same five outputs, same dtypes, same tile-slot
     semantics (padding slots rows=0), one kernel launch. Raises on
     shapes outside its contract -- the caller falls back to the chained
-    builder there rather than getting a silently different table."""
+    builder there rather than getting a silently different table.
+
+    Lane K23, opt-in (the grouping glue around K19 on Qwen3's B=16 step):
+    ``lean=True`` drops the host-side int32 cast (the kernel reads the
+    ids at their own dtype) and the three pre-zero fills (the kernel
+    zeroes the padding slots), one launch instead of five.
+    ``sorted_ids=True`` appends a sixth output, ``expert_ids[order]`` at
+    the ids' dtype, so the caller's index_select goes too. The tables are
+    the same integers either way (``test_lean_tile_table_is_identical``).
+    ``warps`` is the launch's warp count (default 4, as before)."""
     r = expert_ids.numel()
     if r > 256:
         raise ValueError(f"fused tile builder is decode-only (R <= 256); "
@@ -643,25 +672,35 @@ def build_group_tiles_fused(expert_ids, n_experts: int, block_m: int,
         # matching the chained builder (review finding, round 1)
         dev = expert_ids.device
         tb = (n_experts if tiles_budget is None else tiles_budget)
-        return (torch.zeros(tb, dtype=torch.int32, device=dev),
-                torch.zeros(tb, dtype=torch.int32, device=dev),
-                torch.zeros(tb, dtype=torch.int32, device=dev),
-                torch.empty(0, dtype=torch.int64, device=dev),
-                torch.zeros(n_experts, dtype=torch.int64, device=dev))
+        empty = (torch.zeros(tb, dtype=torch.int32, device=dev),
+                 torch.zeros(tb, dtype=torch.int32, device=dev),
+                 torch.zeros(tb, dtype=torch.int32, device=dev),
+                 torch.empty(0, dtype=torch.int64, device=dev),
+                 torch.zeros(n_experts, dtype=torch.int64, device=dev))
+        if sorted_ids:
+            return empty + (torch.empty(0, dtype=expert_ids.dtype, device=dev),)
+        return empty
     if tiles_budget is None:
         tiles_budget = -(-r // block_m) + n_experts
     dev = expert_ids.device
-    row0 = torch.zeros(tiles_budget, dtype=torch.int32, device=dev)
-    rows = torch.zeros(tiles_budget, dtype=torch.int32, device=dev)
-    grp = torch.zeros(tiles_budget, dtype=torch.int32, device=dev)
+    alloc = torch.empty if lean else torch.zeros
+    row0 = alloc(tiles_budget, dtype=torch.int32, device=dev)
+    rows = alloc(tiles_budget, dtype=torch.int32, device=dev)
+    grp = alloc(tiles_budget, dtype=torch.int32, device=dev)
     order = torch.empty(r, dtype=torch.int64, device=dev)
     counts = torch.empty(n_experts, dtype=torch.int64, device=dev)
+    ids = expert_ids.reshape(-1).contiguous() if lean else expert_ids.to(torch.int32)
+    sids = torch.empty(r, dtype=expert_ids.dtype, device=dev) if sorted_ids else order
     maxt = -(-r // block_m) + 1
     _tile_table_r1[(1,)](
-        expert_ids.to(torch.int32), row0, rows, grp, order, counts,
+        ids, row0, rows, grp, order, counts, sids,
         R=r, RB=triton.next_power_of_2(r), E=n_experts,
         EB=triton.next_power_of_2(n_experts), TB=tiles_budget,
-        BM=block_m, MAXT=triton.next_power_of_2(maxt))
+        BM=block_m, MAXT=triton.next_power_of_2(maxt),
+        TBB=triton.next_power_of_2(tiles_budget) if lean else 1,
+        SELF_ZERO=bool(lean), SIDS=bool(sorted_ids), num_warps=warps)
+    if sorted_ids:
+        return row0, rows, grp, order, counts, sids
     return row0, rows, grp, order, counts
 
 

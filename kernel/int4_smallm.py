@@ -151,7 +151,8 @@ def gemm_int4_b32_smallm(x: torch.Tensor, packed: torch.Tensor, scales: torch.Te
 def _gemm_int4_b32_grouped_smallm(x_ptr, ord_ptr, w_ptr, ws_ptr, row0_ptr, rows_ptr, grp_ptr, out_ptr,
                                   N, K: tl.constexpr,
                                   BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, KC: tl.constexpr,
-                                  GATHER: tl.constexpr, DOT_BF16: tl.constexpr):
+                                  GATHER: tl.constexpr, DOT_BF16: tl.constexpr,
+                                  sct_ptr=None, SCATTER: tl.constexpr = False, GDIV: tl.constexpr = 1):
     """K19: K16's arithmetic over K14's expert-major tiles. Grid ``(tiles, cdiv(N, BLOCK_N))``; program (g, pid_n)
     computes ``rows[g]`` (<= BLOCK_M) sorted rows x BLOCK_N outputs of expert ``grp[g]`` over the WHOLE K (no split:
     at decode the tile count times the N blocks already fills the card, so there are no partials, counters or a
@@ -161,6 +162,11 @@ def _gemm_int4_b32_grouped_smallm(x_ptr, ord_ptr, w_ptr, ws_ptr, row0_ptr, rows_
     ``GATHER``: sorted row r reads input row ``order[row0 + r]`` (the expert-major gather folded into the load, for
     the unsorted first projection); otherwise input row ``row0 + r`` (already sorted, e.g. the epilogue output).
     Output rows are written in SORTED order, K14's convention, so this is a drop-in for its captured call.
+    ``SCATTER`` (lane K23, opt-in): sorted row r is stored at output row ``scatter[row0 + r]`` instead, the caller's
+    unsort (``out.index_copy_(0, order, y)``) folded into the store; the values are the same, only their rows move.
+    ``GDIV`` (lane K23, opt-in, with ``GATHER``): the gathered row is ``order[row0 + r] // GDIV``, so a decode step's
+    token rows ``[T, K]`` serve its ``T * top_k`` (token, slot) rows without first being expanded to ``[T * top_k, K]``
+    (row i of that expansion IS token row ``i // top_k``).
     Zero-row tiles (the static grid's padding) exit before the K loop, K14's zero-tile lesson."""
     g = tl.program_id(0)
     pid_n = tl.program_id(1)
@@ -173,6 +179,8 @@ def _gemm_int4_b32_grouped_smallm(x_ptr, ord_ptr, w_ptr, ws_ptr, row0_ptr, rows_
     m_mask = offs_m < rows
     if GATHER:
         src = tl.load(ord_ptr + row0 + offs_m, mask=m_mask, other=0).to(tl.int64)
+        if GDIV != 1:
+            src = src // GDIV
     else:
         src = row0 + offs_m
     offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
@@ -205,7 +213,11 @@ def _gemm_int4_b32_grouped_smallm(x_ptr, ord_ptr, w_ptr, ws_ptr, row0_ptr, rows_
         if DOT_BF16:
             wsc = wsc.to(tl.bfloat16)
         acc += tl.dot(a, tl.trans(wsc), out_dtype=tl.float32)
-    ooff = (row0 + offs_m)[:, None] * N + offs_n[None, :]
+    if SCATTER:
+        dst = tl.load(sct_ptr + row0 + offs_m, mask=m_mask, other=0).to(tl.int64)
+    else:
+        dst = row0 + offs_m
+    ooff = dst[:, None] * N + offs_n[None, :]
     tl.store(out_ptr + ooff, acc.to(tl.bfloat16), mask=m_mask[:, None] & n_mask[None, :])
 
 
@@ -213,11 +225,16 @@ def gemm_int4_b32_grouped_smallm(x: torch.Tensor, packed: torch.Tensor, scales: 
                                  t_row0: torch.Tensor, t_rows: torch.Tensor, t_group: torch.Tensor,
                                  order: torch.Tensor | None = None, *,
                                  block_n: int = 32, kc: int = 256, warps: int = 4, stages: int = 2,
-                                 dot_bf16: bool | None = None) -> torch.Tensor:
+                                 dot_bf16: bool | None = None,
+                                 scatter: torch.Tensor | None = None, gather_div: int = 1) -> torch.Tensor:
     """K19, the grouped small-M int4-b32 GEMM: ``x [R, K]`` bf16 (unsorted when ``order`` is given, else already in
     expert-major order), ``packed [E, N, K//2]`` / ``scales [E, N, K//32]`` int4-b32 expert stacks, and the device
     tile table of ``int4_b32.build_group_tiles_fused`` (``t_row0``, ``t_rows`` <= 16, ``t_group`` = local expert ids;
-    padding tiles rows=0). Returns ``[R, N]`` bf16 in the SORTED row order (K14's convention).
+    padding tiles rows=0). Returns ``[R, N]`` bf16 in the SORTED row order (K14's convention), or, given
+    ``scatter`` (lane K23, opt-in; the builder's ``order``), in the CALLER's row order: sorted row i lands at row
+    ``scatter[i]``, exactly ``torch.empty_like(y).index_copy_(0, scatter, y)`` of the sorted result. With
+    ``gather_div=k`` (lane K23, opt-in; needs ``order``) ``x`` is the ``[R // k, K]`` TOKEN rows and sorted row i reads
+    token row ``order[i] // k``: the same bits as passing ``x.repeat_interleave(k, 0)``, without that copy.
 
     Same contract as K16 per tile: each output row is within one bf16 ulp of ``x[src] @ dequant(packed[e]).T`` and is
     bit-identical to K16 (``gemm_int4_b32_smallm`` with ``sk=1`` and the same ``block_n``/``kc``) on that expert's
@@ -231,6 +248,11 @@ def gemm_int4_b32_grouped_smallm(x: torch.Tensor, packed: torch.Tensor, scales: 
     are (70 of 72 plans compared on the card, ``test_plans_are_bit_identical_compiled`` here). Under the interpreter
     the fp32 dot is numpy's and KC can move the last bit."""
     R, K = x.shape
+    if gather_div != 1:
+        if order is None or gather_div < 1 or R * gather_div != order.numel():
+            raise ValueError(f"gather_div={gather_div} needs order with x.shape[0] * gather_div rows "
+                             f"(x has {R}, order has {None if order is None else order.numel()})")
+        R = order.numel()
     E, N, kh = packed.shape
     if kh * 2 != K or tuple(scales.shape) != (E, N, K // 32):
         raise ValueError(f"layout mismatch: x K={K}, packed {tuple(packed.shape)}, scales {tuple(scales.shape)}")
@@ -238,9 +260,14 @@ def gemm_int4_b32_grouped_smallm(x: torch.Tensor, packed: torch.Tensor, scales: 
     if dot_bf16 is None:
         dot_bf16 = not _interpreting()
     gather = order is not None
+    if scatter is not None and scatter.numel() != R:
+        raise ValueError(f"scatter has {scatter.numel()} rows, x has {R}")
     out = torch.empty(R, N, dtype=torch.bfloat16, device=x.device)
+    extra = {} if scatter is None else {"sct_ptr": scatter, "SCATTER": True}
+    if gather_div != 1:
+        extra["GDIV"] = int(gather_div)
     _gemm_int4_b32_grouped_smallm[(t_row0.numel(), triton.cdiv(N, block_n))](
         x.contiguous(), order if gather else t_row0, packed, scales, t_row0, t_rows, t_group, out,
         N, K=K, BLOCK_M=16, BLOCK_N=block_n, KC=kc, GATHER=bool(gather), DOT_BF16=bool(dot_bf16),
-        num_warps=warps, num_stages=stages)
+        num_warps=warps, num_stages=stages, **extra)
     return out

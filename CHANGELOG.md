@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+- **K23: the grouping glue around K19 folds into the two kernels it brackets; opt-in, no speed claim yet.**
+  - **Why.** experts4bit-qlora P88 censused Qwen3-30B-A3B's B=16 step on an RTX 5090, 8 graph replays per arm. Diffing
+    its K19 arm against its GEMV arm leaves 0.685 ms/step of launches that K19's route adds:
+    - the tile builder, 0.430;
+    - three fills, 0.096 (+144 elementwise calls per step);
+    - an index kernel, 0.094 (by its count, the unsort);
+    - a scatter/gather kernel, 0.065.
+
+    Both arms also pay an `index_select` of 0.46 ms/step. By its call count and per-call time it is inferred to be
+    the `[T * top_k, H]` expansion of the token rows, which `gather_div` makes unnecessary.
+  - **What.**
+    - `int4_b32.build_group_tiles_fused(..., lean=True)`: the builder reads the ids at their own dtype and zeroes the
+      padding slots itself: one launch where the default path makes up to five calls (a cast, three
+      zero-fills, the builder). Live tiles cover exactly the slots below the tile
+      total, so no address is written twice.
+    - `sorted_ids=True` appends `ids[order]` as a sixth output. `warps=` sets the launch's warp count.
+    - `int4_smallm.gemm_int4_b32_grouped_smallm(..., scatter=order)`: K19 stores sorted row i at row `order[i]`. That is
+      the caller's unsort in the store; the values are the same bits.
+    - `gather_div=k` (with `order`): `x` is the step's `[T, H]` token rows, and sorted row i reads token row
+      `order[i] // k`. That is what reading the expansion `x.repeat_interleave(k, 0)` reads, without the copy.
+  - **Contract.**
+    - `test_lean_tile_table_is_identical`: the default call's integers exactly, into poisoned buffers, at int64 and
+      int32 ids.
+    - `test_scatter_is_the_unsort`: bit-identical to `index_copy_`, with and without the gather.
+    - `test_gather_div_reads_token_rows_as_their_expansion`: bit-identical to the expanded call, with and without
+      scatter; bad shapes are refused.
+    - All run under the interpreter and compiled. On the RTX A2000 (correctness only): the builder file 17/17, K19's
+      22/22. Mutation arms each fail the new tests:
+      - dropping the self-zeroing fails 10/10 lean cases;
+      - dropping the scatter fails 3 of 4 (the fourth routing is already sorted);
+      - dropping the divide fails 2 of 3 (the third is k = 1).
+    - With every option off, both kernels do the same work as before: the new branches are compile-time constants,
+      and the builder only gains one unused pointer argument.
+
 - **K21 takes a masked K tail: KC need not divide K.** `gemm_mxfp4_grouped_smallm`'s KC is any of 32, 64, 128 or 256 (refused otherwise). When KC does not divide K, the last chunk is masked: activations and weights past K load as zero, so the padded columns add exact zeros. A constexpr `EVEN_K` keeps the common case mask-free.
   - **Why.** gpt-oss's K = 2880 previously capped K21 at KC 64, and K22 read K21 at only 37 % of the byte floor there. On Qwen3, KC 256 was worth 75 % → 89 % of the floor (K20).
   - **Tests.** Masked-tail reference cases (K = 2880 at KC 256 and 128, K = 96 at KC 64) and an unsupported-KC refusal. The compiled plan-identity test now runs K = 2880's KC 256/128 plans masked, and they stay bit-identical to KC 64. RTX A2000: compiled 14 passed; interpreter 23 with K19's file.
