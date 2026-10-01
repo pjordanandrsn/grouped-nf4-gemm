@@ -1001,7 +1001,8 @@
     "kernel/receipts-k20/5090/tests_compiled.log"
    ],
    "quoted_in": [
-    "README.md"
+    "README.md",
+    "docs/STATUS.md"
    ],
    "notes": "Lane k20-5090-1 cost $0.0615 (estimate $0.5625); receipts in adertha-receipts. Mechanism not profiled: the plan grid does not separate load size, loop overhead and register footprint; every top-ten plan has KC 256. Two plans (BLOCK_N 256 x KC 256, 4 stages) did not compile (shared memory)."
   }
