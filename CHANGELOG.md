@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **K26 read (RTX 5090): DECODE. The NF4 codebook lookup is about 80 % of K25's time; an exact select-tree decode takes K25 to 0.373 / 0.383 (Granite / OLMoE) at bit-identical outputs.** (`gnf4.kernel.k26-nf4-decode-ablation.5090.2026-10-01`)
+  - **Arms, ms per B=16 step:**
+    - K25: 5.869 / 9.898;
+    - `nibble − 8` in place of the lookup: 1.310 / 2.050;
+    - the tree: 2.189 / 3.794;
+    - the served NF4 GEMM: 5.650 / 9.540.
+  - **Controls.** Both bench copies are bit-equal to the kernels they copy, within 1.1 % of their times. The served path with the tree is not bit-identical and not faster.
+  - **Registered pointer:** K25 takes the select tree.
+  - `kernel/RESULTS-k26-nf4-decode-ablation.md`, `kernel/receipts-k26/5090/` (`k26-5090-1`, $0.03).
+
 ## 0.34.0 — 2026-10-01 — grouped small-M tensor-core GEMMs for decode batches: K19 (int4-b32) with the K20 plan as its default, K21 (native MXFP4, with a masked K tail), K23's lean grouping glue, and K25 (NF4); the MXFP4 QLoRA fused combine is deterministic (folded in from the never-published 0.33.8)
 
 **0.34.0.** Four kernels for decode-batch experts, all K19's structure: 16-row expert tiles, the gather folded into the load, bf16 tensor-core MMA. In experts4bit-qlora they serve its licensed batched-decode routes (K19 for the int4 store, lane P88; its lean glue, lane P89; K21 for the MXFP4 store, lane P90). K25 is opt-in there (lane P92: Granite measured, OLMoE failed its quality gate). Shipped modules changed since 0.33.7: `int4_smallm`, `int4_b32`, `mxfp4_grouped`, `nf4_smallm` (new), `mxfp4_qlora` (0.33.8's fix), `_triton_shim` (CPU-path entries) and `gguf_reader` (a docstring). Every other shipped module is identical to 0.33.7. The bench files K20–K26 are campaign instruments, deliberately not packaged.

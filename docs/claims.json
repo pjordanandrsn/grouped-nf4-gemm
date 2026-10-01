@@ -1005,6 +1005,23 @@
     "docs/STATUS.md"
    ],
    "notes": "Lane k20-5090-1 cost $0.0615 (estimate $0.5625); receipts in adertha-receipts. Mechanism not profiled: the plan grid does not separate load size, loop overhead and register footprint; every top-ten plan has KC 256. Two plans (BLOCK_N 256 x KC 256, 4 stages) did not compile (shared memory)."
+  },
+  {
+   "id": "gnf4.kernel.k26-nf4-decode-ablation.5090.2026-10-01",
+   "area": "kernel",
+   "claim": "K26 (pre-registered 2026-10-01, #430): on the RTX 5090 at the NF4 families' B=16 expert shapes (Granite 32 layers, OLMoE 16; per-layer synthetic stores, seeded top-8 routing, both GEMMs per layer in one CUDA graph), the per-nibble codebook lookup is about 80 % of K25's time: K25 (nf4_smallm.gemm_nf4_grouped_smallm) 5.869 / 9.898 ms/step against 1.310 / 2.050 with the lookup replaced by nibble - 8 (affine/pair 0.223 / 0.207, DECODE by the registered rule). An exact 4-level select-tree decode over the 16 fp32 codebook values is bit-identical to K25 and runs at 2.189 / 3.794 (0.373 / 0.383 of K25; 49 / 56 % of the copy floor), so the registered pointer names it as K25's decode. The served _gemm_nf4_grouped runs at 5.650 / 9.540; its own path with the tree is not bit-identical and not faster (1.073 / 1.037).",
+   "value": 0.383,
+   "unit": "select-tree K25 / K25 as merged, ms per B=16 decode step, the larger of the two families (OLMoE; Granite 0.373)",
+   "status": "measured",
+   "hardware": "RTX 5090 (sm_120, driver 580.95.05, 600 W), torch 2.8.0+cu128 / triton 3.4.0, rented host (vast instance 53739655, AMD)",
+   "measured_on": "2026-10-01",
+   "evidence": [
+    "kernel/RESULTS-k26-nf4-decode-ablation.md",
+    "kernel/PREREG-k26-nf4-decode-ablation.md",
+    "kernel/k26_bench.py",
+    "kernel/receipts-k26/5090/k26.json",
+    "kernel/receipts-k26/5090/summary.txt"
+   ]
   }
  ]
 }
