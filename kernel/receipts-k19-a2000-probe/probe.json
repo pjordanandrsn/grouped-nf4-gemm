@@ -1,0 +1,49 @@
+{
+ "device": "NVIDIA RTX A2000 12GB",
+ "sm": 26,
+ "torch": "2.8.0+cu128",
+ "steps": 8,
+ "arms": {
+  "served": {
+   "step_ms_median": 79.31392860412598,
+   "step_ms": [
+    78.88690948486328,
+    79.32476806640625,
+    79.34606552124023,
+    79.41004943847656,
+    79.3030891418457,
+    79.04985427856445,
+    79.25502395629883,
+    79.38003540039062
+   ],
+   "launches_per_step": 96,
+   "kernel_ms_per_step": {
+    "_gemv_int4_b32": 78.47080962499999,
+    "_reduce_partials": 0.5305117500000309
+   },
+   "kernel_total_ms": 79.00132137500002
+  },
+  "k16_each": {
+   "step_ms_median": 73.23336601257324,
+   "step_ms": [
+    70.78750610351562,
+    71.25383758544922,
+    70.01642990112305,
+    73.20156478881836,
+    76.62627029418945,
+    74.69192123413086,
+    73.26516723632812,
+    75.52062225341797
+   ],
+   "launches_per_step": 5294,
+   "kernel_ms_per_step": {
+    "_gemm_int4_b32_smallm": 55.263457124999974,
+    "void at::native::(anonymous namespace)::indexSelectSmallIndex<c10::BFloat16, long, unsigned int, 2, 2, -2>(at::cuda::detail::TensorInfo<c10::BFloat16, unsigned int>, at::cuda::detail::TensorInfo<c10::BFloat16 const, unsigned int>, at::cuda::detail::TensorInfo<long const, unsigned int>, int, int, unsigned int, long)": 14.179091875000005
+   },
+   "kernel_total_ms": 69.44254899999999
+  }
+ },
+ "numerics": {
+  "max_abs_diff_over_max_ref": 0.0072115384973585606
+ }
+}

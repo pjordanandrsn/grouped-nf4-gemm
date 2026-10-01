@@ -144,3 +144,96 @@ def gemm_int4_b32_smallm(x: torch.Tensor, packed: torch.Tensor, scales: torch.Te
         xc, packed, scales, part, cnt, out, M, N, K=K,
         BLOCK_M=16, BLOCK_N=block_n, KC=kc, SK=sk, DOT_BF16=bool(dot_bf16), num_warps=warps, num_stages=stages)
     return out
+
+
+# ---------------------------------------------------------------------------------------------- lane K19 --
+@triton.jit
+def _gemm_int4_b32_grouped_smallm(x_ptr, ord_ptr, w_ptr, ws_ptr, row0_ptr, rows_ptr, grp_ptr, out_ptr,
+                                  N, K: tl.constexpr,
+                                  BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, KC: tl.constexpr,
+                                  GATHER: tl.constexpr, DOT_BF16: tl.constexpr):
+    """K19: K16's arithmetic over K14's expert-major tiles. Grid ``(tiles, cdiv(N, BLOCK_N))``; program (g, pid_n)
+    computes ``rows[g]`` (<= BLOCK_M) sorted rows x BLOCK_N outputs of expert ``grp[g]`` over the WHOLE K (no split:
+    at decode the tile count times the N blocks already fills the card, so there are no partials, counters or a
+    separate reduce). Activations stay bf16 (no int8 quantise); the int4 tile is dequantised and scaled in registers
+    per 32-block and multiplied as bf16 on the tensor cores, one ``tl.dot`` per KC chunk, exactly as K16.
+
+    ``GATHER``: sorted row r reads input row ``order[row0 + r]`` (the expert-major gather folded into the load, for
+    the unsorted first projection); otherwise input row ``row0 + r`` (already sorted, e.g. the epilogue output).
+    Output rows are written in SORTED order, K14's convention, so this is a drop-in for its captured call.
+    Zero-row tiles (the static grid's padding) exit before the K loop, K14's zero-tile lesson."""
+    g = tl.program_id(0)
+    pid_n = tl.program_id(1)
+    rows = tl.load(rows_ptr + g)
+    if rows == 0:
+        return
+    row0 = tl.load(row0_ptr + g).to(tl.int64)
+    eid = tl.load(grp_ptr + g).to(tl.int64)
+    offs_m = tl.arange(0, BLOCK_M)
+    m_mask = offs_m < rows
+    if GATHER:
+        src = tl.load(ord_ptr + row0 + offs_m, mask=m_mask, other=0).to(tl.int64)
+    else:
+        src = row0 + offs_m
+    offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
+    n_mask = offs_n < N
+    KB: tl.constexpr = K // 32
+    NKC: tl.constexpr = K // KC
+    NSC: tl.constexpr = KC // 32
+    offs_kc = tl.arange(0, KC)
+    offs_kh = tl.arange(0, KC // 2)
+    offs_sc = tl.arange(0, NSC)
+    wbase = w_ptr + eid * N * (K // 2)
+    sbase = ws_ptr + eid * N * KB
+    acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
+    for c in range(0, NKC):
+        k0 = c * KC
+        a = tl.load(x_ptr + src[:, None] * K + k0 + offs_kc[None, :], mask=m_mask[:, None], other=0.0)
+        if DOT_BF16:
+            a = a.to(tl.bfloat16)
+        else:
+            a = a.to(tl.float32)
+        wb = tl.load(wbase + offs_n[:, None] * (K // 2) + (k0 // 2) + offs_kh[None, :],
+                     mask=n_mask[:, None], other=0).to(tl.int32)
+        lo = ((wb & 0xF) - 8).to(tl.float32)
+        hi = (((wb >> 4) & 0xF) - 8).to(tl.float32)
+        w = tl.interleave(lo, hi)
+        sc = tl.load(sbase + offs_n[:, None] * KB + (k0 // 32) + offs_sc[None, :],
+                     mask=n_mask[:, None], other=0.0).to(tl.float32)
+        w3 = tl.reshape(w, (BLOCK_N, NSC, 32)) * sc[:, :, None]
+        wsc = tl.reshape(w3, (BLOCK_N, KC))
+        if DOT_BF16:
+            wsc = wsc.to(tl.bfloat16)
+        acc += tl.dot(a, tl.trans(wsc), out_dtype=tl.float32)
+    ooff = (row0 + offs_m)[:, None] * N + offs_n[None, :]
+    tl.store(out_ptr + ooff, acc.to(tl.bfloat16), mask=m_mask[:, None] & n_mask[None, :])
+
+
+def gemm_int4_b32_grouped_smallm(x: torch.Tensor, packed: torch.Tensor, scales: torch.Tensor,
+                                 t_row0: torch.Tensor, t_rows: torch.Tensor, t_group: torch.Tensor,
+                                 order: torch.Tensor | None = None, *,
+                                 block_n: int = 64, kc: int = 128, warps: int = 4, stages: int = 2,
+                                 dot_bf16: bool | None = None) -> torch.Tensor:
+    """K19, the grouped small-M int4-b32 GEMM: ``x [R, K]`` bf16 (unsorted when ``order`` is given, else already in
+    expert-major order), ``packed [E, N, K//2]`` / ``scales [E, N, K//32]`` int4-b32 expert stacks, and the device
+    tile table of ``int4_b32.build_group_tiles_fused`` (``t_row0``, ``t_rows`` <= 16, ``t_group`` = local expert ids;
+    padding tiles rows=0). Returns ``[R, N]`` bf16 in the SORTED row order (K14's convention).
+
+    Same contract as K16 per tile: each output row is within one bf16 ulp of ``x[src] @ dequant(packed[e]).T`` and is
+    bit-identical to K16 (``gemm_int4_b32_smallm`` with ``sk=1`` and the same ``block_n``/``kc``) on that expert's
+    rows, because a row's MMA output does not depend on the tile's other rows. Every launch parameter is static and
+    every input a device tensor, so the call is legal inside CUDA-graph capture; the only allocation is ``out``."""
+    R, K = x.shape
+    E, N, kh = packed.shape
+    if kh * 2 != K or tuple(scales.shape) != (E, N, K // 32):
+        raise ValueError(f"layout mismatch: x K={K}, packed {tuple(packed.shape)}, scales {tuple(scales.shape)}")
+    block_n, kc, _sk = plan_smallm(N, K, block_n=block_n, kc=kc, sk=1)
+    if dot_bf16 is None:
+        dot_bf16 = not _interpreting()
+    gather = order is not None
+    out = torch.empty(R, N, dtype=torch.bfloat16, device=x.device)
+    _gemm_int4_b32_grouped_smallm[(t_row0.numel(), triton.cdiv(N, block_n))](
+        x.contiguous(), order if gather else t_row0, packed, scales, t_row0, t_rows, t_group, out,
+        N, K=K, BLOCK_M=16, BLOCK_N=block_n, KC=kc, GATHER=bool(gather), DOT_BF16=bool(dot_bf16),
+        num_warps=warps, num_stages=stages)
+    return out

@@ -211,9 +211,10 @@
     "split-K GEMV for MoE experts at batch 1",
     "GPTQ-style calibrated int4 packing",
     "int4 attention projections at decode",
-    "grouped split-K GEMV sharing an expert's weight loads across its rows at batch 16"
+    "grouped split-K GEMV sharing an expert's weight loads across its rows at batch 16",
+    "grouped tensor-core small-M GEMM over expert-major tiles for decode-batch experts (K19, opt-in)"
    ],
-   "solution": "quant_x_rows quantises activation rows to int8 with per-32 scales; gemv_int4_b32 runs the split-K int4-b32 GEMV over packed [E, N, K//2] + fp16 scales [E, N, K//32] (reduce_partials folds the split-K sum and bf16 cast into one launch); pack_int4_b32 is the round-to-nearest packer and gptq_pack_int4_b32 + HessianAccumulator the calibrated one; gemm_int4_b32_grouped_captured is the capture-legal batched variant. gemv_int4_b32_grouped (K18) is the split-K GEMV with each program serving up to four rows of one expert, bitwise the served GEMV and measured slower (dormant).",
+   "solution": "quant_x_rows quantises activation rows to int8 with per-32 scales; gemv_int4_b32 runs the split-K int4-b32 GEMV over packed [E, N, K//2] + fp16 scales [E, N, K//32] (reduce_partials folds the split-K sum and bf16 cast into one launch); pack_int4_b32 is the round-to-nearest packer and gptq_pack_int4_b32 + HessianAccumulator the calibrated one; gemm_int4_b32_grouped_captured is the capture-legal batched variant. gemv_int4_b32_grouped (K18) is the split-K GEMV with each program serving up to four rows of one expert, bitwise the served GEMV and measured slower (dormant). gemm_int4_b32_grouped_smallm (K19) runs K16's bf16 tensor-core arithmetic over the device tile table (build_group_tiles_fused, 16-row tiles) with the first projection's gather folded in, bit-identical to K16 per expert; opt-in in experts4bit-qlora, no default changes.",
    "modes": [
     "inference",
     "serving",
@@ -261,7 +262,8 @@
     "gptq_pack:HessianAccumulator",
     "int4_smallm:gemm_int4_b32_smallm",
     "int4_smallm:plan_smallm",
-    "int4_smallm:smallm_workspace"
+    "int4_smallm:smallm_workspace",
+    "int4_smallm:gemm_int4_b32_grouped_smallm"
    ],
    "documentation": [
     "docs/solutions/int4-decode-gemv.md",

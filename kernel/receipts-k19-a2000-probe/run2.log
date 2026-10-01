@@ -1,0 +1,20 @@
+== card before:
+0 %, 1374 MiB
+== INTERP
+    tensor.__index__ = lambda self: int(self.handle.data)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+20 passed, 260 warnings in 4.51s
+== COMPILED A2000
+....................                                                     [100%]
+20 passed in 8.56s
+== PACKAGING
+FAILED test_packaging_covers_kernel.py::test_every_test_file_is_actually_RUN_by_ci
+FAILED test_packaging_covers_kernel.py::test_the_modules_0_3_0_announced_are_packaged
+4 failed, 1 passed in 1.34s
+== PROBE
+served {"step_ms_median": 79.28271102905273, "kernel_total_ms": 78.98868381250003, "launches_per_step": 96}
+k16_each {"step_ms_median": 73.30915069580078, "kernel_total_ms": 69.62045381250016, "launches_per_step": 5294}
+k19 {"step_ms_median": 41.88430404663086, "kernel_total_ms": 43.15362737500001, "launches_per_step": 144}
+numerics {'max_abs_diff_over_max_ref': 0.0072115384973585606}
+K19T_DONE

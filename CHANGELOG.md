@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **K19: a grouped small-M int4-b32 GEMM for decode-batch experts (`int4_smallm.gemm_int4_b32_grouped_smallm`), opt-in; no default changes.**
+  - **What it is.** K16's arithmetic (bf16 tensor-core MMA, the int4 tile dequantised and scaled in registers, one `tl.dot` per 128-wide K chunk) over K14's expert-major device tiles (`build_group_tiles_fused`, 16-row tiles).
+  - One launch per projection covers every (tile × N block). There is no split-K, so no partials, counters or separate reduce, and activations stay bf16 (no int8 quantise).
+  - The first projection's expert-major gather is folded into the load through `order`. Outputs come back in sorted order, a drop-in for K14's `gemm_int4_b32_grouped_captured`. The call is capture-legal.
+  - **Contract** (`kernel/test_int4_grouped_smallm_interp.py`, registered as an interpreter file and in CI's interpreter job):
+    - each sorted row is within one bf16 ulp of `x[src] @ dequant(packed[e]).T`;
+    - **bit-identical to K16 (sk=1) on each expert's rows**, so grouping changes no arithmetic;
+    - the in-kernel gather is bit-identical to gathering first;
+    - an expert with more than 16 rows spans tiles;
+    - deterministic, and a layout mismatch is refused before launch.
+    - 20/20 pass under the interpreter and 20/20 compiled on the NAS RTX A2000.
+  - **Exploratory A2000 probe, not a claim** (`kernel/receipts-k19-a2000-probe/`). On experts4bit-qlora P60's recorded B=16 routing (8 steps, 48 layers, gate_up + down): K19 41.9 ms/step against the served `_gemv_int4_b32` path's 79.3, tile build included. The 5090 measurement, and any default change in experts4bit-qlora behind a quality gate, are separate lanes.
+
 - **Owner quotes and name credits are removed from the documents (docs, and one docstring).**
   - Verbatim chat quotes and name credits are removed from the kernel pre-registrations (B374, B393, K17, K18), two RESULTS pages, an upstream draft, the CI workflow comment and the `kernel/gguf_reader.py` module docstring. That docstring is text only, so no behaviour changes. Directives are paraphrased or reduced to their date; no criterion, band, measurement or date moved.
   - Two OpenTimestamps-anchored documents were edited: `kernel/RESULTS-gate2-confirmatory.md` and `kernel/RESULTS-v2-confirmatory.md`. Each now ends with a note that its `.ots` anchors the version before the edit, which git history keeps.
