@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- **K25: K19's grouped small-M tensor-core GEMM on the NF4 store (`nf4_smallm.gemm_nf4_grouped_smallm`), opt-in; no consumer, no speed claim yet.**
+  - **Why.** experts4bit-qlora's lane P91 (#564) read the NF4 families' B=16 decode steps on an RTX 5090: the served grouped GEMM (`_gemm_nf4_grouped`) is 61.7 % (Granite, `r12epi`) and 71.9 % (OLMoE, `nf4`) of kernel time. That kernel gathers its rows in a separate launch, steps K 64 at a time, and multiplies TF32 on fp32-dequantised weights.
+  - **What it is.** K19's kernel with the NF4 dequant, as K21 is on the MXFP4 store:
+    - the grid, tile table, in-kernel gather, sorted output, K23's `scatter` / `gather_div` and K21's masked K tail are K19's;
+    - each nibble decodes through the fp32 codebook (element 2j is the high nibble), is scaled by its per-64 absmax in fp32, rounded to bf16, and multiplied on the tensor cores.
+  - **Arithmetic.** The weight operand is exactly `dequant_ref(...).to(bfloat16)`, the dequant-then-GEMM path's operand. That is not the served kernel's TF32, which rounds the weight less. So a consumer gates it on quality: on the A2000, at Granite and OLMoE expert shapes on synthetic weights, its rms error against an fp64 product of the fp32 dequant is 1.37× the served kernel's (1.369–1.374 over four shapes).
+  - **Two codebook decodes, bit-identical:**
+    - `lut="pair"` (default) loads one int64 per packed byte holding both of its fp32 codebook values;
+    - `lut="load"` loads one fp32 per nibble.
+    A `tl.gather` register decode was tried and left out: its weights are exact, but its outputs moved a bit at some shapes on the A2000.
+  - **Contract:** `kernel/test_nf4_grouped_smallm_interp.py`, registered as an interpreter file and in CI's interpreter job:
+    - within one bf16 ulp of the dequant reference, including the masked tail and K = 2880;
+    - the decodes, the gather, strided stack views, `scatter` and `gather_div` are bit-identical to their plain forms;
+    - deterministic; refusals;
+    - compiled only: plans move no output bit, and the weight operand read back through the MMA is the bf16 dequant.
+  - **RTX A2000:** 28/28 compiled; interpreter 24 passed (4 compiled-only skips). Six mutations each fail the suite: pair halves swapped, nibble order, absmax column, absmax rounded to bf16, no scatter, no `gather_div`.
+  - **Shared memory.** On the A2000's 99 KB per block, `"load"` overflows at BLOCK_N × KC of 32 × 256 and 64 × 128, and `"pair"` only at 128 × 256.
+
 - **K24 read (gpt-oss-20b, RTX 5090): VOID by its instrument again, and per-layer stores did not close the gap; descriptively K21 with its masked-tail plans reads 0.50× the served NF4 route, at 50 % of the byte floor.** (`kernel/RESULTS-k24-gptoss-per-layer.md`)
   - **Census:** step 22.50 ms; `_gemm_nf4_grouped` 17.90 ms/step (79 %).
   - **Bench, ms/step:** served 15.18; K21 best (32 / KC 128 / 4 warps / 3 stages) 7.62; default (32 / 256) 9.22;
