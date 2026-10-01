@@ -86,6 +86,11 @@ _CPU_PATH = {
         "row (rounded to bfloat16 for the compiled kernel's weight operand) — "
         "the pure-torch reference test_nf4_grouped_smallm_interp pins K25 "
         "against (the interpreter job runs that file on CPU).",
+    "k26_bench":
+        "A campaign instrument (lane K26), not library API: its kernels are "
+        "decode ablations of nf4_smallm's, with no CPU equivalent. Only its "
+        "rule runs on CPU (python k26_bench.py --self-test); for a "
+        "CPU-checkable NF4 product use nf4_grouped.dequant_ref.",
     "int4_b32":
         "For a CPU-checkable result over the same int4-b32 bytes, use "
         "(xq.float() * xs.repeat_interleave(32, dim=1)) @ "
