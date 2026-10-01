@@ -235,6 +235,47 @@ def test_fused_tile_table_matches_chained_builder(R, E, BM):
         assert torch.equal(x, y), (n, x.cpu(), y.cpu())
 
 
+@pytest.mark.parametrize("R,E,BM", [(128, 128, 16), (96, 128, 16), (64, 32, 16),
+                                    (24, 8, 16), (5, 4, 4)])
+@pytest.mark.parametrize("dtype", [torch.int64, torch.int32])
+def test_lean_tile_table_is_identical(R, E, BM, dtype, monkeypatch):
+    """K23: ``lean=True`` (no host cast, no pre-zero fills: the kernel
+    zeroes the padding slots itself) and ``sorted_ids=True`` give the
+    default call's integers EXACTLY, even when every buffer starts as
+    garbage; the sixth output is ``ids[order]`` at the ids' dtype."""
+    pytest.importorskip("triton")
+    from int4_b32 import build_group_tiles_fused
+    dev = _gpu()
+    torch.manual_seed(23 + R)
+    eids = torch.randint(0, E, (R,), device=dev).to(dtype)
+    a = build_group_tiles_fused(eids, E, BM)
+    real_empty = torch.empty
+
+    def poisoned(*args, **kw):
+        out = real_empty(*args, **kw)
+        return out.fill_(-7) if not out.dtype.is_floating_point else out
+    monkeypatch.setattr(torch, "empty", poisoned)
+    b = build_group_tiles_fused(eids, E, BM, lean=True, sorted_ids=True)
+    monkeypatch.undo()
+    assert len(b) == 6
+    for n, x, y in zip(("row0", "rows", "grp", "order", "counts"), a, b):
+        assert x.dtype == y.dtype, (n, x.dtype, y.dtype)
+        assert torch.equal(x, y), (n, x.cpu(), y.cpu())
+    assert b[5].dtype == dtype and torch.equal(b[5], eids.index_select(0, a[3]))
+
+
+def test_lean_tile_table_empty_routing():
+    pytest.importorskip("triton")
+    from int4_b32 import build_group_tiles_fused
+    dev = _gpu()
+    eids = torch.empty(0, dtype=torch.int64, device=dev)
+    a = build_group_tiles_fused(eids, 8, 16)
+    b = build_group_tiles_fused(eids, 8, 16, lean=True, sorted_ids=True)
+    assert len(b) == 6 and b[5].dtype == torch.int64 and b[5].numel() == 0
+    for x, y in zip(a, b):
+        assert x.dtype == y.dtype and torch.equal(x, y)
+
+
 def test_fused_tile_table_refuses_prefill_shapes():
     pytest.importorskip("triton")
     from int4_b32 import build_group_tiles_fused
