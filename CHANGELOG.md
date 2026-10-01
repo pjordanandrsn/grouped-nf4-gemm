@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **K25 decodes its codebook with an exact select tree by default (`lut="tree"`), as lane K26 pointed: bit-identical outputs, at 0.373 / 0.383 of the paired lookup's time on an RTX 5090 (Granite / OLMoE B=16 shapes).** (`gnf4.kernel.k26-nf4-decode-ablation.5090.2026-10-01`)
+  - **What.** `nf4_smallm` loads the 16 fp32 codebook values once per program and selects each weight with a 4-level tree on the nibble's bits, in place of a load per byte (`pair`) or per nibble (`load`). Both lookups stay available.
+  - **Contract.** `kernel/test_nf4_grouped_smallm_interp.py`:
+    - the tree is bit-identical to `pair` and `load` across cases, plans (three tree plans added) and the masked K tail (a new test);
+    - compiled, the weight read back through the MMA is the bf16 dequant.
+    RTX A2000: compiled 30/30, interpreter 26 passed; a mutation that swaps one tree leaf fails 9 tests.
+  - **The K26 bench** names its product arm `lut="pair"` explicitly, so a rerun keeps measuring what it measured.
+
 - **K26 read (RTX 5090): DECODE. The NF4 codebook lookup is about 80 % of K25's time; an exact select-tree decode takes K25 to 0.373 / 0.383 (Granite / OLMoE) at bit-identical outputs.** (`gnf4.kernel.k26-nf4-decode-ablation.5090.2026-10-01`)
   - **Arms, ms per B=16 step:**
     - K25: 5.869 / 9.898;
