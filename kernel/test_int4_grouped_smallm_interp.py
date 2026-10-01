@@ -81,7 +81,11 @@ def test_matches_dequant_reference(E, N, K, eids, label):
 def test_bitwise_equals_k16_per_expert(E, N, K, eids, label):
     """Grouping changes no arithmetic: each expert's sorted rows equal K16 (sk=1, same tile config) on those rows."""
     x, packed, scales, deq, e, (row0, rows, grp, order, counts) = _case(E, N, K, eids)
-    y = gemm_int4_b32_grouped_smallm(x.to(DEV), packed.to(DEV), scales.to(DEV), row0, rows, grp, order).cpu()
+    # the SAME tile config on both sides (K16's defaults): the claim is per plan. K19's own default differs
+    # since K20 (BLOCK_N 32, KC 256); across plans the compiled kernel is bit-identical too (the test below), but under
+    # the interpreter the fp32 dot is numpy's and KC can move the last bit.
+    y = gemm_int4_b32_grouped_smallm(x.to(DEV), packed.to(DEV), scales.to(DEV), row0, rows, grp, order,
+                                     block_n=64, kc=128).cpu()
     o = order.cpu()
     off = 0
     for ex, cnt in enumerate(counts.cpu().tolist()):
@@ -112,3 +116,18 @@ def test_layout_mismatch_is_refused_before_launch():
     x, packed, scales, deq, e, (row0, rows, grp, order, _c) = _case(*CASES[0][:4])
     with pytest.raises(ValueError, match="layout mismatch"):
         gemm_int4_b32_grouped_smallm(x[:, :128].to(DEV), packed.to(DEV), scales.to(DEV), row0, rows, grp, order)
+
+
+@pytest.mark.skipif(INTERP, reason="compiled only: under the interpreter the fp32 dot is numpy's and KC can move the last bit")
+@pytest.mark.parametrize("K", [768, 2048], ids=["down K768", "gate_up K2048"])
+def test_plans_are_bit_identical_compiled(K):
+    """K20: compiled, a plan changes speed and never an output bit. The MMA accumulates the same products in the
+    same order whatever BLOCK_N and KC are (70 of 72 plans read equal on an RTX 5090), which is what let K20 move the
+    default plan to BLOCK_N 32 / KC 256 with no quality read."""
+    eids = [0, 1, 2, 3, 4, 5, 6, 7] * 6 + [3] * 17
+    x, packed, scales, deq, e, (row0, rows, grp, order, _c) = _case(8, 256, K, eids, seed=5)
+    args = (x.to(DEV), packed.to(DEV), scales.to(DEV), row0, rows, grp, order)
+    ref = gemm_int4_b32_grouped_smallm(*args, block_n=64, kc=128, warps=4, stages=2)
+    for bn, kc, wp, st in [(32, 256, 4, 2), (64, 256, 8, 3), (128, 128, 4, 3), (32, 64, 4, 2), (256, 128, 8, 2)]:
+        y = gemm_int4_b32_grouped_smallm(*args, block_n=bn, kc=kc, warps=wp, stages=st)
+        assert torch.equal(y, ref), f"plan ({bn}, {kc}, {wp}, {st}) moved an output bit at K={K}"
