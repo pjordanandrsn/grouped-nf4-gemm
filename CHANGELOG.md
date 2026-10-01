@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **K27 registered: does K25 with the select tree keep its speed at the served kernel's weight precision? TF32 against bf16 at the NF4 families' B=16 shapes on one RTX 5090 (bench and prereg).** (`kernel/PREREG-k27-nf4-tree-precision.md`, `kernel/k27_bench.py`)
+  - **Why.** P92 read K25 (bf16 weight operand) QUALITY_FAIL on OLMoE. K25's `dot_bf16=False` keeps the fp32 weight through TF32 MMA, the served precision class.
+  - **The rule.**
+    - TF32_PATH if `tree32 / served` ≤ 0.60 with `err(tree32) / err(served)` ≤ 1.10 in both families (an fp64 error proxy);
+    - BF16_ONLY if only the bf16 tree clears 0.60;
+    - NONE otherwise.
+  - **A2000 correctness pass** (`--quick`, not a reading): every plan ran; `tree16` bit-equal to `pair16`; `err(tree32) / err(served)` 1.000; `tree32 / served` 0.46 / 0.64.
+
 - **K25 decodes its codebook with an exact select tree by default (`lut="tree"`), as lane K26 pointed: bit-identical outputs, at 0.373 / 0.383 of the paired lookup's time on an RTX 5090 (Granite / OLMoE B=16 shapes).** (`gnf4.kernel.k26-nf4-decode-ablation.5090.2026-10-01`)
   - **What.** `nf4_smallm` loads the 16 fp32 codebook values once per program and selects each weight with a 4-level tree on the nibble's bits, in place of a load per byte (`pair`) or per nibble (`load`). Both lookups stay available.
   - **Contract.** `kernel/test_nf4_grouped_smallm_interp.py`:
