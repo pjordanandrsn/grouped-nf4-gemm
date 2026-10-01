@@ -1,6 +1,6 @@
 # Status — what this kernel does, what changed, what is open
 
-**As of 2026-09-29, `grouped-nf4-gemm` version 0.33.8.** One page. The README argues; this
+**As of 2026-10-01, `grouped-nf4-gemm` version 0.34.0.** One page. The README argues; this
 page states. The positions here name their entries in
 [`docs/claims.json`](claims.json), which carry the evidence paths; a line
 without a claim ID records an issue closure, a correction still outstanding
@@ -137,7 +137,7 @@ MXFP4 decode reproduces Kimi K3's own declared reference exactly
   (`gnf4.kernel.mxfp4-prefill-combine-ordered.a2000.2026-09-28`, measured). In nine
   Kimi-K3 processes (experts4bit-qlora#766) it was the only run-to-run
   difference in the forward, the drift #761 recorded. The MXFP4 QLoRA fused path had the same pattern, in bf16
-  (#409). #416 fixed it the same way, and it ships in 0.33.8.
+  (#409). #416 fixed it the same way, and it ships in 0.34.0 (0.33.8 was prepared but never published).
 - **#393 is closed, answered with an accuracy contract, not a bitwise one
   (lane B393, 2026-09-23, RTX 5090).** `combine_rows` (the fused MoE top-k
   weight-and-sum experts4bit-qlora runs on every MoE layer by default) and
