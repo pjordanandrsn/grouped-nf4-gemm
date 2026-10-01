@@ -1,0 +1,17 @@
+KNOBS e4b=562767e2df030cb5146497132a5a595b0d2e4320 gnf4=1b65a6d8597f1699ebeb9592743b460f4a405e41 model=openai/gpt-oss-20b rev=6cee5e81ee83917806bbde320786a8fb61efebee gpu_class=5090 min_disk_gb=100
+e4b 0.37.8 @562767e2df030cb5146497132a5a595b0d2e4320
+gnf4 0.33.8 @1b65a6d8597f1699ebeb9592743b460f4a405e41
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+cc (12, 0)
+k22 verdict self-test OK (5 cases)
+census B=16 rc=0 BV3_GRAPH batch=16 steps=70 step=22.52ms agg=710.6tok/s recompiles=0 out=/root/k22/census_b16.json
+
+CENSUS _gemm_nf4_grouped ms/step 17.862875
+PROMPTS B=16 sha=5bdbcd9c2d2f888141c8b4969b20e7b96fbda28f90c9b65315cdaab6c0cd7b6f
+record rc=0 P60EIDS {"shape": [128, 24, 16, 4], "mean_distinct": 18.2, "layer_mean_range": [13.72, 25.05]}
+
+copy 1515 GB/s; served _gemm_nf4_grouped 14.809 ms/step (census 17.862875)
+K22 EVAL best (32, 64, 4, 3) 10.297 ms/step, default 10.545, served 15.170, gemv 21.649, floor 3.826; best/served 0.679
+K22_VERDICT VOID: served _gemm_nf4_grouped 14.809 ms/step is not within 15% of the census 17.863

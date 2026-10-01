@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **K22 read (gpt-oss-20b, RTX 5090): VOID by its instrument; descriptively, 79 % of the B=16 step is the NF4 expert GEMM, and K21 reads 0.68× that route at 37 % of the byte floor.** (`kernel/RESULTS-k22-gptoss-mxfp4-b16.md`)
+  - **Census:** step 22.52 ms; `_gemm_nf4_grouped` 17.86 ms/step.
+  - **Recorded gpt-oss routing:** `[128, 24, 16, 4]`, 18.2 distinct experts per layer per step. Kept in the receipts.
+  - **Bench:** served 15.17 ms/step, K21 best 10.30 (KC 64), MXFP4 GEMV 21.65, floor 3.83.
+  - **Why VOID:** the bench's served NF4 kernel read 17 % under the census (band 15 %). The likely cause, inferred: the bench shared one weight set across all 24 layers, letting L2 serve overlapping experts.
+  - **Next:** a K21 masked-K-tail variant (gpt-oss's K = 2880 caps KC at 64), then a re-read with per-layer stores.
+
 - **K21: K19's grouped small-M tensor-core GEMM on the native MXFP4 store (`mxfp4_grouped.gemm_mxfp4_grouped_smallm`), opt-in; no consumer, no speed claim yet.**
   - **Why.** experts4bit-qlora serves gpt-oss's licensed MXFP4 store with `gemv_mxfp4_b32` up to 16 rows. At B=16 a call routes 64 rows (16 × top-4), so the consumer falls back to NF4. K21 is the batched kernel the store lacks: the first kernel of the throughput push to other model families.
   - **What it is.** K19's kernel with only the dequant swapped. An e2m1 nibble decodes to twice its value as an exact integer (`gemv_mxfp4_b32`'s construction), and the per-32 e8m0 byte becomes `2^(e - 128)`, absorbing the half. So every MXFP4 weight is exact in bf16, and the MMA operand equals `dequant_mxfp4`. The grid, tile table, in-kernel gather and sorted output are K19's. The default plan is 32/256, which `plan_smallm` lowers to KC 64 for gpt-oss's K = 2880.

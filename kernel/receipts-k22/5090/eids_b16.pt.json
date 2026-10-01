@@ -1,0 +1,60 @@
+{
+ "prompts_sha256": "5bdbcd9c2d2f888141c8b4969b20e7b96fbda28f90c9b65315cdaab6c0cd7b6f",
+ "prefix": 384,
+ "prefill_chunk": 8,
+ "census": {
+  "moe_layers": 24,
+  "experts": 32,
+  "top_k": 4,
+  "fuse_t1_glue_n": 49,
+  "fuse_t1_glue_r2_n": [
+   24,
+   0
+  ],
+  "fuse_router_epilogue_n": 0,
+  "int4_attn_projections": 0,
+  "int4_expert_layers": 24,
+  "int4_store_kinds": [
+   "mxfp4"
+  ]
+ },
+ "prefill_or_other_calls_per_layer": 48,
+ "steps": 128,
+ "layers": 24,
+ "mean_distinct": 18.203125,
+ "layer_means": [
+  25.05,
+  24.39,
+  20.88,
+  20.64,
+  18.22,
+  20.01,
+  22.31,
+  22.36,
+  20.27,
+  17.28,
+  14.76,
+  14.16,
+  15.45,
+  14.96,
+  19.34,
+  19.49,
+  16.98,
+  14.83,
+  19.38,
+  17.99,
+  15.28,
+  14.29,
+  14.84,
+  13.72
+ ],
+ "min_layer_mean": 13.71875,
+ "max_layer_mean": 25.046875,
+ "eids_shape": [
+  128,
+  24,
+  16,
+  4
+ ],
+ "wall_s": 39.9
+}
