@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **K26 registered: is the NF4 codebook decode what holds K25 (and the served NF4 GEMM) back? A decode ablation on the NF4 families' B=16 shapes on one RTX 5090 (bench and prereg).** (`kernel/PREREG-k26-nf4-decode-ablation.md`, `kernel/k26_bench.py`)
+  - **Why.** experts4bit-qlora lane P92 read K25's GEMM within 4 % of the served NF4 GEMM in-model. K25 shares K21's skeleton but not its decode: K21 uses integer shifts, the NF4 kernels a codebook lookup per nibble.
+  - **The arms.** K25 as merged against bench-local copies of it with the decode switched:
+    - the same codebook (the control);
+    - `nibble − 8` (prices the lookup);
+    - no scale, and bytes only;
+    - an exact 4-level select tree over the 16 fp32 codebook values.
+    The served kernel and a copy of it with the same select tree run beside them.
+  - **The rule.** DECODE if `affine / pair` ≤ 0.60 in both families, NOT_DECODE if ≥ 0.85. The registered pointer: an exact decode qualifies only when bit-equal to the kernel it replaces and at most 0.80 (K25) / 0.90 (served) of its time.
+  - **A2000 correctness pass** (`--quick`, not a reading):
+    - every control bit-equal;
+    - `tree` bit-equal to K25;
+    - `stree` not bit-equal to the served kernel: the same layout/lowering effect `tl.gather` showed in K25.
+
 - **K25: K19's grouped small-M tensor-core GEMM on the NF4 store (`nf4_smallm.gemm_nf4_grouped_smallm`), opt-in; no consumer, no speed claim yet.**
   - **Why.** experts4bit-qlora's lane P91 (#564) read the NF4 families' B=16 decode steps on an RTX 5090: the served grouped GEMM (`_gemm_nf4_grouped`) is 61.7 % (Granite, `r12epi`) and 71.9 % (OLMoE, `nf4`) of kernel time. That kernel gathers its rows in a separate launch, steps K 64 at a time, and multiplies TF32 on fp32-dequantised weights.
   - **What it is.** K19's kernel with the NF4 dequant, as K21 is on the MXFP4 store:
