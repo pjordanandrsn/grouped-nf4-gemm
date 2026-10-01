@@ -1,0 +1,7 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-a8a09877-c532-447e-4170-214d9f9cb103, 12.0
+power.limit,clocks.max.sm 545.00 W, 3105 MHz
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD Ryzen Threadripper 9960X 24-Cores
+               total        used        free      shared  buff/cache   available
+Mem:             125           2          93           0          29         121
+overlay         320G  1.2M  320G   1% /

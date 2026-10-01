@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **K27 read (RTX 5090): TF32_PATH. K25 with the select tree at the served precision (fp32 weights, TF32 MMA) runs at 0.448 / 0.502 of the served NF4 GEMM with the same error.** (`gnf4.kernel.k27-nf4-tree-precision.5090.2026-10-01`)
+  - **ms per B=16 step (Granite / OLMoE):**
+    - TF32 tree 2.588 / 4.847 (best plan 32 / 64 / 4 / 3);
+    - bf16 tree 1.832 / 3.139 (32 / 128 / 4 / 2; bit-equal to the paired lookup);
+    - the served kernel 5.780 / 9.660;
+    - P92's K25 6.070 / 9.989.
+  - **Error.** rms against fp64: the TF32 tree equals the served kernel to four digits; the bf16 arms read 1.35×.
+  - **Next:** K25-tree in TF32 end to end on both families (experts4bit-qlora).
+  - `kernel/RESULTS-k27-nf4-tree-precision.md`, `kernel/receipts-k27/5090/` (`k27-5090-3`; lane $0.044 with a bandwidth refusal and a guard 429 before it).
+
 - **K27 registered: does K25 with the select tree keep its speed at the served kernel's weight precision? TF32 against bf16 at the NF4 families' B=16 shapes on one RTX 5090 (bench and prereg).** (`kernel/PREREG-k27-nf4-tree-precision.md`, `kernel/k27_bench.py`)
   - **Why.** P92 read K25 (bf16 weight operand) QUALITY_FAIL on OLMoE. K25's `dot_bf16=False` keeps the fp32 weight through TF32 MMA, the served precision class.
   - **The rule.**

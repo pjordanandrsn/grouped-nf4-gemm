@@ -1,0 +1,396 @@
+{
+ "device": "NVIDIA GeForce RTX 5090",
+ "torch": "2.8.0+cu128",
+ "B": 16,
+ "steps": 8,
+ "quick": false,
+ "grid": [
+  {
+   "block_n": 32,
+   "kc": 256,
+   "warps": 4,
+   "stages": 2
+  },
+  {
+   "block_n": 32,
+   "kc": 128,
+   "warps": 4,
+   "stages": 2
+  },
+  {
+   "block_n": 32,
+   "kc": 128,
+   "warps": 4,
+   "stages": 3
+  },
+  {
+   "block_n": 64,
+   "kc": 128,
+   "warps": 4,
+   "stages": 2
+  },
+  {
+   "block_n": 32,
+   "kc": 64,
+   "warps": 4,
+   "stages": 3
+  },
+  {
+   "block_n": 16,
+   "kc": 256,
+   "warps": 4,
+   "stages": 2
+  }
+ ],
+ "families": {
+  "granite": {
+   "E": 40,
+   "k": 8,
+   "layers": 32,
+   "rms_err": {
+    "pair16": 0.0003425634020155359,
+    "tree16": 0.0003425634020155359,
+    "tree32": 0.0002528246309558124,
+    "served": 0.00025283119763745053
+   },
+   "tree16_bit_equal_pair16": true,
+   "served_sane": true,
+   "select": {
+    "tree16": [
+     {
+      "plan": {
+       "block_n": 32,
+       "kc": 256,
+       "warps": 4,
+       "stages": 2
+      },
+      "select_ms": 2.230176031589508
+     },
+     {
+      "plan": {
+       "block_n": 32,
+       "kc": 128,
+       "warps": 4,
+       "stages": 2
+      },
+      "select_ms": 1.8182480037212372
+     },
+     {
+      "plan": {
+       "block_n": 32,
+       "kc": 128,
+       "warps": 4,
+       "stages": 3
+      },
+      "select_ms": 1.8520800173282623
+     },
+     {
+      "plan": {
+       "block_n": 64,
+       "kc": 128,
+       "warps": 4,
+       "stages": 2
+      },
+      "select_ms": 2.141991972923279
+     },
+     {
+      "plan": {
+       "block_n": 32,
+       "kc": 64,
+       "warps": 4,
+       "stages": 3
+      },
+      "select_ms": 2.2292799949645996
+     },
+     {
+      "plan": {
+       "block_n": 16,
+       "kc": 256,
+       "warps": 4,
+       "stages": 2
+      },
+      "select_ms": 2.1655439734458923
+     }
+    ],
+    "tree32": [
+     {
+      "plan": {
+       "block_n": 32,
+       "kc": 256,
+       "warps": 4,
+       "stages": 2
+      },
+      "select_ms": 3.4528640508651733
+     },
+     {
+      "plan": {
+       "block_n": 32,
+       "kc": 128,
+       "warps": 4,
+       "stages": 2
+      },
+      "select_ms": 2.8645920753479004
+     },
+     {
+      "plan": {
+       "block_n": 32,
+       "kc": 128,
+       "warps": 4,
+       "stages": 3
+      },
+      "select_ms": 2.9709519743919373
+     },
+     {
+      "plan": {
+       "block_n": 64,
+       "kc": 128,
+       "warps": 4,
+       "stages": 2
+      },
+      "select_ms": 3.3607919812202454
+     },
+     {
+      "plan": {
+       "block_n": 32,
+       "kc": 64,
+       "warps": 4,
+       "stages": 3
+      },
+      "select_ms": 2.5687360167503357
+     },
+     {
+      "plan": {
+       "block_n": 16,
+       "kc": 256,
+       "warps": 4,
+       "stages": 2
+      },
+      "select_ms": 3.693448007106781
+     }
+    ]
+   },
+   "best_plan": {
+    "tree16": {
+     "block_n": 32,
+     "kc": 128,
+     "warps": 4,
+     "stages": 2
+    },
+    "tree32": {
+     "block_n": 32,
+     "kc": 64,
+     "warps": 4,
+     "stages": 3
+    }
+   },
+   "eval_ms_all": {
+    "pair16": [
+     6.071824073791504,
+     6.067807912826538,
+     6.076176166534424,
+     5.99072003364563
+    ],
+    "served": [
+     5.779088020324707,
+     5.7799201011657715,
+     5.781552076339722,
+     5.777440071105957
+    ],
+    "tree16": [
+     1.8318080306053162,
+     1.8313760161399841,
+     1.8374559879302979,
+     1.8232799768447876
+    ],
+    "tree32": [
+     2.5904799699783325,
+     2.5851999521255493,
+     2.5966399908065796,
+     2.5656479597091675
+    ]
+   },
+   "eval_ms": {
+    "pair16": 6.069815993309021,
+    "served": 5.779504060745239,
+    "tree16": 1.8315920233726501,
+    "tree32": 2.587839961051941
+   }
+  },
+  "olmoe": {
+   "E": 64,
+   "k": 8,
+   "layers": 16,
+   "rms_err": {
+    "pair16": 0.0004425058264990756,
+    "tree16": 0.0004425058264990756,
+    "tree32": 0.00032810660195952486,
+    "served": 0.00032811065277107195
+   },
+   "tree16_bit_equal_pair16": true,
+   "served_sane": true,
+   "select": {
+    "tree16": [
+     {
+      "plan": {
+       "block_n": 32,
+       "kc": 256,
+       "warps": 4,
+       "stages": 2
+      },
+      "select_ms": 3.848136007785797
+     },
+     {
+      "plan": {
+       "block_n": 32,
+       "kc": 128,
+       "warps": 4,
+       "stages": 2
+      },
+      "select_ms": 3.1701759696006775
+     },
+     {
+      "plan": {
+       "block_n": 32,
+       "kc": 128,
+       "warps": 4,
+       "stages": 3
+      },
+      "select_ms": 3.2430399656295776
+     },
+     {
+      "plan": {
+       "block_n": 64,
+       "kc": 128,
+       "warps": 4,
+       "stages": 2
+      },
+      "select_ms": 3.3312399983406067
+     },
+     {
+      "plan": {
+       "block_n": 32,
+       "kc": 64,
+       "warps": 4,
+       "stages": 3
+      },
+      "select_ms": 4.392832040786743
+     },
+     {
+      "plan": {
+       "block_n": 16,
+       "kc": 256,
+       "warps": 4,
+       "stages": 2
+      },
+      "select_ms": 3.948184013366699
+     }
+    ],
+    "tree32": [
+     {
+      "plan": {
+       "block_n": 32,
+       "kc": 256,
+       "warps": 4,
+       "stages": 2
+      },
+      "select_ms": 6.056663990020752
+     },
+     {
+      "plan": {
+       "block_n": 32,
+       "kc": 128,
+       "warps": 4,
+       "stages": 2
+      },
+      "select_ms": 5.06387996673584
+     },
+     {
+      "plan": {
+       "block_n": 32,
+       "kc": 128,
+       "warps": 4,
+       "stages": 3
+      },
+      "select_ms": 5.226871967315674
+     },
+     {
+      "plan": {
+       "block_n": 64,
+       "kc": 128,
+       "warps": 4,
+       "stages": 2
+      },
+      "select_ms": 6.16650390625
+     },
+     {
+      "plan": {
+       "block_n": 32,
+       "kc": 64,
+       "warps": 4,
+       "stages": 3
+      },
+      "select_ms": 4.9145201444625854
+     },
+     {
+      "plan": {
+       "block_n": 16,
+       "kc": 256,
+       "warps": 4,
+       "stages": 2
+      },
+      "select_ms": 6.93340802192688
+     }
+    ]
+   },
+   "best_plan": {
+    "tree16": {
+     "block_n": 32,
+     "kc": 128,
+     "warps": 4,
+     "stages": 2
+    },
+    "tree32": {
+     "block_n": 32,
+     "kc": 64,
+     "warps": 4,
+     "stages": 3
+    }
+   },
+   "eval_ms_all": {
+    "pair16": [
+     9.954591751098633,
+     9.912384033203125,
+     10.022639751434326,
+     10.095439910888672
+    ],
+    "served": [
+     9.612415790557861,
+     9.6986722946167,
+     9.70961618423462,
+     9.621568202972412
+    ],
+    "tree16": [
+     3.121392011642456,
+     3.1031360626220703,
+     3.1573920249938965,
+     3.1655839681625366
+    ],
+    "tree32": [
+     4.8219521045684814,
+     4.787760019302368,
+     4.872512102127075,
+     4.887919902801514
+    ]
+   },
+   "eval_ms": {
+    "pair16": 9.98861575126648,
+    "served": 9.660120248794556,
+    "tree16": 3.1393920183181763,
+    "tree32": 4.847232103347778
+   }
+  }
+ },
+ "wall_s": 27.5,
+ "verdict": "TF32_PATH",
+ "verdict_reason": "granite tree32/served 0.448 err 1.000, olmoe tree32/served 0.502 err 1.000; granite tree16/served 0.317, olmoe tree16/served 0.325 -- next: K25-tree in TF32 end to end on both families (<= 0.6, err <= 1.1)"
+}
