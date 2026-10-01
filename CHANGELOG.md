@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.34.1 — 2026-10-01 — K25 decodes the NF4 codebook with an exact select tree by default (lane K26): bit-identical outputs at 0.373 / 0.383 of the paired lookup's time; lane K27 reads the tree at the served kernel's TF32 precision
+
+**0.34.1.** One behavior change: `nf4_smallm.gemm_nf4_grouped_smallm` (K25) now defaults to `lut="tree"`. Its outputs are bit-identical to the previous default (`pair`) and to `load`, which both stay available. The rest is evidence: lanes K26 and K27 (benches, pre-registrations, results, receipts and register rows). `docs/system-manifest.json`'s `consumer_ci_pin` prose now names v0.34.0, the release whose commit experts4bit-qlora's CI installs; it had still named v0.33.0. The compatibility records are otherwise unchanged.
 
 - **K27 read (RTX 5090): TF32_PATH. K25 with the select tree at the served precision (fp32 weights, TF32 MMA) runs at 0.448 / 0.502 of the served NF4 GEMM with the same error.** (`gnf4.kernel.k27-nf4-tree-precision.5090.2026-10-01`)
   - **ms per B=16 step (Granite / OLMoE):**
