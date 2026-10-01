@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **K21: K19's grouped small-M tensor-core GEMM on the native MXFP4 store (`mxfp4_grouped.gemm_mxfp4_grouped_smallm`), opt-in; no consumer, no speed claim yet.**
+  - **Why.** experts4bit-qlora serves gpt-oss's licensed MXFP4 store with `gemv_mxfp4_b32` up to 16 rows. At B=16 a call routes 64 rows (16 × top-4), so the consumer falls back to NF4. K21 is the batched kernel the store lacks: the first kernel of the throughput push to other model families.
+  - **What it is.** K19's kernel with only the dequant swapped. An e2m1 nibble decodes to twice its value as an exact integer (`gemv_mxfp4_b32`'s construction), and the per-32 e8m0 byte becomes `2^(e - 128)`, absorbing the half. So every MXFP4 weight is exact in bf16, and the MMA operand equals `dequant_mxfp4`. The grid, tile table, in-kernel gather and sorted output are K19's. The default plan is 32/256, which `plan_smallm` lowers to KC 64 for gpt-oss's K = 2880.
+  - **Contract:** `kernel/test_mxfp4_grouped_smallm_interp.py`, registered as an interpreter file and in CI's interpreter job:
+    - within one bf16 ulp of the dequant reference, including K = 2880;
+    - the gather is bit-identical to presorting;
+    - deterministic;
+    - refusals;
+    - compiled only: plans are bit-identical.
+    RTX A2000: 10/10 compiled.
+
 - **K20 read (RTX 5090): PROMISING. K19's default plan becomes BLOCK_N 32 / KC 256 / 4 warps / 2 stages; outputs are bit-identical across plans.** (`gnf4.kernel.k20-k19-plan-sweep.5090.2026-10-01`)
   - **The lane** (`kernel/PREREG-k20-k19-plan-sweep-5090.md`, #420; `kernel/RESULTS-k20-k19-plan-sweep-5090.md`): replays experts4bit-qlora P60's recorded B=16 routing on the 5090, one CUDA graph per decode step, sweeping 72 plans. The best plan was chosen on steps 0–7 and read on steps 8–15.
   - **Steps 8–15, ms per decode step:**

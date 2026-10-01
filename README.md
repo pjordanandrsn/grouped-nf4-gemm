@@ -205,6 +205,7 @@ That's the same instrument the 144/144 training receipt used.
 |---|---|
 | **VRAM**, NF4-packed | `nf4_grouped.gemm_4bit_grouped(...)`; backward via `dgrad_4bit_grouped` |
 | **VRAM**, native MXFP4 | `mxfp4_grouped.gemm_mxfp4_grouped(...)` |
+| **VRAM**, native MXFP4 experts, decode batch, expert-major 16-row tiles (the K21 lane) | `mxfp4_grouped.gemm_mxfp4_grouped_smallm(x, blocks, scales, t_row0, t_rows, t_group, order)` over `int4_b32.build_group_tiles_fused(..., 16)` — K19's kernel with the e2m1/e8m0 dequant (exact in bf16); opt-in, no speed claim yet (correctness on the A2000 only) |
 | **host DRAM**, all rows pinned | `mxfp4_pipelined.Mxfp4PipelinedGptOss` |
 | **NVMe**, too big for DRAM | `mxfp4_residency.Mxfp4NvmeResidency` over a baked arena |
 | nowhere yet — you need to make an arena | `nvme_arena.bake_expert_tensors(...)` (relocates MXFP4) or `nvme_bake_nf4.bake_nf4` (re-quantises bf16) |

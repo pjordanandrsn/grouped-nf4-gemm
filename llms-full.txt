@@ -214,6 +214,7 @@ That's the same instrument the 144/144 training receipt used.
 |---|---|
 | **VRAM**, NF4-packed | `nf4_grouped.gemm_4bit_grouped(...)`; backward via `dgrad_4bit_grouped` |
 | **VRAM**, native MXFP4 | `mxfp4_grouped.gemm_mxfp4_grouped(...)` |
+| **VRAM**, native MXFP4 experts, decode batch, expert-major 16-row tiles (the K21 lane) | `mxfp4_grouped.gemm_mxfp4_grouped_smallm(x, blocks, scales, t_row0, t_rows, t_group, order)` over `int4_b32.build_group_tiles_fused(..., 16)` — K19's kernel with the e2m1/e8m0 dequant (exact in bf16); opt-in, no speed claim yet (correctness on the A2000 only) |
 | **host DRAM**, all rows pinned | `mxfp4_pipelined.Mxfp4PipelinedGptOss` |
 | **NVMe**, too big for DRAM | `mxfp4_residency.Mxfp4NvmeResidency` over a baked arena |
 | nowhere yet — you need to make an arena | `nvme_arena.bake_expert_tensors(...)` (relocates MXFP4) or `nvme_bake_nf4.bake_nf4` (re-quantises bf16) |
@@ -1241,7 +1242,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
     "MXFP4 to bf16 dequant costs VRAM and time",
     "serve MXFP4 experts from the released bytes"
    ],
-   "solution": "gemm_mxfp4_grouped is the table-swap of the NF4 kernel over native blocks [E, N, K//2] + e8m0 scales [E, N, K//32]; gemv_mxfp4_b32 is its decode-grade GEMV; mxfp4_loader.to_kernel_shapes views the released tensors in kernel layout with no copy; mxfp4_qlora and mxfp4_native_load train LoRA over the frozen native stacks.",
+   "solution": "gemm_mxfp4_grouped is the table-swap of the NF4 kernel over native blocks [E, N, K//2] + e8m0 scales [E, N, K//32]; gemv_mxfp4_b32 is its decode-grade GEMV; gemm_mxfp4_grouped_smallm (K21, opt-in, unmeasured for speed) is K19's grouped tensor-core small-M GEMM on the same store, for decode batches above the GEMV's rows; mxfp4_loader.to_kernel_shapes views the released tensors in kernel layout with no copy; mxfp4_qlora and mxfp4_native_load train LoRA over the frozen native stacks.",
    "modes": [
     "inference",
     "training",
@@ -1280,7 +1281,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
    ],
    "entrypoints": [
     "mxfp4_grouped:gemm_mxfp4_grouped",
-    "mxfp4_grouped:gemv_mxfp4_b32",
+    "mxfp4_grouped:gemv_mxfp4_b32", "mxfp4_grouped:gemm_mxfp4_grouped_smallm",
     "mxfp4_pack_ref:dequant_mxfp4",
     "mxfp4_pack_ref:quantize_pack_mxfp4",
     "mxfp4_loader:to_kernel_shapes",
