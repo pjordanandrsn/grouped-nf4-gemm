@@ -39,6 +39,7 @@ STEPS = 8
 ITERS = 20
 PLAN = dict(block_n=32, kc=256, warps=4, stages=2)        # K25's default (nf4_smallm.gemm_nf4_grouped_smallm)
 LOAD_PLAN = dict(block_n=32, kc=128, warps=4, stages=2)   # "load" overflows 99 KB of shared memory at KC 256
+PAIR = dict(PLAN, lut="pair")      # the product arm, named: K25's default decode became "tree" after this lane read
 COPY_BAND = 0.05
 DECODE, NOT_DECODE = 0.60, 0.85
 TREE_BAR, STREE_BAR = 0.80, 0.90          # an exact decode qualifies when bit-equal and at most this fraction of the time
@@ -391,8 +392,8 @@ def main(out_path, families, quick=False):
                 for li, (ids, row0, rows, grp, order, xs) in enumerate(sl):
                     (gp, ga), (dp, da) = WL[li]["gu"], WL[li]["dn"]
                     if name == "pair":
-                        gemm_nf4_grouped_smallm(xg, gp, ga, row0, rows, grp, order, **PLAN)
-                        gemm_nf4_grouped_smallm(xd, dp, da, row0, rows, grp, None, **PLAN)
+                        gemm_nf4_grouped_smallm(xg, gp, ga, row0, rows, grp, order, **PAIR)
+                        gemm_nf4_grouped_smallm(xd, dp, da, row0, rows, grp, None, **PAIR)
                     elif name == "load":
                         gemm_nf4_grouped_smallm(xg, gp, ga, row0, rows, grp, order, lut="load", **LOAD_PLAN)
                         gemm_nf4_grouped_smallm(xd, dp, da, row0, rows, grp, None, lut="load", **LOAD_PLAN)
@@ -411,7 +412,7 @@ def main(out_path, families, quick=False):
         # numerics on step 0, layer 0, gate_up: the product against the fp32 dequant oracle; the copy against the product
         ids, row0, rows, grp, order, xs = steps[0][0]
         gp, ga = WL[0]["gu"]
-        y = gemm_nf4_grouped_smallm(xg, gp, ga, row0, rows, grp, order, **PLAN)
+        y = gemm_nf4_grouped_smallm(xg, gp, ga, row0, rows, grp, order, **PAIR)
         yc = ablate(xg, gp, ga, row0, rows, grp, order, 0)
         yt = ablate(xg, gp, ga, row0, rows, grp, order, 4)
         yd = ablate(xd, *WL[0]["dn"], row0, rows, grp, None, 4)
@@ -423,7 +424,7 @@ def main(out_path, families, quick=False):
         f = {"E": E, "k": k, "layers": L, "numerics": {"product_vs_oracle_rel": rel}, "numerics_ok": rel <= NUM_TOL,
              "copy_bit_equal": bool(torch.equal(y, yc)),
              "tree_bit_equal": bool(torch.equal(y, yt))
-             and bool(torch.equal(yd, gemm_nf4_grouped_smallm(xd, *WL[0]["dn"], row0, rows, grp, None, **PLAN)))}
+             and bool(torch.equal(yd, gemm_nf4_grouped_smallm(xd, *WL[0]["dn"], row0, rows, grp, None, **PAIR)))}
         ys = gemm_4bit_grouped_captured(xs, gp, ga, row0, rows, grp, 16)
         f["scopy_bit_equal"] = bool(torch.equal(ys, served_copy(xs, gp, ga, row0, rows, grp, 0)))
         f["stree_bit_equal"] = bool(torch.equal(ys, served_copy(xs, gp, ga, row0, rows, grp, 1)))

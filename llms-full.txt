@@ -214,7 +214,7 @@ That's the same instrument the 144/144 training receipt used.
 |---|---|
 | **VRAM**, NF4-packed | `nf4_grouped.gemm_4bit_grouped(...)`; backward via `dgrad_4bit_grouped` |
 | **VRAM**, native MXFP4 | `mxfp4_grouped.gemm_mxfp4_grouped(...)` |
-| **VRAM**, NF4-packed experts, decode batch, expert-major 16-row tiles (the K25 lane) | `nf4_smallm.gemm_nf4_grouped_smallm(x, packed, absmax, t_row0, t_rows, t_group, order)` over `int4_b32.build_group_tiles_fused(..., 16)` — K19's kernel with the NF4 codebook dequant (the weight operand is `dequant_ref` rounded to bf16, not the served kernel's TF32); opt-in, no speed claim yet (correctness on the A2000 only) |
+| **VRAM**, NF4-packed experts, decode batch, expert-major 16-row tiles (the K25 lane) | `nf4_smallm.gemm_nf4_grouped_smallm(x, packed, absmax, t_row0, t_rows, t_group, order)` over `int4_b32.build_group_tiles_fused(..., 16)` — K19's kernel with the NF4 codebook dequant (the weight operand is `dequant_ref` rounded to bf16, not the served kernel's TF32), decoded by an exact select tree by default. On an RTX 5090 at the NF4 families' B=16 shapes the tree runs at 0.37–0.38 of the paired lookup's time, about 0.39× the served NF4 GEMM, with bit-identical outputs (`gnf4.kernel.k26-nf4-decode-ablation.5090.2026-10-01`); opt-in in experts4bit-qlora |
 | **VRAM**, native MXFP4 experts, decode batch, expert-major 16-row tiles (the K21 lane) | `mxfp4_grouped.gemm_mxfp4_grouped_smallm(x, blocks, scales, t_row0, t_rows, t_group, order)` over `int4_b32.build_group_tiles_fused(..., 16)` — K19's kernel with the e2m1/e8m0 dequant (exact in bf16); opt-in, no speed claim yet (correctness on the A2000 only) |
 | **host DRAM**, all rows pinned | `mxfp4_pipelined.Mxfp4PipelinedGptOss` |
 | **NVMe**, too big for DRAM | `mxfp4_residency.Mxfp4NvmeResidency` over a baked arena |
@@ -1164,7 +1164,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
     "bitsandbytes gemm_4bit has no grouped routed MoE path",
     "QLoRA backward dequantizes 4-bit experts for dX"
    ],
-   "solution": "gemm_4bit_grouped runs one Triton launch for all active experts over the bitsandbytes gemm_4bit NF4 layout (LUT decode to fp32 in registers, blockwise absmax scaling, fp32 accumulation, bf16 epilogue); dequant_ref is the pure-torch oracle it is asserted against; dgrad_4bit_grouped is the one-launch training backward; gemm_nf4_grouped_smallm (K25, opt-in, unmeasured for speed) is K19's grouped tensor-core small-M GEMM on the same NF4 store for decode batches, its weight operand exactly dequant_ref rounded to bf16 (not the served kernel's TF32), so a consumer gates it on quality.",
+   "solution": "gemm_4bit_grouped runs one Triton launch for all active experts over the bitsandbytes gemm_4bit NF4 layout (LUT decode to fp32 in registers, blockwise absmax scaling, fp32 accumulation, bf16 epilogue); dequant_ref is the pure-torch oracle it is asserted against; dgrad_4bit_grouped is the one-launch training backward; gemm_nf4_grouped_smallm (K25, opt-in in the consumer) is K19's grouped tensor-core small-M GEMM on the same NF4 store, its codebook decoded by an exact select tree that lane K26 measured faster than the served NF4 GEMM (gnf4.kernel.k26-nf4-decode-ablation.5090.2026-10-01) for decode batches, its weight operand exactly dequant_ref rounded to bf16 (not the served kernel's TF32), so a consumer gates it on quality.",
    "modes": [
     "inference",
     "training",

@@ -18,11 +18,12 @@ Arithmetic. The weight operand is ``(codebook[nibble] * absmax).to(bf16)``, comp
 ``dequant_ref(...).to(bfloat16)`` bit for bit; activations stay bf16 and the accumulation is fp32. That is NOT the
 served kernel's arithmetic (TF32 on the fp32 weight, which rounds the weight less), so a consumer gates it on quality.
 
-Codebook decode, three ways, the same fp32 values and the same outputs bit for bit (the compiled suite holds that):
-``lut="pair"`` loads ONE int64 per packed byte from a 256-entry table holding both of the byte's fp32 codebook values
-(half the load instructions of a per-nibble lookup); ``"load"`` loads one fp32 per nibble from the 16-entry table in L1;
-``"tree"`` loads the 16 values once per program and selects each weight with a 4-level tree on the nibble's bits, no load
-per element (lane K26: the lookup is what holds the kernel back).
+Codebook decode, three ways, the same fp32 values and the same outputs bit for bit (the compiled suite holds that).
+``lut="tree"`` (the default since lane K26) loads the 16 codebook values once per program and selects each weight with
+a 4-level tree on the nibble's bits, no load per element: on an RTX 5090 it runs at 0.37-0.38 of the paired lookup's
+time at the NF4 families' B=16 shapes. ``"pair"`` loads ONE int64 per packed byte from a 256-entry table holding both of the byte's fp32 codebook values
+(half the load instructions of a per-nibble lookup); ``"load"`` loads one fp32 per nibble from the 16-entry table in L1.
+Lane K26 read the lookup as about 80 % of the kernel's time, which is why the tree is the default.
 On the A2000 (99 KB of shared memory per block) ``"load"`` overflows at BLOCK_N x KC of 32 x 256 and 64 x 128, and
 ``"pair"`` only at 128 x 256: the compiler stages the per-nibble decode through shared memory. A third decode, a
 16-entry register codebook through ``tl.gather`` (the served kernel's VARIANT 1), was tried and left out: its weights
@@ -176,7 +177,7 @@ def _gemm_nf4_grouped_smallm(x_ptr, ord_ptr, w_ptr, am_ptr, lut_ptr, row0_ptr, r
 def gemm_nf4_grouped_smallm(x: torch.Tensor, packed: torch.Tensor, absmax: torch.Tensor,
                             t_row0: torch.Tensor, t_rows: torch.Tensor, t_group: torch.Tensor,
                             order: torch.Tensor | None = None, *,
-                            block_n: int = 32, kc: int = 256, warps: int = 4, stages: int = 2, lut: str = "pair",
+                            block_n: int = 32, kc: int = 256, warps: int = 4, stages: int = 2, lut: str = "tree",
                             dot_bf16: bool | None = None,
                             scatter: torch.Tensor | None = None, gather_div: int = 1) -> torch.Tensor:
     """K25, the grouped small-M NF4 GEMM for decode-batch experts: K19's contract on the NF4 store.
