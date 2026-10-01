@@ -1,0 +1,4 @@
+copy 1525 GB/s
+K26 granite: pair 5.869, copy 5.877, affine 1.310, noscale 1.169, bytes 1.131, tree 2.189, served 5.650, scopy 5.588, stree 6.063, load 12.593 ms/step; floor 1.083; affine_over_pair 0.223, noscale_over_affine 0.893, bytes_over_pair 0.193, served_over_pair 0.963, copy_over_pair 1.001, load_over_pair 2.146, tree_over_pair 0.373, scopy_over_served 0.989, stree_over_served 1.073
+K26 olmoe: pair 9.898, copy 9.894, affine 2.050, noscale 1.859, bytes 1.838, tree 3.794, served 9.540, scopy 9.519, stree 9.894, load 22.556 ms/step; floor 2.109; affine_over_pair 0.207, noscale_over_affine 0.907, bytes_over_pair 0.186, served_over_pair 0.964, copy_over_pair 1.000, load_over_pair 2.279, tree_over_pair 0.383, scopy_over_served 0.998, stree_over_served 1.037
+K26_VERDICT DECODE: affine/pair granite 0.223, olmoe 0.207: <= 0.6 in both -- the codebook decode is the bottleneck; next: K25 takes the select-tree decode (bit-equal; tree/pair 0.383 <= 0.8)

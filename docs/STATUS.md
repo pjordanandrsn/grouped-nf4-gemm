@@ -294,6 +294,11 @@ was wrong.
   on the A2000) read 0.879×. Compiled outputs are bit-identical across plans, so 32/256 is now K19's default. K19 stays
   opt-in in the consumer until its end-to-end read (experts4bit-qlora P88).
   `kernel/RESULTS-k20-k19-plan-sweep-5090.md`; register row `gnf4.kernel.k20-k19-plan-sweep.5090.2026-10-01`.
+- **K26 read (2026-10-01, RTX 5090): the per-nibble codebook lookup is about 80 % of K25's time** at the NF4 families'
+  B=16 shapes (`nibble − 8` in its place: 0.223 / 0.207 of K25, Granite / OLMoE). An exact select-tree decode over
+  the 16 fp32 codebook values is bit-identical to K25 and runs at 0.373 / 0.383 of it (2.189 / 3.794 ms/step, about
+  0.39× the served NF4 GEMM), so K25 takes it. The served kernel's own path with the tree is not bit-identical.
+  `kernel/RESULTS-k26-nf4-decode-ablation.md`; register row `gnf4.kernel.k26-nf4-decode-ablation.5090.2026-10-01`.
 - **A fixed fraction-of-waterfall is retired as a law** (two 0.77
   readings were a two-host coincidence).
 - **The cold-engine "free floor" premise is refuted** on its target box:

@@ -2053,6 +2053,11 @@ was wrong.
   on the A2000) read 0.879×. Compiled outputs are bit-identical across plans, so 32/256 is now K19's default. K19 stays
   opt-in in the consumer until its end-to-end read (experts4bit-qlora P88).
   `kernel/RESULTS-k20-k19-plan-sweep-5090.md`; register row `gnf4.kernel.k20-k19-plan-sweep.5090.2026-10-01`.
+- **K26 read (2026-10-01, RTX 5090): the per-nibble codebook lookup is about 80 % of K25's time** at the NF4 families'
+  B=16 shapes (`nibble − 8` in its place: 0.223 / 0.207 of K25, Granite / OLMoE). An exact select-tree decode over
+  the 16 fp32 codebook values is bit-identical to K25 and runs at 0.373 / 0.383 of it (2.189 / 3.794 ms/step, about
+  0.39× the served NF4 GEMM), so K25 takes it. The served kernel's own path with the tree is not bit-identical.
+  `kernel/RESULTS-k26-nf4-decode-ablation.md`; register row `gnf4.kernel.k26-nf4-decode-ablation.5090.2026-10-01`.
 - **A fixed fraction-of-waterfall is retired as a law** (two 0.77
   readings were a two-host coincidence).
 - **The cold-engine "free floor" premise is refuted** on its target box:
@@ -2690,6 +2695,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - gnf4.kernel.nf4-scalar-gemv-splitk-reorder.5090.2026-09-24 [measured]: The scalar NF4 decode GEMV (GNF4_GEMV_DOTPAD=0) is reorder-class across row counts on an RTX 5090: its split-K count is planned from the rows, so against its own T = 1 rows 116/128, 124/136 and 1,123/1,280 rows are bit-equal at 16, 17 and 160 tokens (max row rel L2 2.4e-4, 1 bf16 ULP), inside its fp64 bound everywhere (ratio <= 0.896).
 - gnf4.calib.link-efficiency.5090.2026-09-24 [measured]: Lane P69: bench/calibrate.py (schema gnf4-hybrid-calib/2, #402) run twice on one rented RTX 5090 (PCIe gen 4 x16, host AMD EPYC 7663) reads the pinned 64 MB H2D copy at 20.58 / 20.72 GB/s forty back-to-back and at 17.97 / 19.90 GB/s one synchronized copy at a time, so cold_deadline's link_eff on that host is 0.873 / 0.960 (mean 0.917; the two runs within 10 %); the registered prediction of [0.55, 0.75] -- lane P66's census probe on another gen 4 x16 RTX 5090 (14.72 / 23.07 = 0.638, host AMD EPYC 7C13) -- is REFUTED on this host: link_eff is a per-host measurement, not a constant of the card class, and Costs.from_blob reads it from each box's own blob.
 - gnf4.kernel.k20-k19-plan-sweep.5090.2026-10-01 [measured]: K20 (pre-registered 2026-10-01, #420): K19 (int4_smallm.gemm_int4_b32_grouped_smallm, the grouped small-M int4-b32 GEMM over expert-major 16-row tiles) at its best plan BLOCK_N 32 / KC 256 / 4 warps / 2 stages, replaying experts4bit-qlora P60's recorded Qwen3-30B-A3B B=16 routing on the RTX 5090 (48 layers x gate_up + down per decode step, one CUDA graph per step, the plan chosen on steps 0-7 and read on steps 8-15): 5.200 ms/step including the per-layer tile build (0.435), against the served int8 GEMV route (quant_x_rows + gemv_int4_b32 + its reduce) 7.062 -- 0.736x, PROMISING by the registered rule (<= 0.77) -- and the shipped plan (64/128) 6.206; 89 % of the 4.640 ms byte floor at a measured 1532 GB/s. The instrument reproduced experts4bit-qlora P87's in-model census within 15 % (served 7.062 vs 7.729, shipped plan 6.206 vs 6.993). Compiled, the output is bit-identical across all 70 plans that ran, so the default plan moved with no quality read. In-model step effect: not measured here (experts4bit-qlora P88).
+- gnf4.kernel.k26-nf4-decode-ablation.5090.2026-10-01 [measured]: K26 (pre-registered 2026-10-01, #430): on the RTX 5090 at the NF4 families' B=16 expert shapes (Granite 32 layers, OLMoE 16; per-layer synthetic stores, seeded top-8 routing, both GEMMs per layer in one CUDA graph), the per-nibble codebook lookup is about 80 % of K25's time: K25 (nf4_smallm.gemm_nf4_grouped_smallm) 5.869 / 9.898 ms/step against 1.310 / 2.050 with the lookup replaced by nibble - 8 (affine/pair 0.223 / 0.207, DECODE by the registered rule). An exact 4-level select-tree decode over the 16 fp32 codebook values is bit-identical to K25 and runs at 2.189 / 3.794 (0.373 / 0.383 of K25; 49 / 56 % of the copy floor), so the registered pointer names it as K25's decode. The served _gemm_nf4_grouped runs at 5.650 / 9.540; its own path with the tree is not bit-identical and not faster (1.073 / 1.037).
 
 Open items (no evidence either way):
 
@@ -2700,4 +2706,4 @@ Projections (arithmetic, not runs):
 
 - gnf4.projection.multiarch [projected]: PROJECTED (stamped pre-silicon): the pure-waterfall gen5 row is falsified; the revised gen4 band 2.4-3.0 tok/s is confirmed (L40S 2.60-2.61); the revised gen5 band 4.0-5.0 missed narrowly (H100 PCIe 3.924); unified-memory rows are ceilings only (17-22 tok/s on 128 GB boxes). NF4-vs-bf16 is a 3.56x byte reduction, not 4x.
 
-(42 active claims listed, 2 open, 1 projected; retired and superseded claims are omitted on purpose.)
+(43 active claims listed, 2 open, 1 projected; retired and superseded claims are omitted on purpose.)
