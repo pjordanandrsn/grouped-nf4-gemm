@@ -18,9 +18,11 @@ Arithmetic. The weight operand is ``(codebook[nibble] * absmax).to(bf16)``, comp
 ``dequant_ref(...).to(bfloat16)`` bit for bit; activations stay bf16 and the accumulation is fp32. That is NOT the
 served kernel's arithmetic (TF32 on the fp32 weight, which rounds the weight less), so a consumer gates it on quality.
 
-Codebook decode, two ways, the same fp32 values and the same outputs bit for bit (the compiled suite holds that):
+Codebook decode, three ways, the same fp32 values and the same outputs bit for bit (the compiled suite holds that):
 ``lut="pair"`` loads ONE int64 per packed byte from a 256-entry table holding both of the byte's fp32 codebook values
-(half the load instructions of a per-nibble lookup); ``"load"`` loads one fp32 per nibble from the 16-entry table in L1.
+(half the load instructions of a per-nibble lookup); ``"load"`` loads one fp32 per nibble from the 16-entry table in L1;
+``"tree"`` loads the 16 values once per program and selects each weight with a 4-level tree on the nibble's bits, no load
+per element (lane K26: the lookup is what holds the kernel back).
 On the A2000 (99 KB of shared memory per block) ``"load"`` overflows at BLOCK_N x KC of 32 x 256 and 64 x 128, and
 ``"pair"`` only at 128 x 256: the compiler stages the per-nibble decode through shared memory. A third decode, a
 16-entry register codebook through ``tl.gather`` (the served kernel's VARIANT 1), was tried and left out: its weights
@@ -39,7 +41,7 @@ from _triton_shim import triton, tl
 from nf4_grouped import BLOCKSIZE, NF4_LUT, _TL_INTERLEAVE, _lut
 
 _SUPPORTED_KC = (64, 128, 256)
-_LUT_MODES = {"load": 0, "pair": 2}
+_LUT_MODES = {"load": 0, "pair": 2, "tree": 3}
 _PAIR_CACHE: dict = {}
 
 
@@ -92,6 +94,23 @@ def _gemm_nf4_grouped_smallm(x_ptr, ord_ptr, w_ptr, am_ptr, lut_ptr, row0_ptr, r
     offs_sc = tl.arange(0, NSC)
     wbase = w_ptr + eid * stride_we + offs_n.to(tl.int64)[:, None] * stride_wn
     abase = am_ptr + eid * stride_ae + offs_n.to(tl.int64)[:, None] * stride_an
+    if LUT == 3:                                       # the 16 codebook values, once per program (the select tree)
+        c0 = tl.load(lut_ptr + 0)
+        c1 = tl.load(lut_ptr + 1)
+        c2 = tl.load(lut_ptr + 2)
+        c3 = tl.load(lut_ptr + 3)
+        c4 = tl.load(lut_ptr + 4)
+        c5 = tl.load(lut_ptr + 5)
+        c6 = tl.load(lut_ptr + 6)
+        c7 = tl.load(lut_ptr + 7)
+        c8 = tl.load(lut_ptr + 8)
+        c9 = tl.load(lut_ptr + 9)
+        c10 = tl.load(lut_ptr + 10)
+        c11 = tl.load(lut_ptr + 11)
+        c12 = tl.load(lut_ptr + 12)
+        c13 = tl.load(lut_ptr + 13)
+        c14 = tl.load(lut_ptr + 14)
+        c15 = tl.load(lut_ptr + 15)
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
     for c in range(0, NKC):
         k0 = c * KC
@@ -115,6 +134,29 @@ def _gemm_nf4_grouped_smallm(x_ptr, ord_ptr, w_ptr, am_ptr, lut_ptr, row0_ptr, r
             ev = pv.to(tl.int32).to(tl.float32, bitcast=True)                # low word = element 2j (HIGH nibble)
             od = (pv >> 32).to(tl.int32).to(tl.float32, bitcast=True)        # high word = element 2j + 1
             w = _TL_INTERLEAVE(ev, od)                                       # [BN, KC] in k order
+        elif LUT == 3:
+            # a 4-level select tree on the nibble's bits over the 16 fp32 codebook values: the same weights as a
+            # lookup, with no load per element (lane K26 found the lookup is what holds the kernel back)
+            nib = _TL_INTERLEAVE((wb >> 4) & 0xF, wb & 0xF)                  # element 2j = HIGH nibble
+            b0 = (nib & 1) != 0
+            b1 = (nib & 2) != 0
+            b2 = (nib & 4) != 0
+            b3 = (nib & 8) != 0
+            s0 = tl.where(b0, c1, c0)
+            s1 = tl.where(b0, c3, c2)
+            s2 = tl.where(b0, c5, c4)
+            s3 = tl.where(b0, c7, c6)
+            s4 = tl.where(b0, c9, c8)
+            s5 = tl.where(b0, c11, c10)
+            s6 = tl.where(b0, c13, c12)
+            s7 = tl.where(b0, c15, c14)
+            u0 = tl.where(b1, s1, s0)
+            u1 = tl.where(b1, s3, s2)
+            u2 = tl.where(b1, s5, s4)
+            u3 = tl.where(b1, s7, s6)
+            v0 = tl.where(b2, u1, u0)
+            v1 = tl.where(b2, u3, u2)
+            w = tl.where(b3, v1, v0)
         else:
             nib = _TL_INTERLEAVE((wb >> 4) & 0xF, wb & 0xF)                  # element 2j = HIGH nibble
             w = tl.load(lut_ptr + nib)
@@ -148,7 +190,7 @@ def gemm_nf4_grouped_smallm(x: torch.Tensor, packed: torch.Tensor, absmax: torch
     ``x`` as the ``[R // k, K]`` token rows.
 
     KC is 64, 128 or 256; when it does not divide K the last chunk is masked (K21's tail). ``lut`` picks the codebook
-    decode (``"pair"`` or ``"load"``), the same outputs bit for bit. Capture-legal: every launch parameter is static and
+    decode (``"pair"``, ``"load"`` or ``"tree"``), the same outputs bit for bit. Capture-legal: every launch parameter is static and
     every input a device tensor; the only allocation is ``out``. Opt-in, no consumer, no speed claim."""
     from int4_smallm import _interpreting
     R, K = x.shape
@@ -174,7 +216,7 @@ def gemm_nf4_grouped_smallm(x: torch.Tensor, packed: torch.Tensor, absmax: torch
     if kc not in _SUPPORTED_KC:
         raise ValueError(f"kc={kc}: expected 64, 128 or 256")
     if lut not in _LUT_MODES:
-        raise ValueError(f"lut={lut!r}: expected 'pair' or 'load'")
+        raise ValueError(f"lut={lut!r}: expected 'pair', 'load' or 'tree'")
     if scatter is not None and scatter.numel() != R:
         raise ValueError(f"scatter has {scatter.numel()} rows, the call has {R}")
     if dot_bf16 is None:

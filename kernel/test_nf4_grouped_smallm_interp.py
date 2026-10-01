@@ -5,7 +5,7 @@ Guards:
 1. every sorted output row is within one bf16 output ulp of ``x[src] @ dequant_ref(packed[e], absmax[e]).T`` -- with
    the weight rounded to bf16 when compiled (the dequant-then-GEMM path's operand), fp32 under the interpreter;
 2. the masked K tail (KC not dividing K) matches the reference too;
-3. the two codebook decodes (pair, load) are bit-identical: the same fp32 values by construction;
+3. the three codebook decodes (pair, load, tree) are bit-identical: the same fp32 values by construction;
 4. the in-kernel gather (``order``) is bit-identical to gathering first;
 5. strided views of a fused stack (the expert and row strides free) are bit-identical to a contiguous copy;
 6. K23's ``scatter`` is the unsort and ``gather_div`` reads token rows as their expansion, bit for bit;
@@ -36,7 +36,7 @@ DEV = "cpu" if INTERP else ("cuda" if torch.cuda.is_available() else None)
 if DEV is None:
     pytest.skip("compiled mode needs a CUDA device; set TRITON_INTERPRET=1 for the CPU contract run", allow_module_level=True)
 
-LUTS = ["pair", "load"]
+LUTS = ["pair", "load", "tree"]
 
 
 def _stack(E, N, K, seed=0):
@@ -103,6 +103,15 @@ def test_masked_tail_matches_dequant_reference(E, N, K, kc, eids, label):
     ref = _ref_sorted(x, deq, e, order)
     err = float((y.float().cpu() - ref).abs().max())
     assert err <= 2 ** -7 * float(ref.abs().max()), f"{label}: max |y - ref| {err} exceeds one bf16 ulp"
+
+
+@pytest.mark.parametrize("E,N,K,kc,eids,label", TAIL_CASES[:2], ids=[c[-1] for c in TAIL_CASES[:2]])
+def test_every_decode_is_bit_identical_through_the_masked_tail(E, N, K, kc, eids, label):
+    x, packed, absmax, deq, e, (row0, rows, grp, order, _c) = _case(E, N, K, eids)
+    args = _args(x, packed, absmax, row0, rows, grp)
+    outs = {m: gemm_nf4_grouped_smallm(*args, order, kc=kc, block_n=16, lut=m) for m in LUTS}
+    for m, y in outs.items():
+        assert torch.equal(y, outs["pair"]), f"{label}: lut={m} differs from lut=pair through the masked tail"
 
 
 def test_pair_lut_holds_both_codebook_values_of_each_byte():
@@ -193,7 +202,7 @@ def test_mismatches_are_refused_before_launch():
         gemm_nf4_grouped_smallm(xd, w[0], absmax.to(torch.int32).to(DEV), *w[2:], order)
     with pytest.raises(ValueError, match="expected 64, 128 or 256"):
         gemm_nf4_grouped_smallm(xd, *w, order, kc=96)
-    with pytest.raises(ValueError, match="expected 'pair' or 'load'"):
+    with pytest.raises(ValueError, match="expected 'pair', 'load' or 'tree'"):
         gemm_nf4_grouped_smallm(xd, *w, order, lut="reg")
     with pytest.raises(ValueError, match="contiguous along their last"):
         gemm_nf4_grouped_smallm(xd, packed.transpose(1, 2).contiguous().transpose(1, 2).to(DEV), *w[1:], order)
@@ -216,7 +225,8 @@ def test_plans_are_bit_identical_compiled(K):
     # 32 x 256 and 64 x 128, "pair" at 128 x 256
     for bn, kc, wp, st, lut in [(32, 256, 4, 2, "pair"), (64, 128, 8, 3, "pair"), (128, 64, 4, 3, "pair"),
                                 (32, 128, 4, 2, "load"), (16, 256, 4, 3, "pair"), (16, 256, 8, 2, "load"),
-                                (64, 256, 4, 2, "pair")]:
+                                (64, 256, 4, 2, "pair"), (32, 256, 4, 2, "tree"), (64, 128, 4, 3, "tree"),
+                                (128, 64, 8, 2, "tree")]:
         y = gemm_nf4_grouped_smallm(*args, order, block_n=bn, kc=kc, warps=wp, stages=st, lut=lut)
         assert torch.equal(y, ref), f"plan ({bn}, {kc}, {wp}, {st}, {lut}) moved an output bit at K={K}"
 
