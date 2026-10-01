@@ -60,7 +60,7 @@
     "bitsandbytes gemm_4bit has no grouped routed MoE path",
     "QLoRA backward dequantizes 4-bit experts for dX"
    ],
-   "solution": "gemm_4bit_grouped runs one Triton launch for all active experts over the bitsandbytes gemm_4bit NF4 layout (LUT decode to fp32 in registers, blockwise absmax scaling, fp32 accumulation, bf16 epilogue); dequant_ref is the pure-torch oracle it is asserted against; dgrad_4bit_grouped is the one-launch training backward.",
+   "solution": "gemm_4bit_grouped runs one Triton launch for all active experts over the bitsandbytes gemm_4bit NF4 layout (LUT decode to fp32 in registers, blockwise absmax scaling, fp32 accumulation, bf16 epilogue); dequant_ref is the pure-torch oracle it is asserted against; dgrad_4bit_grouped is the one-launch training backward; gemm_nf4_grouped_smallm (K25, opt-in, unmeasured for speed) is K19's grouped tensor-core small-M GEMM on the same NF4 store for decode batches, its weight operand exactly dequant_ref rounded to bf16 (not the served kernel's TF32), so a consumer gates it on quality.",
    "modes": [
     "inference",
     "training",
@@ -98,6 +98,8 @@
    "entrypoints": [
     "nf4_grouped:gemm_4bit_grouped",
     "nf4_grouped:gemm_4bit_grouped_captured",
+    "nf4_smallm:gemm_nf4_grouped_smallm",
+    "nf4_smallm:pair_lut",
     "nf4_grouped:build_group_tiles_device",
     "nf4_grouped:dgrad_4bit_grouped",
     "nf4_grouped:dequant_ref",

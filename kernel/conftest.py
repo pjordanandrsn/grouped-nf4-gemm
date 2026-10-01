@@ -44,7 +44,8 @@ _INTERP_FILES = {"test_interp_contract.py", "test_mxfp4_interp.py",
                  "test_int4_smallm_interp.py", "test_offset_boundary_interp.py",
                  "test_int4_b32_fused_reduce_interp.py", "test_int4_b32_grouped_interp.py",
                  "test_int4_grouped_smallm_interp.py",
-                 "test_mxfp4_grouped_smallm_interp.py"}
+                 "test_mxfp4_grouped_smallm_interp.py",
+                 "test_nf4_grouped_smallm_interp.py"}
 
 
 def _device_present():
