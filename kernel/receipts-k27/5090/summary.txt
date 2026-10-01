@@ -1,0 +1,10 @@
+KNOBS gnf4=908a2ca94bfe6bc5f02092423381b1a10ccb59b9 gpu_class=5090 min_disk_gb=20
+gnf4 0.34.0 @908a2ca94bfe6bc5f02092423381b1a10ccb59b9
+torch 2.8.0+cu128
+triton 3.4.0
+cc (12, 0)
+k27_bench self-test OK (9 cases)
+premise K25 contract compiled rc=0: 30 passed in 14.79s
+K27 granite: pair16 6.070, served 5.780, tree16 1.832, tree32 2.588 ms/step; best {"tree16": {"block_n": 32, "kc": 128, "warps": 4, "stages": 2}, "tree32": {"block_n": 32, "kc": 64, "warps": 4, "stages": 3}}; rms err pair16 3.426e-04, tree16 3.426e-04, tree32 2.528e-04, served 2.528e-04; tree16==pair16 True
+K27 olmoe: pair16 9.989, served 9.660, tree16 3.139, tree32 4.847 ms/step; best {"tree16": {"block_n": 32, "kc": 128, "warps": 4, "stages": 2}, "tree32": {"block_n": 32, "kc": 64, "warps": 4, "stages": 3}}; rms err pair16 4.425e-04, tree16 4.425e-04, tree32 3.281e-04, served 3.281e-04; tree16==pair16 True
+K27_VERDICT TF32_PATH: granite tree32/served 0.448 err 1.000, olmoe tree32/served 0.502 err 1.000; granite tree16/served 0.317, olmoe tree16/served 0.325 -- next: K25-tree in TF32 end to end on both families (<= 0.6, err <= 1.1)

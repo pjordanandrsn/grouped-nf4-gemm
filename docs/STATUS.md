@@ -299,6 +299,11 @@ was wrong.
   the 16 fp32 codebook values is bit-identical to K25 and runs at 0.373 / 0.383 of it (2.189 / 3.794 ms/step, about
   0.39× the served NF4 GEMM), so K25 takes it. The served kernel's own path with the tree is not bit-identical.
   `kernel/RESULTS-k26-nf4-decode-ablation.md`; register row `gnf4.kernel.k26-nf4-decode-ablation.5090.2026-10-01`.
+- **K27 read (2026-10-01, RTX 5090): K25 with the select tree at the served kernel's weight precision (fp32 weights,
+  TF32 MMA) runs at 0.448 / 0.502 of the served NF4 GEMM** (Granite / OLMoE B=16 shapes), its rms error equal to the
+  served kernel's. In bf16 it runs at 0.317 / 0.325, at 1.35× the served error. TF32_PATH: the next lane reads K25-tree
+  in TF32 end to end on both families. `kernel/RESULTS-k27-nf4-tree-precision.md`; register row
+  `gnf4.kernel.k27-nf4-tree-precision.5090.2026-10-01`.
 - **A fixed fraction-of-waterfall is retired as a law** (two 0.77
   readings were a two-host coincidence).
 - **The cold-engine "free floor" premise is refuted** on its target box:

@@ -1022,6 +1022,23 @@
     "kernel/receipts-k26/5090/k26.json",
     "kernel/receipts-k26/5090/summary.txt"
    ]
+  },
+  {
+   "id": "gnf4.kernel.k27-nf4-tree-precision.5090.2026-10-01",
+   "area": "kernel",
+   "claim": "K27 (pre-registered 2026-10-01, #434): on the RTX 5090 at the NF4 families' B=16 expert shapes (K26's harness), K25 with the select-tree decode at the served kernel's weight precision (fp32 weights through TF32 MMA, dot_bf16=False; best plan BLOCK_N 32 / KC 64 / 4 warps / 3 stages) runs at 2.588 / 4.847 ms/step against the served _gemm_nf4_grouped's 5.780 / 9.660 (0.448 / 0.502, Granite / OLMoE), with its rms error against an fp64 product equal to the served kernel's (ratio 1.000 both), TF32_PATH by the registered rule; in bf16 (best plan 32 / 128) it runs at 0.317 / 0.325, bit-equal to the paired lookup, at 1.35x the served error.",
+   "value": 0.502,
+   "unit": "TF32 select-tree K25 / served NF4 GEMM, ms per B=16 decode step, the larger of the two families (OLMoE; Granite 0.448)",
+   "status": "measured",
+   "hardware": "RTX 5090 (sm_120, driver 595.91.07, 545 W), torch 2.8.0+cu128 / triton 3.4.0, rented host (vast instance 53751313, AMD)",
+   "measured_on": "2026-10-01",
+   "evidence": [
+    "kernel/RESULTS-k27-nf4-tree-precision.md",
+    "kernel/PREREG-k27-nf4-tree-precision.md",
+    "kernel/k27_bench.py",
+    "kernel/receipts-k27/5090/k27.json",
+    "kernel/receipts-k27/5090/summary.txt"
+   ]
   }
  ]
 }
