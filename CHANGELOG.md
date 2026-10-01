@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **K20 read (RTX 5090): PROMISING. K19's default plan becomes BLOCK_N 32 / KC 256 / 4 warps / 2 stages; outputs are bit-identical across plans.** (`gnf4.kernel.k20-k19-plan-sweep.5090.2026-10-01`)
+  - **The lane** (`kernel/PREREG-k20-k19-plan-sweep-5090.md`, #420; `kernel/RESULTS-k20-k19-plan-sweep-5090.md`): replays experts4bit-qlora P60's recorded B=16 routing on the 5090, one CUDA graph per decode step, sweeping 72 plans. The best plan was chosen on steps 0–7 and read on steps 8–15.
+  - **Steps 8–15, ms per decode step:**
+    - served route (int8 quantise + GEMV + reduce) 7.062;
+    - K19 at the shipped plan (64/128) 6.206;
+    - K19 at 32/256 **5.200** (0.736×; 89 % of the 4.640 ms measured byte floor);
+    - the tile build 0.435 of that.
+  - The instrument reproduced experts4bit-qlora P87's in-model census within the registered 15 %. Every top-ten plan has KC 256. Lane cost $0.0615.
+  - **The plan is free numerically.** Compiled, all 70 plans that ran match the shipped plan bit for bit, because the MMA accumulates the same products in the same order. `test_plans_are_bit_identical_compiled` holds it (passes on sm_86 too). Under the interpreter `test_bitwise_equals_k16_per_expert` now names its plan, since numpy's fp32 dot can move a bit across KC.
+  - **What follows:** an end-to-end lane in experts4bit-qlora (P88) before any consumer default moves.
+
 - **K19: a grouped small-M int4-b32 GEMM for decode-batch experts (`int4_smallm.gemm_int4_b32_grouped_smallm`), opt-in; no default changes.**
   - **What it is.** K16's arithmetic (bf16 tensor-core MMA, the int4 tile dequantised and scaled in registers, one `tl.dot` per 128-wide K chunk) over K14's expert-major device tiles (`build_group_tiles_fused`, 16-row tiles).
   - One launch per projection covers every (tile × N block). There is no split-K, so no partials, counters or separate reduce, and activations stay bf16 (no int8 quantise).

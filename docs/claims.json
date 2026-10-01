@@ -981,6 +981,30 @@
     "CHANGELOG.md"
    ],
    "notes": "Pre-registered in experts4bit-qlora #741 (P1 [0.55, 0.75] REFUTED; P2 [20, 30] GB/s HELD; P3 [12, 18] GB/s refuted on run 2; P4 <= 10 % spread HELD at 9.7 %). The decision rule's refuted branch: the two hosts' difference is stated, not explained (idle link state, NUMA placement of the pinned buffer and the DMA engine's behaviour were not measured); a second box is a new draw under its own amendment. The gen 3 x8 control (the NAS A2000, bench/cold-engine/calib-a2000-400/) reads 1.0. Lane cost $0.0146 (one refused pre-rental launch at $0: a dirty receipts worktree), teardown proven."
+  },
+  {
+   "id": "gnf4.kernel.k20-k19-plan-sweep.5090.2026-10-01",
+   "area": "kernel",
+   "claim": "K20 (pre-registered 2026-10-01, #420): K19 (int4_smallm.gemm_int4_b32_grouped_smallm, the grouped small-M int4-b32 GEMM over expert-major 16-row tiles) at its best plan BLOCK_N 32 / KC 256 / 4 warps / 2 stages, replaying experts4bit-qlora P60's recorded Qwen3-30B-A3B B=16 routing on the RTX 5090 (48 layers x gate_up + down per decode step, one CUDA graph per step, the plan chosen on steps 0-7 and read on steps 8-15): 5.200 ms/step including the per-layer tile build (0.435), against the served int8 GEMV route (quant_x_rows + gemv_int4_b32 + its reduce) 7.062 -- 0.736x, PROMISING by the registered rule (<= 0.77) -- and the shipped plan (64/128) 6.206; 89 % of the 4.640 ms byte floor at a measured 1532 GB/s. The instrument reproduced experts4bit-qlora P87's in-model census within 15 % (served 7.062 vs 7.729, shipped plan 6.206 vs 6.993). Compiled, the output is bit-identical across all 70 plans that ran, so the default plan moved with no quality read. In-model step effect: not measured here (experts4bit-qlora P88).",
+   "value": 0.736,
+   "unit": "best-plan K19 route / served int8 GEMV route, ms per B=16 decode step on recorded routing (steps 8-15 medians: 5.200 / 7.062)",
+   "status": "measured",
+   "hardware": "RTX 5090 (sm_120, 170 SMs, driver 580.119.02, 475 W), torch 2.8.0+cu128 / triton 3.4.0, rented host (vast instance 53653777)",
+   "measured_on": "2026-10-01",
+   "evidence": [
+    "kernel/PREREG-k20-k19-plan-sweep-5090.md",
+    "kernel/RESULTS-k20-k19-plan-sweep-5090.md",
+    "kernel/k20_bench.py",
+    "kernel/int4_smallm.py",
+    "kernel/receipts-k20/5090/k20_rows.json",
+    "kernel/receipts-k20/5090/k20_bench.log",
+    "kernel/receipts-k20/5090/tests_compiled.log"
+   ],
+   "quoted_in": [
+    "README.md",
+    "docs/STATUS.md"
+   ],
+   "notes": "Lane k20-5090-1 cost $0.0615 (estimate $0.5625); receipts in adertha-receipts. Mechanism not profiled: the plan grid does not separate load size, loop overhead and register footprint; every top-ten plan has KC 256. Two plans (BLOCK_N 256 x KC 256, 4 stages) did not compile (shared memory)."
   }
  ]
 }

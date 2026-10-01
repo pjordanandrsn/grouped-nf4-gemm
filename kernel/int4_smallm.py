@@ -212,7 +212,7 @@ def _gemm_int4_b32_grouped_smallm(x_ptr, ord_ptr, w_ptr, ws_ptr, row0_ptr, rows_
 def gemm_int4_b32_grouped_smallm(x: torch.Tensor, packed: torch.Tensor, scales: torch.Tensor,
                                  t_row0: torch.Tensor, t_rows: torch.Tensor, t_group: torch.Tensor,
                                  order: torch.Tensor | None = None, *,
-                                 block_n: int = 64, kc: int = 128, warps: int = 4, stages: int = 2,
+                                 block_n: int = 32, kc: int = 256, warps: int = 4, stages: int = 2,
                                  dot_bf16: bool | None = None) -> torch.Tensor:
     """K19, the grouped small-M int4-b32 GEMM: ``x [R, K]`` bf16 (unsorted when ``order`` is given, else already in
     expert-major order), ``packed [E, N, K//2]`` / ``scales [E, N, K//32]`` int4-b32 expert stacks, and the device
@@ -222,7 +222,14 @@ def gemm_int4_b32_grouped_smallm(x: torch.Tensor, packed: torch.Tensor, scales: 
     Same contract as K16 per tile: each output row is within one bf16 ulp of ``x[src] @ dequant(packed[e]).T`` and is
     bit-identical to K16 (``gemm_int4_b32_smallm`` with ``sk=1`` and the same ``block_n``/``kc``) on that expert's
     rows, because a row's MMA output does not depend on the tile's other rows. Every launch parameter is static and
-    every input a device tensor, so the call is legal inside CUDA-graph capture; the only allocation is ``out``."""
+    every input a device tensor, so the call is legal inside CUDA-graph capture; the only allocation is ``out``.
+
+    The default plan (BLOCK_N 32, KC 256, 4 warps, 2 stages) is K20's best on an RTX 5090 at Qwen3-30B-A3B's expert
+    shapes on recorded B=16 routing: 5.20 ms/step for both projections + the tile build, against the shipped plan's 6.21
+    (BLOCK_N 64, KC 128) and the served int8 GEMV route's 7.06 (``kernel/RESULTS-k20-k19-plan-sweep-5090.md``). Compiled,
+    the plan changes no output bit: the MMA accumulates the same products in the same order whatever BLOCK_N and KC
+    are (70 of 72 plans compared on the card, ``test_plans_are_bit_identical_compiled`` here). Under the interpreter
+    the fp32 dot is numpy's and KC can move the last bit."""
     R, K = x.shape
     E, N, kh = packed.shape
     if kh * 2 != K or tuple(scales.shape) != (E, N, K // 32):

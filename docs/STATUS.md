@@ -288,6 +288,12 @@ was wrong.
   runs 9.689 ms/step against the served GEMV's 6.520 (P2 refuted), and 1.00–1.65× the served call at R = 8/16 (P3
   refuted), worst where nothing can be shared. Not a lever; `gemv_int4_b32_grouped` stays dormant as the evidence.
   `kernel/RESULTS-k18-grouped-expert-gemv.md`; register row `gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22`.
+- **K20 read (2026-10-01, RTX 5090): K19 (`gemm_int4_b32_grouped_smallm`, the grouped small-M int4-b32 GEMM over
+  expert-major 16-row tiles) at BLOCK_N 32 / KC 256 serves P60's recorded B=16 routing at 0.736× the served int8 GEMV
+  route** (5.200 vs 7.062 ms/step including the tile build; 89 % of the byte floor). The shipped plan (64/128, chosen
+  on the A2000) read 0.879×. Compiled outputs are bit-identical across plans, so 32/256 is now K19's default. K19 stays
+  opt-in in the consumer until its end-to-end read (experts4bit-qlora P88).
+  `kernel/RESULTS-k20-k19-plan-sweep-5090.md`; register row `gnf4.kernel.k20-k19-plan-sweep.5090.2026-10-01`.
 - **A fixed fraction-of-waterfall is retired as a law** (two 0.77
   readings were a two-host coincidence).
 - **The cold-engine "free floor" premise is refuted** on its target box:

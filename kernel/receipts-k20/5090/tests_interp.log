@@ -1,0 +1,8 @@
+...........                                                              [100%]
+=============================== warnings summary ===============================
+kernel/test_int4_grouped_smallm_interp.py: 32 warnings
+  /opt/conda/lib/python3.11/site-packages/triton/runtime/interpreter.py:810: DeprecationWarning: Conversion of an array with ndim > 0 to a scalar is deprecated, and will error in future. Ensure you extract a single element from your array before performing this operation. (Deprecated NumPy 1.25.)
+    tensor.__index__ = lambda self: int(self.handle.data)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+11 passed, 32 warnings in 1.58s
