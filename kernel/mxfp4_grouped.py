@@ -292,13 +292,17 @@ def gemv_mxfp4_b32(xq, xs, blocks, scales, eids, N: int, K: int,
 def _gemm_mxfp4_grouped_smallm(x_ptr, ord_ptr, w_ptr, ws_ptr, row0_ptr, rows_ptr, grp_ptr, out_ptr,
                                N, K: tl.constexpr,
                                BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, KC: tl.constexpr,
-                               GATHER: tl.constexpr, DOT_BF16: tl.constexpr):
+                               GATHER: tl.constexpr, DOT_BF16: tl.constexpr, EVEN_K: tl.constexpr = True):
     """K21: K19 (``int4_smallm._gemm_int4_b32_grouped_smallm``) on the native MXFP4 store. Same grid ``(tiles,
     cdiv(N, BLOCK_N))``, same tile table, same gather, same sorted-order output, one ``tl.dot`` per KC chunk, no split-K.
     Only the dequant differs: an e2m1 nibble decodes to TWICE its value as an exact integer (``_gemv_mxfp4_b32``'s
     construction: 0, 1, 2, 3, 4, 6, 8, 12, signed), and the per-32 e8m0 byte becomes ``2^(e - 128)``, absorbing the
     half. Every product is an exact MXFP4 value, representable in bf16, so the bf16 MMA operand equals
-    ``dequant_mxfp4`` exactly."""
+    ``dequant_mxfp4`` exactly.
+
+    ``EVEN_K`` False (KC does not divide K; K is still a multiple of 32): the last chunk is MASKED -- activations and
+    weight nibbles past K load as 0, so the padded columns add exact zeros. gpt-oss's K = 2880 admits no power-of-two KC
+    above 64 without it (K22)."""
     g = tl.program_id(0)
     pid_n = tl.program_id(1)
     rows = tl.load(rows_ptr + g)
@@ -315,7 +319,7 @@ def _gemm_mxfp4_grouped_smallm(x_ptr, ord_ptr, w_ptr, ws_ptr, row0_ptr, rows_ptr
     offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
     n_mask = offs_n < N
     KB: tl.constexpr = K // 32
-    NKC: tl.constexpr = K // KC
+    NKC: tl.constexpr = (K + KC - 1) // KC
     NSC: tl.constexpr = KC // 32
     offs_kc = tl.arange(0, KC)
     offs_kh = tl.arange(0, KC // 2)
@@ -325,13 +329,19 @@ def _gemm_mxfp4_grouped_smallm(x_ptr, ord_ptr, w_ptr, ws_ptr, row0_ptr, rows_ptr
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
     for c in range(0, NKC):
         k0 = c * KC
-        a = tl.load(x_ptr + src[:, None] * K + k0 + offs_kc[None, :], mask=m_mask[:, None], other=0.0)
+        if EVEN_K:
+            a = tl.load(x_ptr + src[:, None] * K + k0 + offs_kc[None, :], mask=m_mask[:, None], other=0.0)
+            wb = tl.load(wbase + offs_n[:, None] * (K // 2) + (k0 // 2) + offs_kh[None, :],
+                         mask=n_mask[:, None], other=0).to(tl.int32)
+        else:
+            a = tl.load(x_ptr + src[:, None] * K + k0 + offs_kc[None, :],
+                        mask=m_mask[:, None] & ((k0 + offs_kc) < K)[None, :], other=0.0)
+            wb = tl.load(wbase + offs_n[:, None] * (K // 2) + (k0 // 2) + offs_kh[None, :],
+                         mask=n_mask[:, None] & (((k0 // 2) + offs_kh) < (K // 2))[None, :], other=0).to(tl.int32)
         if DOT_BF16:
             a = a.to(tl.bfloat16)
         else:
             a = a.to(tl.float32)
-        wb = tl.load(wbase + offs_n[:, None] * (K // 2) + (k0 // 2) + offs_kh[None, :],
-                     mask=n_mask[:, None], other=0).to(tl.int32)
         lo = wb & 0xF
         hi = (wb >> 4) & 0xF
         lo_e = (lo >> 1) & 0x3
@@ -341,8 +351,12 @@ def _gemm_mxfp4_grouped_smallm(x_ptr, ord_ptr, w_ptr, ws_ptr, row0_ptr, rows_ptr
         hi_v = tl.where(hi_e == 0, hi & 0x1, (2 + (hi & 0x1)) << tl.maximum(hi_e - 1, 0))
         hi_v = tl.where((hi & 0x8) != 0, -hi_v, hi_v)
         w = tl.interleave(lo_v.to(tl.float32), hi_v.to(tl.float32))          # low nibble = element 2j
-        e8 = tl.load(sbase + offs_n[:, None] * KB + (k0 // 32) + offs_sc[None, :],
-                     mask=n_mask[:, None], other=128).to(tl.int32)
+        if EVEN_K:
+            e8 = tl.load(sbase + offs_n[:, None] * KB + (k0 // 32) + offs_sc[None, :],
+                         mask=n_mask[:, None], other=128).to(tl.int32)
+        else:
+            e8 = tl.load(sbase + offs_n[:, None] * KB + (k0 // 32) + offs_sc[None, :],
+                         mask=n_mask[:, None] & (((k0 // 32) + offs_sc) < KB)[None, :], other=128).to(tl.int32)
         sc = tl.exp2((e8 - 128).to(tl.float32))                               # 2^(e - 127) * 0.5
         w3 = tl.reshape(w, (BLOCK_N, NSC, 32)) * sc[:, :, None]
         wsc = tl.reshape(w3, (BLOCK_N, KC))
@@ -366,22 +380,27 @@ def gemm_mxfp4_grouped_smallm(x: torch.Tensor, blocks: torch.Tensor, scales: tor
     Returns ``[R, N]`` bf16 in the SORTED row order.
 
     Each output row is within one bf16 ulp of ``x[src] @ dequant_mxfp4(...).T``. The MXFP4 weights are exact in bf16, so
-    the only rounding is the activations' (already bf16) and the fp32 accumulation. KC must divide K and be a power of
-    two (``plan_smallm``); gpt-oss's K = 2880 admits KC <= 64. Capture-legal; the only allocation is ``out``."""
-    from int4_smallm import _interpreting, plan_smallm
+    the only rounding is the activations' (already bf16) and the fp32 accumulation. KC is a power of two (32-256);
+    when it does not divide K the last chunk is masked (gpt-oss's K = 2880 at KC 256 is 11 full chunks + a
+    masked 64-wide tail). Capture-legal; the only allocation is ``out``."""
+    from int4_smallm import _interpreting
     R, K = x.shape
     E, N, kh = blocks.shape
     if blocks.dtype != torch.uint8 or scales.dtype != torch.uint8:
         raise ValueError(f"MXFP4 store must be uint8 blocks/scales, got {blocks.dtype}/{scales.dtype}")
     if kh * 2 != K or tuple(scales.shape) != (E, N, K // 32):
         raise ValueError(f"layout mismatch: x K={K}, blocks {tuple(blocks.shape)}, scales {tuple(scales.shape)}")
-    block_n, kc, _sk = plan_smallm(N, K, block_n=block_n, kc=kc, sk=1)
+    if K % 32:
+        raise ValueError(f"K={K} is not a multiple of the MXFP4 block (32)")
+    if kc not in (32, 64, 128, 256):
+        raise ValueError(f"kc={kc}: expected 32, 64, 128 or 256")
+    even_k = K % kc == 0
     if dot_bf16 is None:
         dot_bf16 = not _interpreting()
     gather = order is not None
     out = torch.empty(R, N, dtype=torch.bfloat16, device=x.device)
     _gemm_mxfp4_grouped_smallm[(t_row0.numel(), triton.cdiv(N, block_n))](
         x.contiguous(), order if gather else t_row0, blocks, scales, t_row0, t_rows, t_group, out,
-        N, K=K, BLOCK_M=16, BLOCK_N=block_n, KC=kc, GATHER=bool(gather), DOT_BF16=bool(dot_bf16),
+        N, K=K, BLOCK_M=16, BLOCK_N=block_n, KC=kc, GATHER=bool(gather), DOT_BF16=bool(dot_bf16), EVEN_K=even_k,
         num_warps=warps, num_stages=stages)
     return out
