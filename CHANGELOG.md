@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **K24 read (gpt-oss-20b, RTX 5090): VOID by its instrument again, and per-layer stores did not close the gap; descriptively K21 with its masked-tail plans reads 0.50× the served NF4 route, at 50 % of the byte floor.** (`kernel/RESULTS-k24-gptoss-per-layer.md`)
+  - **Census:** step 22.50 ms; `_gemm_nf4_grouped` 17.90 ms/step (79 %).
+  - **Bench, ms/step:** served 15.18; K21 best (32 / KC 128 / 4 warps / 3 stages) 7.62; default (32 / 256) 9.22;
+    MXFP4 GEMV 23.84; floor 3.81.
+  - **All 54 plans are bit-identical to the default**, the masked KC 128/256 plans included.
+  - **Why VOID:** the bench's served NF4 kernel read 14.85 ms/step against the census's 17.90 (−17 %, band 15 %), the
+    same miss as K22. K22's inferred cause (cross-layer L2 reuse) is refuted. The next candidate, inferred: the bench
+    replays wikitext teacher-forced routing, while the census decodes its own prompts.
+  - **Next:** an experts4bit-qlora opt-in route for the MXFP4 store's batched rows to K21, then an end-to-end lane with
+    the store's KL instrument as the gate.
+
 - **K23: the grouping glue around K19 folds into the two kernels it brackets; opt-in, no speed claim yet.**
   - **Why.** experts4bit-qlora P88 censused Qwen3-30B-A3B's B=16 step on an RTX 5090, 8 graph replays per arm. Diffing
     its K19 arm against its GEMV arm leaves 0.685 ms/step of launches that K19's route adds:
