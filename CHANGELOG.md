@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### CI: `conflict-marker-guard` refuses merge-conflict markers in tracked text (tooling only)
+
+- New workflow on push and pull_request: a positive control plants a two-sided conflict and asserts both marker lines are
+  flagged, then `git grep` refuses any tracked line beginning `<<<<<<< ` or `>>>>>>> ` (the lone `=======` is a legitimate
+  setext underline and is not matched; a conflict always carries the other two). `guard-allow` on the line exempts a
+  deliberate quotation. Motivated by two CHANGELOG races on experts4bit-qlora in one hour (e4b#848's rebase staged an
+  unresolved file; hotfix e4b#852). Lands here first, then mirrors to experts4bit-qlora. No package code changes.
+
 ## 0.34.1 — 2026-10-01 — K25 decodes the NF4 codebook with an exact select tree by default (lane K26): bit-identical outputs at 0.373 / 0.383 of the paired lookup's time; lane K27 reads the tree at the served kernel's TF32 precision
 
 **0.34.1.** One behavior change: `nf4_smallm.gemm_nf4_grouped_smallm` (K25) now defaults to `lut="tree"`. Its outputs are bit-identical to the previous default (`pair`) and to `load`, which both stay available. The rest is evidence: lanes K26 and K27 (benches, pre-registrations, results, receipts and register rows). `docs/system-manifest.json`'s `consumer_ci_pin` prose now names v0.34.0, the release whose commit experts4bit-qlora's CI installs; it had still named v0.33.0. The compatibility records are otherwise unchanged.
