@@ -1,5 +1,5 @@
-"""The prefill M-tile height rule: ``max`` (default) keys on the largest group; ``cost`` (GNF4_PREFILL_TILE_RULE=cost)
-minimises tiles x (D + BLOCK_M) over the actual group sizes, so one hot expert no longer puts every group on 128-row tiles.
+"""The prefill M-tile height rule: ``cost`` (the default) minimises tiles x (D + BLOCK_M) over the actual group sizes;
+``max`` (GNF4_PREFILL_TILE_RULE=max) keys on the largest group, so one hot expert no longer puts every group on 128-row tiles.
 The rule is a speed choice: under either rule the launch computes the same product (checked on CUDA)."""
 import pytest
 import torch
@@ -49,9 +49,9 @@ def test_ties_go_to_the_taller_tile_and_d_moves_the_pick():
 
 def test_rule_env(monkeypatch):
     monkeypatch.delenv("GNF4_PREFILL_TILE_RULE", raising=False)
-    assert _prefill_tile_rule() == "max"                          # the default is unchanged
-    monkeypatch.setenv("GNF4_PREFILL_TILE_RULE", "cost")
-    assert _prefill_tile_rule() == "cost"
+    assert _prefill_tile_rule() == "cost"                         # the default since TC1 amendment 14's 5090 A/B
+    monkeypatch.setenv("GNF4_PREFILL_TILE_RULE", "max")
+    assert _prefill_tile_rule() == "max"
     monkeypatch.setenv("GNF4_PREFILL_TILE_RULE", "fastest")
     with pytest.raises(ValueError, match="expected max | cost"):
         _prefill_tile_rule()
