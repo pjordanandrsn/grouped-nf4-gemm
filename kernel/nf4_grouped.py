@@ -349,6 +349,74 @@ def _arena(device) -> _PinnedIndexArena:
     return _ARENAS[key]
 
 
+class _PinnedRing:
+    """NON-CAPTURE pinned staging for ``to_device_i32`` -- OPT-IN (``GNF4_PINNED_RING=1``).
+
+    Outside a capture, ``to_device_i32`` builds a pageable tensor, and a pageable
+    host-to-device copy is ``cudaMemcpyAsync`` + ``cudaStreamSynchronize``: the host
+    waits for EVERYTHING already queued. On the host-bound 3060 Ti e2e step that wait
+    was free (the queue was empty), which is why the capture arena is capture-only
+    (§11). It is not free everywhere: experts4bit-qlora's TC1 profile of the fused
+    training step on an RTX 5090 (Qwen3-30B-A3B, tc1-5090-16) spent 1.27 s of a
+    7.28 s profiled step inside ``cudaStreamSynchronize``, and the per-layer
+    accounting (experts4bit-qlora#945) puts 8 of the 13 syncs per MoE layer pass here
+    (5 forward, 3 backward). This ring removes them without the arena's
+    permanence: slots are REUSED, so it must never serve a capture (the arena does).
+
+    Each call takes the next slot, writes the ints into pinned memory, issues a
+    non-blocking copy and records the slot's event. A slot is rewritten only after
+    its event has completed; if the ring wraps onto a copy still in flight, the host
+    waits for that one copy (counted in ``waits``) rather than corrupting it. Values
+    are identical to the pageable path's, so every downstream kernel sees the same
+    bytes. A call larger than one slot falls back to the pageable build.
+    """
+
+    def __init__(self, device):
+        # Read at construction (one ring per device, built on first use), so a test can
+        # resize it by clearing ``_RINGS`` rather than reloading the module.
+        self.SLOTS = int(os.environ.get("GNF4_PINNED_RING_SLOTS", 256))
+        self.SLOT_INTS = int(os.environ.get("GNF4_PINNED_RING_SLOT_INTS", 1 << 14))
+        self.device = torch.device(device)
+        self.host = torch.empty(self.SLOTS, self.SLOT_INTS, dtype=torch.int32, pin_memory=True)
+        self.events = [torch.cuda.Event() for _ in range(self.SLOTS)]
+        self.recorded = [False] * self.SLOTS
+        self.i = 0
+        self.waits = 0
+        self.staged = 0
+
+    def stage(self, flat, n):
+        """Device int32 tensor holding ``flat[:n]``, or None when ``n`` exceeds a slot."""
+        if n > self.SLOT_INTS:
+            return None
+        s = self.i
+        self.i = (s + 1) % self.SLOTS
+        ev = self.events[s]
+        if self.recorded[s] and not ev.query():
+            self.waits += 1
+            ev.synchronize()
+        buf = self.host[s, :n]
+        buf.copy_(torch.as_tensor(flat, dtype=torch.int32))
+        out = buf.to(self.device, non_blocking=True)
+        ev.record(torch.cuda.current_stream(self.device))
+        self.recorded[s] = True
+        self.staged += 1
+        return out
+
+
+_RINGS: dict = {}
+
+
+def _pinned_ring_enabled() -> bool:
+    return os.environ.get("GNF4_PINNED_RING", "0").strip() == "1"
+
+
+def _ring(device) -> _PinnedRing:
+    key = str(device)
+    if key not in _RINGS:
+        _RINGS[key] = _PinnedRing(device)
+    return _RINGS[key]
+
+
 def to_device_i32(seqs, device):
     """Small host-side integer sequences to device, in one transfer whose KIND
     depends on whether the stream is capturing. Returns one int32 device view
@@ -426,11 +494,18 @@ def to_device_i32(seqs, device):
                 "to at least %d, or reserve() the arena before capturing."
                 % (ar.host.numel(), ar.off, total, 2 * (ar.off + total)))
     if not capturing:
-        # Not capturing (or not CUDA): the PRE-CHANGE transfer. A pageable
-        # build syncs, and on the host-bound paths that reach here the sync is
-        # free — the pipeline it would drain is idle.
-        packed = torch.tensor([int(v) for s in seqs for v in s],
-                              dtype=torch.int32, device=dev)
+        flat = [int(v) for s in seqs for v in s]
+        packed = None
+        if cuda and _pinned_ring_enabled():
+            # OPT-IN (GNF4_PINNED_RING=1): a reused pinned slot, no sync. For steps
+            # whose queue is NOT idle at these points -- see _PinnedRing.
+            packed = _ring(dev).stage(flat, total)
+        if packed is None:
+            # Not capturing (or not CUDA, or the ring is off / the call is larger
+            # than a slot): the PRE-CHANGE transfer. A pageable build syncs, and
+            # on the host-bound paths that reach here the sync is free — the
+            # pipeline it would drain is idle.
+            packed = torch.tensor(flat, dtype=torch.int32, device=dev)
     else:
         host, _ = ar.take(total)
         off = 0

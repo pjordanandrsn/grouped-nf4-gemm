@@ -10,6 +10,29 @@
   deliberate quotation. Motivated by two CHANGELOG races on experts4bit-qlora in one hour (e4b#848's rebase staged an
   unresolved file; hotfix e4b#852). Lands here first, then mirrors to experts4bit-qlora. No package code changes.
 
+### `GNF4_PINNED_RING=1`: index transfers outside a capture without a host sync (opt-in; default unchanged)
+
+- **Why.** Outside a CUDA-graph capture, `to_device_i32` builds a pageable tensor, and that copy is `cudaMemcpyAsync`
+  plus `cudaStreamSynchronize`. On the host-bound 3060 Ti step the wait was free, which is why the capture arena is
+  capture-only. It is not free in experts4bit-qlora's fused training step on an RTX 5090: its profile spent
+  1.27 s of a 7.28 s profiled step in `cudaStreamSynchronize`, and 8 of the 13 syncs per MoE layer pass are these
+  copies (5 forward, 3 backward; experts4bit-qlora#945).
+- **What.** `_PinnedRing`, a small per-device ring of pinned slots (`GNF4_PINNED_RING_SLOTS`, default 256, of
+  `GNF4_PINNED_RING_SLOT_INTS`, default 16 Ki ints). Each call writes its ints into the next slot, copies with
+  `non_blocking=True` and records the slot's event. A slot is rewritten only after its event completes; a wrap onto
+  a copy still in flight waits for that copy and counts it in `waits`. Values are identical to the pageable path's.
+  A call larger than a slot falls back to it. Captures still use the arena, whose slices are permanent.
+- **Measured on an RTX A2000** (Qwen3-30B-A3B layer shape, 512 tokens, with experts4bit-qlora's single-read
+  grouping): syncs per layer go from 6 forward / 3 backward to 1 / 0. Host time returns in 3.9 / 3.6 ms instead of
+  waiting out the 17.5 / 21.5 ms GPU span. The training-step effect is to be measured on a 5090 before any default
+  changes.
+- **Tests** (`kernel/test_pinned_ring.py`, CUDA):
+  - values equal the pageable path's;
+  - no synchronizing call, against a control in which the pageable path is caught;
+  - a 2-slot ring wrapped 12 times behind a 200 M-cycle `torch.cuda._sleep` keeps every value, and the host waits;
+  - an oversize call falls back;
+  - the ring is off by default.
+
 ## 0.34.1 — 2026-10-01 — K25 decodes the NF4 codebook with an exact select tree by default (lane K26): bit-identical outputs at 0.373 / 0.383 of the paired lookup's time; lane K27 reads the tree at the served kernel's TF32 precision
 
 **0.34.1.** One behavior change: `nf4_smallm.gemm_nf4_grouped_smallm` (K25) now defaults to `lut="tree"`. Its outputs are bit-identical to the previous default (`pair`) and to `load`, which both stay available. The rest is evidence: lanes K26 and K27 (benches, pre-registrations, results, receipts and register rows). `docs/system-manifest.json`'s `consumer_ci_pin` prose now names v0.34.0, the release whose commit experts4bit-qlora's CI installs; it had still named v0.33.0. The compatibility records are otherwise unchanged.
