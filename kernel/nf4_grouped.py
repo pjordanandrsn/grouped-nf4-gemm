@@ -1250,6 +1250,46 @@ def _prefill_block_m(max_rows: int) -> int:
     return 128
 
 
+#: Per-tile overhead of the M-tile path in row-equivalents for the ``cost`` rule below. Fitted on an RTX A2000 (sm_86) at
+#: Qwen3-30B-A3B's expert shapes over 42 routed batches (16-4096 tokens x top-8 over 128 experts, three router skews): every
+#: config's time is ``tiles x (a + b x BLOCK_M)`` to R^2 0.998, with ``a / b`` = 118 rows (gate_up) and 109 (down). The
+#: rule's regret is flat for D in 64..128 there (geomean 1.021-1.027); 96 sits in the middle. ``GNF4_PREFILL_TILE_D``
+#: overrides it.
+_TILE_D_DEFAULT = 96.0
+#: M-tile heights the prefill path actually launched, after ``prefill_fit`` (ints only -- consumers cast). Lets a training
+#: census say which rule served a step: under ``cost`` at training-sized batches the 128 count stops dominating.
+PREFILL_BM_STATS = {16: 0, 32: 0, 64: 0, 128: 0}
+
+
+def _prefill_tile_rule() -> str:
+    """``max`` (the default): the M-tile height keyed on the LARGEST group, :func:`_prefill_block_m`. ``cost``
+    (``GNF4_PREFILL_TILE_RULE=cost``, opt-in): the height that minimises ``tiles x (D + BLOCK_M)`` over the actual
+    group sizes. ``max`` lets one hot expert put every group on 128-row tiles -- at training-sized batches (about 24
+    rows per expert) that measured 1.5x the best height on an RTX A2000, where ``cost`` came within 1.19x worst-case."""
+    v = os.environ.get("GNF4_PREFILL_TILE_RULE", "max").strip().lower()
+    if v not in ("max", "cost"):
+        raise ValueError(f"GNF4_PREFILL_TILE_RULE={v!r}: expected max | cost")
+    return v
+
+
+def _prefill_block_m_cost(sizes, d: float | None = None) -> int:
+    """The M-tile height in (16, 32, 64, 128) minimising ``sum(ceil(rows / BLOCK_M)) x (D + BLOCK_M)``: each tile pays a
+    fixed decode of its expert's weight slice (``D`` rows' worth) plus its rows' MMA, padding included. Ties go to the
+    taller tile. One pass over ``sizes`` (host ints), about 13 us for 128 groups."""
+    if d is None:
+        v = os.environ.get("GNF4_PREFILL_TILE_D")
+        d = float(v) if v else _TILE_D_DEFAULT
+    t16 = t32 = t64 = t128 = 0
+    for r in sizes:
+        r = int(r)
+        t16 += (r + 15) >> 4
+        t32 += (r + 31) >> 5
+        t64 += (r + 63) >> 6
+        t128 += (r + 127) >> 7
+    cands = ((16, t16), (32, t32), (64, t64), (128, t128))
+    return min(cands, key=lambda c: (c[1] * (d + c[0]), -c[0]))[0]
+
+
 def gemm_4bit_grouped(
     a_cat,
     B,
@@ -1425,7 +1465,8 @@ def gemm_4bit_grouped(
         out.copy_(ws.sum(dim=0))  # fp32 partial reduce, single bf16 downcast
         return out
     if block_m is None:
-        block_m = _prefill_block_m(max(sizes))
+        block_m = (_prefill_block_m_cost(sizes) if _prefill_tile_rule() == "cost"
+                   else _prefill_block_m(max(sizes)))
     if prefill_variant is None:
         prefill_variant = 1 if HAS_TL_GATHER else 0
     if prefill_config is not None:
@@ -1482,6 +1523,7 @@ def gemm_4bit_grouped(
     if prefill_config is None:
         block_m, stages = prefill_fit(block_m, block_n, block_k, stages,
                                       prefill_variant, _device_shared_limit(dev))
+    PREFILL_BM_STATS[block_m] = PREFILL_BM_STATS.get(block_m, 0) + 1
     t_row0, t_rows, t_group = build_group_tiles(sizes, block_m, dev)
     grid = (t_row0.numel(), triton.cdiv(N, block_n))
     _gemm_nf4_grouped[grid](
