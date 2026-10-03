@@ -33,6 +33,18 @@
   - an oversize call falls back;
   - the ring is off by default.
 
+### The pinned index ring is the default outside capture (`GNF4_PINNED_RING=0` turns it off)
+
+- **Why.** experts4bit-qlora's TC1 amendment 10 registered a 5090 A/B with a decision rule. If e4b's single-read grouping plus
+  this ring stepped the fused training step below 0.95 of the legacy path on both arms, the ring would become the default.
+  The box (`tc1-5090-38`) measured **0.866** on the shipped arm (cross-draw 0.843 – 0.889) and **0.847** on the matched arm
+  (0.840 – 0.854). Every pair was stable, held-out loss and peak VRAM were unchanged, and each new-path arm's ring staged
+  53,680 transfers without waiting once (experts4bit-qlora#945, `e4b.train.host-syncs.qwen3.5090.2026-10-03`).
+- **What.** `_pinned_ring_enabled()` is now on unless `GNF4_PINNED_RING=0`. Values are identical to the pageable build, and
+  captures still use the arena.
+- **Not measured here.** Serving's eager decode also goes through `to_device_i32`. A fully host-bound path pays the ring's few
+  microseconds of bookkeeping per call where the sync was free; `GNF4_PINNED_RING=0` restores the old build for such a path.
+
 ## 0.34.1 — 2026-10-01 — K25 decodes the NF4 codebook with an exact select tree by default (lane K26): bit-identical outputs at 0.373 / 0.383 of the paired lookup's time; lane K27 reads the tree at the served kernel's TF32 precision
 
 **0.34.1.** One behavior change: `nf4_smallm.gemm_nf4_grouped_smallm` (K25) now defaults to `lut="tree"`. Its outputs are bit-identical to the previous default (`pair`) and to `load`, which both stay available. The rest is evidence: lanes K26 and K27 (benches, pre-registrations, results, receipts and register rows). `docs/system-manifest.json`'s `consumer_ci_pin` prose now names v0.34.0, the release whose commit experts4bit-qlora's CI installs; it had still named v0.33.0. The compatibility records are otherwise unchanged.

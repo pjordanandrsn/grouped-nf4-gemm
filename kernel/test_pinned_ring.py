@@ -88,7 +88,9 @@ def test_a_call_larger_than_a_slot_falls_back_to_the_pageable_build(monkeypatch)
     assert g._ring(torch.device("cuda")).staged == 0
 
 
-def test_off_by_default(monkeypatch):
+def test_on_by_default_and_zero_turns_it_off(monkeypatch):
     monkeypatch.delenv("GNF4_PINNED_RING", raising=False)
     import nf4_grouped
+    assert nf4_grouped._pinned_ring_enabled() is True
+    monkeypatch.setenv("GNF4_PINNED_RING", "0")
     assert nf4_grouped._pinned_ring_enabled() is False
