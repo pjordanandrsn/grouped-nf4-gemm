@@ -45,6 +45,35 @@
 - **Not measured here.** Serving's eager decode also goes through `to_device_i32`. A fully host-bound path pays the ring's few
   microseconds of bookkeeping per call where the sync was free; `GNF4_PINNED_RING=0` restores the old build for such a path.
 
+### The padded LoRA delta does less work for the same bytes (`NF4_QLORA_LEAN_DELTA=0` restores the previous body)
+
+- **Why.** experts4bit-qlora's TC1 amendment 12 profiled the fused training step on an RTX 5090 after #945's sync fix
+  (`tc1-5090-41`, P19 HELD). The shipped arm spent 94 ms of its 2.05 s of device time per step in one kernel: a
+  scalar-times-tensor multiply, 1,152 times per step. That is `lora_delta_grouped`'s `scaling *` over the padded
+  `[G, widest, N]` block, in the forward, the checkpoint recompute and the backward. At the field recipe (r16, alpha 16) the
+  scaling is 1.0. The matched arm read 0.740 device-busy, under amendment 12's 0.75 line, so its decision rule names
+  launch volume in the LoRA path as the next work.
+- **What.** Four changes to the padded path, each exact:
+  - one flat row index (`g * widest + slot`) instead of the `(group, slot)` pair. Advanced indexing with two index
+    tensors sorted its indices in the backward;
+  - the gather back to row order goes through `_GatherRows`, whose backward is a plain `index_copy_` scatter. Autograd's
+    own backward for `index_select` is an atomic `index_add_`, slow in bf16 on sm_86, and these rows are unique;
+  - the gathered rows are the output. `a_cat` has exactly `total` rows on this path, so the zero fill and slice copy
+    were redundant;
+  - `scaling` multiplies the gathered rows, not the padded block, and is skipped at exactly 1 (`_scaled`; a tensor
+    `scaling` is always applied). The `loop` and `grouped_mm` paths skip it at 1 too.
+- **Measured on an RTX A2000** (a 2-layer Qwen3-MoE at Qwen3-30B-A3B's layer shape, r16 alpha 16, e4b's fused training step,
+  ABBA order). Launches per step 1,424 → 1,344, device time 228.5 → 216.3 ms, wall 241.0 → 227.1 ms. The 5090 effect is
+  to be measured by experts4bit-qlora's TC1 before it is quoted.
+- **Tests** (`kernel/test_lora_delta_lean.py`, CPU and CUDA):
+  - forward and all three gradients are `torch.equal` to the previous body, kept in the test verbatim. The grid covers
+    4 group layouts (including empty groups), scalings 1, 2, 0.5 and 1.7, and bf16/bf16, bf16/fp32 and fp32/fp32
+    activation and adapter dtypes;
+  - device-tensor expert ids give the same bytes;
+  - the skip fires only at exactly 1;
+  - `_GatherRows`' backward equals `index_select`'s;
+  - CUDA launches per forward and backward drop, and `NF4_QLORA_LEAN_DELTA=0` reaches the old body.
+
 ## 0.34.1 — 2026-10-01 — K25 decodes the NF4 codebook with an exact select tree by default (lane K26): bit-identical outputs at 0.373 / 0.383 of the paired lookup's time; lane K27 reads the tree at the served kernel's TF32 precision
 
 **0.34.1.** One behavior change: `nf4_smallm.gemm_nf4_grouped_smallm` (K25) now defaults to `lut="tree"`. Its outputs are bit-identical to the previous default (`pair`) and to `load`, which both stay available. The rest is evidence: lanes K26 and K27 (benches, pre-registrations, results, receipts and register rows). `docs/system-manifest.json`'s `consumer_ci_pin` prose now names v0.34.0, the release whose commit experts4bit-qlora's CI installs; it had still named v0.33.0. The compatibility records are otherwise unchanged.
