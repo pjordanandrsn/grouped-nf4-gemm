@@ -13,7 +13,7 @@ All three came from experts4bit-qlora's training head-to-head (TC1, experts4bit-
 |---|---|---|
 | the pinned index ring outside capture, with e4b's single-read grouping | 0.866, 0.847 | `e4b.train.host-syncs.qwen3.5090.2026-10-03` |
 | the lean padded LoRA delta | 0.939, 0.911 | `e4b.train.lora-delta-lean.qwen3.5090.2026-10-03` |
-| the prefill M-tile height from the group sizes | 0.924, 0.968 | (TC1 amendment 14) |
+| the prefill M-tile height from the group sizes | 0.924, 0.968 | `e4b.train.prefill-tile-rule.qwen3.5090.2026-10-03` |
 
 - Held-out loss was unchanged in every A/B.
 - One untested effect: serving's eager decode also goes through `to_device_i32`, and the ring was not measured there. `GNF4_PINNED_RING=0` restores the old build for a fully host-bound path.
