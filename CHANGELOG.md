@@ -1,6 +1,24 @@
 # Changelog
 
-## Unreleased
+## 0.35.0 — 2026-10-03 — three defaults for experts4bit-qlora's fused training step, all value-identical: the pinned index ring outside capture, the lean padded LoRA delta, and the prefill M-tile height from the group sizes
+
+**0.35.0.** Three defaults change, and no output changes. Every result is bit-identical to 0.34.1's, and each previous setting is one environment variable away:
+- `GNF4_PINNED_RING=0`;
+- `NF4_QLORA_LEAN_DELTA=0`;
+- `GNF4_PREFILL_TILE_RULE=max`.
+
+All three came from experts4bit-qlora's training head-to-head (TC1, experts4bit-qlora#835 / #945). Each was measured on an RTX 5090 in e4b's fused training step on Qwen3-30B-A3B before its default moved:
+
+| change | new / previous step time (shipped, matched) | register |
+|---|---|---|
+| the pinned index ring outside capture, with e4b's single-read grouping | 0.866, 0.847 | `e4b.train.host-syncs.qwen3.5090.2026-10-03` |
+| the lean padded LoRA delta | 0.939, 0.911 | `e4b.train.lora-delta-lean.qwen3.5090.2026-10-03` |
+| the prefill M-tile height from the group sizes | 0.924, 0.968 | (TC1 amendment 14) |
+
+- Held-out loss was unchanged in every A/B.
+- One untested effect: serving's eager decode also goes through `to_device_i32`, and the ring was not measured there. `GNF4_PINNED_RING=0` restores the old build for a fully host-bound path.
+- **Also in this release (tooling only):** a CI guard against merge-conflict markers.
+- `docs/system-manifest.json` is unchanged. Its `consumer_ci_pin` prose still names v0.34.0. experts4bit-qlora's CI moves its pin to this release's commit in its next release, and the prose follows in the release after that, kernel first.
 
 ### The prefill M-tile height comes from the group sizes by default (`GNF4_PREFILL_TILE_RULE=max` restores the largest-group rule)
 
