@@ -350,7 +350,8 @@ def _arena(device) -> _PinnedIndexArena:
 
 
 class _PinnedRing:
-    """NON-CAPTURE pinned staging for ``to_device_i32`` -- OPT-IN (``GNF4_PINNED_RING=1``).
+    """NON-CAPTURE pinned staging for ``to_device_i32`` -- the DEFAULT since experts4bit-qlora#945's 5090 A/B
+    (``GNF4_PINNED_RING=0`` restores the pageable build).
 
     Outside a capture, ``to_device_i32`` builds a pageable tensor, and a pageable
     host-to-device copy is ``cudaMemcpyAsync`` + ``cudaStreamSynchronize``: the host
@@ -407,7 +408,11 @@ _RINGS: dict = {}
 
 
 def _pinned_ring_enabled() -> bool:
-    return os.environ.get("GNF4_PINNED_RING", "0").strip() == "1"
+    """On unless ``GNF4_PINNED_RING=0``. Measured (experts4bit-qlora TC1 amendment 10, tc1-5090-38, one RTX 5090): with
+    e4b's single-read grouping, the ring took a fused MoE training layer pass from 13 host syncs to 1 and the training
+    step to 0.866 (shipped arm) / 0.847 (matched arm) of the pageable path, values identical; that registered decision
+    rule made it the default. The opt-out is for A/B work and for a host-bound path that measures otherwise."""
+    return os.environ.get("GNF4_PINNED_RING", "1").strip() != "0"
 
 
 def _ring(device) -> _PinnedRing:
@@ -497,8 +502,8 @@ def to_device_i32(seqs, device):
         flat = [int(v) for s in seqs for v in s]
         packed = None
         if cuda and _pinned_ring_enabled():
-            # OPT-IN (GNF4_PINNED_RING=1): a reused pinned slot, no sync. For steps
-            # whose queue is NOT idle at these points -- see _PinnedRing.
+            # The default (GNF4_PINNED_RING=0 turns it off): a reused pinned slot, no
+            # sync -- see _PinnedRing and _pinned_ring_enabled for the measurement.
             packed = _ring(dev).stage(flat, total)
         if packed is None:
             # Not capturing (or not CUDA, or the ring is off / the call is larger
