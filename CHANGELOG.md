@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+### `GNF4_PREFILL_TILE_RULE=cost`: the prefill M-tile height from the group sizes, not the largest group (opt-in; default unchanged)
+
+- **Why.** `gemm_4bit_grouped`'s M-tile path uses one tile height for every group in a launch, keyed on `max(sizes)`. One hot
+  expert therefore puts every group on 128-row tiles. The real router does this at training-sized batches: on a 4-layer slice of
+  Qwen3-30B-A3B trained on experts4bit-qlora's TC1 alpaca rows, the median group was 35 rows, while the largest group in a call
+  had a median of 155. On experts4bit-qlora's 5090 profile (`tc1-5090-41`), this kernel is 811 ms of a 2.05 s step's device time.
+- **What.** `_prefill_block_m_cost(sizes)` picks the height in {16, 32, 64, 128} that minimises
+  `sum(ceil(rows / BLOCK_M)) x (D + BLOCK_M)`, with ties going to the taller tile. Each tile pays a fixed decode of its expert's
+  weight slice (D rows' worth) plus its rows' MMA. `D` defaults to 96 (`GNF4_PREFILL_TILE_D`), and one pass over the sizes costs
+  about 13 µs. `PREFILL_BM_STATS` counts the heights actually launched. The default rule stays `max`.
+- **Measured on an RTX A2000** (`bench/tile-rule/`):
+  - 42 synthetic batches fit `tiles x (a + b x BLOCK_M)` to R² 0.998 (D ≈ 110–118). Slowdown against the best height, worst and
+    geometric mean: `max` 1.656 and 1.179, `cost` 1.175 and 1.024.
+  - The real-router replay takes 711.5 ms under `max`, 545.5 ms under `cost` and 538.5 ms at best.
+  - The 4-layer training step, ABBA order, takes 1.619 / 1.589 s under `max` and 1.484 / 1.493 s under `cost`.
+  - Outputs are bit-identical across rules.
+- **Next.** experts4bit-qlora's TC1 measures the rule on an RTX 5090 before the default changes.
+- **Tests** (`kernel/test_prefill_tile_rule.py`):
+  - the rule is the argmin it claims, against a brute force over 7 size lists × 5 values of D;
+  - a hot expert no longer sets every tile, and large groups keep the tall tile;
+  - ties go to the taller tile, and D moves the pick;
+  - the environment parsing works;
+  - on CUDA both rules compute the same bytes, and the counter records the launched height.
+
 ### CI: `conflict-marker-guard` refuses merge-conflict markers in tracked text (tooling only)
 
 - New workflow on push and pull_request: a positive control plants a two-sided conflict and asserts both marker lines are
