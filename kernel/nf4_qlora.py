@@ -63,6 +63,14 @@ def _pad_bytes_limit() -> int:
     return int(float(v)) if v else _PAD_BYTES_LIMIT
 
 
+def _lean_delta_enabled() -> bool:
+    """The padded delta's trimmed body is the default; ``NF4_QLORA_LEAN_DELTA=0``
+    restores the previous body -- bit-identical output and gradients -- so the
+    two can be timed against each other on one box (experts4bit-qlora#945)."""
+    import os
+    return os.environ.get("NF4_QLORA_LEAN_DELTA", "1").strip() != "0"
+
+
 class FusedGroupedNf4(torch.autograd.Function):
     """Grouped NF4 forward through the fused kernel; recompute-decode backward.
 
@@ -212,6 +220,39 @@ def gemm_4bit_grouped_train(a_cat, packed, absmax, sizes, expert_ids,
                                  weights_fn, dgrad_kernel)
 
 
+class _GatherRows(torch.autograd.Function):
+    """``src.index_select(0, idx)`` for UNIQUE ``idx``, whose backward is a plain
+    scatter. Autograd's own backward for ``index_select`` is ``index_add_``, which
+    must assume repeats and so adds atomically -- slow in bf16 on sm_86: 4.9 ms
+    a step against 1.9 ms for this scatter in a 2-layer Qwen3-MoE profile on an
+    RTX A2000. With every row written at most once a copy is the same bytes:
+    ``0 + g == g``."""
+
+    @staticmethod
+    def forward(ctx, src, idx):
+        ctx.save_for_backward(idx)
+        ctx.rows = src.shape[0]
+        return src.index_select(0, idx)
+
+    @staticmethod
+    def backward(ctx, g):
+        (idx,) = ctx.saved_tensors
+        gs = g.new_zeros((ctx.rows,) + tuple(g.shape[1:]))
+        gs.index_copy_(0, idx, g)
+        return gs, None
+
+
+def _scaled(d, scaling):
+    """``scaling * d``, skipped when ``scaling`` is exactly 1: ``1.0 * x == x`` for
+    every float, so the skip is bit-exact, and at alpha == r (the field recipe)
+    the multiply was a full elementwise pass -- forward, recompute and backward --
+    over every LoRA delta for nothing. A tensor ``scaling`` is always applied
+    (comparing it would read the device)."""
+    if isinstance(scaling, (int, float)) and scaling == 1:
+        return d
+    return scaling * d
+
+
 def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
     """Per-expert low-rank delta over a group-sorted activation block.
 
@@ -299,19 +340,38 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
     # is a device-to-host sync and is illegal inside a CUDA graph capture. The
     # value is already known on the host (`sum(rows)`), so handing it over costs
     # nothing and removes the sync.
-    grp = torch.repeat_interleave(torch.arange(len(rows), device=dev), sz,
-                                  output_size=total)
-    slot = torch.arange(total, device=dev) - (torch.cumsum(sz, 0) - sz)[grp]
+    if not _lean_delta_enabled():           # the previous body, kept for the A/B
+        grp = torch.repeat_interleave(torch.arange(len(rows), device=dev), sz,
+                                      output_size=total)
+        slot = torch.arange(total, device=dev) - (torch.cumsum(sz, 0) - sz)[grp]
+        A, B = lora_A[eid], lora_B[eid]
+        x = a_cat.new_zeros(len(rows), widest, a_cat.shape[1]).to(A.dtype)
+        x[grp, slot] = a_cat.to(A.dtype)
+        d = scaling * torch.bmm(torch.bmm(x, A.transpose(1, 2)), B.transpose(1, 2))
+        out = torch.zeros(a_cat.shape[0], B.shape[1], dtype=d.dtype, device=dev)
+        out[:total] = d[grp, slot]
+        return out
+
+    # One FLAT index (row -> padded row g * widest + slot) rather than the
+    # (group, slot) pair: 1-D index_copy_ / index_select cost fewer launches than
+    # two-index advanced indexing, whose backward sorted its indices first.
+    G = len(rows)
+    shift = torch.repeat_interleave(
+        torch.arange(G, device=dev) * widest - (torch.cumsum(sz, 0) - sz), sz,
+        output_size=total)
+    flat = torch.arange(total, device=dev) + shift
 
     A, B = lora_A[eid], lora_B[eid]                    # [G, r, K], [G, N, r]
-    x = a_cat.new_zeros(len(rows), widest, a_cat.shape[1]).to(A.dtype)
-    x[grp, slot] = a_cat.to(A.dtype)
-    d = scaling * torch.bmm(torch.bmm(x, A.transpose(1, 2)), B.transpose(1, 2))
-    # Scatter back into the caller's row order. Zero-size groups were dropped
-    # above, so `grp`/`slot` address exactly the real rows and nothing else.
-    out = torch.zeros(a_cat.shape[0], B.shape[1], dtype=d.dtype, device=dev)
-    out[:total] = d[grp, slot]
-    return out
+    x = torch.zeros(G * widest, a_cat.shape[1], dtype=A.dtype, device=dev)
+    x.index_copy_(0, flat, a_cat.to(A.dtype))
+    d = torch.bmm(torch.bmm(x.view(G, widest, -1), A.transpose(1, 2)),
+                  B.transpose(1, 2))
+    # Back into the caller's row order. Zero-size groups were dropped above, so
+    # `flat` addresses exactly the real rows -- and `a_cat` has exactly `total`
+    # of them (the copy above refuses anything else), so the gather IS the
+    # output: no zero fill, no slice copy. `scaling` lands on the gathered
+    # rows, not the padded block, and not at all when it is 1 -- both exact.
+    return _scaled(_GatherRows.apply(d.view(G * widest, -1), flat), scaling)
 
 
 def _lora_delta_grouped_mm(a_cat, lora_A, lora_B, rows, nz, expert_ids, scaling=1.0):
@@ -337,7 +397,7 @@ def _lora_delta_grouped_mm(a_cat, lora_A, lora_B, rows, nz, expert_ids, scaling=
         d = torch._grouped_mm(h.to(torch.bfloat16).contiguous(), B.transpose(1, 2).contiguous(), offs=offs)   # [total, N]
     except (RuntimeError, NotImplementedError) as e:
         raise RuntimeError(f"NF4_QLORA_LORA_PATH=grouped_mm: torch._grouped_mm refused on this device/shape: {str(e)[:200]}") from e
-    d = (scaling * d.to(lora_A.dtype))
+    d = _scaled(d.to(lora_A.dtype), scaling)
     out = torch.zeros(a_cat.shape[0], B.shape[1], dtype=d.dtype, device=dev)
     out[:total] = d
     return out
@@ -360,7 +420,7 @@ def _lora_delta_grouped_loop(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1
             continue
         x = a_cat[row:row + n]
         A, B = lora_A[e], lora_B[e]
-        d = scaling * ((x.to(A.dtype) @ A.T) @ B.T)   # [n, r] -> [n, N]
+        d = _scaled((x.to(A.dtype) @ A.T) @ B.T, scaling)   # [n, r] -> [n, N]
         if out is None:
             out = torch.zeros(a_cat.shape[0], B.shape[0], dtype=d.dtype,
                               device=a_cat.device)
