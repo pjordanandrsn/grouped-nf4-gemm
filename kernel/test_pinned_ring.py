@@ -9,7 +9,7 @@ no synchronizing call, and slot reuse that can never overwrite a copy still in f
 import pytest
 import torch
 
-pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="the ring stages to a CUDA device")
+cuda = pytest.mark.skipif(not torch.cuda.is_available(), reason="the ring stages to a CUDA device")
 
 
 @pytest.fixture(autouse=True)
@@ -30,6 +30,7 @@ def _fresh(monkeypatch, on=True, slots=None, slot_ints=None):
     return nf4_grouped
 
 
+@cuda
 def test_ring_values_equal_the_pageable_path(monkeypatch):
     seqs = ([3, 1, 4, 1, 5], [9, 2, 6], list(range(40)))
     g = _fresh(monkeypatch, on=False)
@@ -42,6 +43,7 @@ def test_ring_values_equal_the_pageable_path(monkeypatch):
     assert g._ring(torch.device("cuda")).staged == 1
 
 
+@cuda
 def test_the_ring_does_not_synchronize_and_the_instrument_would_see_it(monkeypatch):
     seqs = ([7, 8, 9], [1, 2])
     g = _fresh(monkeypatch, on=False)
@@ -65,6 +67,7 @@ def test_the_ring_does_not_synchronize_and_the_instrument_would_see_it(monkeypat
     assert [t.cpu().tolist() for t in out] == [[7, 8, 9], [1, 2]]
 
 
+@cuda
 def test_slot_reuse_never_overwrites_a_copy_in_flight(monkeypatch):
     g = _fresh(monkeypatch, on=True, slots=2)
     torch.cuda.synchronize()
@@ -76,6 +79,7 @@ def test_slot_reuse_never_overwrites_a_copy_in_flight(monkeypatch):
     assert ring.staged == 12 and ring.waits >= 1, (ring.staged, ring.waits)   # wrapped onto in-flight slots and waited
 
 
+@cuda
 def test_a_call_larger_than_a_slot_falls_back_to_the_pageable_build(monkeypatch):
     g = _fresh(monkeypatch, on=True, slot_ints=8)
     out = g.to_device_i32((list(range(20)),), "cuda")[0]
