@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### The prefill M-tile height comes from the group sizes by default (`GNF4_PREFILL_TILE_RULE=max` restores the largest-group rule)
+
+- **Why.** experts4bit-qlora's TC1 amendment 14 registered a 5090 A/B of the `cost` rule (#441) with a decision rule. If both arms
+  stepped at or below 0.99 of `max`, `cost` would become the default. The box (`tc1-5090-43`, Ryzen 9 7950X) measured:
+
+  | arm | `cost` / `max` | cross-draw range |
+  |---|---|---|
+  | shipped | **0.924** | 0.918 – 0.930 |
+  | matched | **0.968** | 0.964 – 0.971 |
+
+  Every pair was stable and held-out loss unchanged. `max` launched 128-row tiles on about 92 % of calls; `cost` launched mostly 64
+  (64 %) and 32 (24 %).
+- **What.** `_prefill_tile_rule()` now defaults to `cost`. Outputs are identical under either rule.
+- **Inference prefill.** On the RTX A2000's 42-batch sweep (16–4096 tokens, three router skews), `cost` / `max` ran 0.604–1.019 per
+  batch, median 0.956. It was slower than `max` only on a 64-token batch, by 1.9 %. Large groups still take the 128-row tile.
+
 ### `GNF4_PREFILL_TILE_RULE=cost`: the prefill M-tile height from the group sizes, not the largest group (opt-in; default unchanged)
 
 - **Why.** `gemm_4bit_grouped`'s M-tile path uses one tile height for every group in a launch, keyed on `max(sizes)`. One hot

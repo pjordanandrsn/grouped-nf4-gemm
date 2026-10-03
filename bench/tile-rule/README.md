@@ -18,4 +18,6 @@ largest group (`_prefill_block_m(max(sizes))`). The opt-in `GNF4_PREFILL_TILE_RU
   - Training step, ABBA order: `max` 1.619 / 1.589 s, `cost` 1.484 / 1.493 s.
   - The outputs are bit-identical across rules (`kernel/test_prefill_tile_rule.py`).
 
-The default stays `max` until experts4bit-qlora's TC1 measures the rule on an RTX 5090. The fit above is sm_86's.
+**On an RTX 5090** (experts4bit-qlora TC1 amendment 14, `tc1-5090-43`, Ryzen 9 7950X): `cost` / `max` = **0.924** [0.918, 0.930] on the shipped arm
+and **0.968** [0.964, 0.971] on the matched arm, held-out unchanged; `max` launched 128-row tiles on ~92 % of calls, `cost` mostly 64 (64 %) and 32
+(24 %). By the amendment's decision rule `cost` is the default; `GNF4_PREFILL_TILE_RULE=max` restores the previous rule. The fit above is sm_86's.

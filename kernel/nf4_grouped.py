@@ -1262,11 +1262,13 @@ PREFILL_BM_STATS = {16: 0, 32: 0, 64: 0, 128: 0}
 
 
 def _prefill_tile_rule() -> str:
-    """``max`` (the default): the M-tile height keyed on the LARGEST group, :func:`_prefill_block_m`. ``cost``
-    (``GNF4_PREFILL_TILE_RULE=cost``, opt-in): the height that minimises ``tiles x (D + BLOCK_M)`` over the actual
-    group sizes. ``max`` lets one hot expert put every group on 128-row tiles -- at training-sized batches (about 24
-    rows per expert) that measured 1.5x the best height on an RTX A2000, where ``cost`` came within 1.19x worst-case."""
-    v = os.environ.get("GNF4_PREFILL_TILE_RULE", "max").strip().lower()
+    """``cost`` (the default since experts4bit-qlora's TC1 amendment 14): the height that minimises
+    ``tiles x (D + BLOCK_M)`` over the actual group sizes. ``max`` (``GNF4_PREFILL_TILE_RULE=max``, the previous default):
+    the M-tile height keyed on the LARGEST group, :func:`_prefill_block_m`, which lets one hot expert put every group on
+    128-row tiles. Measured on an RTX 5090 at Qwen3-30B-A3B's field recipe (``tc1-5090-43``): ``cost`` steps the fused
+    training step at 0.924 (shipped) / 0.968 (matched) of ``max``, outputs identical. On an RTX A2000's 42-batch sweep
+    ``cost`` / ``max`` ran 0.604-1.019 per batch, median 0.956."""
+    v = os.environ.get("GNF4_PREFILL_TILE_RULE", "cost").strip().lower()
     if v not in ("max", "cost"):
         raise ValueError(f"GNF4_PREFILL_TILE_RULE={v!r}: expected max | cost")
     return v
