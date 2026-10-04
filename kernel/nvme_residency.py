@@ -1283,7 +1283,37 @@ def segment_tensor(tier: "ColdTier", index: dict, layer: int, experts,
 #: 1.9 is the conservative end of the measured band, so this UNDER-promises
 #: capacity. Measured on cgroup v1 + driver 575.64.05 + torch 2.8.0+cu128; treat
 #: it as a starting point on other stacks, not a constant of nature.
+#:
+#: **Superseded as the default, gnf4#71 (2026-10-04).** The "premium" is
+#: PyTorch's caching host allocator ROUNDING EACH PINNED REQUEST UP TO A POWER OF
+#: TWO, not a per-byte cost. On the same stack, read as the container cgroup's
+#: own charge: pinned 340 MB -> 514.5 MB charged, 700 -> 1028.7, 1359 -> 2057.1,
+#: 2100 -> 4113.8, 3000 -> 4113.8. Power-of-two requests and every pageable size
+#: cost ~1.00 per byte (pinned 1.0043, pageable 1.002, agreeing with #71's cap
+#: ladder, 1.004). The ratio therefore depends on the size, from 1.0 to 2.0. A
+#: flat 1.9 wastes up to half a budget, and just ABOVE a power of two (2100 MB:
+#: 1.96x) it over-promises. :func:`capacity_for_bytes` now models the rounding
+#: exactly (:func:`pinned_request_cost`). This constant remains for callers that
+#: pass it as ``factor=``. It is also what the 2026-08-13 ladder saw: 128 rows
+#: (340 MB) and 512 rows (1359 MB) round to 512 and 2048 MB, plus the process
+#: baseline.
 PINNED_ROW_FACTOR = 1.9
+
+#: :func:`nvme_reader.alloc_landing` over-allocates a pinned request by one
+#: alignment unit (its ``align`` default) so it can hand back a page-aligned view.
+PINNED_LANDING_PAD = 4096
+
+
+def pinned_request_cost(n_bytes: int) -> int:
+    """Host memory a pinned landing of ``n_bytes`` really costs (gnf4#71).
+
+    :func:`nvme_reader.alloc_landing` asks PyTorch's caching host allocator for
+    ``n_bytes + PINNED_LANDING_PAD``, and that allocator rounds every request up to
+    a power of two. So a tier sized to exactly 2 GiB pays 4 GiB: the pad tips it
+    over. Measured on torch 2.8.0+cu128 (the receipts are in ``kernel/receipts-71/``).
+    """
+    req = int(n_bytes) + PINNED_LANDING_PAD
+    return 1 << (req - 1).bit_length()
 
 
 def capacity_for_bytes(usable_bytes: int, row_stride: int, *,
@@ -1294,20 +1324,30 @@ def capacity_for_bytes(usable_bytes: int, row_stride: int, *,
     Use MEASURED free RAM, never a declared figure: a pod rented with 4 GPUs
     still exposed 503 GB, identical to a 1-GPU pod (2026-07-30).
 
-    ``pinned`` defaults to True because :class:`ColdTier` does. A pinned row
-    costs about :data:`PINNED_ROW_FACTOR` × ``row_stride`` of real host memory,
-    so dividing a budget by the stride alone over-promises capacity by that
-    factor and hands back a ``hot_rows`` that OOMs partway through the first
-    step. Pass ``pinned=False`` for the mmap tier, where a row costs its stride.
+    ``pinned`` defaults to True because :class:`ColdTier` does. A pinned tier is
+    ONE request that PyTorch's caching host allocator rounds up to a power of two
+    (:func:`pinned_request_cost`, gnf4#71). So the answer is the largest
+    ``hot_rows`` whose rounded request still fits: exact, never over the budget,
+    and without the flat 1.9 that wasted up to half of it and could still overshoot
+    just above a power of two. Pass ``pinned=False`` for the mmap tier, where a row
+    costs its stride.
 
     Args:
         usable_bytes: measured free host RAM to spend on the tier.
         row_stride: bytes per row, from the arena index.
         pinned: whether the tier will page-lock its buffer.
-        factor: override the multiplier; measure your own with a cap ladder
-            rather than guessing, and see :data:`PINNED_ROW_FACTOR` for how.
+        factor: a flat per-row multiplier instead of the model (the previous
+            behaviour: ``usable // (stride * factor)``), for a stack measured to
+            differ. ``factor=PINNED_ROW_FACTOR`` reproduces the old default.
     """
-    f = factor if factor is not None else (PINNED_ROW_FACTOR if pinned else 1.0)
-    if f <= 0:
-        raise ValueError("factor must be > 0")
-    return max(1, int(int(usable_bytes) // (int(row_stride) * f)))
+    if factor is not None:
+        if factor <= 0:
+            raise ValueError("factor must be > 0")
+        return max(1, int(int(usable_bytes) // (int(row_stride) * factor)))
+    if not pinned:
+        return max(1, int(usable_bytes) // int(row_stride))
+    usable = int(usable_bytes)
+    if usable <= 0:
+        return 1
+    cap = 1 << (usable.bit_length() - 1)          # the largest power of two the budget holds
+    return max(1, (cap - PINNED_LANDING_PAD) // int(row_stride))

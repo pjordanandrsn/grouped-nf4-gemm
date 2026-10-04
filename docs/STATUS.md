@@ -372,8 +372,12 @@ was wrong.
 - **#60** — arena staging blocks ~30% of a training step; the next
   layer's rows are prefetchable (guarded by a CUDA event, with a
   `hot_rows` floor of two layers' experts).
-- **#71** — `PINNED_ROW_FACTOR` is ~2× conservative on cgroup v1; v2
-  needs a box the rented pods cannot give. (#60 and #71 are `gnf4.open.issues`.)
+- **#71** — `PINNED_ROW_FACTOR`'s 1.9 was PyTorch's caching host allocator
+  rounding each pinned request up to a power of two, not a per-byte premium.
+  `capacity_for_bytes` now models that exactly (`pinned_request_cost`,
+  `kernel/receipts-71/`). On cgroup v1 a pinned power-of-two byte costs 1.004. The
+  cgroup v2 per-byte charge is being read in lane K29 before the next release.
+  (#60 and #71 are `gnf4.open.issues`.)
 - **`docs/context-budgets.md` is rung-one only** (A2000-measured
   KB/token); full-depth real-weight confirmation is pending and the K3
   row is a declared gap. Its own text forbids promoting pending rows to

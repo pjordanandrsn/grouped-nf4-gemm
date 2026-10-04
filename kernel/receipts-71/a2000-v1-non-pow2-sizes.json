@@ -1,0 +1,136 @@
+{
+ "env": {
+  "cgroup": "v1",
+  "charge_file": "/sys/fs/cgroup/memory/memory.usage_in_bytes",
+  "proc_self_cgroup": "9:name=systemd:/docker/77ab49f0bff6472d628dd998b214ede244d0796f70f2b38a30621be6f3c659e6\n8:pids:/docker/77ab49f0bff6472d628dd998b214ede244d0796f70f2b38a30621be6f3c659e6\n7:freezer:/docker/77ab49f0bff6472d628dd998b214ede244d0796f70f2b38a30621be6f3c659e6\n6:devices:/docker/77ab49f0bff6472d628dd998b214ede244d0796f70f2b38a30621be6f3c659e6\n5:blkio:/docker/77ab49f0bff6472d628dd998b214ede244d0796f70f2b38a30621be6f3c659e6\n4:cpuacct:/docker/77ab49f0bff6472d628dd998b214ede244d0796f70f2b38a30621be6f3c659e6\n3:cpuset:/docker/77ab49f0bff6472d628dd998b214ede244d0796f70f2b38a30621be6f3c659e6\n2:memory:/docker/77ab49f0bff6472d628dd998b214ede244d0796f70f2b38a30621be6f3c659e6\n1:cpu:/docker/77ab49f0bff6472d628dd998b214ede244d0796f70f2b38a30621be6f3c659e6",
+  "torch": "2.8.0+cu128",
+  "cuda": "12.8",
+  "gpu": "NVIDIA RTX A2000 12GB",
+  "driver": "575.64.05",
+  "limit_memory_memory.limit_in_bytes": "9223372036854771712"
+ },
+ "rows": [
+  {
+   "mode": "pinned",
+   "size_mb": 0,
+   "charge_before": 598573056,
+   "charge_after": 598581248,
+   "delta_mb": 0.0078125,
+   "is_pinned": null,
+   "rep": 0
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 340,
+   "charge_before": 598487040,
+   "charge_after": 1138020352,
+   "delta_mb": 514.5390625,
+   "is_pinned": true,
+   "rep": 0
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 700,
+   "charge_before": 598581248,
+   "charge_after": 1677262848,
+   "delta_mb": 1028.7109375,
+   "is_pinned": true,
+   "rep": 0
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 1359,
+   "charge_before": 598454272,
+   "charge_after": 2755444736,
+   "delta_mb": 2057.06640625,
+   "is_pinned": true,
+   "rep": 0
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 2100,
+   "charge_before": 598585344,
+   "charge_after": 4912189440,
+   "delta_mb": 4113.7734375,
+   "is_pinned": true,
+   "rep": 0
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 3000,
+   "charge_before": 598532096,
+   "charge_after": 4912136192,
+   "delta_mb": 4113.7734375,
+   "is_pinned": true,
+   "rep": 0
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 0,
+   "charge_before": 598491136,
+   "charge_after": 598499328,
+   "delta_mb": 0.0078125,
+   "is_pinned": null,
+   "rep": 0
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 340,
+   "charge_before": 598618112,
+   "charge_after": 956211200,
+   "delta_mb": 341.02734375,
+   "is_pinned": false,
+   "rep": 0
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 700,
+   "charge_before": 598470656,
+   "charge_after": 1334288384,
+   "delta_mb": 701.73046875,
+   "is_pinned": false,
+   "rep": 0
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 1359,
+   "charge_before": 598495232,
+   "charge_after": 2026680320,
+   "delta_mb": 1362.0234375,
+   "is_pinned": false,
+   "rep": 0
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 2100,
+   "charge_before": 598519808,
+   "charge_after": 2805215232,
+   "delta_mb": 2104.46875,
+   "is_pinned": false,
+   "rep": 0
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 3000,
+   "charge_before": 598499328,
+   "charge_after": 3750768640,
+   "delta_mb": 3006.23828125,
+   "is_pinned": false,
+   "rep": 0
+  }
+ ],
+ "fits": {
+  "pinned": {
+   "slope": 1.5236,
+   "intercept_mb": 67.1,
+   "r2": 0.93663,
+   "points": 6
+  },
+  "pageable": {
+   "slope": 1.002,
+   "intercept_mb": 0.2,
+   "r2": 1.0,
+   "points": 6
+  }
+ }
+}

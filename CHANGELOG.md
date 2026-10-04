@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### Pinned-tier sizing models the allocator's power-of-two rounding (`capacity_for_bytes`; #71)
+
+- **Why.** `PINNED_ROW_FACTOR = 1.9` was read as a per-byte premium on pinned memory. It is not one. PyTorch's caching
+  host allocator rounds each pinned request up to a power of two, and `alloc_landing` asks for `n + 4096`.
+  - Read as the container cgroup's own charge on the stack the constant names (cgroup v1, driver 575.64.05, torch
+    2.8.0+cu128, RTX A2000), pinned 340 / 700 / 1359 / 2100 / 3000 MB cost 514.5 / 1028.7 / 2057.1 / 4113.8 /
+    4113.8 MB.
+  - Power-of-two pinned requests and every pageable size cost ~1.00 per byte (1.0043 and 1.002), agreeing with #71's
+    cap ladder (1.004).
+  - So the flat 1.9 wasted up to half a budget and, just above a power of two (2100 MB: 1.96×), over-promised.
+- **What.**
+  - `pinned_request_cost(n)` (the next power of two of `n + PINNED_LANDING_PAD`).
+  - `capacity_for_bytes(..., pinned=True)` returns the largest `hot_rows` whose rounded request fits the budget: exact
+    and never over it.
+  - `factor=` still gives the old flat formula (`factor=PINNED_ROW_FACTOR` reproduces it).
+  - `pinned=False` is unchanged.
+- **Tests.**
+  - The receipts' charges.
+  - Never-overshoot and maximality across budgets and strides (the old factor's overshoot is pinned too).
+  - A charge test that runs a real pinned `alloc_landing` in a fresh process wherever CUDA and a cgroup charge are
+    readable. On the A2000, all 30 tests in `test_nvme_residency.py` passed.
+- **Not yet released.** The cgroup **v2** per-byte charge is unmeasured; lane K29 reads it on a rented box first.
+
 ## 0.37.0 — 2026-10-04 — two defaults: programmatic dependent launch for decode launches of at most 8 rows (`GNF4_PDL`, value-identical; experts4bit-qlora's int4 serving decode 1.0404× at one request and 1.0000× at 16 on an RTX 5090) and the grouped_mm training route on compute capability 9.0 (`GNF4_TRAIN_GEMM=auto`; Unsloth/e4b 1.030 on an H100 NVL, a labelled row)
 
 **0.37.0.** Two defaults change. One never changes values; the other changes them on compute capability 9.0 only.
