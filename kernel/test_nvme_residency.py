@@ -17,9 +17,11 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from nvme_arena import bake, load_index  # noqa: E402
 from nvme_residency import (  # noqa: E402
+    PINNED_LANDING_PAD,
     PINNED_ROW_FACTOR,
     ColdTier,
     capacity_for_bytes,
+    pinned_request_cost,
 )
 from test_nvme_arena import E, L, make_snapshot  # noqa: E402
 
@@ -112,22 +114,84 @@ def test_capacity_for_bytes_floors_and_never_returns_zero():
 
 
 def test_capacity_for_bytes_defaults_to_the_pinned_cost():
-    """The default must budget for what a PINNED row really costs.
+    """The default must budget for what a PINNED tier really costs.
 
-    ColdTier pins by default, and a pinned row costs ~1.9x its stride of real
-    host memory (measured by cap ladder, see PINNED_ROW_FACTOR). Dividing by the
+    ColdTier pins by default, and its buffer is ONE pinned request that PyTorch's
+    caching host allocator rounds up to a power of two (gnf4#71). Dividing by the
     stride alone returns a hot_rows that OOMs partway through the first step, so
-    the default has to be the conservative one -- a caller who wants the raw
-    arithmetic asks for it.
+    the default models the rounding; a caller who wants the raw arithmetic asks.
     """
     budget, stride = 10 * 4096, 4096
     assert capacity_for_bytes(budget, stride) < capacity_for_bytes(budget, stride, pinned=False)
-    assert capacity_for_bytes(budget, stride) == int(budget // (stride * PINNED_ROW_FACTOR))
+    # 40960 B holds a 32768 B power of two; minus the landing pad, 7 rows of 4096.
+    assert capacity_for_bytes(budget, stride) == (32768 - PINNED_LANDING_PAD) // stride == 7
+    # The old flat factor is still reachable explicitly.
+    assert capacity_for_bytes(budget, stride, factor=PINNED_ROW_FACTOR) == int(budget // (stride * PINNED_ROW_FACTOR))
     # An explicit factor overrides both, and 1.0 reproduces the unpinned answer.
     assert capacity_for_bytes(budget, stride, factor=1.0) == 10
     assert capacity_for_bytes(budget, stride, factor=2.0) == 5
     with pytest.raises(ValueError):
         capacity_for_bytes(budget, stride, factor=0)
+
+
+def test_pinned_request_cost_is_the_allocators_power_of_two():
+    """gnf4#71's receipts (kernel/receipts-71/): pinned requests are charged at the next power of two."""
+    MB = 1 << 20
+    for asked, charged in ((340, 512), (700, 1024), (1359, 2048), (2100, 4096), (3000, 4096)):
+        assert pinned_request_cost(asked * MB) == charged * MB, asked
+    # the landing pad tips an exact power of two over: a 2 GiB tier pays 4 GiB
+    assert pinned_request_cost(2048 * MB) == 4096 * MB
+    assert pinned_request_cost(2048 * MB - PINNED_LANDING_PAD) == 2048 * MB
+
+
+@pytest.mark.parametrize("stride", [4096, 2_654_208, 3_145_728, 9_437_184])
+def test_pinned_capacity_never_overshoots_and_is_the_largest_that_fits(stride):
+    """The rows capacity_for_bytes returns, allocated the way ColdTier allocates them, never cost more than the
+    budget, and one more row would. The flat 1.9 failed the first half just above a power of two."""
+    MB = 1 << 20
+    for budget_mb in (64, 100, 511, 512, 513, 700, 1024, 1500, 2047, 2048, 2049, 2200, 3000, 4096, 6000, 40_000):
+        budget = budget_mb * MB
+        rows = capacity_for_bytes(budget, stride)
+        if pinned_request_cost(stride) > budget:
+            assert rows == 1          # "never 0 rows", as before: a budget below one row is the caller's to see
+            continue
+        assert pinned_request_cost(rows * stride) <= budget, (budget_mb, stride, rows)
+        assert pinned_request_cost((rows + 1) * stride) > budget, (budget_mb, stride, rows)
+    # the flat factor, by contrast, overshoots just above a power of two
+    budget = 4000 * MB
+    old = int(budget // (2_654_208 * PINNED_ROW_FACTOR))
+    assert pinned_request_cost(old * 2_654_208) > budget
+
+
+def test_pinned_landing_charge_matches_the_model_on_this_box():
+    """On a box with CUDA and a readable cgroup charge, a pinned alloc_landing costs pinned_request_cost(n).
+    Run in a fresh process: the caching allocator would otherwise reuse a block an earlier test pinned."""
+    import os
+    import subprocess
+    import sys
+    torch = pytest.importorskip("torch")
+    if not torch.cuda.is_available():
+        pytest.skip("no CUDA: pinned memory needs a device")
+    charge = next((p for p in ("/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory/memory.usage_in_bytes")
+                   if os.path.exists(p)), None)
+    if charge is None:
+        pytest.skip("no readable cgroup memory charge")
+    here = os.path.dirname(os.path.abspath(__file__))
+    code = (
+        "import sys, time, torch; sys.path.insert(0, %r)\n"
+        "from nvme_reader import alloc_landing\n"
+        "torch.empty(1, device='cuda'); torch.cuda.synchronize(); time.sleep(0.5)\n"
+        "rd = lambda: int(open(%r).read())\n"
+        "c0 = rd(); mv, keep = alloc_landing(%d, pinned=True); keep.fill_(1); time.sleep(0.5)\n"
+        "print(rd() - c0)\n"
+    )
+    MB = 1 << 20
+    for n in (340 * MB, 700 * MB):
+        out = subprocess.run([sys.executable, "-c", code % (here, charge, n)], capture_output=True, text=True, timeout=300)
+        assert out.returncode == 0, out.stderr[-500:]
+        delta = int(out.stdout.strip().splitlines()[-1])
+        want = pinned_request_cost(n)
+        assert abs(delta - want) <= 0.02 * want + 16 * MB, (n, delta, want)
 
 
 def test_hit_rate_rises_with_hot_fraction_under_skewed_routing(arena):
