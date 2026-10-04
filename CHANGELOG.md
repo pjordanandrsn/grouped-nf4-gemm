@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+### `NF4_QLORA_COMPACT_DELTA=1`: the padded LoRA delta saves its input, not its padded block (opt-in; default unchanged)
+
+- **Why.** Under autograd, the lean padded delta saves the zero-padded input block `[G, widest, K]` for its first bmm, plus the
+  per-expert gathered adapters. A hot expert makes the block `G x widest` rows wide however few rows are real. At Qwen3-30B-A3B's
+  shape (380 tokens, top-8) one MoE layer saved 133 MB with bf16 adapters and 229 MB with fp32 adapters, 85 MB of that the gate_up
+  block alone. That memory is what stops experts4bit-qlora from keeping MoE activations across a step instead of recomputing them
+  under gradient checkpointing.
+- **What.** `_CompactPaddedDelta` is one autograd node. Its forward runs the same ops. It saves the input (an alias), `eid`, `flat`
+  and the first bmm's `[G, widest, r]` output. Its backward re-gathers the adapters, rebuilds the block with the same zero fill
+  and `index_copy_`, and issues the calls autograd's own backward makes, on the same operand layouts.
+- **Values.** Forward and every gradient are `torch.equal` to the autograd path. This covers distinct and repeated ids, bf16 and
+  fp32 adapters, scaling 1 and 2, CPU and CUDA, with and without `GNF4_HOST_REUSE`.
+- **Measured on an RTX A2000** (one `ExpertsLoRA` layer at Qwen3-30B-A3B's shape, skewed router, `GNF4_HOST_REUSE=1` in both
+  arms, three interleaved pairs of 300 repetitions):
+  - **Saved memory per layer:** 133.2 → 54.2 MB with bf16 adapters, and 229.1 → 54.9 MB with fp32.
+  - **Forward host median:** 2.915 / 3.194 / 3.014 → 2.689 / 3.166 / 2.805 ms.
+  - **Backward host median:** 2.574 / 2.772 / 2.610 → 2.526 / 2.878 / 2.696 ms.
+  - **Backward device span:** 19.13 / 19.42 / 19.56 → 19.87 / 20.10 / 20.22 ms. **That is a cost**: rebuilding the block adds
+    about 0.7 ms (+3.5 %) to a layer's backward. Under full-layer gradient checkpointing the flag is therefore a small device loss
+    for a lower backward peak.
+  - Its use is the step it enables. On a 4-layer Qwen3-30B-A3B slice (TC1 rows, mb2 x accum 4), checkpointing only attention and
+    keeping the MoE activations took the step from 1.278 s to 0.975 / 0.981 s, with every trainable gradient `torch.equal` under
+    deterministic mode. Peak memory rose 0.57 GB with this flag, against 1.39 GB without it.
+- **Tests** (`kernel/test_compact_delta.py`): bit-identity across the grid above; at least 8x fewer bytes saved on a hot-expert
+  case; off by default.
+
 ### `GNF4_HOST_REUSE=1`: one MoE layer pass stops re-uploading and re-deriving the same grouping (opt-in; default unchanged)
 
 - **Why.** experts4bit-qlora's fused training step is host-bound on fast cards: the same RTX 5090 arm steps at very different

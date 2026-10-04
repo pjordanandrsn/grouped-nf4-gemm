@@ -20,6 +20,8 @@ See ``fused_grouped_lora`` below, which does exactly that.
 """
 from __future__ import annotations
 
+import os
+
 import torch
 
 # Padded-bmm cutoff for `lora_delta_grouped`: fall back to the per-expert loop once
@@ -397,6 +399,8 @@ def _lora_delta_padded(a_cat, lora_A, lora_B, eid, flat, G, widest, unique, scal
     ~0.4 ms of device time slower per layer backward on an A2000 here). With distinct ids every gradient row
     receives exactly one value on both routes, so the gradients are equal.
     """
+    if _compact_delta_enabled():
+        return _scaled(_CompactPaddedDelta.apply(a_cat, lora_A, lora_B, eid, flat, G, widest, unique), scaling)
     dev = a_cat.device
     if unique:
         A, B = _GatherRows.apply(lora_A, eid), _GatherRows.apply(lora_B, eid)
@@ -412,6 +416,79 @@ def _lora_delta_padded(a_cat, lora_A, lora_B, eid, flat, G, widest, unique, scal
     # output: no zero fill, no slice copy. `scaling` lands on the gathered
     # rows, not the padded block, and not at all when it is 1 -- both exact.
     return _scaled(_GatherRows.apply(d.view(G * widest, -1), flat), scaling)
+
+
+def _compact_delta_enabled() -> bool:
+    """Off unless ``NF4_QLORA_COMPACT_DELTA=1``: the lean padded delta through ``_CompactPaddedDelta`` (same values, a
+    fraction of the saved memory); opt-in until a within-box A/B decides the default."""
+    return os.environ.get("NF4_QLORA_COMPACT_DELTA", "0").strip() == "1"
+
+
+class _CompactPaddedDelta(torch.autograd.Function):
+    """The lean padded LoRA delta as ONE autograd node that saves its INPUT, not its padded block.
+
+    Under autograd the padded path saves, per projection, the zero-padded input block ``[G, widest, K]`` (the
+    first bmm's operand) and the gathered adapters ``[G, r, K]`` / ``[G, N, r]``. With a hot expert the block is
+    ``G * widest`` rows wide whatever the real row count: at Qwen3-30B-A3B's shape (380 tokens, top-8, fp32
+    adapters) one MoE layer saved 229 MB, 85 MB of it the gate_up block alone. This node runs the same forward ops
+    and saves ``a_cat`` (an alias of the caller's tensor), ``eid``, ``flat`` and the first bmm's ``[G, widest, r]``
+    output; its backward re-gathers the adapters, rebuilds the block with the same zero fill and ``index_copy_``,
+    and issues the same calls autograd's own backward would (``BmmBackward0``'s two products on the same operand
+    layouts, ``index_copy_``'s ``index_select``, the gather's scatter, the adapters' scatter or sorted
+    ``index_put_``), so every gradient is the same bytes. The rebuild costs one fill and one copy of the block in
+    backward; the node replaces about ten autograd nodes per projection.
+    """
+
+    @staticmethod
+    def forward(ctx, a_cat, lora_A, lora_B, eid, flat, G, widest, unique):
+        if unique:
+            A, B = lora_A.index_select(0, eid), lora_B.index_select(0, eid)
+        else:
+            A, B = lora_A[eid], lora_B[eid]
+        x = torch.zeros(G * widest, a_cat.shape[1], dtype=A.dtype, device=a_cat.device)
+        x.index_copy_(0, flat, a_cat.to(A.dtype))
+        h = torch.bmm(x.view(G, widest, -1), A.transpose(1, 2))           # [G, widest, r]
+        d = torch.bmm(h, B.transpose(1, 2))                                # [G, widest, N]
+        ctx.save_for_backward(a_cat, lora_A, lora_B, eid, flat, h)
+        ctx.G, ctx.widest, ctx.unique = G, widest, unique
+        return d.view(G * widest, -1).index_select(0, flat)
+
+    @staticmethod
+    def backward(ctx, g):
+        a_cat, lora_A, lora_B, eid, flat, h = ctx.saved_tensors
+        G, W, unique = ctx.G, ctx.widest, ctx.unique
+        if unique:
+            A, B = lora_A.index_select(0, eid), lora_B.index_select(0, eid)
+        else:
+            A, B = lora_A[eid], lora_B[eid]
+        gd = g.new_zeros((G * W,) + tuple(g.shape[1:]))                   # the gather's backward: a scatter
+        gd.index_copy_(0, flat, g)
+        gd = gd.view(G, W, -1)
+        gh = gd.bmm(B)                                                     # BmmBackward0 of d = h @ B^T
+        gBt = h.transpose(1, 2).bmm(gd)
+        x = torch.zeros(G * W, a_cat.shape[1], dtype=A.dtype, device=a_cat.device)
+        x.index_copy_(0, flat, a_cat.to(A.dtype))
+        gx = gh.bmm(A)                                                     # BmmBackward0 of h = x @ A^T
+        gAt = x.view(G, W, -1).transpose(1, 2).bmm(gh)
+        grad_a = None
+        if ctx.needs_input_grad[0]:
+            grad_a = gx.view(G * W, -1).index_select(0, flat)              # index_copy_'s backward for its source
+            if grad_a.dtype != a_cat.dtype:
+                grad_a = grad_a.to(a_cat.dtype)                            # the .to(A.dtype)'s backward
+        gA = gB = None
+        if ctx.needs_input_grad[1]:
+            gA = torch.zeros_like(lora_A)
+            if unique:
+                gA.index_copy_(0, eid, gAt.transpose(1, 2))
+            else:
+                gA.index_put_((eid,), gAt.transpose(1, 2), accumulate=True)
+        if ctx.needs_input_grad[2]:
+            gB = torch.zeros_like(lora_B)
+            if unique:
+                gB.index_copy_(0, eid, gBt.transpose(1, 2))
+            else:
+                gB.index_put_((eid,), gBt.transpose(1, 2), accumulate=True)
+        return grad_a, gA, gB, None, None, None, None, None
 
 
 def _lora_delta_grouped_mm(a_cat, lora_A, lora_B, rows, nz, expert_ids, scaling=1.0):

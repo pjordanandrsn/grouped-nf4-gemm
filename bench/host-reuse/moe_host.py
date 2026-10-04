@@ -32,18 +32,19 @@ def inputs(seed):
     hs = torch.randn(a.tokens, a.hid, dtype=torch.bfloat16, device=dev, generator=g).requires_grad_(True)
     logits = torch.randn(a.tokens, a.E, device=dev, generator=g) + skew
     w, idx = logits.softmax(-1).topk(a.topk, dim=1)
-    return hs, idx, (w / w.sum(-1, keepdim=True)).to(torch.bfloat16)
+    return hs, idx, (w / w.sum(-1, keepdim=True)).to(torch.bfloat16).requires_grad_(True)   # router weights carry grad in training
 def run(seed):
     hs, idx, wts = inputs(seed)
     out = mod(hs, idx, wts); out.float().sum().backward()
-    return hs, out
+    return hs, wts, out
 for i in range(5):
     run(i)
 torch.cuda.synchronize()
 if a.check:
     for p in mod.parameters(): p.grad = None
-    hs, out = run(12345); torch.cuda.synchronize()
-    torch.save({"out": out.detach().cpu(), "hs_grad": hs.grad.cpu(), **{n: p.grad.cpu() for n, p in mod.named_parameters() if p.grad is not None}}, a.check)
+    hs, wts, out = run(12345); torch.cuda.synchronize()
+    torch.save({"out": out.detach().cpu(), "hs_grad": hs.grad.cpu(), "w_grad": wts.grad.cpu(),
+                **{n: p.grad.cpu() for n, p in mod.named_parameters() if p.grad is not None}}, a.check)
     print("check written", a.check)
 if a.cprofile:
     pr = cProfile.Profile()

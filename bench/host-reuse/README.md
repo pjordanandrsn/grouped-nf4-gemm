@@ -40,3 +40,33 @@ other jobs. Three interleaved off/on pairs of 300 repetitions:
 
 An earlier draft gathered the adapters with `index_select`. Its backward, an atomic `index_add_`, cost about 0.4 ms of
 device time per layer backward on the A2000. That is why the shipped route is `_GatherRows`, whose backward is a scatter.
+
+## NF4_QLORA_COMPACT_DELTA and the checkpoint policy it enables
+
+**`moe_host.py`.** The routing weights now carry grad, as they do in training.
+
+**`moe_saved.py [bf16|fp32]`.** Tallies what autograd saves for one fused MoE layer forward: every saved tensor, deduplicated by
+storage, excluding parameters and inputs. With the skewed router at 380 tokens:
+
+| adapters | `NF4_QLORA_COMPACT_DELTA=0` | `=1` |
+|---|---|---|
+| bf16 | 133.2 MB | 54.2 MB |
+| fp32 | 229.1 MB | 54.9 MB |
+
+**`ckpt_ab.py --mode layer|attn|none`.** Trains a 4-layer Qwen3-30B-A3B slice (TC1 token rows, mb2 x accum 4, fp32 attention LoRA)
+under three checkpoint policies:
+- `layer`: Hugging Face's per-decoder-layer checkpointing;
+- `attn`: only `self_attn` is checkpointed, and the MoE activations are kept;
+- `none`.
+
+`--check` saves every trainable gradient after one micro-batch under deterministic mode. RTX A2000, `GNF4_HOST_REUSE=1`, 2026-10-04:
+
+| policy | compact | step s (median of 6, two runs) | peak allocated GB |
+|---|---|---|---|
+| layer | off, no reuse | 1.278 | 4.335 |
+| layer | on | 1.286 / 1.297 | 4.335 |
+| attn | off | 0.969 / 0.976 | 5.72 |
+| attn | on | 0.975 / 0.981 | 4.904 |
+| none | off | 0.931 / 0.944 | 5.98 |
+
+All 48 trainable gradients are `torch.equal` across `layer`, `attn` and `none`, and with the flag off and on.
