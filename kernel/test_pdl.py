@@ -1,10 +1,11 @@
 """Lane K28 (``PREREG-k28-pdl-decode-chain.md``): programmatic dependent launch (PDL) for the decode-row kernels of
-``int4_b32``, behind ``GNF4_PDL`` (opt-in; off by default until K28 reads).
+``int4_b32``, behind ``GNF4_PDL``: on by default since experts4bit-qlora's lane P113 read CAP_DEFAULT, with
+``GNF4_PDL_MAX_ROWS`` defaulting to 8 (``GNF4_PDL=0`` turns it off; ``GNF4_PDL_MAX_ROWS=0`` removes the cap).
 
 The contract, before any timing:
 
-1. **Off is today.** Unset or ``0``, every launch passes exactly the keywords it passed before the switch existed, so
-   the kernels compile and launch as before. On a device that cannot do PDL (CPU, the interpreter, ROCm, or a card
+1. **Off is the old path.** With ``GNF4_PDL=0`` every launch passes exactly the keywords it passed before the switch
+   existed, so the kernels compile and launch as before. On a device that cannot do PDL (CPU, the interpreter, ROCm, or a card
    below sm_90) the switch is inert even when set.
 2. **Ordering is untouched.** Every decode-row kernel's FIRST statement is the preamble, which waits for the previous
    kernel on the stream to complete (``griddepcontrol.wait``) before it lets the next one launch
@@ -42,17 +43,17 @@ def fresh(monkeypatch):
     into another test (the switch is read once and cached; each test here sets the environment first)."""
     monkeypatch.setattr(m, "_CC_CACHE", {})
     monkeypatch.setattr(m, "_PDL_SWITCH", [])
-    monkeypatch.setattr(m, "_PDL_CAP", [0])
+    monkeypatch.setattr(m, "_PDL_CAP", [m.PDL_MAX_ROWS_DEFAULT])
     monkeypatch.delenv(m.PDL_MAX_ROWS_ENV, raising=False)
     return monkeypatch
 
 
 # ---------------------------------------------------------------- 1. off is today, and inert where PDL cannot run --
-def test_the_switch_is_off_by_default_and_parses(monkeypatch):
+def test_the_switch_is_on_by_default_and_parses(monkeypatch):
     monkeypatch.delenv(m.PDL_ENV, raising=False)
-    assert m.PDL_ENV == "GNF4_PDL" and m.PDL_DEFAULT is False and m.pdl_default() is False
-    for v, want in (("1", True), ("on", True), ("TRUE", True), ("0", False), ("off", False), ("", False),
-                    ("2", False), ("yes", False)):
+    assert m.PDL_ENV == "GNF4_PDL" and m.PDL_DEFAULT is True and m.pdl_default() is True     # P113: CAP_DEFAULT
+    for v, want in (("1", True), ("on", True), ("TRUE", True), ("0", False), ("off", False), ("", True),
+                    ("2", True), ("yes", True)):
         monkeypatch.setenv(m.PDL_ENV, v)
         assert m.pdl_default() is want, v
 
@@ -70,7 +71,7 @@ def test_the_switch_is_read_once_and_refreshed_on_request(fresh):
 
 
 def test_off_passes_no_keywords_anywhere(fresh):
-    fresh.delenv(m.PDL_ENV, raising=False)
+    fresh.setenv(m.PDL_ENV, "0")
     fresh.setattr(torch.cuda, "get_device_capability", lambda d=None: (12, 0))
     fresh.setattr(torch.version, "hip", None)
     assert m._pdl_kw("cuda", 1) == {} and m._pdl_kw("cpu", 1) == {}
@@ -110,8 +111,10 @@ def test_on_where_pdl_can_run(fresh):
 
 
 def test_the_row_cap_parses(monkeypatch):
-    assert m.PDL_MAX_ROWS_ENV == "GNF4_PDL_MAX_ROWS"
-    for v, want in (("", 0), ("0", 0), ("8", 8), (" 16 ", 16), ("-4", 0), ("x", 0), ("2.5", 0)):
+    assert m.PDL_MAX_ROWS_ENV == "GNF4_PDL_MAX_ROWS" and m.PDL_MAX_ROWS_DEFAULT == 8                 # P113: CAP_DEFAULT
+    monkeypatch.delenv(m.PDL_MAX_ROWS_ENV, raising=False)
+    assert m.pdl_max_rows() == 8
+    for v, want in (("", 8), ("0", 0), ("8", 8), (" 16 ", 16), ("-4", 8), ("x", 8), ("2.5", 8)):
         monkeypatch.setenv(m.PDL_MAX_ROWS_ENV, v)
         assert m.pdl_max_rows() == want, v
 
@@ -123,11 +126,15 @@ def test_the_row_cap_keeps_pdl_for_small_launches_only(fresh):
     fresh.setattr(m, "_LAUNCH_PDL", [True])
     fresh.setattr(torch.cuda, "get_device_capability", lambda d=None: (12, 0))
     on = {"PDL": True, "launch_pdl": True}
+    fresh.setenv(m.PDL_MAX_ROWS_ENV, "0")
     assert m.pdl_refresh() is True and [m._pdl_kw("cuda", r) for r in (1, 8, 16, 128)] == [on] * 4, "no cap: every launch"
-    fresh.setenv(m.PDL_MAX_ROWS_ENV, "8")
+    fresh.delenv(m.PDL_MAX_ROWS_ENV)
     assert m._pdl_kw("cuda", 16) == on, "the cap is read with the switch, once"
     m.pdl_refresh()
-    assert [m._pdl_kw("cuda", r) for r in (1, 8, 9, 16, 128)] == [on, on, {}, {}, {}]
+    assert [m._pdl_kw("cuda", r) for r in (1, 8, 9, 16, 128)] == [on, on, {}, {}, {}], "the default cap, 8"
+    fresh.setenv(m.PDL_MAX_ROWS_ENV, "16")
+    m.pdl_refresh()
+    assert [m._pdl_kw("cuda", r) for r in (8, 16, 17)] == [on, on, {}]
     fresh.setenv(m.PDL_ENV, "0")
     m.pdl_refresh()
     assert m._pdl_kw("cuda", 1) == {}, "the cap never turns PDL on"

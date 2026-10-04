@@ -309,6 +309,11 @@ was wrong.
   ×1.125), with every output bitwise identical; 0.217 µs with the served step's ATen stand-ins interleaved.
   LEVER: experts4bit-qlora reads it served next, and the switch stays opt-in until then.
   `kernel/RESULTS-k28-pdl-decode-chain.md`; register row `gnf4.kernel.k28-pdl-decode-chain.5090.2026-10-04`.
+- **`GNF4_PDL` on by default, capped at 8 rows (2026-10-04).** experts4bit-qlora's served lanes: P112 closed VOID
+  twice; P113 read CAP_DEFAULT on SC1's int4 serving configuration (RTX 5090). Capped, it decodes identical tokens
+  1.0404× as fast with one request and 1.0000× with 16; uncapped, 1.0401× and 0.9787×. Register row
+  `e4b.serve.p113.gnf4-pdl-capped.qwen3-int4.5090.2026-10-04` (experts4bit-qlora). `GNF4_PDL=0` turns it off,
+  `GNF4_PDL_MAX_ROWS=0` removes the cap.
 - **A fixed fraction-of-waterfall is retired as a law** (two 0.77
   readings were a two-host coincidence).
 - **The cold-engine "free floor" premise is refuted** on its target box:
