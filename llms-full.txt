@@ -1164,7 +1164,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
     "bitsandbytes gemm_4bit has no grouped routed MoE path",
     "QLoRA backward dequantizes 4-bit experts for dX"
    ],
-   "solution": "gemm_4bit_grouped runs one Triton launch for all active experts over the bitsandbytes gemm_4bit NF4 layout (LUT decode to fp32 in registers, blockwise absmax scaling, fp32 accumulation, bf16 epilogue); dequant_ref is the pure-torch oracle it is asserted against; dgrad_4bit_grouped is the one-launch training backward; gemm_nf4_grouped_smallm (K25, opt-in in the consumer) is K19's grouped tensor-core small-M GEMM on the same NF4 store, its codebook decoded by an exact select tree that lane K26 measured faster than the served NF4 GEMM (gnf4.kernel.k26-nf4-decode-ablation.5090.2026-10-01) for decode batches, its weight operand exactly dequant_ref rounded to bf16 (not the served kernel's TF32), so a consumer gates it on quality.",
+   "solution": "gemm_4bit_grouped runs one Triton launch for all active experts over the bitsandbytes gemm_4bit NF4 layout (LUT decode to fp32 in registers, blockwise absmax scaling, fp32 accumulation, bf16 epilogue); dequant_ref is the pure-torch oracle it is asserted against; dgrad_4bit_grouped is the one-launch training backward; gemm_nf4_grouped_smallm (K25, opt-in in the consumer) is K19's grouped tensor-core small-M GEMM on the same NF4 store, its codebook decoded by an exact select tree that lane K26 measured faster than the served NF4 GEMM (gnf4.kernel.k26-nf4-decode-ablation.5090.2026-10-01) for decode batches, its weight operand exactly dequant_ref rounded to bf16 (not the served kernel's TF32), so a consumer gates it on quality. On sm_90 an opt-in training route, GNF4_TRAIN_GEMM=grouped_mm (nf4_route), dequantizes the present experts to bf16 (bit-equal to dequant_ref rounded to bf16) and runs the training forward and dgrad through torch._grouped_mm; an experts4bit-qlora kernel replay on an H100 NVL put it at 0.596 (forward) / 0.494 (dgrad) of the fused kernels' time, not bit-identical (<= 0.0024 relative Frobenius), so it stays opt-in until a full-step A/B decides.",
    "modes": [
     "inference",
     "training",
@@ -1210,7 +1210,10 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
     "nf4_grouped:repack_from_bnb",
     "nf4_pack_ref:quantize_pack_nf4",
     "nf4_qlora:gemm_4bit_grouped_train",
-    "nf4_qlora:fused_grouped_lora"
+    "nf4_qlora:fused_grouped_lora",
+    "nf4_route:grouped_mm_forward",
+    "nf4_route:grouped_mm_dgrad",
+    "nf4_route:dequant_groups"
    ],
    "documentation": [
     "docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md",
@@ -1231,6 +1234,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
    "limitations": [
     "Loses to a CUDA-graphed per-expert baseline at some decode shapes (claim gnf4.kernel.graphed-baseline-decode-loses); shapes below the dispatch floor belong to the dequant path: nf4_grouped.decode_dispatch says so and the caller routes them there, while the op itself always runs fused (docs/STATUS.md)",
     "CUDA + Triton only; calling the kernel on CPU raises and names dequant_ref",
+    "GNF4_TRAIN_GEMM=grouped_mm runs on compute capability 9.0 only (torch 2.8's torch._grouped_mm target) and refuses elsewhere with the reason; it is not bit-identical to the fused kernels.",
     "The fidelity claim is measured against fp32 accumulation on NVIDIA tensor cores; other backends must re-measure (docs/PORTABILITY.md)",
     "Every speed figure is per card -- the census is sm_86, the head-to-head and the real-finetune cells are RTX 4090 / H100, the torch._grouped_mm cell is RTX 5090 -- and none is an architecture-wide statement; the registered comparator is this repository's own per-expert dequantize-then-GEMM loop, and no registered cell times bitsandbytes' own packed 2-D inference forward (0.50.0 and later)"
    ],
