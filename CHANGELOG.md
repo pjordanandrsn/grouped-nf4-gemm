@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### `GNF4_PDL_MAX_ROWS=<n>`: keep programmatic dependent launch for small launches only (opt-in, with `GNF4_PDL=1`; default unchanged)
+
+- **Why.** experts4bit-qlora's P112 closed VOID without a reading (#1026). Its first run's arms showed `GNF4_PDL=1`
+  helping e4b's int4 serving step with one request (B=1 decode ×1.039 / ×1.037) and costing it with 16 (×0.985 /
+  ×0.985), with identical tokens. At B=1 the switched launches carry 1 or 8 activation rows; at B=16 they carry 16 or
+  more.
+- **What it does.** With `GNF4_PDL=1` and `GNF4_PDL_MAX_ROWS=<n>`, a decode-row launch over at most `n` rows keeps PDL
+  and a larger one launches without it. Every wrapper passes its activation rows: `R` for the quantise, GEMV, reduce,
+  SwiGLU, rotary, router and norms, and the token count for the combine.
+- **When it does nothing.** The cap is read with the switch, once (`pdl_refresh()` re-reads both). Unset, `0` or
+  anything that is not a positive integer means no cap. The cap never turns PDL on.
+- **Tested.** `kernel/test_pdl.py`, now 25 tests: the cap's parsing and gating on CPU, and an AST check that every
+  launch passes its device and its rows. Values cannot change, because PDL never does.
+- **No speed is claimed.** A new experts4bit-qlora lane reads PDL off, on everything, and capped, under decode-only
+  timing.
+
 ### The grouped_mm route's dequant kernel runs at bandwidth (`GNF4_TRAIN_GEMM=grouped_mm`; values unchanged)
 
 - **Why.** experts4bit-qlora's TC1c amendment 4 measured the route on the full Qwen3-30B-A3B training step on an H100 NVL, and it made

@@ -42,6 +42,8 @@ def fresh(monkeypatch):
     into another test (the switch is read once and cached; each test here sets the environment first)."""
     monkeypatch.setattr(m, "_CC_CACHE", {})
     monkeypatch.setattr(m, "_PDL_SWITCH", [])
+    monkeypatch.setattr(m, "_PDL_CAP", [0])
+    monkeypatch.delenv(m.PDL_MAX_ROWS_ENV, raising=False)
     return monkeypatch
 
 
@@ -64,14 +66,14 @@ def test_the_switch_is_read_once_and_refreshed_on_request(fresh):
     assert m.pdl_active("cuda") is True
     fresh.setenv(m.PDL_ENV, "0")
     assert m.pdl_active("cuda") is True, "read once: a later environment change needs pdl_refresh()"
-    assert m.pdl_refresh() is False and m.pdl_active("cuda") is False and m._pdl_kw("cuda") == {}
+    assert m.pdl_refresh() is False and m.pdl_active("cuda") is False and m._pdl_kw("cuda", 1) == {}
 
 
 def test_off_passes_no_keywords_anywhere(fresh):
     fresh.delenv(m.PDL_ENV, raising=False)
     fresh.setattr(torch.cuda, "get_device_capability", lambda d=None: (12, 0))
     fresh.setattr(torch.version, "hip", None)
-    assert m._pdl_kw("cuda") == {} and m._pdl_kw("cpu") == {}
+    assert m._pdl_kw("cuda", 1) == {} and m._pdl_kw("cpu", 1) == {}
 
 
 def test_inert_where_pdl_cannot_run(fresh):
@@ -79,21 +81,21 @@ def test_inert_where_pdl_cannot_run(fresh):
     fresh.setattr(torch.version, "hip", None)
     fresh.setattr(torch.cuda, "get_device_capability", lambda d=None: (12, 0))
     fresh.delenv("TRITON_INTERPRET", raising=False)
-    assert m._pdl_kw("cpu") == {}, "CPU"
+    assert m._pdl_kw("cpu", 1) == {}, "CPU"
     fresh.setenv("TRITON_INTERPRET", "1")
-    assert m._pdl_kw("cuda") == {}, "the interpreter"
+    assert m._pdl_kw("cuda", 1) == {}, "the interpreter"
     fresh.delenv("TRITON_INTERPRET", raising=False)
     fresh.setattr(torch.version, "hip", "6.2")
-    assert m._pdl_kw("cuda") == {}, "ROCm reports its own capability numbers (gfx942 is (9, 4))"
+    assert m._pdl_kw("cuda", 1) == {}, "ROCm reports its own capability numbers (gfx942 is (9, 4))"
     fresh.setattr(torch.version, "hip", None)
     for cc in ((8, 0), (8, 6), (8, 9)):
         fresh.setattr(m, "_CC_CACHE", {})
         fresh.setattr(torch.cuda, "get_device_capability", lambda d=None, cc=cc: cc)
-        assert m._pdl_kw("cuda") == {}, cc
+        assert m._pdl_kw("cuda", 1) == {}, cc
     fresh.setattr(m, "_LAUNCH_PDL", [False])
     fresh.setattr(m, "_CC_CACHE", {})
     fresh.setattr(torch.cuda, "get_device_capability", lambda d=None: (12, 0))
-    assert m._pdl_kw("cuda") == {}, "a Triton that cannot launch with PDL"
+    assert m._pdl_kw("cuda", 1) == {}, "a Triton that cannot launch with PDL"
 
 
 def test_on_where_pdl_can_run(fresh):
@@ -104,7 +106,31 @@ def test_on_where_pdl_can_run(fresh):
     for cc in ((9, 0), (10, 0), (12, 0)):
         fresh.setattr(m, "_CC_CACHE", {})
         fresh.setattr(torch.cuda, "get_device_capability", lambda d=None, cc=cc: cc)
-        assert m._pdl_kw("cuda") == {"PDL": True, "launch_pdl": True}, cc
+        assert m._pdl_kw("cuda", 1) == {"PDL": True, "launch_pdl": True}, cc
+
+
+def test_the_row_cap_parses(monkeypatch):
+    assert m.PDL_MAX_ROWS_ENV == "GNF4_PDL_MAX_ROWS"
+    for v, want in (("", 0), ("0", 0), ("8", 8), (" 16 ", 16), ("-4", 0), ("x", 0), ("2.5", 0)):
+        monkeypatch.setenv(m.PDL_MAX_ROWS_ENV, v)
+        assert m.pdl_max_rows() == want, v
+
+
+def test_the_row_cap_keeps_pdl_for_small_launches_only(fresh):
+    fresh.setenv(m.PDL_ENV, "1")
+    fresh.delenv("TRITON_INTERPRET", raising=False)
+    fresh.setattr(torch.version, "hip", None)
+    fresh.setattr(m, "_LAUNCH_PDL", [True])
+    fresh.setattr(torch.cuda, "get_device_capability", lambda d=None: (12, 0))
+    on = {"PDL": True, "launch_pdl": True}
+    assert m.pdl_refresh() is True and [m._pdl_kw("cuda", r) for r in (1, 8, 16, 128)] == [on] * 4, "no cap: every launch"
+    fresh.setenv(m.PDL_MAX_ROWS_ENV, "8")
+    assert m._pdl_kw("cuda", 16) == on, "the cap is read with the switch, once"
+    m.pdl_refresh()
+    assert [m._pdl_kw("cuda", r) for r in (1, 8, 9, 16, 128)] == [on, on, {}, {}, {}]
+    fresh.setenv(m.PDL_ENV, "0")
+    m.pdl_refresh()
+    assert m._pdl_kw("cuda", 1) == {}, "the cap never turns PDL on"
 
 
 def test_triton_can_launch_with_pdl():
@@ -160,6 +186,8 @@ def test_every_launch_takes_the_switch_and_nothing_else_names_it():
     for name, kws in launches:
         star = [k for k in kws if k.startswith("_pdl_kw(")]
         assert len(star) == 1, (name, kws)
+        call = ast.parse(star[0], mode="eval").body
+        assert len(call.args) == 2 and not call.keywords, f"{name}: every launch passes its device and its rows ({star[0]})"
         assert "PDL" not in kws and "launch_pdl" not in kws, (name, kws)
     assert len(launches) == 13 and SRC.count("**_pdl_kw(") == 13
 

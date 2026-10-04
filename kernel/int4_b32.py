@@ -43,12 +43,18 @@ from _triton_shim import UnsupportedShapeError  # noqa: E402
 #: an environment lookup, ~0.6 us); :func:`pdl_refresh` re-reads it after the environment changes.
 PDL_ENV = "GNF4_PDL"
 PDL_DEFAULT = False
+#: Lane P112 saw PDL help the int4 serving step at B=1 and cost it at B=16 (not a reading; experts4bit-qlora
+#: ``bench/p112/RESULTS-p112.md``). ``GNF4_PDL_MAX_ROWS=<n>`` keeps PDL for launches of at most ``n`` activation rows and
+#: launches the rest without it; unset, ``0`` or anything that is not a positive integer means no cap. Read with the
+#: switch, once.
+PDL_MAX_ROWS_ENV = "GNF4_PDL_MAX_ROWS"
 #: ``griddepcontrol`` exists from sm_90 (Hopper) on. Below that the switch is inert: the kernels compile and launch
 #: exactly as they do with it off.
 PDL_MIN_CC = (9, 0)
 _CC_CACHE: dict[str, tuple] = {}
 _LAUNCH_PDL: list = []
 _PDL_SWITCH: list = []                  # [bool] once GNF4_PDL has been read
+_PDL_CAP: list = [0]                    # GNF4_PDL_MAX_ROWS as last read (0 = no cap)
 _NO_KW: dict = {}                       # what an off launch unpacks: nothing (never mutated)
 _PDL_KW: dict = {"PDL": True, "launch_pdl": True}
 
@@ -64,8 +70,15 @@ def pdl_default() -> bool:
     return PDL_DEFAULT
 
 
+def pdl_max_rows() -> int:
+    """``GNF4_PDL_MAX_ROWS`` as the environment holds it now: a positive integer, or 0 for no cap."""
+    v = os.environ.get(PDL_MAX_ROWS_ENV, "").strip()
+    return int(v) if v.isdigit() and int(v) > 0 else 0
+
+
 def pdl_refresh() -> bool:
-    """Re-read ``GNF4_PDL`` into the switch every launch consults, and return it."""
+    """Re-read ``GNF4_PDL`` and ``GNF4_PDL_MAX_ROWS`` into the switch every launch consults, and return the switch."""
+    _PDL_CAP[0] = pdl_max_rows()
     _PDL_SWITCH[:] = [pdl_default()]
     return _PDL_SWITCH[0]
 
@@ -96,11 +109,15 @@ def pdl_active(device) -> bool:
     return _CC_CACHE[key] >= PDL_MIN_CC and _launch_pdl_available()
 
 
-def _pdl_kw(device) -> dict:
-    """Launch keywords for one decode-row kernel: ``PDL=True`` (the kernel's grid-dependency preamble) together
-    with ``launch_pdl=True`` (Triton launches it as a programmatic dependent of the previous kernel on the stream),
-    or nothing at all, so the off path compiles and launches exactly as before the switch existed."""
-    return _PDL_KW if pdl_active(device) else _NO_KW
+def _pdl_kw(device, rows: int) -> dict:
+    """Launch keywords for one decode-row kernel over ``rows`` activation rows: ``PDL=True`` (the kernel's
+    grid-dependency preamble) together with ``launch_pdl=True`` (Triton launches it as a programmatic dependent of the
+    previous kernel on the stream), or nothing at all, so the off path compiles and launches exactly as before the switch
+    existed. Under ``GNF4_PDL_MAX_ROWS`` a launch of more rows than the cap takes nothing."""
+    if not pdl_active(device):
+        return _NO_KW
+    cap = _PDL_CAP[0]
+    return _NO_KW if cap and rows > cap else _PDL_KW
 
 
 @triton.jit
@@ -148,7 +165,7 @@ def quant_x_rows(x: torch.Tensor):
     R, K = x.shape
     xq = torch.empty(R, K, dtype=torch.int8, device=x.device)
     xs = torch.empty(R, K // BLOCK, dtype=torch.float32, device=x.device)
-    _quant_x_rows[(R, K // BLOCK)](x.contiguous(), xq, xs, K=K, **_pdl_kw(x.device))
+    _quant_x_rows[(R, K // BLOCK)](x.contiguous(), xq, xs, K=K, **_pdl_kw(x.device, R))
     return xq, xs
 
 
@@ -366,7 +383,7 @@ def reduce_partials(part: torch.Tensor, sk: int, R: int, N: int,
     rn = R * N
     block = 1024
     _reduce_partials[(triton.cdiv(rn, block),)](
-        part, out, SK=sk, RN=rn, BLOCK=block, num_warps=4, **_pdl_kw(part.device))
+        part, out, SK=sk, RN=rn, BLOCK=block, num_warps=4, **_pdl_kw(part.device, R))
     return out
 
 
@@ -427,7 +444,7 @@ def gemv_int4_b32(xq, xs, packed, scales, eids, N: int, K: int,
         _gemv_int4_b32[(triton.cdiv(N, bn), R, sk)](
             xq, xs, packed, scales, eids, part, part, part,
             N, K=K, R=R, BLOCK_N=bn, SK=sk, KU=ku, FUSED_REDUCE=0, num_warps=wp,
-            **_pdl_kw(xq.device))
+            **_pdl_kw(xq.device, R))
         return reduce_partials(part, sk, R, N, out=out)
     need = gemv_counter_len(N, R, bn)
     if cnt is None:
@@ -440,7 +457,7 @@ def gemv_int4_b32(xq, xs, packed, scales, eids, N: int, K: int,
     _gemv_int4_b32[(triton.cdiv(N, bn), R, sk)](
         xq, xs, packed, scales, eids, part, cnt, out,
         N, K=K, R=R, BLOCK_N=bn, SK=sk, KU=ku, FUSED_REDUCE=1, num_warps=wp,
-        **_pdl_kw(xq.device))
+        **_pdl_kw(xq.device, R))
     return out
 
 
@@ -823,7 +840,7 @@ def quant_x_rows_gathered(x: torch.Tensor, order: torch.Tensor):
     xq = torch.empty(R, K, dtype=torch.int8, device=x.device)
     xs = torch.empty(R, K // BLOCK, dtype=torch.float32, device=x.device)
     _quant_x_rows_gathered[(R, K // BLOCK)](
-        x.contiguous(), order, xq, xs, K=K, **_pdl_kw(x.device))
+        x.contiguous(), order, xq, xs, K=K, **_pdl_kw(x.device, R))
     return xq, xs
 
 
@@ -852,7 +869,7 @@ def swiglu_rows(gu: torch.Tensor):
     h = torch.empty(R, inter, dtype=torch.bfloat16, device=gu.device)
     bs = min(1024, triton.next_power_of_2(inter))
     _swiglu_rows[(R, triton.cdiv(inter, bs))](
-        gu.contiguous(), h, I=inter, BS=bs, **_pdl_kw(gu.device))
+        gu.contiguous(), h, I=inter, BS=bs, **_pdl_kw(gu.device, R))
     return h
 
 
@@ -896,7 +913,7 @@ def combine_rows(dn: torch.Tensor, w: torch.Tensor, k: int):
     block = min(1024, triton.next_power_of_2(H))
     _combine_rows[(T, triton.cdiv(H, block))](
         dn.contiguous(), w.contiguous(), out, K=k, H=H, BLOCK=block,
-        num_warps=4, **_pdl_kw(dn.device))
+        num_warps=4, **_pdl_kw(dn.device, T))
     return out
 
 
@@ -932,7 +949,7 @@ def rmsnorm_rows(x: torch.Tensor, weight: torch.Tensor, eps: float):
     out = torch.empty_like(xf, dtype=torch.bfloat16)
     _rmsnorm_rows[(xf.shape[0],)](
         xf.contiguous(), weight.contiguous(), out, xf.shape[0],
-        H=H, HB=triton.next_power_of_2(H), EPS=eps, num_warps=8, **_pdl_kw(x.device))
+        H=H, HB=triton.next_power_of_2(H), EPS=eps, num_warps=8, **_pdl_kw(x.device, xf.shape[0]))
     return out.reshape(x.shape)
 
 
@@ -987,7 +1004,7 @@ def rmsnorm_resid_rows(x: torch.Tensor, resid: torch.Tensor,
     _rmsnorm_resid_rows[(xf.shape[0],)](
         xf.contiguous(), rf.contiguous(), weight.contiguous(), out, nres,
         scale, H=H, HB=triton.next_power_of_2(H), EPS=eps,
-        SCALED=(scale != 1.0), num_warps=8, **_pdl_kw(x.device))
+        SCALED=(scale != 1.0), num_warps=8, **_pdl_kw(x.device, xf.shape[0]))
     return out.reshape(x.shape), nres.reshape(x.shape)
 
 
@@ -1019,7 +1036,7 @@ def scaled_resid_add_rows(x: torch.Tensor, resid: torch.Tensor, scale: float):
     out = torch.empty_like(xf, dtype=torch.bfloat16)
     _scaled_resid_add_rows[(xf.shape[0],)](
         xf.contiguous(), rf.contiguous(), out, float(scale),
-        H=H, HB=triton.next_power_of_2(H), num_warps=8, **_pdl_kw(x.device))
+        H=H, HB=triton.next_power_of_2(H), num_warps=8, **_pdl_kw(x.device, xf.shape[0]))
     return out.reshape(x.shape)
 
 
@@ -1071,7 +1088,7 @@ def rope_norm_heads(x: torch.Tensor, weight: torch.Tensor,
     _rope_norm_heads[(R, HEADS)](
         x.contiguous(), weight.contiguous(), cos.contiguous(),
         sin.contiguous(), out, HEADS=HEADS, D=D,
-        DB=triton.next_power_of_2(D), EPS=eps, num_warps=4, **_pdl_kw(x.device))
+        DB=triton.next_power_of_2(D), EPS=eps, num_warps=4, **_pdl_kw(x.device, R))
     return out
 
 
@@ -1110,7 +1127,7 @@ def rope_heads(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor):
     out = torch.empty(R, HEADS, D, dtype=torch.bfloat16, device=x.device)
     _rope_heads[(R, HEADS)](
         x.contiguous(), cos.contiguous(), sin.contiguous(), out,
-        HEADS=HEADS, D=D, DB=triton.next_power_of_2(D), num_warps=4, **_pdl_kw(x.device))
+        HEADS=HEADS, D=D, DB=triton.next_power_of_2(D), num_warps=4, **_pdl_kw(x.device, R))
     return out
 
 
@@ -1210,5 +1227,5 @@ def router_epilogue(logits: torch.Tensor, k: int, norm: bool, *,
         logits.contiguous(), b, first, w, idx, E=E,
         EB=triton.next_power_of_2(E), K=k, KB=triton.next_power_of_2(k),
         NORM=bool(norm), HAS_BIAS=has_bias,
-        SELECT_ON_LOGITS=bool(select_on_logits), num_warps=4, **_pdl_kw(logits.device))
+        SELECT_ON_LOGITS=bool(select_on_logits), num_warps=4, **_pdl_kw(logits.device, R))
     return first, w, idx
