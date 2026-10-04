@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Engagement accounting for the training path: which dgrad served each call, ring overflow, the padded block's real bytes
+
+- **`nf4_qlora.DGRAD_STATS`** counts which backward served each frozen-GEMM dgrad: the kernel, the grouped_mm route, the
+  `dense` route (#459), or the per-expert decode loop. The loop is counted with its reason: an ineligible grad or shape (the `dgrad_eligible` reason),
+  offload-staged storage, or `dgrad_kernel=False`. The loop used to be taken silently, so a run that asked for the kernel could
+  not tell it had not had it. experts4bit-qlora's training census reads it (moe-generalize).
+- **The pinned staging ring counts its overflow** (`_PinnedRing.overflow`): a call larger than `GNF4_PINNED_RING_SLOT_INTS`
+  ints takes the pageable, synchronizing copy, and now says so.
+- **`LORA_PAD_WASTE["last_bytes_alloc"]`** records the padded LoRA block at its real allocation itemsize. The block is
+  allocated in the adapter dtype, so on fp32 adapters it takes twice the `last_bytes` that the `auto` rule compares against
+  its 2 GiB limit. Recorded only: the rule is unchanged until a full-step reading says which accounting it should use.
+
 ## 0.38.0 — 2026-10-04 — pinned-tier sizing models PyTorch's power-of-two pinned allocator (`capacity_for_bytes`; #71): exact and never over budget, where the flat 1.9 wasted up to half a budget and could overshoot. Measured on cgroup v1 and v2 (lane K29)
 
 **0.38.0.** One helper's answer changes; no kernel output changes. `capacity_for_bytes(..., pinned=True)`, the function the NVMe and host-RAM tiers tell you to size `hot_rows` with, now models what pinned memory actually costs.

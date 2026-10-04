@@ -385,10 +385,12 @@ class _PinnedRing:
         self.i = 0
         self.waits = 0
         self.staged = 0
+        self.overflow = 0      # calls larger than a slot: they take the pageable, syncing copy (GNF4_PINNED_RING_SLOT_INTS)
 
     def stage(self, flat, n):
         """Device int32 tensor holding ``flat[:n]``, or None when ``n`` exceeds a slot."""
         if n > self.SLOT_INTS:
+            self.overflow += 1
             return None
         s = self.i
         self.i = (s + 1) % self.SLOTS

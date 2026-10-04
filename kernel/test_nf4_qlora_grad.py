@@ -393,6 +393,32 @@ def test_dgrad_kernel_opt_in_falls_back_for_offload_staged_weights():
 
 
 @pytest.mark.skipif(not CUDA, reason="fused kernel is CUDA/Triton only")
+def test_dgrad_stats_name_the_backward_that_served_each_call(monkeypatch):
+    """DGRAD_STATS counts the kernel, and every fall to the loop WITH its reason: an engagement census reads it to tell a run
+    that had the kernel from one that silently did not."""
+    import nf4_qlora
+    monkeypatch.setenv("GNF4_TRAIN_GEMM", "fused")
+    monkeypatch.setattr(nf4_qlora, "DGRAD_STATS",
+                        {"kernel": 0, "grouped_mm": 0, "dense": 0, "loop": 0, "loop_reasons": {}})
+    packed, absmax = _packed_stack()
+    a, sizes, eids = _grouped_inputs()
+    packed_c, absmax_c = packed.cuda(), absmax.cuda()
+
+    def _bwd(*extra):
+        x = a.clone().cuda().to(torch.bfloat16).requires_grad_(True)
+        FusedGroupedNf4.apply(x, packed_c, absmax_c, sizes, eids, *extra).sum().backward()
+
+    _bwd()                                                  # the default: the kernel
+    _bwd(None, False)                                       # the exact loop, asked for
+    _bwd(lambda: (packed, absmax), True)                    # CPU-staged storage: the loop, not asked for
+    monkeypatch.setenv("GNF4_TRAIN_GEMM", "dense")
+    _bwd()                                                  # the opt-in dense route (any CUDA card)
+    st = nf4_qlora.DGRAD_STATS
+    assert (st["kernel"], st["grouped_mm"], st["dense"], st["loop"]) == (1, 0, 1, 2), st
+    assert st["loop_reasons"] == {"dgrad_kernel=False": 1, "storage on another device (offload-staged)": 1}, st
+
+
+@pytest.mark.skipif(not CUDA, reason="fused kernel is CUDA/Triton only")
 def test_dgrad_kernel_reaches_lora_params_too():
     """The flag threads through fused_grouped_lora; A and B must still train."""
     packed, absmax = _packed_stack()
