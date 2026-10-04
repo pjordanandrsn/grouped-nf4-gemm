@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.36.0 — 2026-10-04 — one MoE layer pass reuses its grouping instead of re-uploading and re-deriving it (`GNF4_HOST_REUSE`, on by default; value-identical): experts4bit-qlora's fused training step at 0.933 / 0.951 on an RTX 5090; the compact padded LoRA delta (opt-in)
+
+**0.36.0.** One default changes, and no output changes: `GNF4_HOST_REUSE` is on (`GNF4_HOST_REUSE=0` restores the previous behaviour).
+- **What it does.** One MoE layer pass stops re-uploading and re-deriving the same grouping:
+  - repeat index uploads return the earlier device tensor;
+  - the down LoRA delta reuses the gate_up delta's plan;
+  - distinct-id adapter gathers take a scatter backward.
+- **Measured.** experts4bit-qlora's TC1 amendment 20 measured its fused training step on an RTX 5090 with every other default in force. The step ran at **0.933** (shipped arm) and **0.951** (matched arm) of the flag off, with held-out loss unchanged (`e4b.train.host-reuse.qwen3.5090.2026-10-04`).
+- **Also in this release (opt-in):** `NF4_QLORA_COMPACT_DELTA=1`. The padded LoRA delta saves its input instead of its padded block: 133 → 54 MB per layer at Qwen3-30B-A3B's shape with bf16 adapters, with values identical. That is what lets experts4bit-qlora keep MoE activations across a step (`E4B_MOE_KEEP_LAYERS`).
+- `docs/system-manifest.json` is unchanged. Its `consumer_ci_pin` prose still trails the consumer's pin, and moves in a release that changes no other compatibility fact.
 
 ### `GNF4_HOST_REUSE` is on by default (`GNF4_HOST_REUSE=0` restores the previous behaviour)
 
