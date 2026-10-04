@@ -1,6 +1,17 @@
 # Changelog
 
-## Unreleased
+## 0.37.0 — 2026-10-04 — two defaults: programmatic dependent launch for decode launches of at most 8 rows (`GNF4_PDL`, value-identical; experts4bit-qlora's int4 serving decode 1.0404× at one request and 1.0000× at 16 on an RTX 5090) and the grouped_mm training route on compute capability 9.0 (`GNF4_TRAIN_GEMM=auto`; Unsloth/e4b 1.030 on an H100 NVL, a labelled row)
+
+**0.37.0.** Two defaults change. One never changes values; the other changes them on compute capability 9.0 only.
+- **`GNF4_PDL` is on, capped at 8 activation rows** (`GNF4_PDL=0` turns it off; `GNF4_PDL_MAX_ROWS=0` removes the cap).
+  - On NVIDIA sm_90+ cards, the twelve decode-row kernels' launches of at most 8 rows become programmatic dependents of the kernel before them. Values never change.
+  - experts4bit-qlora's lane P113 read it on SC1's int4 serving configuration (Qwen3-30B-A3B) on an RTX 5090, under decode-only timing. Tokens were identical, decode ran **1.0404×** as fast with one request and **1.0000×** with 16 (`e4b.serve.p113.gnf4-pdl-capped.qwen3-int4.5090.2026-10-04`). Uncapped, it cost 16 requests (0.9787×), which is why the cap is the default.
+  - It is inert on CPU, under the interpreter, on ROCm and below sm_90.
+- **`GNF4_TRAIN_GEMM=auto`** takes the grouped_mm training route on a compute capability 9.0 card whose torch has `_grouped_mm`, and the fused kernels everywhere else (`GNF4_TRAIN_GEMM=fused` restores the old numerics).
+  - experts4bit-qlora's TC1c amendment 6 measured Unsloth/e4b at **1.030** [1.016, 1.045] on the full Qwen3-30B-A3B training step on an H100 NVL with the route on, and **1.325** with MoE activations also kept (`e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.route-v2`, `….moe-keep-route-v2`). Both are LABELLED rows. The H100 position of record stays amendment 1's 0.817 (Unsloth faster) until a default-settings box re-reads it on this release.
+  - Values change on sm_90 only: at most 0.0024 relative Frobenius per GEMM in the kernel replay.
+- **Also new in this release:** the grouped_mm route itself (`GNF4_TRAIN_GEMM=grouped_mm`, sm_90) with its dequant kernel at bandwidth; the `GNF4_PDL` and `GNF4_PDL_MAX_ROWS` switches the new default is built from; and K28's reading of PDL in the served B=1 decode chain (0.323 µs saved per gnf4 kernel, bit-identically).
+- `docs/system-manifest.json` is unchanged. Its `consumer_ci_pin` prose still trails the consumer's pin.
 
 ### `GNF4_PDL` is on by default, capped at 8 activation rows (`GNF4_PDL=0` turns it off; `GNF4_PDL_MAX_ROWS=0` removes the cap)
 
