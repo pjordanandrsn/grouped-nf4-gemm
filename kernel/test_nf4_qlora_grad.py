@@ -304,7 +304,7 @@ def test_no_rows_returns_none_as_before():
 # --- the opt-in dgrad route through the autograd Function --------------------
 
 @pytest.mark.skipif(not CUDA, reason="fused kernel is CUDA/Triton only")
-def test_dgrad_kernel_is_on_by_default():
+def test_dgrad_kernel_is_on_by_default(monkeypatch):
     """The default backward is the single-launch kernel, since 2026-08-12.
 
     Inverted from `test_dgrad_kernel_is_off_by_default`. The old default was the
@@ -318,6 +318,9 @@ def test_dgrad_kernel_is_on_by_default():
     `dgrad_kernel=False` must still reach the exact loop. Both halves are
     asserted here so a future flip in either direction is loud.
     """
+    # GNF4_TRAIN_GEMM=fused: these assert the fused dgrad KERNEL; under `auto` a call with few groups takes the dense route
+    # off sm_90 (and the grouped_mm route on sm_90), which is not this kernel.
+    monkeypatch.setenv("GNF4_TRAIN_GEMM", "fused")
     packed, absmax = _packed_stack()
     a, sizes, eids = _grouped_inputs()
     packed_c, absmax_c = packed.cuda(), absmax.cuda()
@@ -347,8 +350,11 @@ def test_dgrad_kernel_is_on_by_default():
 
 
 @pytest.mark.skipif(not CUDA, reason="fused kernel is CUDA/Triton only")
-def test_dgrad_kernel_route_matches_within_the_bf16_budget():
+def test_dgrad_kernel_route_matches_within_the_bf16_budget(monkeypatch):
     """Opted in, the gradient must still agree with decode-then-matmul."""
+    # GNF4_TRAIN_GEMM=fused: these assert the fused dgrad KERNEL; under `auto` a call with few groups takes the dense route
+    # off sm_90 (and the grouped_mm route on sm_90), which is not this kernel.
+    monkeypatch.setenv("GNF4_TRAIN_GEMM", "fused")
     packed, absmax = _packed_stack()
     a, sizes, eids = _grouped_inputs()
     packed_c, absmax_c = packed.cuda(), absmax.cuda()

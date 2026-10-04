@@ -89,6 +89,18 @@ def test_route_env(monkeypatch):
     assert nf4_route.train_gemm_route() == "grouped_mm"
     monkeypatch.setenv("GNF4_TRAIN_GEMM", "dense")
     assert nf4_route.train_gemm_route() == "dense"
+    # auto off sm_90: dense for a call with 1..DENSE_AUTO_MAX_GROUPS present groups, fused above (or without a count); sm_90 stays grouped_mm
+    monkeypatch.delenv("GNF4_TRAIN_GEMM", raising=False)
+    cap = nf4_route.DENSE_AUTO_MAX_GROUPS
+    if not sm90:
+        assert nf4_route.train_gemm_route(None, 8) == "dense" and nf4_route.train_gemm_route(None, cap) == "dense"
+        assert nf4_route.train_gemm_route(None, cap + 1) == "fused" and nf4_route.train_gemm_route(None, 128) == "fused"
+        assert nf4_route.train_gemm_route(None, 0) == "fused" and nf4_route.train_gemm_route() == "fused"
+    else:
+        assert nf4_route.train_gemm_route(None, 8) == "grouped_mm"
+    assert nf4_route.train_gemm_route(torch.device("cpu"), 8) == "fused"
+    monkeypatch.setenv("GNF4_TRAIN_GEMM", "fused")
+    assert nf4_route.train_gemm_route(None, 8) == "fused"
     monkeypatch.setenv("GNF4_TRAIN_GEMM", "cublas")
     with pytest.raises(ValueError):
         nf4_route.train_gemm_route()
@@ -121,3 +133,22 @@ def test_dense_route_takes_device_sizes_and_ids():
     rel = ((host.float() - want.float()).norm() / want.float().norm()).item()
     assert rel < 5e-3, rel
 
+
+
+def test_auto_takes_dense_for_few_groups_off_sm90(monkeypatch):
+    """auto, per call, through FusedGroupedNf4: a call with <= DENSE_AUTO_MAX_GROUPS present groups runs the dense route off sm_90 (both
+    forward and dgrad), and a call with more stays on the fused kernels; on sm_90 auto is the grouped_mm route either way."""
+    if torch.cuda.get_device_capability() == (9, 0):
+        pytest.skip("auto is the grouped_mm route on sm_90")
+    nf4_route.ROUTE_STATS.update(fwd=0, dgrad=0, dense_fwd=0, dense_dgrad=0)
+    few = ([40, 3, 17, 9], [0, 2, 5, 7])
+    _run("auto", monkeypatch, few[0], few[1], 256, 512)
+    assert nf4_route.ROUTE_STATS["dense_fwd"] == 1 and nf4_route.ROUTE_STATS["dense_dgrad"] == 1
+    many = [2] * (nf4_route.DENSE_AUTO_MAX_GROUPS + 1)
+    B_E = len(many)
+    monkeypatch.setenv("GNF4_TRAIN_GEMM", "auto")
+    B, am = _stack(B_E, 256, 512)
+    a = (torch.randn(sum(many), 512, device="cuda") * 0.5).to(torch.bfloat16).requires_grad_(True)
+    out = nf4_qlora.gemm_4bit_grouped_train(a, B, am, many, list(range(B_E)))
+    out.float().sum().backward()
+    assert nf4_route.ROUTE_STATS["dense_fwd"] == 1 and nf4_route.ROUTE_STATS["dense_dgrad"] == 1, nf4_route.ROUTE_STATS

@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### `GNF4_TRAIN_GEMM=auto` takes the dense route off sm_90 for calls with at most 16 present experts
+
+- **Why.** experts4bit-qlora's TC1 amendment 22 read the dense route (#459) against the fused kernels on the full training step, one RTX
+  5090 per family:
+  - **Mixtral-8x7B** (2 of 8 experts per token): dense/fused **0.651** [0.648, 0.654], 5.52 → 3.59 s/step.
+  - **Qwen3-30B-A3B** (up to 128 present experts per call): **2.947** [2.915, 2.979], far slower. The per-expert loop adds a launch per
+    expert per projection to a step that is launch-bound.
+  - Held-out moved by −0.0021 (Mixtral) and −0.0001 (Qwen3) nats.
+- **What.** Its registered rule took the dense route under `auto` on non-sm_90 cards for calls with at most 16 present groups.
+  - `train_gemm_route(dev, n_groups)` now takes the call's group count, and `FusedGroupedNf4` passes `len(sizes)`.
+  - The threshold is `nf4_route.DENSE_AUTO_MAX_GROUPS`.
+  - sm_90 keeps the grouped_mm route, CPU stays fused, and an explicit `GNF4_TRAIN_GEMM` value is used as given.
+- **Values change** for training calls with 16 or fewer present groups on cards other than sm_90 (Mixtral-like layers), within bf16
+  noise. `GNF4_TRAIN_GEMM=fused` restores the fused kernels.
+- **Tested.** `test_route_env` covers the per-call choice; a new test drives `FusedGroupedNf4` with few groups (dense) and with many
+  (fused). The two fused-dgrad tests pin `fused`. RTX A2000: 47 passed, 1 skipped.
+
 ## 0.38.0 — 2026-10-04 — pinned-tier sizing models PyTorch's power-of-two pinned allocator (`capacity_for_bytes`; #71): exact and never over budget, where the flat 1.9 wasted up to half a budget and could overshoot. Measured on cgroup v1 and v2 (lane K29)
 
 **0.38.0.** One helper's answer changes; no kernel output changes. `capacity_for_bytes(..., pinned=True)`, the function the NVMe and host-RAM tiers tell you to size `hot_rows` with, now models what pinned memory actually costs.
