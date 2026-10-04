@@ -19,7 +19,7 @@
 
 ## Why it happens
 
-Top-k routing touches a small fraction of expert bytes per token, so residency, not capacity, is the binding constraint; but a serving loop needs those bytes to arrive as one aligned request landing where the kernel will read them. Safetensors is tensor-major; the page cache duplicates a DRAM tier and hands eviction to the OS; a pinned row costs more host memory than its stride (`nvme_residency.PINNED_ROW_FACTOR`). The tiers here fix the layout at bake time and never copy a row more than the link requires.
+Top-k routing touches a small fraction of expert bytes per token, so residency, not capacity, is the binding constraint; but a serving loop needs those bytes to arrive as one aligned request landing where the kernel will read them. Safetensors is tensor-major; the page cache duplicates a DRAM tier and hands eviction to the OS; a pinned tier costs more host memory than its rows, because PyTorch rounds every pinned request up to a power of two (`nvme_residency.pinned_request_cost`; size `hot_rows` with `capacity_for_bytes`, which models it). The tiers here fix the layout at bake time and never copy a row more than the link requires.
 
 ## Which project solves it
 
@@ -117,7 +117,7 @@ The CPU block bakes, verifies the full chain (source range hash, manifest, arena
 - `Mxfp4NvmeResidency` is not CUDA-graph capturable: a miss is a host-side disk read.
 - Do not quantize-bake a checkpoint that already ships MXFP4 ([README](../../README.md)); relocate it.
 - The cold-engine premise (bitsandbytes' CPU dequant as a free decode arm) is refuted on a box without AVX-512 (claim `gnf4.cold-engine.phase0-premise-refuted`).
-- Open issues on arena staging (#60) and the pinned-row factor (#71: `PINNED_ROW_FACTOR` is conservative on cgroup v1; cgroup v2 is unmeasured) are listed in [`STATUS.md`](../STATUS.md). No ROCm or XPU.
+- Arena staging (#60) is open and listed in [`STATUS.md`](../STATUS.md). The pinned-row factor (#71) is closed: since 0.38.0, `capacity_for_bytes` models the power-of-two rounding, measured on cgroup v1 and v2 (`gnf4.kernel.k29-pinned-charge-cgroup-v2.5090.2026-10-04`). No ROCm or XPU.
 
 ## Related
 

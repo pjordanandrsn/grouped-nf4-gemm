@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Docs: the host/NVMe streaming solution page no longer describes #71 as open (docs only)
+
+- `docs/solutions/stream-moe-experts-from-host-or-nvme.md` named `PINNED_ROW_FACTOR` as a pinned row's cost and listed #71
+  as open with cgroup v2 unmeasured. Both have been wrong since 0.38.0. The page now names `pinned_request_cost` /
+  `capacity_for_bytes` and K29's register row.
+
 ### `GNF4_TRAIN_GEMM=auto` takes the dense route off sm_90 for calls with at most 16 present experts
 
 - **Why.** experts4bit-qlora's TC1 amendment 22 read the dense route (#459) against the fused kernels on the full training step, one RTX
