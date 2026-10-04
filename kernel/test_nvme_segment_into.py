@@ -301,6 +301,7 @@ def test_a_non_blocking_copy_to_the_device_fences_the_slots_it_read(arena):
     suffix = EXPERT_SUFFIXES[0]
     dt, shape, _off, _ln = segment_geometry(index, suffix)
     with _tier(path, index) as t:
+        t.ensure(2, PICK)                            # the stand-in copies its slot bytes from the real tier's rows
         st = _FencingStandIn(t, index)
         out = torch.empty((len(PICK),) + shape, dtype=dt, device="cuda")
         segment_into(st, index, 2, PICK, suffix, out, non_blocking=True)
