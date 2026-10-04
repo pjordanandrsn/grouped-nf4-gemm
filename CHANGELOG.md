@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### K29 registered: what a pinned host byte costs a cgroup v2 container -- the release gate for the power-of-two pinned-tier model (prereg only; #71)
+
+- **Why.** The pinned-tier model (`capacity_for_bytes`, this release's #71 entry below) was measured on cgroup v1. It
+  hands back more rows than 1.9, so it ships only after one cgroup **v2** reading, the regime rented boxes run.
+- **Method.** One rented RTX 5090. The probe from `kernel/receipts-71/` reads the container cgroup's own
+  `memory.current` around fresh-process pinned and pageable allocations at ten sizes. The runner is
+  experts4bit-qlora `bench/k29/` (rehearsed on v1; STOP-1 fired as designed).
+- **Rule.** `r = charged / pow2ceil(N)`. VOID, then CONFIRMED (every r in [0.97, 1.06]: the model ships, #71 closes),
+  then PREMIUM (median r > 1.06: the default is withdrawn before release), then MIXED. Lane ceiling $3.00.
+
 ### Pinned-tier sizing models the allocator's power-of-two rounding (`capacity_for_bytes`; #71)
 
 - **Why.** `PINNED_ROW_FACTOR = 1.9` was read as a per-byte premium on pinned memory. It is not one. PyTorch's caching
