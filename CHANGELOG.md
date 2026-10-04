@@ -1,6 +1,21 @@
 # Changelog
 
-## Unreleased
+## 0.38.0 — 2026-10-04 — pinned-tier sizing models PyTorch's power-of-two pinned allocator (`capacity_for_bytes`; #71): exact and never over budget, where the flat 1.9 wasted up to half a budget and could overshoot. Measured on cgroup v1 and v2 (lane K29)
+
+**0.38.0.** One helper's answer changes; no kernel output changes. `capacity_for_bytes(..., pinned=True)`, the function the NVMe and host-RAM tiers tell you to size `hot_rows` with, now models what pinned memory actually costs.
+- **What was wrong.** `PINNED_ROW_FACTOR = 1.9` was read as a per-byte premium on pinned memory. It is PyTorch's caching host allocator rounding every pinned request **up to a power of two**, and `alloc_landing` asks for `rows × stride + 4096`. The flat 1.9 wasted up to half a budget, and just above a power of two it could still over-allocate: 2100 MB costs 4096 MB, 1.96×.
+- **What it does now.** `pinned_request_cost(n)` is the next power of two of `n + 4096`. `capacity_for_bytes` returns the largest `hot_rows` whose rounded request fits: exact, and never over the budget. At most budgets that is more rows than before.
+  - `factor=PINNED_ROW_FACTOR` reproduces the old answer.
+  - `pinned=False` is unchanged.
+- **Measured in both cgroup regimes.** Every pinned request is charged 0.4–1.0 % over its power of two:
+  - **v1** (RTX A2000, `kernel/receipts-71/`): 1.0043–1.005;
+  - **v2** (rented RTX 5090, lane K29, `gnf4.kernel.k29-pinned-charge-cgroup-v2.5090.2026-10-04`): 1.0048–1.0103.
+
+  K29 was registered as this release's gate, and it read CONFIRMED.
+- **Also in this release (opt-in): `GNF4_TRAIN_GEMM=dense`** (#459). This training route works on any CUDA card. Each present expert is dequantized alone and multiplied with `torch.mm`, keeping the grouped kernels' contracts.
+  - In an RTX A2000 replay of Mixtral-8x7B's expert shapes it ran forward 3.4× and dgrad 7.0–7.7× faster than the fused kernels.
+  - The default (`auto`) is unchanged. A full-step A/B on an RTX 5090 decides whether `auto` takes it anywhere.
+- `docs/system-manifest.json` is unchanged. Its `consumer_ci_pin` prose still trails the consumer's pin.
 
 ### K29 read: CONFIRMED. A pinned request costs its power of two on cgroup v2 as well (#71 closes)
 
