@@ -99,6 +99,9 @@ class FusedGroupedNf4(torch.autograd.Function):
         if ctx.route == "grouped_mm":
             from nf4_route import grouped_mm_forward
             out = grouped_mm_forward(a_cat, packed, absmax, sizes, expert_ids)
+        elif ctx.route == "dense":
+            from nf4_route import dense_forward
+            out = dense_forward(a_cat, packed, absmax, sizes, expert_ids)
         else:
             out = gemm_4bit_grouped(a_cat, packed, absmax, sizes, expert_ids)
         # DO NOT stash the weight tensors themselves when a weights_fn is
@@ -182,6 +185,9 @@ class FusedGroupedNf4(torch.autograd.Function):
                 if packed.device == grad_out.device and getattr(ctx, "route", "fused") == "grouped_mm":
                     from nf4_route import grouped_mm_dgrad
                     return ((grouped_mm_dgrad(grad_out, packed, absmax, ctx.sizes, ctx.expert_ids),) + (None,) * 6)
+                if packed.device == grad_out.device and getattr(ctx, "route", "fused") == "dense":
+                    from nf4_route import dense_dgrad
+                    return ((dense_dgrad(grad_out, packed, absmax, ctx.sizes, ctx.expert_ids),) + (None,) * 6)
                 if packed.device == grad_out.device:
                     return ((dgrad_4bit_grouped(grad_out, packed, absmax,
                                                 ctx.sizes, ctx.expert_ids),)

@@ -54,11 +54,11 @@ def _run(route, monkeypatch, sizes, eids, N, K, seed=0):
 def test_route_matches_the_fused_kernels(monkeypatch, N, K, sizes, eids):
     monkeypatch.setattr(nf4_route, "_refuse_unless_supported", lambda dev: None)
     monkeypatch.setattr(torch, "_grouped_mm", _loop_grouped_mm, raising=False)
-    nf4_route.ROUTE_STATS.update(fwd=0, dgrad=0)
+    nf4_route.ROUTE_STATS.update(fwd=0, dgrad=0, dense_fwd=0, dense_dgrad=0)
     fo, fg = _run("fused", monkeypatch, sizes, eids, N, K)
-    assert nf4_route.ROUTE_STATS == {"fwd": 0, "dgrad": 0}
+    assert nf4_route.ROUTE_STATS == {"fwd": 0, "dgrad": 0, "dense_fwd": 0, "dense_dgrad": 0}
     ro, rg = _run("grouped_mm", monkeypatch, sizes, eids, N, K)
-    assert nf4_route.ROUTE_STATS == {"fwd": 1, "dgrad": 1}
+    assert nf4_route.ROUTE_STATS == {"fwd": 1, "dgrad": 1, "dense_fwd": 0, "dense_dgrad": 0}
     for name, x, y in (("out", fo, ro), ("grad_a", fg, rg)):
         rel = ((x - y).norm() / x.norm()).item()
         assert rel < 5e-3, (name, rel)
@@ -87,6 +87,37 @@ def test_route_env(monkeypatch):
     assert nf4_route.train_gemm_route() == "fused"
     monkeypatch.setenv("GNF4_TRAIN_GEMM", "grouped_mm")
     assert nf4_route.train_gemm_route() == "grouped_mm"
+    monkeypatch.setenv("GNF4_TRAIN_GEMM", "dense")
+    assert nf4_route.train_gemm_route() == "dense"
     monkeypatch.setenv("GNF4_TRAIN_GEMM", "cublas")
     with pytest.raises(ValueError):
         nf4_route.train_gemm_route()
+
+
+@pytest.mark.parametrize("N,K", [(1536, 2048), (2048, 768), (130, 192)])
+@pytest.mark.parametrize("sizes,eids", [([40, 3, 17, 9], [0, 2, 5, 7]), ([64], [4]), ([1, 0, 120, 2, 5], [1, 2, 3, 6, 7])])
+def test_dense_route_matches_the_fused_kernels_on_any_card(monkeypatch, N, K, sizes, eids):
+    """GNF4_TRAIN_GEMM=dense: the per-expert dequant + torch.mm loop gives the fused kernels' forward and dgrad within bf16 noise,
+    an empty group included, and counts itself (never the grouped_mm route's counters)."""
+    nf4_route.ROUTE_STATS.update(fwd=0, dgrad=0, dense_fwd=0, dense_dgrad=0)
+    fo, fg = _run("fused", monkeypatch, sizes, eids, N, K)
+    do, dg = _run("dense", monkeypatch, sizes, eids, N, K)
+    assert nf4_route.ROUTE_STATS == {"fwd": 0, "dgrad": 0, "dense_fwd": 1, "dense_dgrad": 1}
+    for name, x, y in (("out", fo, do), ("grad_a", fg, dg)):
+        rel = ((x - y).norm() / x.norm()).item()
+        assert rel < 5e-3, (name, rel)
+
+
+def test_dense_route_takes_device_sizes_and_ids():
+    """The loop reads sizes once on the host; device-side sizes and ids give the same output as host lists."""
+    B, am = _stack(8, 256, 512, seed=3)
+    sizes, eids = [5, 0, 33, 7], [7, 1, 2, 4]
+    a = (torch.randn(sum(sizes), 512, device="cuda") * 0.5).to(torch.bfloat16)
+    host = nf4_route.dense_forward(a, B, am, sizes, eids)
+    dev = nf4_route.dense_forward(a, B, am, torch.tensor(sizes, device="cuda"), torch.tensor(eids, device="cuda", dtype=torch.int32))
+    assert torch.equal(host, dev)
+    want = torch.cat([a[r0:r0 + n].float() @ NG.dequant_ref(B[e], am[e], 256, 512).to(torch.bfloat16).float().t()
+                      for r0, n, e in zip([0, 5, 5, 38], sizes, eids) if n]).to(torch.bfloat16)
+    rel = ((host.float() - want.float()).norm() / want.float().norm()).item()
+    assert rel < 5e-3, rel
+

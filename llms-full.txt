@@ -1164,7 +1164,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
     "bitsandbytes gemm_4bit has no grouped routed MoE path",
     "QLoRA backward dequantizes 4-bit experts for dX"
    ],
-   "solution": "gemm_4bit_grouped runs one Triton launch for all active experts over the bitsandbytes gemm_4bit NF4 layout (LUT decode to fp32 in registers, blockwise absmax scaling, fp32 accumulation, bf16 epilogue); dequant_ref is the pure-torch oracle it is asserted against; dgrad_4bit_grouped is the one-launch training backward; gemm_nf4_grouped_smallm (K25, opt-in in the consumer) is K19's grouped tensor-core small-M GEMM on the same NF4 store, its codebook decoded by an exact select tree that lane K26 measured faster than the served NF4 GEMM (gnf4.kernel.k26-nf4-decode-ablation.5090.2026-10-01) for decode batches, its weight operand exactly dequant_ref rounded to bf16 (not the served kernel's TF32), so a consumer gates it on quality. On sm_90 the default training route (GNF4_TRAIN_GEMM=auto; nf4_route) dequantizes the present experts to bf16 (bit-equal to dequant_ref rounded to bf16) and runs the training forward and dgrad through torch._grouped_mm: experts4bit-qlora's TC1c amendment 6 measured the full Qwen3-30B-A3B training step on an H100 NVL at Unsloth/e4b 1.030 with it against 0.817 with the fused kernels, the matched set EQUIVALENT though not bit-identical (<= 0.0024 relative Frobenius per GEMM in the kernel replay). GNF4_TRAIN_GEMM=fused keeps the fused kernels, which every other card uses by default.",
+   "solution": "gemm_4bit_grouped runs one Triton launch for all active experts over the bitsandbytes gemm_4bit NF4 layout (LUT decode to fp32 in registers, blockwise absmax scaling, fp32 accumulation, bf16 epilogue); dequant_ref is the pure-torch oracle it is asserted against; dgrad_4bit_grouped is the one-launch training backward; gemm_nf4_grouped_smallm (K25, opt-in in the consumer) is K19's grouped tensor-core small-M GEMM on the same NF4 store, its codebook decoded by an exact select tree that lane K26 measured faster than the served NF4 GEMM (gnf4.kernel.k26-nf4-decode-ablation.5090.2026-10-01) for decode batches, its weight operand exactly dequant_ref rounded to bf16 (not the served kernel's TF32), so a consumer gates it on quality. On sm_90 the default training route (GNF4_TRAIN_GEMM=auto; nf4_route) dequantizes the present experts to bf16 (bit-equal to dequant_ref rounded to bf16) and runs the training forward and dgrad through torch._grouped_mm: experts4bit-qlora's TC1c amendment 6 measured the full Qwen3-30B-A3B training step on an H100 NVL at Unsloth/e4b 1.030 with it against 0.817 with the fused kernels, the matched set EQUIVALENT though not bit-identical (<= 0.0024 relative Frobenius per GEMM in the kernel replay). GNF4_TRAIN_GEMM=fused keeps the fused kernels, which every other card uses by default. GNF4_TRAIN_GEMM=dense (opt-in, any CUDA card) runs each present expert as its own dequant + torch.mm, one expert's bf16 weight at a time; it is not bit-identical to the fused kernels, and no full-step reading has decided where it is faster.",
    "modes": [
     "inference",
     "training",
@@ -1213,7 +1213,9 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
     "nf4_qlora:fused_grouped_lora",
     "nf4_route:grouped_mm_forward",
     "nf4_route:grouped_mm_dgrad",
-    "nf4_route:dequant_groups"
+    "nf4_route:dequant_groups",
+    "nf4_route:dense_forward",
+    "nf4_route:dense_dgrad"
    ],
    "documentation": [
     "docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md",
