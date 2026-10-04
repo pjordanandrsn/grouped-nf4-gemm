@@ -109,6 +109,7 @@
     "nf4_qlora:fused_grouped_lora",
     "nf4_route:grouped_mm_forward",
     "nf4_route:grouped_mm_dgrad",
+    "nf4_route:route_for",
     "nf4_route:dequant_groups",
     "nf4_route:dense_forward",
     "nf4_route:dense_dgrad"

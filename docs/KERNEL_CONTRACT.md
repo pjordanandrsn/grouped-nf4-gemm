@@ -231,6 +231,15 @@ Launch amortization is therefore the design center, not an optimization:
 | prefill (S=2048, bs1) | mean S·k/E: 256 (OLMoE), 128 (Qwen3/Gemma-4), 64 (GPT-OSS); multinomial spread in census |
 | training microbatch (mb=1, seq 2048, packed) | same shape as prefill; backward stays on the dequant path in v1 (scope control) |
 
+## Training route, stated as data (`nf4_route`)
+
+`MIN_CAPABILITY = (8, 0)` is the fused NF4 kernels' documented floor and `GROUPED_MM_CAPABILITY = (9, 0)` the one
+capability where `GNF4_TRAIN_GEMM=auto` takes the dequantise + `torch._grouped_mm` route. `route_for(capability, *,
+has_grouped_mm, requested, n_groups)` is the decision itself, a pure function (off sm_90, `auto` is `dense` for a call
+with 1 to `DENSE_AUTO_MAX_GROUPS` present groups); `train_gemm_route` resolves a live device through it.
+Below the floor `route_for` answers `None` with the reason. The launch path did not change: nothing refuses on the floor
+at launch time.
+
 ## Fallback contract
 
 Above the size threshold where dequant+`grouped_mm` wins (roofline: compute-bound cells),

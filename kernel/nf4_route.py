@@ -37,15 +37,66 @@ _AUTO_ROUTE: dict = {}                                     # device index -> the
 #: Qwen3-30B-A3B (up to 128 present experts per call, a launch-bound step) stepped at 2.947x, so calls with many groups stay fused.
 DENSE_AUTO_MAX_GROUPS = 16
 
+#: The fused NF4 kernels' documented floor (README "Environment": an NVIDIA GPU of sm_80 or newer). Stated here as data so a
+#: caller can ask before it launches; nothing below this is tested, and nothing here refuses on it at launch.
+MIN_CAPABILITY = (8, 0)
+#: The one compute capability ``torch._grouped_mm`` has a kernel for (torch 2.8), so the only place ``auto`` takes that route.
+GROUPED_MM_CAPABILITY = (9, 0)
+ROUTES = ("auto", "fused", "grouped_mm", "dense")
+
+
+def route_for(capability, *, has_grouped_mm: bool, requested: str = "auto", n_groups=None) -> tuple:
+    """The training route for a device, decided from facts about it rather than from a live device: ``(route, reason)``.
+
+    The same decision :func:`train_gemm_route` makes, as a pure function, so it can be answered before CUDA is initialised, for a
+    device that is not this one, or in a test without a GPU. ``capability`` is the ``(major, minor)`` compute capability, or
+    ``None`` for a non-CUDA device; ``has_grouped_mm`` is whether the torch that will run has ``torch._grouped_mm``;
+    ``requested`` is what ``GNF4_TRAIN_GEMM`` would say; ``n_groups`` is the call's number of present groups when known (``auto``
+    takes the dense route off sm_90 for 1 to :data:`DENSE_AUTO_MAX_GROUPS` of them). ``route`` is ``"fused"``, ``"grouped_mm"`` or
+    ``"dense"``, or ``None`` when no route of this module can train there (below :data:`MIN_CAPABILITY`, an explicit
+    ``grouped_mm`` the device cannot run, or no CUDA device): ``reason`` then says why, in the words the launch-time refusal
+    would use.
+    """
+    requested = str(requested).strip().lower()
+    if requested not in ROUTES:
+        raise ValueError(f"requested must be one of {ROUTES}, got {requested!r}")
+    if capability is None:
+        return None, "no CUDA device: the NF4 training kernels are CUDA-only"
+    cap = (int(capability[0]), int(capability[1]))
+    if cap < MIN_CAPABILITY:
+        return None, (f"compute capability {cap[0]}.{cap[1]} is below the documented floor "
+                      f"{MIN_CAPABILITY[0]}.{MIN_CAPABILITY[1]} of the fused NF4 kernels")
+    if requested == "fused":
+        return "fused", "GNF4_TRAIN_GEMM=fused"
+    if requested == "dense":
+        return "dense", "GNF4_TRAIN_GEMM=dense: per-expert dequant + torch.mm"
+    grouped_ok = has_grouped_mm and cap == GROUPED_MM_CAPABILITY
+    if requested == "grouped_mm":
+        if not has_grouped_mm:
+            return None, "GNF4_TRAIN_GEMM=grouped_mm needs torch._grouped_mm (torch >= 2.8); this torch has none"
+        if not grouped_ok:
+            return None, (f"GNF4_TRAIN_GEMM=grouped_mm: torch._grouped_mm runs on compute capability 9.0 only (torch 2.8); "
+                          f"this device is {cap[0]}.{cap[1]}")
+        return "grouped_mm", "GNF4_TRAIN_GEMM=grouped_mm"
+    if grouped_ok:
+        return "grouped_mm", "auto: compute capability 9.0 with torch._grouped_mm"
+    why = (f"auto: compute capability {cap[0]}.{cap[1]} is not 9.0" if has_grouped_mm
+           else "auto: this torch has no torch._grouped_mm")
+    if n_groups is not None and 0 < int(n_groups) <= DENSE_AUTO_MAX_GROUPS:
+        return "dense", f"{why}; {int(n_groups)} present groups <= {DENSE_AUTO_MAX_GROUPS} take the dense route"
+    if n_groups is not None:
+        return "fused", f"{why}; {int(n_groups)} present groups > {DENSE_AUTO_MAX_GROUPS} stay fused"
+    return "fused", f"{why} (a call with 1 to {DENSE_AUTO_MAX_GROUPS} present groups takes the dense route)"
+
 
 def train_gemm_route(dev=None, n_groups=None) -> str:
     """``GNF4_TRAIN_GEMM`` = ``auto`` (default) | ``fused`` | ``grouped_mm`` | ``dense``. ``auto`` is ``grouped_mm`` on a CUDA device
     of compute capability 9.0 when this torch has ``_grouped_mm``. On any other CUDA device it is ``dense`` for a call with 1 to
     :data:`DENSE_AUTO_MAX_GROUPS` present groups (``n_groups``) and ``fused`` above that or when ``n_groups`` is not given; CPU is
     ``fused``. ``dense`` dequantizes one present expert at a time and runs its GEMM through ``torch.mm``. An explicit value is used as
-    given. ``dev`` defaults to the current CUDA device."""
+    given. ``dev`` defaults to the current CUDA device. The device-level decision is :func:`route_for`."""
     v = os.environ.get("GNF4_TRAIN_GEMM", "auto").strip().lower()
-    if v not in ("auto", "fused", "grouped_mm", "dense"):
+    if v not in ROUTES:
         raise ValueError(f"GNF4_TRAIN_GEMM must be 'auto', 'fused', 'grouped_mm' or 'dense', got {v!r}")
     if v != "auto":
         return v
@@ -59,20 +110,19 @@ def train_gemm_route(dev=None, n_groups=None) -> str:
     idx = dev.index if dev.index is not None else torch.cuda.current_device()
     r = _AUTO_ROUTE.get(idx)
     if r is None:
-        ok = hasattr(torch, "_grouped_mm") and torch.cuda.get_device_capability(idx) == (9, 0)
-        r = _AUTO_ROUTE[idx] = "grouped_mm" if ok else "fused"
+        route, _ = route_for(torch.cuda.get_device_capability(idx), has_grouped_mm=hasattr(torch, "_grouped_mm"))
+        # Below the floor route_for answers None; ``auto`` has always said "fused" there and the kernel launch is what fails.
+        r = _AUTO_ROUTE[idx] = route or "fused"
     if r == "fused" and n_groups is not None and 0 < int(n_groups) <= DENSE_AUTO_MAX_GROUPS:
         return "dense"
     return r
 
 
 def _refuse_unless_supported(dev):
-    if not hasattr(torch, "_grouped_mm"):
-        raise RuntimeError("GNF4_TRAIN_GEMM=grouped_mm needs torch._grouped_mm (torch >= 2.8); this torch has none -- unset it")
-    cap = torch.cuda.get_device_capability(dev)
-    if cap != (9, 0):
-        raise RuntimeError(f"GNF4_TRAIN_GEMM=grouped_mm: torch._grouped_mm runs on compute capability 9.0 only (torch 2.8); this device "
-                           f"is {cap[0]}.{cap[1]} -- unset it (the fused kernels are the route here)")
+    route, why = route_for(torch.cuda.get_device_capability(dev), has_grouped_mm=hasattr(torch, "_grouped_mm"),
+                           requested="grouped_mm")
+    if route != "grouped_mm":
+        raise RuntimeError(f"{why} -- unset it (the fused kernels are the route here)")
 
 
 @triton.jit

@@ -224,6 +224,10 @@ Training goes through `nf4_qlora` / `mxfp4_qlora`, which is what
 [`experts4bit-qlora`](https://pypi.org/project/experts4bit-qlora/)
 drives (`enable_fast()`, `enable_fast_train()`). This package makes one
 expert-stack matmul cheap; e4b decides which bytes are where.
+Which training kernel route a device gets (the fused kernels, or the dequantise + `torch._grouped_mm` route on compute
+capability 9.0) can be asked without the device: `nf4_route.route_for(capability, has_grouped_mm=..., n_groups=...)` returns the
+route and the reason (per call: off sm_90, `auto` is `dense` for 1 to 16 present groups), or `None` with the reason below
+the sm_80 floor.
 
 ## What is measured
 

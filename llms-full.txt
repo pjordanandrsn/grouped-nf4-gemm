@@ -233,6 +233,10 @@ Training goes through `nf4_qlora` / `mxfp4_qlora`, which is what
 [`experts4bit-qlora`](https://pypi.org/project/experts4bit-qlora/)
 drives (`enable_fast()`, `enable_fast_train()`). This package makes one
 expert-stack matmul cheap; e4b decides which bytes are where.
+Which training kernel route a device gets (the fused kernels, or the dequantise + `torch._grouped_mm` route on compute
+capability 9.0) can be asked without the device: `nf4_route.route_for(capability, has_grouped_mm=..., n_groups=...)` returns the
+route and the reason (per call: off sm_90, `auto` is `dense` for 1 to 16 present groups), or `None` with the reason below
+the sm_80 floor.
 
 ## Source: docs/SOLUTIONS.md (https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/SOLUTIONS.md)
 
@@ -1213,6 +1217,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
     "nf4_qlora:fused_grouped_lora",
     "nf4_route:grouped_mm_forward",
     "nf4_route:grouped_mm_dgrad",
+    "nf4_route:route_for",
     "nf4_route:dequant_groups",
     "nf4_route:dense_forward",
     "nf4_route:dense_dgrad"
@@ -2450,6 +2455,15 @@ Launch amortization is therefore the design center, not an optimization:
 | decode bs1 | ~1 token/expert, k experts active (k=8 of 64/128; k=4 GPT-OSS) |
 | prefill (S=2048, bs1) | mean S·k/E: 256 (OLMoE), 128 (Qwen3/Gemma-4), 64 (GPT-OSS); multinomial spread in census |
 | training microbatch (mb=1, seq 2048, packed) | same shape as prefill; backward stays on the dequant path in v1 (scope control) |
+
+## Training route, stated as data (`nf4_route`)
+
+`MIN_CAPABILITY = (8, 0)` is the fused NF4 kernels' documented floor and `GROUPED_MM_CAPABILITY = (9, 0)` the one
+capability where `GNF4_TRAIN_GEMM=auto` takes the dequantise + `torch._grouped_mm` route. `route_for(capability, *,
+has_grouped_mm, requested, n_groups)` is the decision itself, a pure function (off sm_90, `auto` is `dense` for a call
+with 1 to `DENSE_AUTO_MAX_GROUPS` present groups); `train_gemm_route` resolves a live device through it.
+Below the floor `route_for` answers `None` with the reason. The launch path did not change: nothing refuses on the floor
+at launch time.
 
 ## Fallback contract
 
