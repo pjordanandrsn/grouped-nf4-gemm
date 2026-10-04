@@ -94,7 +94,7 @@ py-modules = [
     # NOT in the wheel. kernel/test_packaging_covers_kernel.py now fails if any
     # non-test kernel/*.py is missing here.
     "mxfp4_residency", "nvme_residency", "row_pool", "fp8_kv", "fp8_paged_attn",
-    "nf4_qlora",
+    "nf4_qlora", "nf4_route",
     # The GGUF k-quant lane (Glimmer-era): reader + reference decoders.
     "gguf_reader", "kquant_ref",
     # Calibrated (GPTQ-style) packing onto the shipped int4-b32 grid: same
