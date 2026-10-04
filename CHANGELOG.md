@@ -13,6 +13,36 @@ Register: `gnf4.kernel.k28-pdl-decode-chain.5090.2026-10-04`; `kernel/RESULTS-k2
 - **What follows (registered).** `GNF4_PDL` stays off by default here. experts4bit-qlora registers a served lane (B=1 and
   B=16, tokens and tok/s), which also decides whether e4b's own decode kernels take the preamble.
 - **Cost:** $0.0237.
+### `GNF4_TRAIN_GEMM=grouped_mm`: dequantize the present experts and run the training GEMMs through `torch._grouped_mm` (opt-in, sm_90)
+
+- **Why.** On an H100 NVL, experts4bit-qlora's fused training step is device-bound, at about 1.8× its comparator's device time per
+  step. experts4bit-qlora's TC1c amendment 3 (`tc1c-h100-5`, H100 NVL, torch 2.8) replayed the 128 unique fused forward and dgrad
+  calls of its Qwen3-30B-A3B training step, recorded through the real router:
+
+  | | fused / dequant / grouped_mm (ms) | (dequant + grouped_mm) / fused | grouped_mm alone / fused |
+  |---|---|---|---|
+  | forward | 75.11 / 29.45 / 15.29 | **0.596** | 0.204 |
+  | dgrad | 89.20 / 29.42 / 14.63 | **0.494** | 0.164 |
+
+  Every call was within 0.0024 relative Frobenius error of the fused output. The registered rule (both ratios ≤ 0.80) is to take the
+  route as an sm_90 opt-in.
+- **What.** `kernel/nf4_route.py` adds two pieces:
+  - one Triton kernel that decodes the present experts' NF4 stacks to a contiguous bf16 `[G, N, K]`, bit-equal to
+    `dequant_ref(...).to(bfloat16)`;
+  - `torch._grouped_mm` for the forward (`a_cat @ W_e^T`) and the dgrad (`grad_out @ W_e`) over the groups' offsets.
+
+  `FusedGroupedNf4` picks the route at forward and remembers it, so a backward never mixes routes. `dgrad_kernel=False` and
+  offload-staged storage keep their own paths. `ROUTE_STATS` counts calls.
+- **Refusal.** Off compute capability 9.0 (torch 2.8's only `torch._grouped_mm` target) it refuses with the reason, and never falls
+  back silently.
+- **Numerics.** Not bit-identical to the fused kernels: bf16 weights, cuBLAS accumulation. It stays opt-in until a training A/B on the
+  H100 decides (experts4bit-qlora TC1c amendment 4).
+- **Tests** (`kernel/test_nf4_route.py`):
+  - dequant bit-equality on four shapes;
+  - route vs fused within 5e-3 on forward and dgrad through `FusedGroupedNf4`, with `torch._grouped_mm` stubbed by a per-group loop
+    where the card has none;
+  - refusal off sm_90;
+  - environment parsing.
 
 ### K28 registered: does programmatic dependent launch shorten the served B=1 decode layer's gnf4 kernels in a CUDA graph, bit-identically? (bench and prereg)
 

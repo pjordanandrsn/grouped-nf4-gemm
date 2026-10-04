@@ -91,7 +91,14 @@ class FusedGroupedNf4(torch.autograd.Function):
         from nf4_grouped import gemm_4bit_grouped
 
         ctx.dgrad_kernel = dgrad_kernel
-        out = gemm_4bit_grouped(a_cat, packed, absmax, sizes, expert_ids)
+        # GNF4_TRAIN_GEMM=grouped_mm (opt-in, sm_90; nf4_route.py): dequantize + torch._grouped_mm instead of the fused kernel,
+        # forward and dgrad alike. The choice is made here and remembered, so a backward never mixes routes.
+        from nf4_route import grouped_mm_forward, train_gemm_route
+        ctx.route = train_gemm_route()
+        if ctx.route == "grouped_mm":
+            out = grouped_mm_forward(a_cat, packed, absmax, sizes, expert_ids)
+        else:
+            out = gemm_4bit_grouped(a_cat, packed, absmax, sizes, expert_ids)
         # DO NOT stash the weight tensors themselves when a weights_fn is
         # supplied. e4b's expert offload keeps a SINGLE layer GPU-resident:
         # staging a layer evicts the previous one by reassigning ``.data``.
@@ -170,6 +177,9 @@ class FusedGroupedNf4(torch.autograd.Function):
             # falls back to the loop -- so exactness is never merely a flag away
             # from being silently wrong.
             if ctx.dgrad_kernel and dgrad_eligible(grad_out, packed, absmax) is None:
+                if packed.device == grad_out.device and getattr(ctx, "route", "fused") == "grouped_mm":
+                    from nf4_route import grouped_mm_dgrad
+                    return ((grouped_mm_dgrad(grad_out, packed, absmax, ctx.sizes, ctx.expert_ids),) + (None,) * 6)
                 if packed.device == grad_out.device:
                     return ((dgrad_4bit_grouped(grad_out, packed, absmax,
                                                 ctx.sizes, ctx.expert_ids),)
