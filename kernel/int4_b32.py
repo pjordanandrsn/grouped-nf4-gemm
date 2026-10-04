@@ -36,14 +36,100 @@ from int4_pack_ref import BLOCK, dequant_int4_ref, pack_int4_b32  # noqa: F401
 from _triton_shim import UnsupportedShapeError  # noqa: E402
 
 
+# ------------------------------------- lane K28: programmatic dependent launch --
+#: Lane K28 (``PREREG-k28-pdl-decode-chain.md``): launch the decode-row kernels of this module with programmatic
+#: dependent launch (PDL). ``1``/``0`` force it; unset = the shipped default, which stays off until K28 reads. It is
+#: read ONCE, at the first launch that asks (every launch asks, so a per-call read would cost each eager decode launch
+#: an environment lookup, ~0.6 us); :func:`pdl_refresh` re-reads it after the environment changes.
+PDL_ENV = "GNF4_PDL"
+PDL_DEFAULT = False
+#: ``griddepcontrol`` exists from sm_90 (Hopper) on. Below that the switch is inert: the kernels compile and launch
+#: exactly as they do with it off.
+PDL_MIN_CC = (9, 0)
+_CC_CACHE: dict[str, tuple] = {}
+_LAUNCH_PDL: list = []
+_PDL_SWITCH: list = []                  # [bool] once GNF4_PDL has been read
+_NO_KW: dict = {}                       # what an off launch unpacks: nothing (never mutated)
+_PDL_KW: dict = {"PDL": True, "launch_pdl": True}
+
+
+def pdl_default() -> bool:
+    """``GNF4_PDL`` as the environment holds it now: ``1``/``true``/``on`` or ``0``/``false``/``off``; anything else is
+    the default (off). The launches read it through :func:`pdl_refresh`'s cache, not through this."""
+    v = os.environ.get(PDL_ENV, "").strip().lower()
+    if v in ("1", "true", "on"):
+        return True
+    if v in ("0", "false", "off"):
+        return False
+    return PDL_DEFAULT
+
+
+def pdl_refresh() -> bool:
+    """Re-read ``GNF4_PDL`` into the switch every launch consults, and return it."""
+    _PDL_SWITCH[:] = [pdl_default()]
+    return _PDL_SWITCH[0]
+
+
+def _launch_pdl_available() -> bool:
+    """Whether this Triton's NVIDIA backend takes the ``launch_pdl`` launch option (3.4 and later)."""
+    if not _LAUNCH_PDL:
+        try:
+            from triton.backends.nvidia.compiler import CUDAOptions
+            _LAUNCH_PDL.append("launch_pdl" in CUDAOptions.__dataclass_fields__)
+        except Exception:  # noqa: BLE001 -- any import failure means the option is not there
+            _LAUNCH_PDL.append(False)
+    return _LAUNCH_PDL[0]
+
+
+def pdl_active(device) -> bool:
+    """True when this module's decode-row kernels launch with PDL on ``device``: the switch is on, the device is an
+    NVIDIA CUDA device (not ROCm, which reports its own capability numbers), the kernels are compiled (not the
+    interpreter), Triton can launch with PDL, and the card is sm_90 or newer."""
+    if not (_PDL_SWITCH[0] if _PDL_SWITCH else pdl_refresh()):
+        return False
+    dev = torch.device(device)
+    if dev.type != "cuda" or torch.version.hip or os.environ.get("TRITON_INTERPRET", "0") == "1":
+        return False
+    key = str(dev)
+    if key not in _CC_CACHE:
+        _CC_CACHE[key] = tuple(torch.cuda.get_device_capability(dev))
+    return _CC_CACHE[key] >= PDL_MIN_CC and _launch_pdl_available()
+
+
+def _pdl_kw(device) -> dict:
+    """Launch keywords for one decode-row kernel: ``PDL=True`` (the kernel's grid-dependency preamble) together
+    with ``launch_pdl=True`` (Triton launches it as a programmatic dependent of the previous kernel on the stream),
+    or nothing at all, so the off path compiles and launches exactly as before the switch existed."""
+    return _PDL_KW if pdl_active(device) else _NO_KW
+
+
+@triton.jit
+def _pdl_enter(PDL: tl.constexpr):
+    """The PDL preamble, first in every decode-row kernel. ``griddepcontrol.wait`` blocks until the previous kernel on
+    the stream has COMPLETED and its memory is visible, so nothing below it can read a stale input or overwrite one the
+    previous kernel still reads. ``griddepcontrol.launch_dependents`` then lets the next kernel's programs launch and
+    park in their own wait while this one runs: what PDL hides is launch latency, never ordering. With ``PDL`` off
+    this is empty.
+
+    The two instructions are written as inline PTX rather than through ``tl.extra.cuda.gdc_wait`` /
+    ``gdc_launch_dependents``: Triton 3.4.0 ships those wrappers still on its old ``_builder`` keyword, so they fail to
+    compile ("unexpected keyword argument '_semantic'"; seen on the NAS A2000 compiling for sm_120). These are the same
+    PTX strings those wrappers emit."""
+    if PDL:
+        tl.inline_asm_elementwise("griddepcontrol.wait; // dummy $0", "=r", [], dtype=tl.int32, is_pure=False, pack=1)
+        tl.inline_asm_elementwise("griddepcontrol.launch_dependents; // dummy $0", "=r", [], dtype=tl.int32,
+                                  is_pure=False, pack=1)
+
+
 # ------------------------------------------------- activation quantise --
 @triton.jit
-def _quant_x_rows(x_ptr, xq_ptr, xs_ptr, K: tl.constexpr):
+def _quant_x_rows(x_ptr, xq_ptr, xs_ptr, K: tl.constexpr, PDL: tl.constexpr = False):
     """Per-(row, 32-block) int8 symmetric quantise (Q8-style). Grid
     (R, K//32): blocks are independent, so the k loop the original
     one-program-per-row kernel carried was pure serialization -- the
     B=16 census priced it at 11.2 us/call for trivially-parallel work.
     Same arithmetic per block, so outputs are bitwise-identical."""
+    _pdl_enter(PDL)
     # literal 32 throughout: triton JIT bodies cannot read imported
     # module globals (BLOCK lives in int4_pack_ref for the host side)
     r = tl.program_id(0)
@@ -62,7 +148,7 @@ def quant_x_rows(x: torch.Tensor):
     R, K = x.shape
     xq = torch.empty(R, K, dtype=torch.int8, device=x.device)
     xs = torch.empty(R, K // BLOCK, dtype=torch.float32, device=x.device)
-    _quant_x_rows[(R, K // BLOCK)](x.contiguous(), xq, xs, K=K)
+    _quant_x_rows[(R, K // BLOCK)](x.contiguous(), xq, xs, K=K, **_pdl_kw(x.device))
     return xq, xs
 
 
@@ -72,7 +158,8 @@ def _gemv_int4_b32(xq_ptr, xs_ptr, w_ptr, ws_ptr, eid_ptr, part_ptr,
                    cnt_ptr, out_ptr,
                    N, K: tl.constexpr, R: tl.constexpr,
                    BLOCK_N: tl.constexpr, SK: tl.constexpr,
-                   KU: tl.constexpr, FUSED_REDUCE: tl.constexpr):
+                   KU: tl.constexpr, FUSED_REDUCE: tl.constexpr,
+                   PDL: tl.constexpr = False):
     """One program computes BLOCK_N output rows of expert ``eids[e]`` for
     activation row ``e``, over its split-K span. Grid (cdiv(N,BN), R, SK).
     Dense callers pass R=1 with ``eids=[0]``. Stores fp32 partials at
@@ -89,6 +176,7 @@ def _gemv_int4_b32(xq_ptr, xs_ptr, w_ptr, ws_ptr, eid_ptr, part_ptr,
     re-arms its counter. ``cnt`` is ``[R * cdiv(N, BLOCK_N)] int32``, zeroed
     once at allocation and left zeroed by every launch. ``SK == 1`` stores
     bf16 straight to ``out`` (nothing to reduce, no counter traffic)."""
+    _pdl_enter(PDL)
     pid = tl.program_id(0)
     e = tl.program_id(1)
     sk = tl.program_id(2)
@@ -249,7 +337,7 @@ def _plan(N: int, K: int, R: int = 1, sm_count: int = 128):
 
 @triton.jit
 def _reduce_partials(part_ptr, out_ptr, SK: tl.constexpr, RN,
-                     BLOCK: tl.constexpr):
+                     BLOCK: tl.constexpr, PDL: tl.constexpr = False):
     """``out[i] = bf16(sum_sk part[sk, i])`` over the flattened ``[R, N]``
     -- the split-K reduction and the bf16 cast in ONE launch. The
     ``part.reshape(sk, R, N).sum(0).to(bf16)`` it replaces was three
@@ -259,6 +347,7 @@ def _reduce_partials(part_ptr, out_ptr, SK: tl.constexpr, RN,
     slot order, each add rounded: bitwise that sequential sum, and not
     bitwise torch's ``.sum(0)``, whose order differs (lane B393, 270 of
     270 census cases on an RTX 5090 and an RTX A2000)."""
+    _pdl_enter(PDL)
     pid = tl.program_id(0)
     offs = pid * BLOCK + tl.arange(0, BLOCK)
     m = offs < RN
@@ -277,7 +366,7 @@ def reduce_partials(part: torch.Tensor, sk: int, R: int, N: int,
     rn = R * N
     block = 1024
     _reduce_partials[(triton.cdiv(rn, block),)](
-        part, out, SK=sk, RN=rn, BLOCK=block, num_warps=4)
+        part, out, SK=sk, RN=rn, BLOCK=block, num_warps=4, **_pdl_kw(part.device))
     return out
 
 
@@ -337,7 +426,8 @@ def gemv_int4_b32(xq, xs, packed, scales, eids, N: int, K: int,
     if not fused_reduce:
         _gemv_int4_b32[(triton.cdiv(N, bn), R, sk)](
             xq, xs, packed, scales, eids, part, part, part,
-            N, K=K, R=R, BLOCK_N=bn, SK=sk, KU=ku, FUSED_REDUCE=0, num_warps=wp)
+            N, K=K, R=R, BLOCK_N=bn, SK=sk, KU=ku, FUSED_REDUCE=0, num_warps=wp,
+            **_pdl_kw(xq.device))
         return reduce_partials(part, sk, R, N, out=out)
     need = gemv_counter_len(N, R, bn)
     if cnt is None:
@@ -349,7 +439,8 @@ def gemv_int4_b32(xq, xs, packed, scales, eids, N: int, K: int,
         out = torch.empty(R, N, dtype=torch.bfloat16, device=xq.device)
     _gemv_int4_b32[(triton.cdiv(N, bn), R, sk)](
         xq, xs, packed, scales, eids, part, cnt, out,
-        N, K=K, R=R, BLOCK_N=bn, SK=sk, KU=ku, FUSED_REDUCE=1, num_warps=wp)
+        N, K=K, R=R, BLOCK_N=bn, SK=sk, KU=ku, FUSED_REDUCE=1, num_warps=wp,
+        **_pdl_kw(xq.device))
     return out
 
 
@@ -706,11 +797,12 @@ def build_group_tiles_fused(expert_ids, n_experts: int, block_m: int,
 
 @triton.jit
 def _quant_x_rows_gathered(x_ptr, ord_ptr, xq_ptr, xs_ptr,
-                           K: tl.constexpr):
+                           K: tl.constexpr, PDL: tl.constexpr = False):
     """``_quant_x_rows`` with the expert-major GATHER folded in: output
     row ``r`` quantises input row ``order[r]``. Kills the standalone
     [R, K] index_select the serving loop paid per layer (census: 48
     calls / 0.46 ms per B=16 step)."""
+    _pdl_enter(PDL)
     r = tl.program_id(0)
     kb = tl.program_id(1)
     src = tl.load(ord_ptr + r).to(tl.int64)
@@ -731,14 +823,16 @@ def quant_x_rows_gathered(x: torch.Tensor, order: torch.Tensor):
     xq = torch.empty(R, K, dtype=torch.int8, device=x.device)
     xs = torch.empty(R, K // BLOCK, dtype=torch.float32, device=x.device)
     _quant_x_rows_gathered[(R, K // BLOCK)](
-        x.contiguous(), order, xq, xs, K=K)
+        x.contiguous(), order, xq, xs, K=K, **_pdl_kw(x.device))
     return xq, xs
 
 
 @triton.jit
-def _swiglu_rows(gu_ptr, h_ptr, I: tl.constexpr, BS: tl.constexpr):
+def _swiglu_rows(gu_ptr, h_ptr, I: tl.constexpr, BS: tl.constexpr,
+                 PDL: tl.constexpr = False):
     """h = silu(gate) * up over a [R, 2I] gate-block-then-up-block
     matrix, one kernel instead of the chunk/silu/mul chain."""
+    _pdl_enter(PDL)
     r = tl.program_id(0)
     c = tl.program_id(1)
     offs = c * BS + tl.arange(0, BS)
@@ -758,19 +852,20 @@ def swiglu_rows(gu: torch.Tensor):
     h = torch.empty(R, inter, dtype=torch.bfloat16, device=gu.device)
     bs = min(1024, triton.next_power_of_2(inter))
     _swiglu_rows[(R, triton.cdiv(inter, bs))](
-        gu.contiguous(), h, I=inter, BS=bs)
+        gu.contiguous(), h, I=inter, BS=bs, **_pdl_kw(gu.device))
     return h
 
 
 # ------------------------------------------ top-k weighted combine --
 @triton.jit
 def _combine_rows(dn_ptr, w_ptr, out_ptr, K: tl.constexpr, H,
-                  BLOCK: tl.constexpr):
+                  BLOCK: tl.constexpr, PDL: tl.constexpr = False):
     """``out[t, :] = bf16(sum_j fp32(dn[t*K + j, :]) * w[t*K + j])`` --
     the MoE combine (weight, sum over the top-k, cast) in one launch. The
     torch chain it replaces was four dispatches per layer (to_copy,
     mul, sum, to_copy) and two kernels; the Qwen3 B=1 op census put
     them at the top of the collapsed forward's glue."""
+    _pdl_enter(PDL)
     t = tl.program_id(0)
     pid = tl.program_id(1)
     offs = pid * BLOCK + tl.arange(0, BLOCK)
@@ -801,14 +896,14 @@ def combine_rows(dn: torch.Tensor, w: torch.Tensor, k: int):
     block = min(1024, triton.next_power_of_2(H))
     _combine_rows[(T, triton.cdiv(H, block))](
         dn.contiguous(), w.contiguous(), out, K=k, H=H, BLOCK=block,
-        num_warps=4)
+        num_warps=4, **_pdl_kw(dn.device))
     return out
 
 
 # --------------------------------------------------- fused T=1 RMSNorm --
 @triton.jit
 def _rmsnorm_rows(x_ptr, w_ptr, out_ptr, R, H: tl.constexpr,
-                  HB: tl.constexpr, EPS: tl.constexpr):
+                  HB: tl.constexpr, EPS: tl.constexpr, PDL: tl.constexpr = False):
     """One launch per RMSNorm site: the fp32 mean-square reduce, the
     rsqrt scale, the weight multiply, and the cast back -- the chain
     torch runs as 3-4 kernels per call at decode shapes. Row-parallel
@@ -816,6 +911,7 @@ def _rmsnorm_rows(x_ptr, w_ptr, out_ptr, R, H: tl.constexpr,
     [heads, head_dim] q/k norms. The weight read is ~4 KB per call, so
     the single-CTA bandwidth trap that refused the fused router (P10)
     does not transfer."""
+    _pdl_enter(PDL)
     r = tl.program_id(0)
     offs = tl.arange(0, HB)
     m = offs < H
@@ -836,7 +932,7 @@ def rmsnorm_rows(x: torch.Tensor, weight: torch.Tensor, eps: float):
     out = torch.empty_like(xf, dtype=torch.bfloat16)
     _rmsnorm_rows[(xf.shape[0],)](
         xf.contiguous(), weight.contiguous(), out, xf.shape[0],
-        H=H, HB=triton.next_power_of_2(H), EPS=eps, num_warps=8)
+        H=H, HB=triton.next_power_of_2(H), EPS=eps, num_warps=8, **_pdl_kw(x.device))
     return out.reshape(x.shape)
 
 
@@ -844,7 +940,7 @@ def rmsnorm_rows(x: torch.Tensor, weight: torch.Tensor, eps: float):
 @triton.jit
 def _rmsnorm_resid_rows(x_ptr, res_ptr, w_ptr, out_ptr, nres_ptr, scale,
                         H: tl.constexpr, HB: tl.constexpr, EPS: tl.constexpr,
-                        SCALED: tl.constexpr):
+                        SCALED: tl.constexpr, PDL: tl.constexpr = False):
     """The decoder layer's ``resid = resid + x; h = rmsnorm(resid)``
     pair as ONE launch: torch runs it as an elementwise add plus the
     3-4 kernel norm chain, twice per layer. The add rounds once to
@@ -858,6 +954,7 @@ def _rmsnorm_resid_rows(x_ptr, res_ptr, w_ptr, out_ptr, nres_ptr, scale,
     times a Python float is one fp32 multiply and one rounding), so the
     scaled path reproduces that rounding rather than folding the scale
     into the fp32 sum -- two roundings, as upstream, not one."""
+    _pdl_enter(PDL)
     r = tl.program_id(0)
     offs = tl.arange(0, HB)
     m = offs < H
@@ -890,19 +987,20 @@ def rmsnorm_resid_rows(x: torch.Tensor, resid: torch.Tensor,
     _rmsnorm_resid_rows[(xf.shape[0],)](
         xf.contiguous(), rf.contiguous(), weight.contiguous(), out, nres,
         scale, H=H, HB=triton.next_power_of_2(H), EPS=eps,
-        SCALED=(scale != 1.0), num_warps=8)
+        SCALED=(scale != 1.0), num_warps=8, **_pdl_kw(x.device))
     return out.reshape(x.shape), nres.reshape(x.shape)
 
 
 # --------------------------------------------- scaled residual add --
 @triton.jit
 def _scaled_resid_add_rows(x_ptr, res_ptr, out_ptr, scale, H: tl.constexpr,
-                           HB: tl.constexpr):
+                           HB: tl.constexpr, PDL: tl.constexpr = False):
     """``resid + x * scale`` as ONE launch with upstream's two bf16
     roundings (product, then sum). torch runs the multiply and the add
     as two kernels; a single ``torch.add(alpha=)`` rounds once and is
     therefore not the upstream value. Used for the layer tail, where no
     norm follows within the layer."""
+    _pdl_enter(PDL)
     r = tl.program_id(0)
     offs = tl.arange(0, HB)
     m = offs < H
@@ -921,7 +1019,7 @@ def scaled_resid_add_rows(x: torch.Tensor, resid: torch.Tensor, scale: float):
     out = torch.empty_like(xf, dtype=torch.bfloat16)
     _scaled_resid_add_rows[(xf.shape[0],)](
         xf.contiguous(), rf.contiguous(), out, float(scale),
-        H=H, HB=triton.next_power_of_2(H), num_warps=8)
+        H=H, HB=triton.next_power_of_2(H), num_warps=8, **_pdl_kw(x.device))
     return out.reshape(x.shape)
 
 
@@ -929,7 +1027,7 @@ def scaled_resid_add_rows(x: torch.Tensor, resid: torch.Tensor, scale: float):
 @triton.jit
 def _rope_norm_heads(x_ptr, w_ptr, cos_ptr, sin_ptr, out_ptr,
                      HEADS: tl.constexpr, D: tl.constexpr,
-                     DB: tl.constexpr, EPS: tl.constexpr):
+                     DB: tl.constexpr, EPS: tl.constexpr, PDL: tl.constexpr = False):
     """Per-head RMSNorm followed by rotate-half rotary, one launch for
     all heads of one projection: replaces the norm launch plus the
     ~6-kernel ``apply_rotary_pos_emb`` chain (cat, neg, two muls, add,
@@ -938,6 +1036,7 @@ def _rope_norm_heads(x_ptr, w_ptr, cos_ptr, sin_ptr, out_ptr,
     ~2 KB, occupancy-safe. rotate_half convention: halves split at
     D/2, ``y = xn * cos + [-xn2, xn1] * sin`` where xn is the NORMED
     vector (norm precedes rotary upstream), fp32 math, bf16 store."""
+    _pdl_enter(PDL)
     r = tl.program_id(0)
     h = tl.program_id(1)
     offs = tl.arange(0, DB)
@@ -972,18 +1071,20 @@ def rope_norm_heads(x: torch.Tensor, weight: torch.Tensor,
     _rope_norm_heads[(R, HEADS)](
         x.contiguous(), weight.contiguous(), cos.contiguous(),
         sin.contiguous(), out, HEADS=HEADS, D=D,
-        DB=triton.next_power_of_2(D), EPS=eps, num_warps=4)
+        DB=triton.next_power_of_2(D), EPS=eps, num_warps=4, **_pdl_kw(x.device))
     return out
 
 
 # ------------------------------------------ rotary only (no head norm) --
 @triton.jit
 def _rope_heads(x_ptr, cos_ptr, sin_ptr, out_ptr,
-                HEADS: tl.constexpr, D: tl.constexpr, DB: tl.constexpr):
+                HEADS: tl.constexpr, D: tl.constexpr, DB: tl.constexpr,
+                PDL: tl.constexpr = False):
     """Rotate-half rotary for all heads of one projection in one launch,
     for attention WITHOUT a per-head norm (GraniteMoe, Mixtral): the same
     ``apply_rotary_pos_emb`` chain the norm+rotary fold replaces, minus
     the norm. fp32 math, bf16 store; halves split at D/2."""
+    _pdl_enter(PDL)
     r = tl.program_id(0)
     h = tl.program_id(1)
     offs = tl.arange(0, DB)
@@ -1009,7 +1110,7 @@ def rope_heads(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor):
     out = torch.empty(R, HEADS, D, dtype=torch.bfloat16, device=x.device)
     _rope_heads[(R, HEADS)](
         x.contiguous(), cos.contiguous(), sin.contiguous(), out,
-        HEADS=HEADS, D=D, DB=triton.next_power_of_2(D), num_warps=4)
+        HEADS=HEADS, D=D, DB=triton.next_power_of_2(D), num_warps=4, **_pdl_kw(x.device))
     return out
 
 
@@ -1018,7 +1119,8 @@ def rope_heads(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor):
 def _router_epilogue(logit_ptr, bias_ptr, prob_ptr, wout_ptr, iout_ptr,
                      E: tl.constexpr, EB: tl.constexpr, K: tl.constexpr,
                      KB: tl.constexpr, NORM: tl.constexpr,
-                     HAS_BIAS: tl.constexpr, SELECT_ON_LOGITS: tl.constexpr):
+                     HAS_BIAS: tl.constexpr, SELECT_ON_LOGITS: tl.constexpr,
+                     PDL: tl.constexpr = False):
     """softmax over all experts, top-K select, optional renormalise --
     the five-launch chain torch runs per layer (softmax, gatherTopK, its
     bitonic sort, the sum, the divide) as one launch on ONE row.
@@ -1034,6 +1136,7 @@ def _router_epilogue(logit_ptr, bias_ptr, prob_ptr, wout_ptr, iout_ptr,
     of two: the register vectors are padded to ``KB`` and masked, since
     ``tl.arange`` only spans powers of two and a model whose top_k is
     not one would otherwise fail at launch."""
+    _pdl_enter(PDL)
     r = tl.program_id(0)
     offs = tl.arange(0, EB)
     m = offs < E
@@ -1107,5 +1210,5 @@ def router_epilogue(logits: torch.Tensor, k: int, norm: bool, *,
         logits.contiguous(), b, first, w, idx, E=E,
         EB=triton.next_power_of_2(E), K=k, KB=triton.next_power_of_2(k),
         NORM=bool(norm), HAS_BIAS=has_bias,
-        SELECT_ON_LOGITS=bool(select_on_logits), num_warps=4)
+        SELECT_ON_LOGITS=bool(select_on_logits), num_warps=4, **_pdl_kw(logits.device))
     return first, w, idx

@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased
+
+### `GNF4_PDL=1`: the decode-row kernels launch with programmatic dependent launch (opt-in; default unchanged)
+
+- **Why.** experts4bit-qlora's SC1b census (#846) found e4b's B=1 decode step on an RTX 5090 does the same kernel work
+  as llama.cpp's, 4.09 against 4.14 ms summed, but overlaps none of its 1,550 in-graph kernels. llama.cpp overlaps 95.5 %
+  of consecutive pairs on one stream, which hides about 1.38 ms a step. Same-stream overlap is programmatic dependent
+  launch (PDL). 913 of those 1,550 kernels are this module's decode-row kernels (SC1b's node census, `sc1d-5090-3`):
+  the int4 trio 576, `_rope_norm_heads` 96, and 49 or 48 each of the norms, the router epilogue, SwiGLU and the combine.
+- **What it does.** With `GNF4_PDL=1` on an sm_90+ NVIDIA card, twelve kernels launch as programmatic dependents of
+  the kernel before them:
+  - `_quant_x_rows`, `_quant_x_rows_gathered`, `_gemv_int4_b32`, `_reduce_partials`;
+  - `_rmsnorm_rows`, `_rmsnorm_resid_rows`, `_scaled_resid_add_rows`, `_rope_norm_heads`, `_rope_heads`;
+  - `_router_epilogue`, `_swiglu_rows`, `_combine_rows`.
+
+  Each kernel's first statement waits for the previous kernel on the stream to complete, then releases the next one to
+  launch. Nothing reads or writes memory before the wait, so PDL hides launch latency and cannot reorder anything.
+  The two instructions (`griddepcontrol.wait`, `griddepcontrol.launch_dependents`) are inline PTX. Triton 3.4.0's own
+  `tl.extra.cuda.gdc_wait` / `gdc_launch_dependents` wrappers still use the pre-3.4 `_builder` keyword and fail to
+  compile.
+- **What does not change.** Off (unset or `0`), every launch passes the keywords it passed before. The switch is inert
+  even when set on CPU, under the interpreter, on ROCm, on cards below sm_90, and with a Triton that has no
+  `launch_pdl`.
+- **Read once.** The switch is read at the first launch that asks; `int4_b32.pdl_refresh()` re-reads it. Every launch
+  asks, and a per-call environment read measured about 0.6 µs, which an eager decode step would pay about 900 times.
+  The cached check costs about 0.06 µs.
+- **Tested.** `kernel/test_pdl.py`:
+  - on CPU: the parsing, the inert cases, and that every launch of the twelve kernels takes the switch and starts with
+    the wait;
+  - on an sm_90+ card: every wrapper, eager and captured in a CUDA graph, is `torch.equal` with the switch on and off,
+    and a probe shows a dependent kernel starting inside its predecessor and leaving its wait only after it.
+
+  No speed is claimed. Lane K28 (`kernel/PREREG-k28-pdl-decode-chain.md`) reads it on an RTX 5090, and the default
+  stays off until then.
+
 ## 0.36.0 — 2026-10-04 — one MoE layer pass reuses its grouping instead of re-uploading and re-deriving it (`GNF4_HOST_REUSE`, on by default; value-identical): experts4bit-qlora's fused training step at 0.933 / 0.951 on an RTX 5090; the compact padded LoRA delta (opt-in)
 
 **0.36.0.** One default changes, and no output changes: `GNF4_HOST_REUSE` is on (`GNF4_HOST_REUSE=0` restores the previous behaviour).
