@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### The grouped_mm route's dequant kernel runs at bandwidth (`GNF4_TRAIN_GEMM=grouped_mm`; values unchanged)
+
+- **Why.** experts4bit-qlora's TC1c amendment 4 measured the route on the full Qwen3-30B-A3B training step on an H100 NVL, and it made
+  the step **slower**: Unsloth/e4b fell from 0.817 to 0.664, and from 1.100 to 0.934 with MoE activations kept. The profiled arm put
+  the route's `_dequant_groups_kernel` at 2,178 ms of device time per step (1.89 ms per call), against the fused kernels' 1,424 ms. The
+  kernel gathered the NF4 LUT and the absmax per element.
+- **What.** The kernel is rewritten:
+  - byte tiles (BLOCK_N 16 × 256 bytes, 8 warps) are loaded coalesced;
+  - both nibbles are decoded through a 16-entry register LUT (`tl.gather`) and interleaved with `tl.join`;
+  - one absmax per quant block is applied by reshape-broadcast;
+  - contiguous bf16 rows are stored.
+
+  Same fp32 multiply and one bf16 rounding, so it stays bit-equal to `dequant_ref(...).to(bfloat16)`.
+- **Measured on an RTX A2000** (Qwen3-30B-A3B stacks, 48 experts): gate_up 8.24 → 1.62–1.69 ms (224–233 GB/s), and down 2.64 →
+  0.84–0.86 ms. That is 0.76–0.82× and 0.73–0.93× of bitsandbytes' `dequantize_4bit` on the same stacks. Outputs are bit-equal.
+- **Next.** The route stays opt-in. Its full-step value on the H100 is re-measured with this kernel (experts4bit-qlora TC1c).
+- **Tests.** `test_nf4_route.py` gains non-tile-multiple shapes: (17, 640) and (33, 64).
+
 ### K28 read (RTX 5090): LEVER — programmatic dependent launch saves 0.323 µs per gnf4 kernel in the served B=1 decode chain, bit-identically
 
 Register: `gnf4.kernel.k28-pdl-decode-chain.5090.2026-10-04`; `kernel/RESULTS-k28-pdl-decode-chain.md`.
