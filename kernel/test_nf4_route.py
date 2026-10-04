@@ -19,7 +19,7 @@ def _stack(E, N, K, seed=0):
     return B, am
 
 
-@pytest.mark.parametrize("N,K", [(1536, 2048), (2048, 768), (96, 128), (130, 192)])
+@pytest.mark.parametrize("N,K", [(1536, 2048), (2048, 768), (96, 128), (130, 192), (17, 640), (33, 64)])
 def test_dequant_groups_is_bit_equal_to_dequant_ref(N, K):
     E = 8
     B, am = _stack(E, N, K, seed=N + K)

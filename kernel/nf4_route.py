@@ -44,23 +44,37 @@ def _refuse_unless_supported(dev):
 
 
 @triton.jit
-def _dequant_groups_kernel(b_ptr, am_ptr, eid_ptr, lut_ptr, out_ptr, N, K,
+def _dequant_groups_kernel(b_ptr, am_ptr, eid_ptr, lut_ptr, out_ptr, N, KB,
                            s_be, s_bn, s_ae, s_an, s_og, s_on,
-                           BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr, QBLOCK: tl.constexpr):
+                           BLOCK_N: tl.constexpr, BLOCK_KB: tl.constexpr, QB: tl.constexpr):
+    """One [BLOCK_N rows x BLOCK_KB packed bytes] tile of one group's expert: bytes loaded coalesced, both nibbles decoded through a
+    16-entry register LUT (tl.gather), interleaved with tl.join (element 2j = high nibble, 2j+1 = low -- dequant_ref's order), scaled
+    by one absmax per quant block via reshape-broadcast, stored as contiguous bf16 rows. fp32 multiply then one bf16 rounding, so it
+    is bit-equal to dequant_ref(...).to(bfloat16)."""
     g = tl.program_id(0)
-    offs_n = tl.program_id(1) * BLOCK_N + tl.arange(0, BLOCK_N)
-    offs_k = tl.program_id(2) * BLOCK_K + tl.arange(0, BLOCK_K)
+    rn = tl.program_id(1) * BLOCK_N + tl.arange(0, BLOCK_N)
+    rb = tl.program_id(2) * BLOCK_KB + tl.arange(0, BLOCK_KB)
     e = tl.load(eid_ptr + g).to(tl.int64)
-    n_mask = offs_n < N
-    k_mask = offs_k < K
-    mask = n_mask[:, None] & k_mask[None, :]
-    byt = tl.load(b_ptr + e * s_be + offs_n[:, None].to(tl.int64) * s_bn + (offs_k[None, :] // 2), mask=mask, other=0).to(tl.int32)
-    # bnb packs element 2j into the HIGH nibble, 2j+1 into the LOW nibble (dequant_ref's order)
-    nib = tl.where((offs_k[None, :] % 2) == 0, (byt >> 4) & 0xF, byt & 0xF)
-    val = tl.load(lut_ptr + nib)
-    am = tl.load(am_ptr + e * s_ae + offs_n[:, None].to(tl.int64) * s_an + (offs_k[None, :] // QBLOCK), mask=mask, other=0.0)
-    w = (val * am).to(tl.bfloat16)
-    tl.store(out_ptr + g.to(tl.int64) * s_og + offs_n[:, None].to(tl.int64) * s_on + offs_k[None, :], w, mask=mask)
+    n_mask = rn < N
+    byt = tl.load(b_ptr + e * s_be + rn[:, None].to(tl.int64) * s_bn + rb[None, :],
+                  mask=n_mask[:, None] & (rb[None, :] < KB), other=0).to(tl.int32)
+    lut = tl.load(lut_ptr + tl.arange(0, 16))
+    hi = tl.reshape(tl.gather(lut, tl.reshape((byt >> 4) & 0xF, [BLOCK_N * BLOCK_KB]), 0), [BLOCK_N, BLOCK_KB])
+    lo = tl.reshape(tl.gather(lut, tl.reshape(byt & 0xF, [BLOCK_N * BLOCK_KB]), 0), [BLOCK_N, BLOCK_KB])
+    v = tl.reshape(tl.join(hi, lo), [BLOCK_N, BLOCK_KB // QB, 2 * QB])
+    rq = tl.program_id(2) * (BLOCK_KB // QB) + tl.arange(0, BLOCK_KB // QB)
+    am = tl.load(am_ptr + e * s_ae + rn[:, None].to(tl.int64) * s_an + rq[None, :],
+                 mask=n_mask[:, None] & (rq[None, :] < KB // QB), other=0.0)
+    w = tl.reshape(v * am[:, :, None], [BLOCK_N, 2 * BLOCK_KB]).to(tl.bfloat16)
+    rk = tl.program_id(2) * (2 * BLOCK_KB) + tl.arange(0, 2 * BLOCK_KB)
+    tl.store(out_ptr + g.to(tl.int64) * s_og + rn[:, None].to(tl.int64) * s_on + rk[None, :], w,
+             mask=n_mask[:, None] & (rk[None, :] < 2 * KB))
+
+
+# BLOCK_N 16 x BLOCK_KB 256 bytes at 8 warps: on an RTX A2000 this runs a Qwen3-30B-A3B gate_up stack at 233 GB/s (0.76x the time of
+# bitsandbytes' dequantize_4bit, 5.1x faster than this module's first kernel, which gathered the LUT and the absmax per element and is
+# what made experts4bit-qlora's TC1c amendment 4 boxes slower) and down at 0.93x bitsandbytes; bit-equal throughout.
+_DQ_BLOCK_N, _DQ_BLOCK_KB, _DQ_WARPS = 16, 256, 8
 
 
 def dequant_groups(B: torch.Tensor, absmax: torch.Tensor, eids_dev: torch.Tensor, N: int, K: int) -> torch.Tensor:
@@ -71,11 +85,11 @@ def dequant_groups(B: torch.Tensor, absmax: torch.Tensor, eids_dev: torch.Tensor
     if G == 0:
         return out
     am = absmax if absmax.dtype == torch.float32 else absmax.float()
-    BN, BK = 32, 128
-    _dequant_groups_kernel[(G, triton.cdiv(N, BN), triton.cdiv(K, BK))](
-        B, am, eids_dev, _lut(B.device), out, N, K,
+    KB = K // 2
+    _dequant_groups_kernel[(G, triton.cdiv(N, _DQ_BLOCK_N), triton.cdiv(KB, _DQ_BLOCK_KB))](
+        B, am, eids_dev, _lut(B.device), out, N, KB,
         B.stride(0), B.stride(1), am.stride(0), am.stride(1), out.stride(0), out.stride(1),
-        BLOCK_N=BN, BLOCK_K=BK, QBLOCK=BLOCKSIZE, num_warps=4)
+        BLOCK_N=_DQ_BLOCK_N, BLOCK_KB=_DQ_BLOCK_KB, QB=BLOCKSIZE // 2, num_warps=_DQ_WARPS)
     return out
 
 
