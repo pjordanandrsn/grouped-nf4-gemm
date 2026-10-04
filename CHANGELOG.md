@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### `nf4_route.route_for`: the training-route decision without a device
+
+- **Why.** `train_gemm_route(dev)` decided the route by asking a live CUDA device for its compute capability. A caller that
+  wants the answer before it initialises CUDA, for a device it is not running on, or in a test without a GPU had to restate
+  the rule, and the fused kernels' sm_80 floor was written only in the README.
+- **What.**
+  - `route_for(capability, *, has_grouped_mm, requested="auto", n_groups=None) -> (route, reason)`, a pure function of the
+    device's facts.
+    `route` is `"fused"`, `"grouped_mm"`, `"dense"`, or `None` when nothing in this module can train there, and `reason` says
+    why. `n_groups` (a call's present groups, when known) reproduces #463's rule: `auto` takes `dense` off sm_90 for 1 to
+    `DENSE_AUTO_MAX_GROUPS` of them.
+  - `MIN_CAPABILITY = (8, 0)` and `GROUPED_MM_CAPABILITY = (9, 0)` as data.
+  - `train_gemm_route` and the explicit-`grouped_mm` refusal now call it.
+- **Unchanged.** Every live resolution is the same as before. Below sm_80, `auto` still answers `"fused"` and the launch is
+  what fails. The refusal for an explicit `grouped_mm` keeps its wording; below sm_80 it now names the floor.
+- **Tests.** `kernel/test_nf4_route_decision.py` runs on CPU. On a CUDA box it also checks agreement with the live
+  resolution, per group count too: 17 passed on an RTX A2000.
+
 ### `GNF4_TRAIN_GEMM=auto` takes the dense route off sm_90 for calls with at most 16 present experts
 
 - **Why.** experts4bit-qlora's TC1 amendment 22 read the dense route (#459) against the fused kernels on the full training step, one RTX
