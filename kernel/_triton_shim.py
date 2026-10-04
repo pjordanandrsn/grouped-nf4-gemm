@@ -45,8 +45,9 @@ that only exists on the platforms CI does not run is logic nothing checks.
 from __future__ import annotations
 
 import functools
+import os
 
-__all__ = ["HAS_TRITON", "UnsupportedShapeError", "device_shared_mem_limit", "tl", "triton"]
+__all__ = ["HAS_TRITON", "UnsupportedShapeError", "device_shared_mem_limit", "prebind", "prebind_requested", "tl", "triton"]
 
 _NO_TRITON = (
     "triton is not installed, so this fused kernel cannot run. triton is a "
@@ -236,3 +237,115 @@ def device_shared_mem_limit(device=None) -> int:
         return _SHARED_MEM_LIMIT[idx]
     except Exception:
         return 0
+
+
+# --- GNF4_TRITON_PREBIND (opt-in) ------------------------------------------------------------------------------------------------
+#
+# A Triton launch, ``kernel[grid](...)``, spends most of its host time before the driver call: it binds the arguments to the
+# signature, specializes each one (dtype, 16-byte alignment, ``== 1`` and ``% 16`` of integers), formats that into a string key,
+# looks the compiled kernel up and builds launch metadata -- 30-90 us a launch under triton 3.4 on an RTX A2000 host, against a
+# 4-7 us driver call. ``prebind`` wraps a kernel so that the FIRST launch of each specialization goes through Triton unchanged and
+# the compiled kernel it returns is remembered under a key built from the same facts Triton specializes on; later launches with
+# that key call the kernel's own launcher directly. Same compiled binary, same arguments, same stream: bit-identical outputs
+# (test_triton_prebind). A Triton release this was not read against, a launch hook (profilers), a pre-run hook, a callable grid, a
+# changed global, or an argument of another type takes Triton's own launch. One knob is read less often than Triton reads it:
+# triton 3.4 re-reads TRITON_DEBUG at every launch, the prebound path once per kernel (3.6 itself reads it once, at import). Off
+# unless GNF4_TRITON_PREBIND=1, read when the kernel's module is imported; off, ``prebind`` returns the kernel itself.
+
+#: Triton releases whose launch protocol (``JITFunction.run`` -> ``CompiledKernel.run``) the prebound path was read against.
+PREBIND_TRITON = ((3, 4), (3, 6))
+#: Launches through the prebound path, and through Triton's own (the first launch of a key, or a fallback).
+PREBIND_STATS = {"prebound": 0, "triton": 0}
+_PREBIND_MAX_KEYS = 4096           # integer values are keyed exactly; a sweep over sizes must not grow it forever
+_PREBIND_PLAIN = (int, float, bool, type(None))
+_MISSING = object()
+
+
+def prebind_requested() -> bool:
+    return os.environ.get("GNF4_TRITON_PREBIND", "0").strip() == "1"
+
+
+def _triton_version():
+    try:
+        return tuple(int(v) for v in triton.__version__.split(".")[:2])
+    except Exception:
+        return None
+
+
+def prebind(fn, force: bool = False):
+    """``fn`` wrapped in :class:`Prebound` when ``GNF4_TRITON_PREBIND=1`` (or ``force``) and this Triton is supported; else ``fn``."""
+    if not (force or prebind_requested()) or not HAS_TRITON or _triton_version() not in PREBIND_TRITON:
+        return fn
+    from triton.runtime.jit import JITFunction
+    if not isinstance(fn, JITFunction) or not all(hasattr(fn, a) for a in ("params", "used_global_vals", "pre_run_hooks")):
+        return fn                  # e.g. TRITON_INTERPRET=1's InterpretedFunction
+    return Prebound(fn)
+
+
+class Prebound:
+    """``kernel[grid](*args, **kwargs)`` with Triton's per-launch binding done once per specialization."""
+
+    def __init__(self, fn):
+        import torch
+        from triton import knobs
+        self.fn, self.knobs, self.tensor = fn, knobs, torch.Tensor
+        self.names = tuple(p.name for p in fn.params)
+        self.defaults = {p.name: p.default for p in fn.params if p.has_default}
+        self.kernels = {}
+        self.device = self.stream = None       # Triton's own device / stream getters, bound at the first launch
+        # 3.6 adds an instrumentation mode to every launch's options. 3.4 re-reads TRITON_DEBUG from the environment at every launch
+        # (1.4 us on an RTX A2000 host), 3.6 once at import: read here once per kernel under 3.4, per launch under 3.6.
+        self.compilation = getattr(knobs, "compilation", None)
+        self.debug = knobs.runtime.debug if _triton_version() < (3, 6) else None
+
+    def __getitem__(self, grid):
+        if callable(grid):
+            return self.fn[grid]
+        return functools.partial(self.launch, grid)
+
+    def _triton(self, grid, args, kwargs):
+        PREBIND_STATS["triton"] += 1
+        return self.fn[grid](*args, **kwargs)
+
+    def launch(self, grid, *args, **kwargs):
+        fn, rt = self.fn, self.knobs.runtime
+        # A registered launch hook (3.4: a callable; 3.6: a non-empty HookChain) needs Triton's launch metadata: take its path.
+        if getattr(rt.launch_enter_hook, "calls", rt.launch_enter_hook) or getattr(rt.launch_exit_hook, "calls", rt.launch_exit_hook) \
+                or fn.pre_run_hooks:
+            return self._triton(grid, args, kwargs)
+        try:
+            # every parameter in signature order (the launcher's argument list), constexprs and defaults included
+            full = args + tuple([kwargs[n] if n in kwargs else self.defaults[n] for n in self.names[len(args):]])
+            if self.device is None:            # torch's, on CUDA: bound once rather than through the driver proxy per launch
+                from triton.runtime.driver import driver
+                self.device, self.stream = driver.active.get_current_device, driver.active.get_current_stream
+            dev, T = self.device(), self.tensor
+            # Triton's key, made exact: a tensor's dtype and 16-byte alignment, an integer's value (which fixes its == 1, % 16 and
+            # width), any other argument's type and value; plus the launch options, the device and the debug / instrumentation knobs.
+            key = (dev, rt.debug if self.debug is None else self.debug, getattr(self.compilation, "instrumentation_mode", None),
+                   tuple(kwargs.items()),
+                   tuple([(a.dtype, a.data_ptr() % 16 == 0) if isinstance(a, T) else a if type(a) is int else (type(a), a)
+                          for a in full]))
+            hit = self.kernels.get(key)
+        except (KeyError, TypeError):          # a missing argument, an unhashable one: Triton reports it
+            return self._triton(grid, args, kwargs)
+        if hit is None:
+            kernel = self._triton(grid, args, kwargs)
+            # Kept only for plain arguments (a tensor passed by keyword would sit in the key, by identity) and a launchable kernel.
+            if (len(full) == len(self.names) and all(isinstance(a, (T,) + _PREBIND_PLAIN) for a in args)
+                    and all(type(v) in _PREBIND_PLAIN for v in kwargs.values())
+                    and all(hasattr(kernel, a) for a in ("run", "function", "packed_metadata"))):
+                if len(self.kernels) >= _PREBIND_MAX_KEYS:
+                    self.kernels.clear()
+                self.kernels[key] = (kernel, kernel.run, kernel.function, kernel.packed_metadata)
+            return kernel
+        for (name, _), (val, scope) in fn.used_global_vals.items():
+            cur = scope.get(name, _MISSING)
+            if cur is not val and cur != val:  # Triton refuses a launch after a global it compiled against changed
+                return self._triton(grid, args, kwargs)
+        kernel, run, function, metadata = hit
+        n = len(grid)
+        PREBIND_STATS["prebound"] += 1
+        # launch metadata and the enter / exit hooks are None: exactly what Triton passes when no hook is registered
+        run(grid[0], grid[1] if n > 1 else 1, grid[2] if n > 2 else 1, self.stream(dev), function, metadata, None, None, None, *full)
+        return kernel

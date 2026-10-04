@@ -23,8 +23,12 @@ import os
 
 import torch
 
-from _triton_shim import tl, triton
-from nf4_grouped import BLOCKSIZE, _lut, to_device_i32
+from _triton_shim import prebind, prebind_requested, tl, triton
+from nf4_grouped import BLOCKSIZE, _host_reuse_enabled, _lists_of_ints_shape, _lut, _raw_stream_key, _ValueMemo, to_device_i32
+
+#: GNF4_TRITON_PREBIND=1 (opt-in, read at import): the dequant kernel launches without Triton's per-call argument binding, the device
+#: capability the route checks is read once per device, and one grouping's device plan is reused by value. Values identical.
+_PREBIND = prebind_requested()
 
 ROUTE_STATS = {"fwd": 0, "dgrad": 0}
 
@@ -118,8 +122,22 @@ def train_gemm_route(dev=None, n_groups=None) -> str:
     return r
 
 
+_CAPABILITY: dict = {}
+
+
+def _capability(dev):
+    """``torch.cuda.get_device_capability(dev)``; under GNF4_TRITON_PREBIND=1 read once per indexed device (a constant of the card,
+    and 7-11 us a call on an RTX A2000 host, paid twice per projection)."""
+    if not _PREBIND or getattr(dev, "index", None) is None:
+        return torch.cuda.get_device_capability(dev)
+    cap = _CAPABILITY.get(dev)
+    if cap is None:
+        cap = _CAPABILITY[dev] = torch.cuda.get_device_capability(dev)
+    return cap
+
+
 def _refuse_unless_supported(dev):
-    route, why = route_for(torch.cuda.get_device_capability(dev), has_grouped_mm=hasattr(torch, "_grouped_mm"),
+    route, why = route_for(_capability(dev), has_grouped_mm=hasattr(torch, "_grouped_mm"),
                            requested="grouped_mm")
     if route != "grouped_mm":
         raise RuntimeError(f"{why} -- unset it (the fused kernels are the route here)")
@@ -153,6 +171,9 @@ def _dequant_groups_kernel(b_ptr, am_ptr, eid_ptr, lut_ptr, out_ptr, N, KB,
              mask=n_mask[:, None] & (rk[None, :] < 2 * KB))
 
 
+# GNF4_TRITON_PREBIND=1 (opt-in): the same kernel, launched without Triton's per-call argument binding (_triton_shim.prebind)
+_dequant_groups_launch = prebind(_dequant_groups_kernel)
+
 # BLOCK_N 16 x BLOCK_KB 256 bytes at 8 warps: on an RTX A2000 this runs a Qwen3-30B-A3B gate_up stack at 233 GB/s (0.76x the time of
 # bitsandbytes' dequantize_4bit, 5.1x faster than this module's first kernel, which gathered the LUT and the absmax per element and is
 # what made experts4bit-qlora's TC1c amendment 4 boxes slower) and down at 0.93x bitsandbytes; bit-equal throughout.
@@ -168,15 +189,30 @@ def dequant_groups(B: torch.Tensor, absmax: torch.Tensor, eids_dev: torch.Tensor
         return out
     am = absmax if absmax.dtype == torch.float32 else absmax.float()
     KB = K // 2
-    _dequant_groups_kernel[(G, triton.cdiv(N, _DQ_BLOCK_N), triton.cdiv(KB, _DQ_BLOCK_KB))](
+    _dequant_groups_launch[(G, triton.cdiv(N, _DQ_BLOCK_N), triton.cdiv(KB, _DQ_BLOCK_KB))](
         B, am, eids_dev, _lut(B.device), out, N, KB,
         B.stride(0), B.stride(1), am.stride(0), am.stride(1), out.stride(0), out.stride(1),
         BLOCK_N=_DQ_BLOCK_N, BLOCK_KB=_DQ_BLOCK_KB, QB=BLOCKSIZE // 2, num_warps=_DQ_WARPS)
     return out
 
 
+_PLAN_FAST = _ValueMemo()
+
+
 def _plan(sizes, expert_ids, dev):
-    """(eids int32 device, offs int32 device = inclusive cumsum of sizes) for one call; host lists go through to_device_i32."""
+    """(eids int32 device, offs int32 device = inclusive cumsum of sizes) for one call; host lists go through to_device_i32.
+
+    Under GNF4_TRITON_PREBIND=1 the plan of a grouping already seen on this device and stream is reused by value -- a layer's
+    gate_up and down calls, forward and dgrad, share one -- instead of rebuilding its upload key and relaunching the cumsum."""
+    if _PREBIND and _lists_of_ints_shape((sizes, expert_ids)) and dev.type == "cuda" and _host_reuse_enabled() \
+            and not torch.cuda.is_current_stream_capturing():
+        ctx = _raw_stream_key(dev)
+        hit = _PLAN_FAST.get((sizes, expert_ids), ctx)
+        return hit if hit is not None else _PLAN_FAST.put((sizes, expert_ids), ctx, _build_plan(sizes, expert_ids, dev))
+    return _build_plan(sizes, expert_ids, dev)
+
+
+def _build_plan(sizes, expert_ids, dev):
     if torch.is_tensor(expert_ids) and expert_ids.is_cuda:
         eids = expert_ids.to(torch.int32)
         (sz,) = to_device_i32((list(sizes),), dev)
