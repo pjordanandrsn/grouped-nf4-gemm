@@ -150,6 +150,8 @@ class ColdTier:
         self._last_use: dict[tuple[int, int], int] = {}
         # Concurrency state (see ensure's docstring for the contract):
         self._reserved: set[int] = set()   # slots whose fill is in flight
+        # slot -> the event completing the last device copy that READ it (see fence). A fill into the slot waits on it.
+        self._fence: dict[int, object] = {}
         # Lazy min-heap of (rank, slot, key) for every occupied slot, so
         # victim selection is a few heap pops instead of an O(hot_rows) sweep.
         # Entries are never removed on change -- a fresh one is pushed and the
@@ -194,6 +196,8 @@ class ColdTier:
         # so NOT critical-path — reported to make that checkable).
         self.demand_fill_ns = 0
         self.demand_wait_ns = 0
+        self.fence_waits = 0           # fills that waited for a queued device copy out of their slot
+        self.fence_wait_ns = 0
         self.spec_fill_ns = 0
         # Reclaimable-residency accounting. Every logical eviction resolves
         # exactly once, as a resurrection or as an overwrite; the two are the
@@ -209,6 +213,34 @@ class ColdTier:
     def _slot_view(self, slot: int) -> memoryview:
         lo = slot * self.row_stride
         return self.buffer[lo:lo + self.row_stride]
+
+    def fence(self, slots, event) -> None:
+        """Record that ``event`` completes the last device copy that reads each of ``slots``.
+
+        A non-blocking copy out of a pinned slot is QUEUED when it returns, not done. A later fill into that slot (a
+        demand ensure for another layer, or a speculative prefetch) must not start its disk read until the copy has read
+        the old bytes, or the copy lands a mix of two rows: finite, plausible and wrong, with correct row IDs (#60).
+        :func:`segment_into` records one after its non-blocking copies; anything else that copies out of
+        :meth:`pinned_tensor` without blocking should do the same. ``event`` needs only ``synchronize()``."""
+        with self._lock:
+            for s in slots:
+                self._fence[int(s)] = event
+
+    def _wait_fences(self, slots) -> None:
+        """Wait for the fenced copies out of ``slots`` (each event once), before their fills start."""
+        with self._lock:
+            evs = [ev for ev in (self._fence.pop(int(s), None) for s in slots) if ev is not None]
+        if not evs:
+            return
+        t0 = time.monotonic_ns()
+        seen: set = set()
+        for ev in evs:
+            if id(ev) not in seen:
+                seen.add(id(ev))
+                ev.synchronize()
+        with self._lock:
+            self.fence_waits += 1
+            self.fence_wait_ns += time.monotonic_ns() - t0
 
     def _submit_fill(self, layer: int, key, slot: int):
         """Start this slot's fill and return its future.
@@ -496,6 +528,8 @@ class ColdTier:
         # publish held demand waits hostage to speculative batch stragglers.
         first_err = None
         if reserved:
+            # a queued device copy may still be reading these slots' previous rows (see fence)
+            self._wait_fences([s for _k, s in reserved])
             t_fill = time.monotonic_ns()
             landed: set = set()
             # _submit_fill can raise SYNCHRONOUSLY -- a landing callback that
@@ -1009,6 +1043,8 @@ class ColdTier:
             "demand_waits": self.demand_waits,
             "demand_fill_ns": self.demand_fill_ns,
             "demand_wait_ns": self.demand_wait_ns,
+            "fence_waits": self.fence_waits,
+            "fence_wait_ns": self.fence_wait_ns,
             "spec_fill_ns": self.spec_fill_ns,
             "evictions": self.evictions,
             "resident_rows": len(self._slot_of),
@@ -1218,6 +1254,12 @@ def segment_into(tier: "ColdTier", index: dict, layer: int, experts,
         else:
             mv = tier.row(layer, e)[off:off + ln]
             dv.copy_(torch.frombuffer(bytearray(mv), dtype=torch.uint8))
+    if non_blocking and pinned is not None and out.device.type == "cuda":
+        # The copies above are queued, not done. Fence the slots they read, so a later fill (another layer's demand
+        # ensure, or a prefetch) waits for them instead of overwriting bytes a copy has yet to read (#60).
+        ev = torch.cuda.Event()
+        ev.record(torch.cuda.current_stream(out.device))
+        tier.fence(slots, ev)
     return out
 
 

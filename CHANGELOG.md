@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### `nvme_residency`: pinned slots are fenced against queued device copies (#60)
+
+- **The race.** A non-blocking copy out of a pinned slot is queued, not done, when `segment_into` returns. A later fill
+  into that slot could start its disk read before the copy ran: another layer's demand `ensure`, or a speculative
+  prefetch. The copy then delivered the new row's bytes under the old row's IDs, finite and plausible, and no row-ID
+  guard can see it. The routed training stage was ordered implicitly by its routing sync. The bulk fallback, and any
+  staging made sync-free, were not.
+- **The fix.**
+  - `segment_into` records a CUDA event after its non-blocking copies into a CUDA destination, and fences the slots
+    they read (`ColdTier.fence`).
+  - A fill waits on its slot's fence before the read starts, each event once. `fence_waits` and `fence_wait_ns` in
+    `stats()` count it.
+  - An already-complete event costs a no-op `synchronize()`.
+- **Shown on an RTX A2000.** A sleep kernel held the stream so the copy was still queued, then the same slots were
+  refilled with another layer's rows. With the fence, the copy read the right layer; with fills not waiting (the
+  mutation arm), it read the refill's bytes. CPU tests pin the ordering and include a mutation arm of their own.
+- **Not in this change.** Whole-layer training prefetch, which #60 first proposed, was measured on 2026-08-13 and
+  refuted (experts4bit-qlora `bench/host-ram-ceiling/RESULTS-prefetch.md`: 14.4 % slower at 1.9x the bytes). The
+  fence was the hazard #60's thread found, and it applies to any non-blocking reader of pinned slots.
+
 ## 0.39.0 — 2026-10-04 — `GNF4_TRAIN_GEMM=auto` takes the dense route off sm_90 for training calls with at most 16 present experts (experts4bit-qlora TC1 amendment 22: Mixtral-8x7B's step 0.651x on an RTX 5090; Qwen3-like layers stay fused); `nf4_route.route_for`; engagement accounting for the training path
 
 **0.39.0.** One default changes, by a rule registered and read in experts4bit-qlora: `GNF4_TRAIN_GEMM=auto` now takes

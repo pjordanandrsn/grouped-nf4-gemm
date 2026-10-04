@@ -566,3 +566,67 @@ def test_demand_window_survives_concurrent_spec_churn(arena):
             stop.set()
             w.join()
         assert not errs, errs
+
+
+# ---- #60: a fill must not overwrite a pinned slot a queued device copy has yet to read
+class _Ev:
+    """Stands in for a CUDA event: ``synchronize()`` is the only thing a fence needs."""
+
+    def __init__(self, log, name):
+        self.log, self.name = log, name
+
+    def synchronize(self):
+        self.log.append(("sync", self.name))
+
+
+def _log_fills(t, log, monkeypatch):
+    orig = t.reader.read_row
+
+    def read_row(layer, expert, dst):
+        log.append(("fill", layer, expert))
+        return orig(layer, expert, dst)
+    monkeypatch.setattr(t.reader, "read_row", read_row)
+
+
+def _fenced_refill(arena, monkeypatch, *, no_wait=False):
+    """Layer 0's rows fill both slots, a queued copy reads them (fenced), then layer 1 evicts and refills the same
+    slots. Returns the order of events, and the stats."""
+    path, index, _ = arena
+    with _tier(path, index, 2) as t:
+        log = []
+        t.ensure(0, [0, 1])
+        t.fence([t.slot_of(0, 0), t.slot_of(0, 1)], _Ev(log, "copy-of-layer-0"))
+        _log_fills(t, log, monkeypatch)
+        if no_wait:
+            monkeypatch.setattr(t, "_wait_fences", lambda slots: None)
+        t.ensure(1, [0, 1])
+        first = list(log)
+        log.clear()
+        t.ensure(2, [0, 1])                      # the fence was consumed by the refill
+        return first, list(log), t.stats()
+
+
+def test_a_fill_into_a_fenced_slot_waits_for_the_copy_first(arena, monkeypatch):
+    first, later, st = _fenced_refill(arena, monkeypatch)
+    assert first[0] == ("sync", "copy-of-layer-0")
+    assert first.count(("sync", "copy-of-layer-0")) == 1          # one event, waited once
+    assert sorted(e for e in first if e[0] == "fill") == [("fill", 1, 0), ("fill", 1, 1)]
+    assert st["fence_waits"] == 1
+    assert ("sync", "copy-of-layer-0") not in later
+
+
+def test_the_fence_ordering_check_fails_when_fills_do_not_wait(arena, monkeypatch):
+    """The mutation arm: without the wait, the refill's disk reads start with the copy still queued."""
+    first, _, st = _fenced_refill(arena, monkeypatch, no_wait=True)
+    assert first[0] != ("sync", "copy-of-layer-0") and ("sync", "copy-of-layer-0") not in first
+    assert st["fence_waits"] == 0
+
+
+def test_an_unfenced_fill_does_not_wait(arena, monkeypatch):
+    path, index, _ = arena
+    with _tier(path, index, 2) as t:
+        log = []
+        _log_fills(t, log, monkeypatch)
+        t.ensure(0, [0, 1])
+        t.ensure(1, [0, 1])
+        assert not [e for e in log if e[0] == "sync"] and t.stats()["fence_waits"] == 0
