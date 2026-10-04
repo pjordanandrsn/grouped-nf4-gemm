@@ -91,6 +91,11 @@ _CPU_PATH = {
         "decode ablations of nf4_smallm's, with no CPU equivalent. Only its "
         "rule runs on CPU (python k26_bench.py --self-test); for a "
         "CPU-checkable NF4 product use nf4_grouped.dequant_ref.",
+    "nf4_route":
+        "For a CPU-checkable result over the same NF4 bytes, use "
+        "x.float() @ nf4_grouped.dequant_ref(packed[e], absmax[e], N, K).to(torch.bfloat16).float().T "
+        "per group (the forward; grad_out @ that weight for the dgrad) -- the route's dequant kernel is "
+        "bit-equal to dequant_ref rounded to bfloat16 (test_nf4_route), and torch._grouped_mm has no CPU path.",
     "int4_b32":
         "For a CPU-checkable result over the same int4-b32 bytes, use "
         "(xq.float() * xs.repeat_interleave(32, dim=1)) @ "
