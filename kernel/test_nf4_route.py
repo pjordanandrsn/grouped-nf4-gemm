@@ -75,7 +75,15 @@ def test_refuses_off_sm90(monkeypatch):
 
 
 def test_route_env(monkeypatch):
-    monkeypatch.delenv("GNF4_TRAIN_GEMM", raising=False)
+    sm90 = hasattr(torch, "_grouped_mm") and torch.cuda.get_device_capability() == (9, 0)
+    for unset in (None, "auto", " AUTO "):
+        if unset is None:
+            monkeypatch.delenv("GNF4_TRAIN_GEMM", raising=False)
+        else:
+            monkeypatch.setenv("GNF4_TRAIN_GEMM", unset)
+        assert nf4_route.train_gemm_route() == ("grouped_mm" if sm90 else "fused")
+        assert nf4_route.train_gemm_route(torch.device("cpu")) == "fused"
+    monkeypatch.setenv("GNF4_TRAIN_GEMM", "fused")
     assert nf4_route.train_gemm_route() == "fused"
     monkeypatch.setenv("GNF4_TRAIN_GEMM", "grouped_mm")
     assert nf4_route.train_gemm_route() == "grouped_mm"

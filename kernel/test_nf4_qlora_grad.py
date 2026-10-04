@@ -105,8 +105,11 @@ def test_zero_B_delta_is_exactly_zero():
 
 
 @pytest.mark.skipif(not CUDA, reason="fused kernel is CUDA/Triton only")
-def test_fused_backward_matches_dequant_reference():
+def test_fused_backward_matches_dequant_reference(monkeypatch):
     """dL/dx through the fused kernel == dL/dx through decode-then-matmul."""
+    # GNF4_TRAIN_GEMM=fused EXPLICITLY: on compute capability 9.0 the default (`auto`) is the grouped_mm route, whose GEMMs are
+    # not this exact loop.
+    monkeypatch.setenv("GNF4_TRAIN_GEMM", "fused")
     packed, absmax = _packed_stack()
     a, sizes, eids = _grouped_inputs()
     packed_c, absmax_c = packed.cuda(), absmax.cuda()

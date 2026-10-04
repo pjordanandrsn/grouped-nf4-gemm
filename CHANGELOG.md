@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### `GNF4_TRAIN_GEMM=auto`, the new default: the grouped_mm training route on compute capability 9.0, the fused kernels elsewhere
+
+- **Why.** experts4bit-qlora's TC1c amendment 6 measured the route, with #452's dequant, on the full Qwen3-30B-A3B training step on
+  an H100 NVL. Unsloth/e4b went from 0.817 with the fused kernels (amendment 1) to **1.030** [1.016, 1.045], so e4b is now faster per
+  step. With MoE activations kept it went from 1.100 to **1.325** [1.296, 1.356]. The matched set stayed EQUIVALENT on both boxes.
+- **The rule held.** Amendment 4 registered three conditions for this default, and all three hold: the numerics (P20), box R at or
+  above 0.858, and e4b's held-out loss within 0.005 of amendment 1's (0.8481 against 0.8521 over two draws). That margin is thin:
+  two of the four draw-against-draw pairings would miss it.
+- **What.** `GNF4_TRAIN_GEMM` gains `auto` and defaults to it. `auto` takes the route on a CUDA device of compute capability 9.0 when
+  torch has `_grouped_mm`, and the fused kernels everywhere else, including CPU; it is resolved once per device. `fused` and
+  `grouped_mm` still force one, and `grouped_mm` still refuses off sm_90.
+- **Values change on sm_90 only.** The route is not bit-identical to the fused kernels (at most 0.0024 relative Frobenius per GEMM in
+  the kernel replay). Set `GNF4_TRAIN_GEMM=fused` for the old numerics. Other cards are unchanged.
+- **Tested.** `kernel/test_nf4_route.py`'s env test now covers `auto`: the route on sm_90, the fused kernels elsewhere and on CPU.
+  `test_fused_backward_matches_dequant_reference` pins `fused`, because it asserts the fused loop's exact backward. On an RTX A2000
+  the three training-path files pass (36 passed, 1 skipped).
+
 ### `GNF4_PDL_MAX_ROWS=<n>`: keep programmatic dependent launch for small launches only (opt-in, with `GNF4_PDL=1`; default unchanged)
 
 - **Why.** experts4bit-qlora's P112 closed VOID without a reading (#1026). Its first run's arms showed `GNF4_PDL=1`
