@@ -37,31 +37,33 @@ from _triton_shim import UnsupportedShapeError  # noqa: E402
 
 
 # ------------------------------------- lane K28: programmatic dependent launch --
-#: Lane K28 (``PREREG-k28-pdl-decode-chain.md``): launch the decode-row kernels of this module with programmatic
-#: dependent launch (PDL). ``1``/``0`` force it; unset = the shipped default, which stays off until K28 reads. It is
-#: read ONCE, at the first launch that asks (every launch asks, so a per-call read would cost each eager decode launch
-#: an environment lookup, ~0.6 us); :func:`pdl_refresh` re-reads it after the environment changes.
+#: Launch the decode-row kernels of this module with programmatic dependent launch (PDL). ``1``/``0`` force it; unset =
+#: the shipped default, ON since experts4bit-qlora's lane P113 read CAP_DEFAULT (``bench/p113/RESULTS-p113.md``: capped
+#: at 8 rows, SC1's int4 serving step decoded identical tokens 1.0404x as fast with one request and 1.0000x with 16;
+#: uncapped, 1.0401x and 0.9787x). Lane K28 read the mechanism on a CUDA-graph replay of the decode chain. It is read
+#: ONCE, at the first launch that asks (every launch asks, so a per-call read would cost each eager decode launch an
+#: environment lookup, ~0.6 us); :func:`pdl_refresh` re-reads it after the environment changes.
 PDL_ENV = "GNF4_PDL"
-PDL_DEFAULT = False
-#: Lane P112 saw PDL help the int4 serving step at B=1 and cost it at B=16 (not a reading; experts4bit-qlora
-#: ``bench/p112/RESULTS-p112.md``). ``GNF4_PDL_MAX_ROWS=<n>`` keeps PDL for launches of at most ``n`` activation rows and
-#: launches the rest without it; unset, ``0`` or anything that is not a positive integer means no cap. Read with the
-#: switch, once.
+PDL_DEFAULT = True
+#: ``GNF4_PDL_MAX_ROWS=<n>`` keeps PDL for launches of at most ``n`` activation rows and launches the rest without it
+#: (P113: PDL helps the B=1 step, where every launch carries 1 or 8 rows, and costs the 16-row one). Unset or not a
+#: non-negative integer = the default cap, 8; ``0`` = no cap. Read with the switch, once.
 PDL_MAX_ROWS_ENV = "GNF4_PDL_MAX_ROWS"
+PDL_MAX_ROWS_DEFAULT = 8
 #: ``griddepcontrol`` exists from sm_90 (Hopper) on. Below that the switch is inert: the kernels compile and launch
 #: exactly as they do with it off.
 PDL_MIN_CC = (9, 0)
 _CC_CACHE: dict[str, tuple] = {}
 _LAUNCH_PDL: list = []
 _PDL_SWITCH: list = []                  # [bool] once GNF4_PDL has been read
-_PDL_CAP: list = [0]                    # GNF4_PDL_MAX_ROWS as last read (0 = no cap)
+_PDL_CAP: list = [PDL_MAX_ROWS_DEFAULT]  # GNF4_PDL_MAX_ROWS as last read (0 = no cap)
 _NO_KW: dict = {}                       # what an off launch unpacks: nothing (never mutated)
 _PDL_KW: dict = {"PDL": True, "launch_pdl": True}
 
 
 def pdl_default() -> bool:
     """``GNF4_PDL`` as the environment holds it now: ``1``/``true``/``on`` or ``0``/``false``/``off``; anything else is
-    the default (off). The launches read it through :func:`pdl_refresh`'s cache, not through this."""
+    the default (on). The launches read it through :func:`pdl_refresh`'s cache, not through this."""
     v = os.environ.get(PDL_ENV, "").strip().lower()
     if v in ("1", "true", "on"):
         return True
@@ -71,9 +73,10 @@ def pdl_default() -> bool:
 
 
 def pdl_max_rows() -> int:
-    """``GNF4_PDL_MAX_ROWS`` as the environment holds it now: a positive integer, or 0 for no cap."""
+    """``GNF4_PDL_MAX_ROWS`` as the environment holds it now: a non-negative integer (``0`` = no cap); unset or anything
+    else is the default cap, :data:`PDL_MAX_ROWS_DEFAULT`."""
     v = os.environ.get(PDL_MAX_ROWS_ENV, "").strip()
-    return int(v) if v.isdigit() and int(v) > 0 else 0
+    return int(v) if v.isdigit() else PDL_MAX_ROWS_DEFAULT
 
 
 def pdl_refresh() -> bool:

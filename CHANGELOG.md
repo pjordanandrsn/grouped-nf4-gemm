@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### `GNF4_PDL` is on by default, capped at 8 activation rows (`GNF4_PDL=0` turns it off; `GNF4_PDL_MAX_ROWS=0` removes the cap)
+
+- **Why.** experts4bit-qlora's lane P113 (experts4bit-qlora#1030) registered this as its CAP_DEFAULT consequence and read
+  it on an RTX 5090. On SC1's int4 serving configuration (Qwen3-30B-A3B), with decode-only timing, the capped switch
+  (`GNF4_PDL=1 GNF4_PDL_MAX_ROWS=8`) decoded identical tokens **1.0404×** as fast with one request (the step 4.381 →
+  4.211 ms) and **1.0000×** with 16. Uncapped it read 1.0401× and 0.9787×; the 16-row step went 8.947 → 9.127 ms.
+  Register row `e4b.serve.p113.gnf4-pdl-capped.qwen3-int4.5090.2026-10-04` (experts4bit-qlora).
+- **What changes.** `PDL_DEFAULT` is `True`, and `GNF4_PDL_MAX_ROWS` defaults to 8: unset or not a non-negative
+  integer means 8, and `0` means no cap. Values do not change, because PDL never changes them. On NVIDIA sm_90+ cards,
+  the twelve decode-row kernels' launches of at most 8 rows become programmatic dependents of the kernel before them.
+- **Where it does nothing.** It is inert on CPU, under the interpreter, on ROCm and below sm_90, as before.
+- **Scope.** The speed was read on SC1's int4 serving configuration on one RTX 5090. Elsewhere only exactness is
+  established, by construction and by `kernel/test_pdl.py` on the card.
+- `kernel/test_pdl.py` pins the new defaults.
+
 ### `GNF4_TRAIN_GEMM=auto`, the new default: the grouped_mm training route on compute capability 9.0, the fused kernels elsewhere
 
 - **Why.** experts4bit-qlora's TC1c amendment 6 measured the route, with #452's dequant, on the full Qwen3-30B-A3B training step on

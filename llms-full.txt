@@ -1545,7 +1545,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
     "fused top-k combine for MoE decode",
     "split-K reduce and bf16 cast in one launch"
    ],
-   "solution": "int4_b32 carries the decode glue: rmsnorm_rows, rmsnorm_resid_rows, scaled_resid_add_rows, rope_norm_heads, rope_heads, router_epilogue (softmax-then-top-k, or top-k on logits with an optional bias), swiglu_rows, combine_rows and reduce_partials; each has an in-tree parity test against a torch reference. GNF4_PDL=1 (opt-in, sm_90+ NVIDIA cards only) launches these kernels, the int4 decode GEMV and the activation quantise with programmatic dependent launch: each waits for its predecessor before touching memory, so outputs are bitwise those with it off (kernel/test_pdl.py).",
+   "solution": "int4_b32 carries the decode glue: rmsnorm_rows, rmsnorm_resid_rows, scaled_resid_add_rows, rope_norm_heads, rope_heads, router_epilogue (softmax-then-top-k, or top-k on logits with an optional bias), swiglu_rows, combine_rows and reduce_partials; each has an in-tree parity test against a torch reference. On sm_90+ NVIDIA cards these kernels, the int4 decode GEMV and the activation quantise launch with programmatic dependent launch by default, for launches of at most 8 activation rows (GNF4_PDL, GNF4_PDL_MAX_ROWS; GNF4_PDL=0 turns it off): each waits for its predecessor before touching memory, so outputs are bitwise those with it off (kernel/test_pdl.py).",
    "modes": [
     "serving",
     "inference"
@@ -1604,7 +1604,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
     "The composition timing and the paired perplexity deltas are measured-private (claim gnf4.serve.decode-glue-kernels): real runs through the consumer on the RTX 5090 whose receipts live in a private audit tree; what is checkable here is each kernel's parity test",
     "int4_b32 imports triton at module level and is not importable without it",
     "combine_rows and reduce_partials carry an accuracy contract, not a bitwise one: each is within the error bound of a correct fp32 summation in every census case on an RTX 5090, and neither is bitwise the torch chain it replaced (lane B393; gnf4.kernel.combine-rows-accuracy.5090.2026-09-23, gnf4.kernel.reduce-partials-slot-order.5090.2026-09-23); the kernel's output and torch's chain were each bit-identical on sm_86 and sm_120 at the census cases (corrected 2026-09-24)",
-    "GNF4_PDL is opt-in: lane K28 read it LEVER on a CUDA-graph replay of the served decode chain (gnf4.kernel.k28-pdl-decode-chain.5090.2026-10-04), but its served effect is unread (experts4bit-qlora lane P112 closed VOID; its arms suggested a gain at one request and a cost at sixteen); GNF4_PDL_MAX_ROWS keeps it for small launches only; it is inert on CPU, under the interpreter, on ROCm and below sm_90"
+    "GNF4_PDL is on by default, capped at 8 activation rows, since experts4bit-qlora lane P113 read CAP_DEFAULT on SC1's int4 serving configuration (e4b.serve.p113.gnf4-pdl-capped.qwen3-int4.5090.2026-10-04; uncapped it cost the 16-request step there, which is why the cap is the default); lane K28 read the mechanism on the decode chain (gnf4.kernel.k28-pdl-decode-chain.5090.2026-10-04); it is inert on CPU, under the interpreter, on ROCm and below sm_90, and its speed elsewhere is unread"
    ],
    "status": "measured-private"
   },
@@ -2073,6 +2073,11 @@ was wrong.
   ×1.125), with every output bitwise identical; 0.217 µs with the served step's ATen stand-ins interleaved.
   LEVER: experts4bit-qlora reads it served next, and the switch stays opt-in until then.
   `kernel/RESULTS-k28-pdl-decode-chain.md`; register row `gnf4.kernel.k28-pdl-decode-chain.5090.2026-10-04`.
+- **`GNF4_PDL` on by default, capped at 8 rows (2026-10-04).** experts4bit-qlora's served lanes: P112 closed VOID
+  twice; P113 read CAP_DEFAULT on SC1's int4 serving configuration (RTX 5090). Capped, it decodes identical tokens
+  1.0404× as fast with one request and 1.0000× with 16; uncapped, 1.0401× and 0.9787×. Register row
+  `e4b.serve.p113.gnf4-pdl-capped.qwen3-int4.5090.2026-10-04` (experts4bit-qlora). `GNF4_PDL=0` turns it off,
+  `GNF4_PDL_MAX_ROWS=0` removes the cap.
 - **A fixed fraction-of-waterfall is retired as a law** (two 0.77
   readings were a two-host coincidence).
 - **The cold-engine "free floor" premise is refuted** on its target box:
