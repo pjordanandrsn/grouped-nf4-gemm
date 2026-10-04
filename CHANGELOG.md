@@ -1,6 +1,24 @@
 # Changelog
 
-## Unreleased
+## 0.39.0 — 2026-10-04 — `GNF4_TRAIN_GEMM=auto` takes the dense route off sm_90 for training calls with at most 16 present experts (experts4bit-qlora TC1 amendment 22: Mixtral-8x7B's step 0.651x on an RTX 5090; Qwen3-like layers stay fused); `nf4_route.route_for`; engagement accounting for the training path
+
+**0.39.0.** One default changes, by a rule registered and read in experts4bit-qlora: `GNF4_TRAIN_GEMM=auto` now takes
+the dense route on cards other than sm_90 for training calls with **at most 16 present experts**. No serving kernel and
+no forward output changes.
+
+- **Why.** TC1 amendment 22 read the route on the full QLoRA training step, one RTX 5090 per family.
+  - **Mixtral-8x7B** (2 of 8 experts per token): dense/fused **0.651** [0.648, 0.654], 5.52 → 3.59 s/step.
+  - **Qwen3-30B-A3B** (up to 128 present experts per call): **2.947**, far slower. Its layers keep the fused kernels.
+  - Held-out moved −0.0021 and −0.0001 nats.
+- **What changes for you.** Few-large-expert models (Mixtral-like) train with each active expert dequantized and
+  multiplied densely, on cards other than H100-class. Their values move within bf16 noise. `GNF4_TRAIN_GEMM=fused`
+  restores the fused kernels. sm_90 keeps the grouped_mm route.
+- **Also in this release:**
+  - `nf4_route.route_for`: the training-route decision as a pure function of a device's facts, usable without a GPU.
+  - Engagement accounting for the training path: `DGRAD_STATS` says which dgrad served each call and why the loop did;
+    the pinned ring reports its overflow; the padded LoRA block's real bytes are recorded.
+  - A docs fix: #71 is no longer described as open.
+- `docs/system-manifest.json` is unchanged.
 
 ### `nf4_route.route_for`: the training-route decision without a device
 
