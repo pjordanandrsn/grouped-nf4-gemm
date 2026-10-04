@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### K28 registered: does programmatic dependent launch shorten the served B=1 decode layer's gnf4 kernels in a CUDA graph, bit-identically? (bench and prereg)
+
+`kernel/PREREG-k28-pdl-decode-chain.md`, `kernel/k28_bench.py`; tracking issue experts4bit-qlora#1015.
+- **The bench.** It runs 48 layers of the served B=1 layer's 19 gnf4 kernels (912) at Qwen3-30B-A3B's shapes in one CUDA
+  graph, `GNF4_PDL` off against on, on one RTX 5090. Alongside are an instrument repeat and a glued variant that adds
+  the served step's attention and router stand-ins. The checks are bitwise outputs, launch accounting through a Triton
+  launch hook, and an engagement probe on the global clock.
+- **The rule.** VOID, FUNCTION_FAIL and NOISY come first. **LEVER** if the chain saves ≥ 0.25 µs per gnf4 kernel, which is
+  0.23 ms of the served step's 4.08 ms span if it transferred whole; NO_LEVER otherwise. On LEVER, experts4bit-qlora
+  registers a served lane; the default stays off here until it reads.
+- **Rehearsed on the NAS A2000** (sm_86, not a reading). It read VOID by compute capability, as designed:
+  - 912 gnf4 launches per capture, none with PDL;
+  - every bitwise check held;
+  - instrument 1.0008.
+
 ### `GNF4_PDL=1`: the decode-row kernels launch with programmatic dependent launch (opt-in; default unchanged)
 
 - **Why.** experts4bit-qlora's SC1b census (#846) found e4b's B=1 decode step on an RTX 5090 does the same kernel work
