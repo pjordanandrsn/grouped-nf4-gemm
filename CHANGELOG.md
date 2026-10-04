@@ -1,6 +1,33 @@
 # Changelog
 
-## Unreleased
+## 0.38.0 — 2026-10-04 — pinned-tier sizing models PyTorch's power-of-two pinned allocator (`capacity_for_bytes`; #71): exact and never over budget, where the flat 1.9 wasted up to half a budget and could overshoot. Measured on cgroup v1 and v2 (lane K29)
+
+**0.38.0.** One helper's answer changes; no kernel output changes. `capacity_for_bytes(..., pinned=True)`, the function the NVMe and host-RAM tiers tell you to size `hot_rows` with, now models what pinned memory actually costs.
+- **What was wrong.** `PINNED_ROW_FACTOR = 1.9` was read as a per-byte premium on pinned memory. It is PyTorch's caching host allocator rounding every pinned request **up to a power of two**, and `alloc_landing` asks for `rows × stride + 4096`. The flat 1.9 wasted up to half a budget, and just above a power of two it could still over-allocate: 2100 MB costs 4096 MB, 1.96×.
+- **What it does now.** `pinned_request_cost(n)` is the next power of two of `n + 4096`. `capacity_for_bytes` returns the largest `hot_rows` whose rounded request fits: exact, and never over the budget. At most budgets that is more rows than before.
+  - `factor=PINNED_ROW_FACTOR` reproduces the old answer.
+  - `pinned=False` is unchanged.
+- **Measured in both cgroup regimes.** Every pinned request is charged 0.4–1.0 % over its power of two:
+  - **v1** (RTX A2000, `kernel/receipts-71/`): 1.0043–1.005;
+  - **v2** (rented RTX 5090, lane K29, `gnf4.kernel.k29-pinned-charge-cgroup-v2.5090.2026-10-04`): 1.0048–1.0103.
+
+  K29 was registered as this release's gate, and it read CONFIRMED.
+- **Also in this release (opt-in): `GNF4_TRAIN_GEMM=dense`** (#459). This training route works on any CUDA card. Each present expert is dequantized alone and multiplied with `torch.mm`, keeping the grouped kernels' contracts.
+  - In an RTX A2000 replay of Mixtral-8x7B's expert shapes it ran forward 3.4× and dgrad 7.0–7.7× faster than the fused kernels.
+  - The default (`auto`) is unchanged. A full-step A/B on an RTX 5090 decides whether `auto` takes it anywhere.
+- `docs/system-manifest.json` is unchanged. Its `consumer_ci_pin` prose still trails the consumer's pin.
+
+### K29 read: CONFIRMED. A pinned request costs its power of two on cgroup v2 as well (#71 closes)
+
+- **Run.** `k29-5090-2`, $0.032. A rented RTX 5090 container under cgroup v2 (kernel 6.8.0-138, driver 590.48.01,
+  torch 2.8.0+cu128).
+- **Result.** 18 pinned rows (9 sizes from 340 MB to 4 GiB, ×2) read charged / pow2ceil(N) = **1.0048–1.0103**
+  (median 1.0054). The pageable control slope is 1.0021. CONFIRMED by the registered rule ([0.97, 1.06]).
+- **Predictions.** Q1, Q2 and Q4 held. Q3 (every r in [1.00, 1.01]) missed narrowly: one row read 1.0103.
+- **Consequence, as registered.** This release ships the power-of-two pinned-tier model below, and #71 closes.
+- **Records.** Register row `gnf4.kernel.k29-pinned-charge-cgroup-v2.5090.2026-10-04`; `kernel/RESULTS-k29-…`;
+  `kernel/receipts-k29/5090/`.
+- **Earlier attempts.** `k29-5090-1` ($0.06) lost its finished data to a single rsync (fixed in experts4bit-qlora#1047).
 
 ### Engagement accounting for the training path: which dgrad served each call, ring overflow, the padded block's real bytes
 
@@ -67,7 +94,7 @@
   - Never-overshoot and maximality across budgets and strides (the old factor's overshoot is pinned too).
   - A charge test that runs a real pinned `alloc_landing` in a fresh process wherever CUDA and a cgroup charge are
     readable. On the A2000, all 30 tests in `test_nvme_residency.py` passed.
-- **Not yet released.** The cgroup **v2** per-byte charge is unmeasured; lane K29 reads it on a rented box first.
+- **Released after K29 CONFIRMED** the model on cgroup v2 (the entry above). #71 is closed.
 
 ## 0.37.0 — 2026-10-04 — two defaults: programmatic dependent launch for decode launches of at most 8 rows (`GNF4_PDL`, value-identical; experts4bit-qlora's int4 serving decode 1.0404× at one request and 1.0000× at 16 on an RTX 5090) and the grouped_mm training route on compute capability 9.0 (`GNF4_TRAIN_GEMM=auto`; Unsloth/e4b 1.030 on an H100 NVL, a labelled row)
 

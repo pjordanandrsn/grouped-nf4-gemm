@@ -1296,7 +1296,9 @@ def segment_tensor(tier: "ColdTier", index: dict, layer: int, experts,
 #: exactly (:func:`pinned_request_cost`). This constant remains for callers that
 #: pass it as ``factor=``. It is also what the 2026-08-13 ladder saw: 128 rows
 #: (340 MB) and 512 rows (1359 MB) round to 512 and 2048 MB, plus the process
-#: baseline.
+#: baseline. On cgroup v2 (lane K29: RTX 5090, kernel 6.8, driver 590.48.01) the
+#: same model holds: 18 pinned rows read 1.0048-1.0103 of their power of two
+#: (``gnf4.kernel.k29-pinned-charge-cgroup-v2.5090.2026-10-04``).
 PINNED_ROW_FACTOR = 1.9
 
 #: :func:`nvme_reader.alloc_landing` over-allocates a pinned request by one

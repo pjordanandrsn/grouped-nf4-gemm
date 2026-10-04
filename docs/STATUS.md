@@ -1,6 +1,6 @@
 # Status — what this kernel does, what changed, what is open
 
-**As of 2026-10-04, `grouped-nf4-gemm` version 0.37.0.** One page. The README argues; this
+**As of 2026-10-04, `grouped-nf4-gemm` version 0.38.0.** One page. The README argues; this
 page states. The positions here name their entries in
 [`docs/claims.json`](claims.json), which carry the evidence paths; a line
 without a claim ID records an issue closure, a correction still outstanding
@@ -372,12 +372,14 @@ was wrong.
 - **#60** — arena staging blocks ~30% of a training step; the next
   layer's rows are prefetchable (guarded by a CUDA event, with a
   `hot_rows` floor of two layers' experts).
-- **#71** — `PINNED_ROW_FACTOR`'s 1.9 was PyTorch's caching host allocator
-  rounding each pinned request up to a power of two, not a per-byte premium.
-  `capacity_for_bytes` now models that exactly (`pinned_request_cost`,
-  `kernel/receipts-71/`). On cgroup v1 a pinned power-of-two byte costs 1.004. The
-  cgroup v2 per-byte charge is being read in lane K29 before the next release.
-  (#60 and #71 are `gnf4.open.issues`.)
+- **#71 closed.** `PINNED_ROW_FACTOR`'s 1.9 was PyTorch's caching host
+  allocator rounding each pinned request up to a power of two, not a per-byte
+  premium. `capacity_for_bytes` models it exactly (`pinned_request_cost`). Every
+  pinned request is measured at 0.4–1.0 % over its power of two, in both regimes:
+  - cgroup v1 (`kernel/receipts-71/`);
+  - cgroup v2 (lane K29, `gnf4.kernel.k29-pinned-charge-cgroup-v2.5090.2026-10-04`).
+
+  (#60 is `gnf4.open.issues`.)
 - **`docs/context-budgets.md` is rung-one only** (A2000-measured
   KB/token); full-depth real-weight confirmation is pending and the K3
   row is a declared gap. Its own text forbids promoting pending rows to
