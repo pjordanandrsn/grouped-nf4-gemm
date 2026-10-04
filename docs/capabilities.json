@@ -437,7 +437,7 @@
     "fused top-k combine for MoE decode",
     "split-K reduce and bf16 cast in one launch"
    ],
-   "solution": "int4_b32 carries the decode glue: rmsnorm_rows, rmsnorm_resid_rows, scaled_resid_add_rows, rope_norm_heads, rope_heads, router_epilogue (softmax-then-top-k, or top-k on logits with an optional bias), swiglu_rows, combine_rows and reduce_partials; each has an in-tree parity test against a torch reference.",
+   "solution": "int4_b32 carries the decode glue: rmsnorm_rows, rmsnorm_resid_rows, scaled_resid_add_rows, rope_norm_heads, rope_heads, router_epilogue (softmax-then-top-k, or top-k on logits with an optional bias), swiglu_rows, combine_rows and reduce_partials; each has an in-tree parity test against a torch reference. GNF4_PDL=1 (opt-in, sm_90+ NVIDIA cards only) launches these kernels, the int4 decode GEMV and the activation quantise with programmatic dependent launch: each waits for its predecessor before touching memory, so outputs are bitwise those with it off (kernel/test_pdl.py).",
    "modes": [
     "serving",
     "inference"
@@ -495,7 +495,8 @@
    "limitations": [
     "The composition timing and the paired perplexity deltas are measured-private (claim gnf4.serve.decode-glue-kernels): real runs through the consumer on the RTX 5090 whose receipts live in a private audit tree; what is checkable here is each kernel's parity test",
     "int4_b32 imports triton at module level and is not importable without it",
-    "combine_rows and reduce_partials carry an accuracy contract, not a bitwise one: each is within the error bound of a correct fp32 summation in every census case on an RTX 5090, and neither is bitwise the torch chain it replaced (lane B393; gnf4.kernel.combine-rows-accuracy.5090.2026-09-23, gnf4.kernel.reduce-partials-slot-order.5090.2026-09-23); the kernel's output and torch's chain were each bit-identical on sm_86 and sm_120 at the census cases (corrected 2026-09-24)"
+    "combine_rows and reduce_partials carry an accuracy contract, not a bitwise one: each is within the error bound of a correct fp32 summation in every census case on an RTX 5090, and neither is bitwise the torch chain it replaced (lane B393; gnf4.kernel.combine-rows-accuracy.5090.2026-09-23, gnf4.kernel.reduce-partials-slot-order.5090.2026-09-23); the kernel's output and torch's chain were each bit-identical on sm_86 and sm_120 at the census cases (corrected 2026-09-24)",
+    "GNF4_PDL is opt-in and unmeasured: lane K28 (kernel/PREREG-k28-pdl-decode-chain.md) reads it on an RTX 5090, and it is inert on CPU, under the interpreter, on ROCm and below sm_90"
    ],
    "status": "measured-private"
   },
