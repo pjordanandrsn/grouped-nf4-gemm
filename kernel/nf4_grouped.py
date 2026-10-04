@@ -408,7 +408,7 @@ class _PinnedRing:
 _RINGS: dict = {}
 
 
-# Host-reuse memo for `to_device_i32` (GNF4_HOST_REUSE=1, opt-in). A fused MoE training layer pass uploads the SAME host
+# Host-reuse memo for `to_device_i32` (on by default since TC1 amendment 20; GNF4_HOST_REUSE=0 turns it off). A fused MoE training layer pass uploads the SAME host
 # integers several times: the gate_up and down GEMMs each upload `expert_ids`, the two LoRA deltas each upload
 # (rows, ids), and the dgrad kernels upload `expert_ids` again in backward: 8 uploads per layer forward + backward,
 # 4 of them repeats (a cProfile of one Qwen3-30B-A3B-shaped layer on an RTX A2000 host: ~170 us a call, 5 per
@@ -424,9 +424,11 @@ HOST_REUSE_STATS = {"upload_hits": 0, "upload_misses": 0, "plan_hits": 0, "plan_
 
 
 def _host_reuse_enabled() -> bool:
-    """Off unless ``GNF4_HOST_REUSE=1``. Value-identical host-side reuse (see ``_UPLOAD_MEMO`` and
-    ``nf4_qlora.lora_delta_grouped``); opt-in until a within-box A/B decides the default."""
-    return os.environ.get("GNF4_HOST_REUSE", "0").strip() == "1"
+    """On unless ``GNF4_HOST_REUSE=0``. Value-identical host-side reuse (see ``_UPLOAD_MEMO`` and
+    ``nf4_qlora.lora_delta_grouped``). Measured (experts4bit-qlora TC1 amendment 20, tc1-5090-51, one RTX 5090, every other
+    default in force): the fused Qwen3-30B-A3B training step at 0.933 (shipped arm) / 0.951 (matched arm) of the flag off,
+    held-out unchanged; that registered decision rule made it the default. The opt-out is for A/B work."""
+    return os.environ.get("GNF4_HOST_REUSE", "1").strip() != "0"
 
 
 def _stream_key(dev):

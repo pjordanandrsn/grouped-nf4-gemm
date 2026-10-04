@@ -323,7 +323,7 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
     dev = a_cat.device
     from nf4_grouped import to_device_i32, _host_reuse_enabled, _stream_key, HOST_REUSE_STATS
     host_ids = None if (torch.is_tensor(expert_ids) and expert_ids.is_cuda) else [int(expert_ids[g]) for g in nz]
-    # GNF4_HOST_REUSE=1 (opt-in): the gate_up and down deltas of one MoE layer pass share their grouping, so the
+    # GNF4_HOST_REUSE (on by default; =0 turns it off): the gate_up and down deltas of one MoE layer pass share their grouping, so the
     # down call reuses the gate_up call's device plan (`eid`, `flat`) instead of re-uploading the ids and
     # rebuilding the flat index -- about ten launches and one transfer per pass, values identical (the key is the
     # host grouping itself, plus device and stream). Host ids only (a device `expert_ids` would need a read to
@@ -391,7 +391,7 @@ _PLAN_MEMO: dict = {}
 def _lora_delta_padded(a_cat, lora_A, lora_B, eid, flat, G, widest, unique, scaling):
     """The lean padded delta given its device plan (``eid`` the [G] expert ids, ``flat`` row -> padded row).
 
-    ``unique`` (host-known distinct ids, GNF4_HOST_REUSE=1 only) gathers the adapters through ``_GatherRows``
+    ``unique`` (host-known distinct ids, with GNF4_HOST_REUSE on) gathers the adapters through ``_GatherRows``
     instead of advanced indexing. Same forward values (both are row copies); the backward differs only in
     route: advanced indexing's backward is ``index_put_(accumulate=True)``, which SORTS its indices first (a
     radix sort plus index arithmetic, ~10 launches per adapter), while ``_GatherRows``' is a zero fill and

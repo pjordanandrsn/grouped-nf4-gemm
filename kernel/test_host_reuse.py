@@ -1,4 +1,4 @@
-"""GNF4_HOST_REUSE=1: host-side reuse inside one MoE layer pass gives the SAME values, bit for bit.
+"""GNF4_HOST_REUSE (on by default; =0 off): host-side reuse inside one MoE layer pass gives the SAME values, bit for bit.
 
 Three pieces, all opt-in behind the one flag: ``to_device_i32`` returns the device tensor an identical earlier upload
 produced (keyed on the integers, the device and the current stream; never under capture); ``lora_delta_grouped``'s
@@ -99,8 +99,16 @@ def test_upload_memo_is_bounded(monkeypatch):
     assert len(NG._UPLOAD_MEMO) == NG._UPLOAD_MEMO_SIZE
 
 
-def test_off_by_default(monkeypatch):
+def test_on_by_default(monkeypatch):
     monkeypatch.delenv("GNF4_HOST_REUSE", raising=False)
+    _fresh()
+    (a,) = NG.to_device_i32(([8, 9],), "cuda")
+    (b,) = NG.to_device_i32(([8, 9],), "cuda")
+    assert a.data_ptr() == b.data_ptr() and len(NG._UPLOAD_MEMO) == 1
+
+
+def test_zero_turns_it_off(monkeypatch):
+    monkeypatch.setenv("GNF4_HOST_REUSE", "0")
     _fresh()
     (a,) = NG.to_device_i32(([8, 9],), "cuda")
     (b,) = NG.to_device_i32(([8, 9],), "cuda")

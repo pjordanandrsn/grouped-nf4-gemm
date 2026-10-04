@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### `GNF4_HOST_REUSE` is on by default (`GNF4_HOST_REUSE=0` restores the previous behaviour)
+
+- **Why.** experts4bit-qlora's TC1 amendment 20 registered a 5090 A/B of the flag (#444) with a decision rule: if both arms stepped at
+  or below 0.99 of the flag off, it would become the default. The box (`tc1-5090-51`, AMD EPYC 7C13, RTX 5090, $0.36) ran e4b
+  against itself, with every other current default in force and two draws a side in ABBA order:
+
+  | arm | on / off | cross-draw range | s/step off (d1 / d2) | s/step on (d1 / d2) |
+  |---|---|---|---|---|
+  | shipped | **0.933** | 0.912 – 0.954 | 3.146 / 3.075 | 2.870 / 2.934 |
+  | matched | **0.951** | 0.922 – 0.980 | 3.875 / 4.008 | 3.697 / 3.799 |
+
+  All eight arms were VALID and every pair stable (within 3.4 %). Held-out loss was unchanged: 0.8145 → 0.8154 shipped and
+  0.8500 → 0.8481 matched, within the step's existing run-to-run variation. Both predictions held (P33 band 0.92–0.99, P34
+  0.93–0.99). Register: `e4b.train.host-reuse.qwen3.5090.2026-10-04`.
+- **What changes.** Nothing a kernel reads. Uploads with identical integers on the same device and stream return the earlier device
+  tensor. The down LoRA delta reuses the gate_up delta's plan. Distinct-id adapter gathers take the scatter backward. Captures never
+  use the memo.
+- **Untested.** Serving's eager decode also goes through `to_device_i32` and was not measured. experts4bit-qlora's serving and fused
+  test files (76 tests) pass identically with the flag on and off.
+
 ### `NF4_QLORA_COMPACT_DELTA=1`: the padded LoRA delta saves its input, not its padded block (opt-in; default unchanged)
 
 - **Why.** Under autograd, the lean padded delta saves the zero-padded input block `[G, widest, K]` for its first bmm, plus the
