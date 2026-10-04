@@ -14,6 +14,28 @@
   `kernel/receipts-k29/5090/`.
 - **Earlier attempts.** `k29-5090-1` ($0.06) lost its finished data to a single rsync (fixed in experts4bit-qlora#1047).
 
+### `GNF4_TRAIN_GEMM=dense`: a per-expert dequant + `torch.mm` training route on any CUDA card (opt-in)
+
+- **Why.** experts4bit-qlora's TC2 amendment 7 box D (Mixtral-8x7B, an RTX 5090) read e4b's reference loop, which dequantizes each expert
+  and runs a dense GEMM, at 4.69 s/step against the fused kernels' 5.52. An RTX A2000 replay of Mixtral's expert shapes (1,024 rows
+  per expert) shows the cause:
+
+  | projection | forward, fused → dense | dgrad, fused → dense |
+  |---|---|---|
+  | gate_up | 127.5 → 37.9 ms | 283.7 → 36.7 ms |
+  | down | 64.3 → 18.5 ms | 139.2 → 19.8 ms |
+
+  At Qwen3-30B-A3B's shapes the dense loop is 1.7× forward and 4.6× dgrad at 256 rows per expert, and the fused forward is ahead at
+  Qwen3's down projection with 64 rows.
+- **What.** `nf4_route.dense_forward` / `dense_dgrad` keep `gemm_4bit_grouped` / `dgrad_4bit_grouped`'s contracts. Each present expert
+  is dequantized alone (`dequant_groups`, bit-equal to `dequant_ref` in bf16) and multiplied with `torch.mm`, so one expert's bf16
+  weight is the only transient (Mixtral's gate_up: 235 MB). It is selected only by `GNF4_TRAIN_GEMM=dense`; `auto` is unchanged.
+  `ROUTE_STATS` gains `dense_fwd` / `dense_dgrad`.
+- **Values.** Not bit-identical to the fused kernels (cuBLAS's accumulation order), within bf16 noise: the test bound is 5e-3 relative.
+- **Tested.** `kernel/test_nf4_route.py` (dense against fused through `FusedGroupedNf4`, including an empty group, device-side sizes
+  and ids, and the env value). RTX A2000: 46 passed, 1 skipped with the qlora-grad and eids-forms tests.
+- **Next.** A full-step A/B on Mixtral and Qwen3-30B-A3B on an RTX 5090 decides whether `auto` takes it anywhere.
+
 ### K29 registered: what a pinned host byte costs a cgroup v2 container -- the release gate for the power-of-two pinned-tier model (prereg only; #71)
 
 - **Why.** The pinned-tier model (`capacity_for_bytes`, this release's #71 entry below) was measured on cgroup v1. It
