@@ -88,7 +88,8 @@ def test_a_call_larger_than_a_slot_falls_back_to_the_pageable_build(monkeypatch)
     out = g.to_device_i32((list(range(20)),), "cuda")[0]
     torch.cuda.synchronize()
     assert out.cpu().tolist() == list(range(20))
-    assert g._ring(torch.device("cuda")).staged == 0
+    ring = g._ring(torch.device("cuda"))
+    assert ring.staged == 0 and ring.overflow == 1, (ring.staged, ring.overflow)   # the syncing copy, counted
 
 
 def test_on_by_default_and_zero_turns_it_off(monkeypatch):

@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Engagement accounting for the training path: which dgrad served each call, ring overflow, the padded block's real bytes
+
+- **`nf4_qlora.DGRAD_STATS`** counts which backward served each frozen-GEMM dgrad: the kernel, the grouped_mm route, or the
+  per-expert decode loop. The loop is counted with its reason: an ineligible grad or shape (the `dgrad_eligible` reason),
+  offload-staged storage, or `dgrad_kernel=False`. The loop used to be taken silently, so a run that asked for the kernel could
+  not tell it had not had it. experts4bit-qlora's training census reads it (moe-generalize).
+- **The pinned staging ring counts its overflow** (`_PinnedRing.overflow`): a call larger than `GNF4_PINNED_RING_SLOT_INTS`
+  ints takes the pageable, synchronizing copy, and now says so.
+- **`LORA_PAD_WASTE["last_bytes_alloc"]`** records the padded LoRA block at its real allocation itemsize. The block is
+  allocated in the adapter dtype, so on fp32 adapters it takes twice the `last_bytes` that the `auto` rule compares against
+  its 2 GiB limit. Recorded only: the rule is unchanged until a full-step reading says which accounting it should use.
+
 ### `GNF4_TRAIN_GEMM=dense`: a per-expert dequant + `torch.mm` training route on any CUDA card (opt-in)
 
 - **Why.** experts4bit-qlora's TC2 amendment 7 box D (Mixtral-8x7B, an RTX 5090) read e4b's reference loop, which dequantizes each expert

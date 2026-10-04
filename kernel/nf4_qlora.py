@@ -41,7 +41,11 @@ _PAD_BYTES_LIMIT = 2 * 2 ** 30   # `auto` pads unless the padded block would exc
 # kernel for the part). `LORA_PATH_STATS` counts calls per path (ints only -- consumers cast) and `LORA_PAD_WASTE` records
 # the last / max padding-waste ratio seen, so a training census can say which path served a step and at what skew.
 LORA_PATH_STATS = {"loop": 0, "padded": 0, "grouped_mm": 0}
-LORA_PAD_WASTE = {"last": 0.0, "max": 0.0, "last_bytes": 0}
+# Which backward served each frozen-GEMM dgrad: the single-launch kernel, the grouped_mm route, or the per-expert decode loop --
+# with the loop's reason (`dgrad_eligible`'s, offload-staged storage, or dgrad_kernel=False). The loop is exact and slow; it used
+# to be taken silently, so a run asking for the kernel could not tell it had not had it.
+DGRAD_STATS = {"kernel": 0, "grouped_mm": 0, "loop": 0, "loop_reasons": {}}
+LORA_PAD_WASTE = {"last": 0.0, "max": 0.0, "last_bytes": 0, "last_bytes_alloc": 0}
 
 
 def _lora_path() -> str:
@@ -181,20 +185,26 @@ class FusedGroupedNf4(torch.autograd.Function):
             # unchanged -- an ineligible shape or offload-staged storage still
             # falls back to the loop -- so exactness is never merely a flag away
             # from being silently wrong.
-            if ctx.dgrad_kernel and dgrad_eligible(grad_out, packed, absmax) is None:
+            why = dgrad_eligible(grad_out, packed, absmax) if ctx.dgrad_kernel else "dgrad_kernel=False"
+            if why is None:
                 if packed.device == grad_out.device and getattr(ctx, "route", "fused") == "grouped_mm":
                     from nf4_route import grouped_mm_dgrad
+                    DGRAD_STATS["grouped_mm"] += 1
                     return ((grouped_mm_dgrad(grad_out, packed, absmax, ctx.sizes, ctx.expert_ids),) + (None,) * 6)
                 if packed.device == grad_out.device and getattr(ctx, "route", "fused") == "dense":
                     from nf4_route import dense_dgrad
                     return ((dense_dgrad(grad_out, packed, absmax, ctx.sizes, ctx.expert_ids),) + (None,) * 6)
                 if packed.device == grad_out.device:
+                    DGRAD_STATS["kernel"] += 1
                     return ((dgrad_4bit_grouped(grad_out, packed, absmax,
                                                 ctx.sizes, ctx.expert_ids),)
                             + (None,) * 6)
                 # Offload-staged on another device: the kernel would need the
                 # whole stack resident, which is the thing offload exists to
                 # avoid. Per-expert staging below stays correct there.
+                why = "storage on another device (offload-staged)"
+            DGRAD_STATS["loop"] += 1
+            DGRAD_STATS["loop_reasons"][str(why)] = DGRAD_STATS["loop_reasons"].get(str(why), 0) + 1
 
             grad_a = torch.empty(grad_out.shape[0], K, dtype=grad_out.dtype,
                                  device=grad_out.device)
@@ -324,6 +334,11 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
     waste = len(rows) * widest / total
     pad_bytes = len(rows) * widest * (a_cat.shape[1] + lora_B.shape[1]) * a_cat.element_size()
     LORA_PAD_WASTE["last"], LORA_PAD_WASTE["last_bytes"] = waste, pad_bytes
+    # The padded block is allocated in the ADAPTER dtype (fp32 on a matched-init arm), so the bytes it really takes can be twice
+    # `pad_bytes`, which sizes it at the activations' itemsize. Recorded, not acted on: the route rule is unchanged until a full
+    # step reads what accounting it should use.
+    LORA_PAD_WASTE["last_bytes_alloc"] = len(rows) * widest * (a_cat.shape[1] + lora_B.shape[1]) * max(
+        a_cat.element_size(), lora_A.element_size())
     LORA_PAD_WASTE["max"] = max(LORA_PAD_WASTE["max"], waste)
     if path == "auto":
         wl = _pad_waste_limit()
