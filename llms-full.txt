@@ -1604,7 +1604,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
     "The composition timing and the paired perplexity deltas are measured-private (claim gnf4.serve.decode-glue-kernels): real runs through the consumer on the RTX 5090 whose receipts live in a private audit tree; what is checkable here is each kernel's parity test",
     "int4_b32 imports triton at module level and is not importable without it",
     "combine_rows and reduce_partials carry an accuracy contract, not a bitwise one: each is within the error bound of a correct fp32 summation in every census case on an RTX 5090, and neither is bitwise the torch chain it replaced (lane B393; gnf4.kernel.combine-rows-accuracy.5090.2026-09-23, gnf4.kernel.reduce-partials-slot-order.5090.2026-09-23); the kernel's output and torch's chain were each bit-identical on sm_86 and sm_120 at the census cases (corrected 2026-09-24)",
-    "GNF4_PDL is opt-in and unmeasured: lane K28 (kernel/PREREG-k28-pdl-decode-chain.md) reads it on an RTX 5090, and it is inert on CPU, under the interpreter, on ROCm and below sm_90"
+    "GNF4_PDL is opt-in: lane K28 read it LEVER on a CUDA-graph replay of the served decode chain (gnf4.kernel.k28-pdl-decode-chain.5090.2026-10-04), but its served effect is unread (experts4bit-qlora lane P112 closed VOID; its arms suggested a gain at one request and a cost at sixteen); GNF4_PDL_MAX_ROWS keeps it for small launches only; it is inert on CPU, under the interpreter, on ROCm and below sm_90"
    ],
    "status": "measured-private"
   },
