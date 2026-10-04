@@ -23,6 +23,9 @@
 - **What does not change.** Off (unset or `0`), every launch passes the keywords it passed before. The switch is inert
   even when set on CPU, under the interpreter, on ROCm, on cards below sm_90, and with a Triton that has no
   `launch_pdl`.
+- **Read once.** The switch is read at the first launch that asks; `int4_b32.pdl_refresh()` re-reads it. Every launch
+  asks, and a per-call environment read measured about 0.6 µs, which an eager decode step would pay about 900 times.
+  The cached check costs about 0.06 µs.
 - **Tested.** `kernel/test_pdl.py`:
   - on CPU: the parsing, the inert cases, and that every launch of the twelve kernels takes the switch and starts with
     the wait;

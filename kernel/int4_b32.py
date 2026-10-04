@@ -38,7 +38,9 @@ from _triton_shim import UnsupportedShapeError  # noqa: E402
 
 # ------------------------------------- lane K28: programmatic dependent launch --
 #: Lane K28 (``PREREG-k28-pdl-decode-chain.md``): launch the decode-row kernels of this module with programmatic
-#: dependent launch (PDL). ``1``/``0`` force it; unset = the shipped default, which stays off until K28 reads.
+#: dependent launch (PDL). ``1``/``0`` force it; unset = the shipped default, which stays off until K28 reads. It is
+#: read ONCE, at the first launch that asks (every launch asks, so a per-call read would cost each eager decode launch
+#: an environment lookup, ~0.6 us); :func:`pdl_refresh` re-reads it after the environment changes.
 PDL_ENV = "GNF4_PDL"
 PDL_DEFAULT = False
 #: ``griddepcontrol`` exists from sm_90 (Hopper) on. Below that the switch is inert: the kernels compile and launch
@@ -46,16 +48,26 @@ PDL_DEFAULT = False
 PDL_MIN_CC = (9, 0)
 _CC_CACHE: dict[str, tuple] = {}
 _LAUNCH_PDL: list = []
+_PDL_SWITCH: list = []                  # [bool] once GNF4_PDL has been read
+_NO_KW: dict = {}                       # what an off launch unpacks: nothing (never mutated)
+_PDL_KW: dict = {"PDL": True, "launch_pdl": True}
 
 
 def pdl_default() -> bool:
-    """``GNF4_PDL``: ``1``/``true``/``on`` or ``0``/``false``/``off``; anything else is the default (off)."""
+    """``GNF4_PDL`` as the environment holds it now: ``1``/``true``/``on`` or ``0``/``false``/``off``; anything else is
+    the default (off). The launches read it through :func:`pdl_refresh`'s cache, not through this."""
     v = os.environ.get(PDL_ENV, "").strip().lower()
     if v in ("1", "true", "on"):
         return True
     if v in ("0", "false", "off"):
         return False
     return PDL_DEFAULT
+
+
+def pdl_refresh() -> bool:
+    """Re-read ``GNF4_PDL`` into the switch every launch consults, and return it."""
+    _PDL_SWITCH[:] = [pdl_default()]
+    return _PDL_SWITCH[0]
 
 
 def _launch_pdl_available() -> bool:
@@ -73,7 +85,7 @@ def pdl_active(device) -> bool:
     """True when this module's decode-row kernels launch with PDL on ``device``: the switch is on, the device is an
     NVIDIA CUDA device (not ROCm, which reports its own capability numbers), the kernels are compiled (not the
     interpreter), Triton can launch with PDL, and the card is sm_90 or newer."""
-    if not pdl_default():
+    if not (_PDL_SWITCH[0] if _PDL_SWITCH else pdl_refresh()):
         return False
     dev = torch.device(device)
     if dev.type != "cuda" or torch.version.hip or os.environ.get("TRITON_INTERPRET", "0") == "1":
@@ -88,7 +100,7 @@ def _pdl_kw(device) -> dict:
     """Launch keywords for one decode-row kernel: ``PDL=True`` (the kernel's grid-dependency preamble) together
     with ``launch_pdl=True`` (Triton launches it as a programmatic dependent of the previous kernel on the stream),
     or nothing at all, so the off path compiles and launches exactly as before the switch existed."""
-    return {"PDL": True, "launch_pdl": True} if pdl_active(device) else {}
+    return _PDL_KW if pdl_active(device) else _NO_KW
 
 
 @triton.jit

@@ -38,8 +38,10 @@ CC = torch.cuda.get_device_capability() if CUDA else (0, 0)
 
 @pytest.fixture
 def fresh(monkeypatch):
-    """A clean capability cache, restored afterwards, so a mocked capability never leaks into another test."""
+    """Clean capability and switch caches, restored afterwards, so a mocked capability or a switch read never leaks
+    into another test (the switch is read once and cached; each test here sets the environment first)."""
     monkeypatch.setattr(m, "_CC_CACHE", {})
+    monkeypatch.setattr(m, "_PDL_SWITCH", [])
     return monkeypatch
 
 
@@ -51,6 +53,18 @@ def test_the_switch_is_off_by_default_and_parses(monkeypatch):
                     ("2", False), ("yes", False)):
         monkeypatch.setenv(m.PDL_ENV, v)
         assert m.pdl_default() is want, v
+
+
+def test_the_switch_is_read_once_and_refreshed_on_request(fresh):
+    fresh.setattr(torch.cuda, "get_device_capability", lambda d=None: (12, 0))
+    fresh.setattr(torch.version, "hip", None)
+    fresh.setattr(m, "_LAUNCH_PDL", [True])
+    fresh.delenv("TRITON_INTERPRET", raising=False)
+    fresh.setenv(m.PDL_ENV, "1")
+    assert m.pdl_active("cuda") is True
+    fresh.setenv(m.PDL_ENV, "0")
+    assert m.pdl_active("cuda") is True, "read once: a later environment change needs pdl_refresh()"
+    assert m.pdl_refresh() is False and m.pdl_active("cuda") is False and m._pdl_kw("cuda") == {}
 
 
 def test_off_passes_no_keywords_anywhere(fresh):
@@ -209,6 +223,7 @@ def _chain(t):
 
 def _run(monkeypatch, on, graph):
     monkeypatch.setenv(m.PDL_ENV, "1" if on else "0")
+    m.pdl_refresh()
     assert m.pdl_active("cuda") is on
     t = _inputs("cuda")
     if not graph:
