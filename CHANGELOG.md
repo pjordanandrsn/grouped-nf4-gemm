@@ -4,8 +4,8 @@
 
 ### Engagement accounting for the training path: which dgrad served each call, ring overflow, the padded block's real bytes
 
-- **`nf4_qlora.DGRAD_STATS`** counts which backward served each frozen-GEMM dgrad: the kernel, the grouped_mm route, or the
-  per-expert decode loop. The loop is counted with its reason: an ineligible grad or shape (the `dgrad_eligible` reason),
+- **`nf4_qlora.DGRAD_STATS`** counts which backward served each frozen-GEMM dgrad: the kernel, the grouped_mm route, the
+  `dense` route (#459), or the per-expert decode loop. The loop is counted with its reason: an ineligible grad or shape (the `dgrad_eligible` reason),
   offload-staged storage, or `dgrad_kernel=False`. The loop used to be taken silently, so a run that asked for the kernel could
   not tell it had not had it. experts4bit-qlora's training census reads it (moe-generalize).
 - **The pinned staging ring counts its overflow** (`_PinnedRing.overflow`): a call larger than `GNF4_PINNED_RING_SLOT_INTS`

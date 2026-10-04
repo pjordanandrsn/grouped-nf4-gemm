@@ -41,10 +41,10 @@ _PAD_BYTES_LIMIT = 2 * 2 ** 30   # `auto` pads unless the padded block would exc
 # kernel for the part). `LORA_PATH_STATS` counts calls per path (ints only -- consumers cast) and `LORA_PAD_WASTE` records
 # the last / max padding-waste ratio seen, so a training census can say which path served a step and at what skew.
 LORA_PATH_STATS = {"loop": 0, "padded": 0, "grouped_mm": 0}
-# Which backward served each frozen-GEMM dgrad: the single-launch kernel, the grouped_mm route, or the per-expert decode loop --
-# with the loop's reason (`dgrad_eligible`'s, offload-staged storage, or dgrad_kernel=False). The loop is exact and slow; it used
-# to be taken silently, so a run asking for the kernel could not tell it had not had it.
-DGRAD_STATS = {"kernel": 0, "grouped_mm": 0, "loop": 0, "loop_reasons": {}}
+# Which backward served each frozen-GEMM dgrad: the single-launch kernel, the grouped_mm route, the dense route, or the
+# per-expert decode loop -- with the loop's reason (`dgrad_eligible`'s, offload-staged storage, or dgrad_kernel=False). The loop is
+# exact and slow; it used to be taken silently, so a run asking for the kernel could not tell it had not had it.
+DGRAD_STATS = {"kernel": 0, "grouped_mm": 0, "dense": 0, "loop": 0, "loop_reasons": {}}
 LORA_PAD_WASTE = {"last": 0.0, "max": 0.0, "last_bytes": 0, "last_bytes_alloc": 0}
 
 
@@ -193,6 +193,7 @@ class FusedGroupedNf4(torch.autograd.Function):
                     return ((grouped_mm_dgrad(grad_out, packed, absmax, ctx.sizes, ctx.expert_ids),) + (None,) * 6)
                 if packed.device == grad_out.device and getattr(ctx, "route", "fused") == "dense":
                     from nf4_route import dense_dgrad
+                    DGRAD_STATS["dense"] += 1
                     return ((dense_dgrad(grad_out, packed, absmax, ctx.sizes, ctx.expert_ids),) + (None,) * 6)
                 if packed.device == grad_out.device:
                     DGRAD_STATS["kernel"] += 1

@@ -399,7 +399,7 @@ def test_dgrad_stats_name_the_backward_that_served_each_call(monkeypatch):
     import nf4_qlora
     monkeypatch.setenv("GNF4_TRAIN_GEMM", "fused")
     monkeypatch.setattr(nf4_qlora, "DGRAD_STATS",
-                        {"kernel": 0, "grouped_mm": 0, "loop": 0, "loop_reasons": {}})
+                        {"kernel": 0, "grouped_mm": 0, "dense": 0, "loop": 0, "loop_reasons": {}})
     packed, absmax = _packed_stack()
     a, sizes, eids = _grouped_inputs()
     packed_c, absmax_c = packed.cuda(), absmax.cuda()
@@ -411,8 +411,10 @@ def test_dgrad_stats_name_the_backward_that_served_each_call(monkeypatch):
     _bwd()                                                  # the default: the kernel
     _bwd(None, False)                                       # the exact loop, asked for
     _bwd(lambda: (packed, absmax), True)                    # CPU-staged storage: the loop, not asked for
+    monkeypatch.setenv("GNF4_TRAIN_GEMM", "dense")
+    _bwd()                                                  # the opt-in dense route (any CUDA card)
     st = nf4_qlora.DGRAD_STATS
-    assert (st["kernel"], st["grouped_mm"], st["loop"]) == (1, 0, 2), st
+    assert (st["kernel"], st["grouped_mm"], st["dense"], st["loop"]) == (1, 0, 1, 2), st
     assert st["loop_reasons"] == {"dgrad_kernel=False": 1, "storage on another device (offload-staged)": 1}, st
 
 
