@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
-"""The grouped_mm training route (GNF4_TRAIN_GEMM=grouped_mm, opt-in, sm_90): dequantize the present experts' NF4 stacks to bf16
-with one Triton kernel, then run the grouped GEMM through ``torch._grouped_mm`` -- forward ``a_cat @ W_e^T`` and dgrad
-``grad_out @ W_e`` -- instead of grouped-nf4-gemm's fused decode-in-the-mainloop kernels.
+"""The grouped_mm training route (GNF4_TRAIN_GEMM=auto, the default, takes it on sm_90; =grouped_mm forces it): dequantize the
+present experts' NF4 stacks to bf16 with one Triton kernel, then run the grouped GEMM through ``torch._grouped_mm`` -- forward
+``a_cat @ W_e^T`` and dgrad ``grad_out @ W_e`` -- instead of grouped-nf4-gemm's fused decode-in-the-mainloop kernels.
 
 Why it exists: on an H100 NVL experts4bit-qlora's fused training step is device-bound, and its comparator's route on that card is
 exactly this one (dequantize, then a dense grouped GEMM that sm_90 runs natively). experts4bit-qlora's TC1c amendment 3 replays
@@ -9,10 +9,13 @@ recorded real-router calls on an H100 to decide whether the route is worth takin
 
 Values: the dequantized stack is bit-equal to ``dequant_ref(...).to(bfloat16)`` (the test asserts it); the GEMM accumulates bf16
 products in fp32 in cuBLAS's order, so outputs differ from the fused kernels' in the last bits (an A2000 per-group check put the
-relative Frobenius difference at <= 2.4e-3). Not bit-identical: a training A/B decides it, never a silent default.
+relative Frobenius difference at <= 2.4e-3). Not bit-identical, so a training A/B decided it: experts4bit-qlora's TC1c amendment 6
+measured the full Qwen3-30B-A3B step on an H100 NVL faster than the fused kernels' with the matched set EQUIVALENT, and ``auto``
+takes the route on sm_90 since. ``GNF4_TRAIN_GEMM=fused`` keeps the fused kernels.
 
-Refuses, with the reason, where ``torch._grouped_mm`` has no kernel for the device (torch 2.8: compute capability 9.0 only),
-rather than falling back to the fused kernels -- the same rule as nf4_qlora's grouped_mm LoRA path.
+``auto`` never takes the route where ``torch._grouped_mm`` has no kernel for the device (torch 2.8: compute capability 9.0 only);
+an explicit ``grouped_mm`` refuses there, with the reason, rather than falling back to the fused kernels -- the same rule as
+nf4_qlora's grouped_mm LoRA path.
 """
 from __future__ import annotations
 
@@ -26,12 +29,31 @@ from nf4_grouped import BLOCKSIZE, _lut, to_device_i32
 ROUTE_STATS = {"fwd": 0, "dgrad": 0}
 
 
-def train_gemm_route() -> str:
-    """``GNF4_TRAIN_GEMM`` = ``fused`` (default) | ``grouped_mm``."""
-    v = os.environ.get("GNF4_TRAIN_GEMM", "fused").strip().lower()
-    if v not in ("fused", "grouped_mm"):
-        raise ValueError(f"GNF4_TRAIN_GEMM must be 'fused' or 'grouped_mm', got {v!r}")
-    return v
+_AUTO_ROUTE: dict = {}                                     # device index -> the route ``auto`` resolved to there
+
+
+def train_gemm_route(dev=None) -> str:
+    """``GNF4_TRAIN_GEMM`` = ``auto`` (default) | ``fused`` | ``grouped_mm``. ``auto`` is ``grouped_mm`` on a CUDA device of compute
+    capability 9.0 when this torch has ``_grouped_mm``, and ``fused`` everywhere else (other cards, CPU). ``dev`` defaults to the
+    current CUDA device."""
+    v = os.environ.get("GNF4_TRAIN_GEMM", "auto").strip().lower()
+    if v not in ("auto", "fused", "grouped_mm"):
+        raise ValueError(f"GNF4_TRAIN_GEMM must be 'auto', 'fused' or 'grouped_mm', got {v!r}")
+    if v != "auto":
+        return v
+    if dev is None:
+        if not torch.cuda.is_available():
+            return "fused"
+        dev = torch.device("cuda", torch.cuda.current_device())
+    dev = torch.device(dev)
+    if dev.type != "cuda":
+        return "fused"
+    idx = dev.index if dev.index is not None else torch.cuda.current_device()
+    r = _AUTO_ROUTE.get(idx)
+    if r is None:
+        ok = hasattr(torch, "_grouped_mm") and torch.cuda.get_device_capability(idx) == (9, 0)
+        r = _AUTO_ROUTE[idx] = "grouped_mm" if ok else "fused"
+    return r
 
 
 def _refuse_unless_supported(dev):

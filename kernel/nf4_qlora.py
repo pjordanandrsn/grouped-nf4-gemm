@@ -91,13 +91,11 @@ class FusedGroupedNf4(torch.autograd.Function):
         from nf4_grouped import gemm_4bit_grouped
 
         ctx.dgrad_kernel = dgrad_kernel
-        # GNF4_TRAIN_GEMM=grouped_mm (opt-in, sm_90; nf4_route.py): dequantize + torch._grouped_mm instead of the fused kernel,
-        # forward and dgrad alike. The choice is made here and remembered, so a backward never mixes routes.
-        # The route module is imported only when the variable asks for it, so the default path never depends on it.
-        ctx.route = "fused"
-        if os.environ.get("GNF4_TRAIN_GEMM", "fused").strip().lower() != "fused":
-            from nf4_route import train_gemm_route
-            ctx.route = train_gemm_route()                 # validates the value; raises on an unknown one
+        # GNF4_TRAIN_GEMM (nf4_route.py): `auto`, the default, takes the grouped_mm route -- dequantize + torch._grouped_mm,
+        # forward and dgrad alike -- on compute capability 9.0 and the fused kernel everywhere else; `fused` / `grouped_mm`
+        # force one. The choice is made here and remembered, so a backward never mixes routes.
+        from nf4_route import train_gemm_route
+        ctx.route = train_gemm_route(a_cat.device)         # validates the value; raises on an unknown one
         if ctx.route == "grouped_mm":
             from nf4_route import grouped_mm_forward
             out = grouped_mm_forward(a_cat, packed, absmax, sizes, expert_ids)
