@@ -45,7 +45,7 @@ PDL_DEFAULT = False
 #: exactly as they do with it off.
 PDL_MIN_CC = (9, 0)
 _CC_CACHE: dict[str, tuple] = {}
-_GDC: list = []
+_LAUNCH_PDL: list = []
 
 
 def pdl_default() -> bool:
@@ -58,20 +58,21 @@ def pdl_default() -> bool:
     return PDL_DEFAULT
 
 
-def _gdc_available() -> bool:
-    if not _GDC:
+def _launch_pdl_available() -> bool:
+    """Whether this Triton's NVIDIA backend takes the ``launch_pdl`` launch option (3.4 and later)."""
+    if not _LAUNCH_PDL:
         try:
-            from triton.language.extra import cuda as _tlc
-            _GDC.append(hasattr(_tlc, "gdc_wait") and hasattr(_tlc, "gdc_launch_dependents"))
-        except Exception:  # noqa: BLE001 -- any import failure means the intrinsics are not there
-            _GDC.append(False)
-    return _GDC[0]
+            from triton.backends.nvidia.compiler import CUDAOptions
+            _LAUNCH_PDL.append("launch_pdl" in CUDAOptions.__dataclass_fields__)
+        except Exception:  # noqa: BLE001 -- any import failure means the option is not there
+            _LAUNCH_PDL.append(False)
+    return _LAUNCH_PDL[0]
 
 
 def pdl_active(device) -> bool:
     """True when this module's decode-row kernels launch with PDL on ``device``: the switch is on, the device is an
     NVIDIA CUDA device (not ROCm, which reports its own capability numbers), the kernels are compiled (not the
-    interpreter), Triton ships the grid-dependency intrinsics, and the card is sm_90 or newer."""
+    interpreter), Triton can launch with PDL, and the card is sm_90 or newer."""
     if not pdl_default():
         return False
     dev = torch.device(device)
@@ -80,7 +81,7 @@ def pdl_active(device) -> bool:
     key = str(dev)
     if key not in _CC_CACHE:
         _CC_CACHE[key] = tuple(torch.cuda.get_device_capability(dev))
-    return _CC_CACHE[key] >= PDL_MIN_CC and _gdc_available()
+    return _CC_CACHE[key] >= PDL_MIN_CC and _launch_pdl_available()
 
 
 def _pdl_kw(device) -> dict:
@@ -92,13 +93,20 @@ def _pdl_kw(device) -> dict:
 
 @triton.jit
 def _pdl_enter(PDL: tl.constexpr):
-    """The PDL preamble, first in every decode-row kernel. ``gdc_wait`` blocks until the previous kernel on the stream
-    has COMPLETED and its memory is visible, so nothing below it can read a stale input or overwrite one the previous
-    kernel still reads. ``gdc_launch_dependents`` then lets the next kernel's programs launch and park in their own
-    wait while this one runs: what PDL hides is launch latency, never ordering. With ``PDL`` off this is empty."""
+    """The PDL preamble, first in every decode-row kernel. ``griddepcontrol.wait`` blocks until the previous kernel on
+    the stream has COMPLETED and its memory is visible, so nothing below it can read a stale input or overwrite one the
+    previous kernel still reads. ``griddepcontrol.launch_dependents`` then lets the next kernel's programs launch and
+    park in their own wait while this one runs: what PDL hides is launch latency, never ordering. With ``PDL`` off
+    this is empty.
+
+    The two instructions are written as inline PTX rather than through ``tl.extra.cuda.gdc_wait`` /
+    ``gdc_launch_dependents``: Triton 3.4.0 ships those wrappers still on its old ``_builder`` keyword, so they fail to
+    compile ("unexpected keyword argument '_semantic'"; seen on the NAS A2000 compiling for sm_120). These are the same
+    PTX strings those wrappers emit."""
     if PDL:
-        tl.extra.cuda.gdc_wait()
-        tl.extra.cuda.gdc_launch_dependents()
+        tl.inline_asm_elementwise("griddepcontrol.wait; // dummy $0", "=r", [], dtype=tl.int32, is_pure=False, pack=1)
+        tl.inline_asm_elementwise("griddepcontrol.launch_dependents; // dummy $0", "=r", [], dtype=tl.int32,
+                                  is_pure=False, pack=1)
 
 
 # ------------------------------------------------- activation quantise --

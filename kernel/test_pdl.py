@@ -7,7 +7,8 @@ The contract, before any timing:
    the kernels compile and launch as before. On a device that cannot do PDL (CPU, the interpreter, ROCm, or a card
    below sm_90) the switch is inert even when set.
 2. **Ordering is untouched.** Every decode-row kernel's FIRST statement is the preamble, which waits for the previous
-   kernel on the stream to complete (``gdc_wait``) before it lets the next one launch (``gdc_launch_dependents``).
+   kernel on the stream to complete (``griddepcontrol.wait``) before it lets the next one launch
+   (``griddepcontrol.launch_dependents``).
    Nothing in a kernel reads or writes memory before its wait, so PDL can only hide launch latency, never reorder.
 3. **On is bitwise off.** On an sm_90+ card, every wrapper and a captured chain of all of them return ``torch.equal``
    outputs with the switch on and off.
@@ -75,28 +76,29 @@ def test_inert_where_pdl_cannot_run(fresh):
         fresh.setattr(m, "_CC_CACHE", {})
         fresh.setattr(torch.cuda, "get_device_capability", lambda d=None, cc=cc: cc)
         assert m._pdl_kw("cuda") == {}, cc
-    fresh.setattr(m, "_GDC", [False])
+    fresh.setattr(m, "_LAUNCH_PDL", [False])
     fresh.setattr(m, "_CC_CACHE", {})
     fresh.setattr(torch.cuda, "get_device_capability", lambda d=None: (12, 0))
-    assert m._pdl_kw("cuda") == {}, "a Triton without the grid-dependency intrinsics"
+    assert m._pdl_kw("cuda") == {}, "a Triton that cannot launch with PDL"
 
 
 def test_on_where_pdl_can_run(fresh):
     fresh.setenv(m.PDL_ENV, "1")
     fresh.delenv("TRITON_INTERPRET", raising=False)
     fresh.setattr(torch.version, "hip", None)
-    fresh.setattr(m, "_GDC", [True])
+    fresh.setattr(m, "_LAUNCH_PDL", [True])
     for cc in ((9, 0), (10, 0), (12, 0)):
         fresh.setattr(m, "_CC_CACHE", {})
         fresh.setattr(torch.cuda, "get_device_capability", lambda d=None, cc=cc: cc)
         assert m._pdl_kw("cuda") == {"PDL": True, "launch_pdl": True}, cc
 
 
-def test_triton_ships_the_intrinsics():
-    """pyproject pins triton>=3.4, the release that added them; a regression here would silently disable the switch."""
-    from triton.language.extra import cuda as tlc
-    assert hasattr(tlc, "gdc_wait") and hasattr(tlc, "gdc_launch_dependents")
-    assert m._gdc_available() is True
+def test_triton_can_launch_with_pdl():
+    """pyproject pins triton>=3.4, the release that added ``launch_pdl``; a regression here would silently disable the
+    switch."""
+    from triton.backends.nvidia.compiler import CUDAOptions
+    assert "launch_pdl" in CUDAOptions.__dataclass_fields__
+    assert m._launch_pdl_available() is True
 
 
 # ------------------------------------------------------------------- 2. the preamble comes first, in every kernel --
@@ -109,8 +111,12 @@ def test_the_preamble_waits_before_it_releases_the_next_kernel():
     body = _defs()["_pdl_enter"].body
     body = body[1:] if isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) else body
     assert len(body) == 1 and isinstance(body[0], ast.If) and ast.unparse(body[0].test) == "PDL"
-    calls = [ast.unparse(s.value) for s in body[0].body]
-    assert calls == ["tl.extra.cuda.gdc_wait()", "tl.extra.cuda.gdc_launch_dependents()"], calls
+    calls = [s.value for s in body[0].body]
+    assert [ast.unparse(c.func) for c in calls] == ["tl.inline_asm_elementwise"] * 2
+    asm = [c.args[0].value for c in calls]
+    assert asm[0].startswith("griddepcontrol.wait;") and asm[1].startswith("griddepcontrol.launch_dependents;"), asm
+    for c in calls:                       # not pure: the compiler may neither drop nor hoist it
+        assert {k.arg: ast.unparse(k.value) for k in c.keywords}["is_pure"] == "False"
 
 
 @pytest.mark.parametrize("name", KERNELS)
@@ -244,7 +250,8 @@ import triton.language as tl  # noqa: E402
 def _probe_spin(out_ptr, NS: tl.constexpr, PDL: tl.constexpr):
     t0 = tl.extra.cuda.globaltimer()
     if PDL:
-        tl.extra.cuda.gdc_launch_dependents()
+        tl.inline_asm_elementwise("griddepcontrol.launch_dependents; // dummy $0", "=r", [], dtype=tl.int32,
+                                  is_pure=False, pack=1)
     t = t0
     while t - t0 < NS:
         t = tl.extra.cuda.globaltimer()
@@ -255,7 +262,7 @@ def _probe_spin(out_ptr, NS: tl.constexpr, PDL: tl.constexpr):
 def _probe_after(out_ptr, PDL: tl.constexpr):
     t_pre = tl.extra.cuda.globaltimer()
     if PDL:
-        tl.extra.cuda.gdc_wait()
+        tl.inline_asm_elementwise("griddepcontrol.wait; // dummy $0", "=r", [], dtype=tl.int32, is_pure=False, pack=1)
     t_post = tl.extra.cuda.globaltimer()
     tl.store(out_ptr + 1, t_pre)
     tl.store(out_ptr + 2, t_post)

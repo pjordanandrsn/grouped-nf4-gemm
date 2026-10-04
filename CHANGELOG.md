@@ -17,8 +17,12 @@
 
   Each kernel's first statement waits for the previous kernel on the stream to complete, then releases the next one to
   launch. Nothing reads or writes memory before the wait, so PDL hides launch latency and cannot reorder anything.
+  The two instructions (`griddepcontrol.wait`, `griddepcontrol.launch_dependents`) are inline PTX. Triton 3.4.0's own
+  `tl.extra.cuda.gdc_wait` / `gdc_launch_dependents` wrappers still use the pre-3.4 `_builder` keyword and fail to
+  compile.
 - **What does not change.** Off (unset or `0`), every launch passes the keywords it passed before. The switch is inert
-  on CPU, under the interpreter, on ROCm and on cards below sm_90, even when set.
+  even when set on CPU, under the interpreter, on ROCm, on cards below sm_90, and with a Triton that has no
+  `launch_pdl`.
 - **Tested.** `kernel/test_pdl.py`:
   - on CPU: the parsing, the inert cases, and that every launch of the twelve kernels takes the switch and starts with
     the wait;
