@@ -1,0 +1,6 @@
+[2026-10-04T16:45:22Z] K29 k29-5090-2: sizes 0,340,512,700,1024,1359,2048,2100,3000,4096 MB x 2 reps, pinned and pageable
+[2026-10-04T16:45:24Z] cgroup v2: memory.current readable (class drawn)
+FITS {"pinned": {"slope": 1.1516, "intercept_mb": 208.0, "r2": 0.84503, "points": 20}, "pageable": {"slope": 1.0021, "intercept_mb": 1.7, "r2": 1.0, "points": 20}}
+ENV {"cgroup": "v2", "torch": "2.8.0+cu128", "driver": "590.48.01", "gpu": "NVIDIA GeForce RTX 5090"}
+[2026-10-04T16:47:50Z] probe done
+[2026-10-04T16:47:50Z] TP_DONE rc=0

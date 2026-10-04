@@ -1,0 +1,10 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 590.48.01
+kernel: 6.8.0-138-generic
+cgroup mounts:
+  cgroup /sys/fs/cgroup cgroup2 ro,nosuid,nodev,noexec,relatime,nsdelegate,memory_recursiveprot 0 0
+proc_self_cgroup: 0::/ 
+/sys/fs/cgroup/memory.max: 183350853632
+/sys/fs/cgroup/memory.current: 13828096
+MemTotal:       263771780 kB
+MemAvailable:   254275712 kB
+torch 2.8.0+cu128 cuda 12.8
