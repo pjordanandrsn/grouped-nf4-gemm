@@ -1,0 +1,4 @@
+K28 launches {"chain_off": {"gnf4": 912, "pdl": 0, "other_triton": 0}, "chain_on": {"gnf4": 912, "pdl": 912, "other_triton": 0}, "chain_off2": {"gnf4": 912, "pdl": 0, "other_triton": 0}, "glued_off": {"gnf4": 912, "pdl": 0, "other_triton": 0}, "glued_on": {"gnf4": 912, "pdl": 912, "other_triton": 0}} bitwise {"chain_on": true, "chain_off2": true, "glued_on": true, "eager_on": true, "eager_graph": true}
+K28 median ms {"chain_off": 2.6576, "chain_on": 2.3632, "chain_off2": 2.6594, "glued_off": 2.8468, "glued_on": 2.6489}
+K28 probe early_ns on [19712, 19424, 19584, 19616, 19616] off [-480, -800, -608, -608, -608]
+K28_VERDICT LEVER: chain 2.6576 -> 2.3632 ms (x1.125), 0.323 us per gnf4 kernel; glued 2.8468 -> 2.6489 ms, 0.217 us; instrument 1.0007 -- >= 0.25 us: next, a served lane reads GNF4_PDL=1 on e4b's decode step

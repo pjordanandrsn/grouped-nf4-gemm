@@ -304,6 +304,11 @@ was wrong.
   served kernel's. In bf16 it runs at 0.317 / 0.325, at 1.35× the served error. TF32_PATH: the next lane reads K25-tree
   in TF32 end to end on both families. `kernel/RESULTS-k27-nf4-tree-precision.md`; register row
   `gnf4.kernel.k27-nf4-tree-precision.5090.2026-10-01`.
+- **K28 read (2026-10-04, RTX 5090): programmatic dependent launch (`GNF4_PDL=1`) saves 0.323 µs per gnf4
+  kernel** in a CUDA-graph replay of the served Qwen3-30B-A3B B=1 layer's 912 gnf4 kernels (2.658 → 2.363 ms,
+  ×1.125), with every output bitwise identical; 0.217 µs with the served step's ATen stand-ins interleaved.
+  LEVER: experts4bit-qlora reads it served next, and the switch stays opt-in until then.
+  `kernel/RESULTS-k28-pdl-decode-chain.md`; register row `gnf4.kernel.k28-pdl-decode-chain.5090.2026-10-04`.
 - **A fixed fraction-of-waterfall is retired as a law** (two 0.77
   readings were a two-host coincidence).
 - **The cold-engine "free floor" premise is refuted** on its target box:

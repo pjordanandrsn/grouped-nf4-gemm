@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### K28 read (RTX 5090): LEVER — programmatic dependent launch saves 0.323 µs per gnf4 kernel in the served B=1 decode chain, bit-identically
+
+Register: `gnf4.kernel.k28-pdl-decode-chain.5090.2026-10-04`; `kernel/RESULTS-k28-pdl-decode-chain.md`.
+- **The reading** (`k28-5090-1`). 48 layers × 19 gnf4 kernels (912) replay in 2.363 ms with `GNF4_PDL=1` against
+  2.658 ms without (×1.125). With the served step's attention and router stand-ins interleaved the
+  saving is 0.217 µs per kernel. Every bitwise check held, and the probe's dependent was waiting
+  19.4–19.7 µs before its 20 µs primary ended.
+- **The predictions.** All seven held; Q4's 0.3–1.2 µs held at its low end.
+- **What follows (registered).** `GNF4_PDL` stays off by default here. experts4bit-qlora registers a served lane (B=1 and
+  B=16, tokens and tok/s), which also decides whether e4b's own decode kernels take the preamble.
+- **Cost:** $0.0237.
+
 ### K28 registered: does programmatic dependent launch shorten the served B=1 decode layer's gnf4 kernels in a CUDA graph, bit-identically? (bench and prereg)
 
 `kernel/PREREG-k28-pdl-decode-chain.md`, `kernel/k28_bench.py`; tracking issue experts4bit-qlora#1015.

@@ -1039,6 +1039,23 @@
     "kernel/receipts-k27/5090/k27.json",
     "kernel/receipts-k27/5090/summary.txt"
    ]
+  },
+  {
+   "id": "gnf4.kernel.k28-pdl-decode-chain.5090.2026-10-04",
+   "area": "kernel",
+   "claim": "K28 (pre-registered 2026-10-04, #449): on the RTX 5090, a CUDA-graph replay of 48 layers of the served Qwen3-30B-A3B B=1 decode layer's 19 grouped-nf4-gemm kernels (912) runs at 2.3632 ms with GNF4_PDL=1 (programmatic dependent launch, #448) against 2.6576 ms without (x1.125), 0.323 us saved per gnf4 kernel, with every output bitwise identical; LEVER by the registered rule (bar 0.25 us). With the served step's attention and router stand-ins interleaved (two more ATen kernels a layer) the saving is 0.217 us per gnf4 kernel (2.8468 -> 2.6489 ms). A microbenchmark of gnf4's kernels, not a served speed.",
+   "value": 0.323,
+   "unit": "us saved per grouped-nf4-gemm kernel in the CUDA-graph replay (GNF4_PDL off minus on, over 912 kernels)",
+   "status": "measured",
+   "hardware": "RTX 5090 (sm_120, driver 580.95.05, 600 W), torch 2.8.0+cu128 / triton 3.4.0, rented host (vast instance 54112990, AMD EPYC 7C13)",
+   "measured_on": "2026-10-04",
+   "evidence": [
+    "kernel/RESULTS-k28-pdl-decode-chain.md",
+    "kernel/PREREG-k28-pdl-decode-chain.md",
+    "kernel/k28_bench.py",
+    "kernel/receipts-k28/5090/k28.json",
+    "kernel/receipts-k28/5090/summary.txt"
+   ]
   }
  ]
 }
