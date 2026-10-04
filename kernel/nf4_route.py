@@ -32,11 +32,18 @@ ROUTE_STATS = {"fwd": 0, "dgrad": 0}
 _AUTO_ROUTE: dict = {}                                     # device index -> the route ``auto`` resolved to there
 
 
-def train_gemm_route(dev=None) -> str:
+#: ``auto`` takes the dense route off sm_90 for a call with at most this many present groups. experts4bit-qlora's TC1 amendment 22 read it
+#: on the full training step on an RTX 5090: Mixtral-8x7B (2 of 8 experts per token) stepped at 0.651x the fused kernels' time, while
+#: Qwen3-30B-A3B (up to 128 present experts per call, a launch-bound step) stepped at 2.947x, so calls with many groups stay fused.
+DENSE_AUTO_MAX_GROUPS = 16
+
+
+def train_gemm_route(dev=None, n_groups=None) -> str:
     """``GNF4_TRAIN_GEMM`` = ``auto`` (default) | ``fused`` | ``grouped_mm`` | ``dense``. ``auto`` is ``grouped_mm`` on a CUDA device
-    of compute capability 9.0 when this torch has ``_grouped_mm``, and ``fused`` everywhere else (other cards, CPU). ``dense`` (opt-in,
-    any CUDA card) dequantizes one present expert at a time and runs its GEMM through ``torch.mm``. ``dev`` defaults to the current
-    CUDA device."""
+    of compute capability 9.0 when this torch has ``_grouped_mm``. On any other CUDA device it is ``dense`` for a call with 1 to
+    :data:`DENSE_AUTO_MAX_GROUPS` present groups (``n_groups``) and ``fused`` above that or when ``n_groups`` is not given; CPU is
+    ``fused``. ``dense`` dequantizes one present expert at a time and runs its GEMM through ``torch.mm``. An explicit value is used as
+    given. ``dev`` defaults to the current CUDA device."""
     v = os.environ.get("GNF4_TRAIN_GEMM", "auto").strip().lower()
     if v not in ("auto", "fused", "grouped_mm", "dense"):
         raise ValueError(f"GNF4_TRAIN_GEMM must be 'auto', 'fused', 'grouped_mm' or 'dense', got {v!r}")
@@ -54,6 +61,8 @@ def train_gemm_route(dev=None) -> str:
     if r is None:
         ok = hasattr(torch, "_grouped_mm") and torch.cuda.get_device_capability(idx) == (9, 0)
         r = _AUTO_ROUTE[idx] = "grouped_mm" if ok else "fused"
+    if r == "fused" and n_groups is not None and 0 < int(n_groups) <= DENSE_AUTO_MAX_GROUPS:
+        return "dense"
     return r
 
 
