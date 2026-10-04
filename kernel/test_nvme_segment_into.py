@@ -282,3 +282,71 @@ def test_the_byte_dtype_tables_do_not_drift_apart():
     assert not missing, (
         "these dtype tags are accepted elsewhere in the package but cannot be read "
         f"back by segment_geometry/segment_tensor: {sorted(set(missing))}")
+
+
+class _FencingStandIn(_StandInTier):
+    def __init__(self, real, index):
+        super().__init__(real, index)
+        self.fences = []
+
+    def fence(self, slots, event):
+        self.fences.append((list(slots), event))
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="the fence is a CUDA event")
+def test_a_non_blocking_copy_to_the_device_fences_the_slots_it_read(arena):
+    """#60: the copies are queued when segment_into returns, so the slots they read are fenced with an event recorded
+    after them. A blocking copy, or a host destination, has nothing in flight and records none."""
+    path, index = arena
+    suffix = EXPERT_SUFFIXES[0]
+    dt, shape, _off, _ln = segment_geometry(index, suffix)
+    with _tier(path, index) as t:
+        t.ensure(2, PICK)                            # the stand-in copies its slot bytes from the real tier's rows
+        st = _FencingStandIn(t, index)
+        out = torch.empty((len(PICK),) + shape, dtype=dt, device="cuda")
+        segment_into(st, index, 2, PICK, suffix, out, non_blocking=True)
+        assert len(st.fences) == 1
+        slots, ev = st.fences[0]
+        assert slots == [st._slots[(2, e)] for e in PICK] and isinstance(ev, torch.cuda.Event)
+        ev.synchronize()
+        segment_into(st, index, 2, PICK, suffix, out, non_blocking=False)
+        segment_into(st, index, 2, PICK, suffix, torch.empty((len(PICK),) + shape, dtype=dt), non_blocking=True)
+        assert len(st.fences) == 1
+
+
+def _queued_copy_then_refill(arena, *, no_wait):
+    """A real pinned tier with two slots. A sleep kernel holds the stream, so segment_into's non-blocking copy of
+    layer 0's rows is still queued when layer 1's demand ensure refills the same two slots. Returns (copied, layer 0's
+    bytes, layer 1's bytes)."""
+    path, index = arena
+    suffix = EXPERT_SUFFIXES[0]
+    dt, shape, _off, _ln = segment_geometry(index, suffix)
+    with ColdTier(path, hot_rows=2, pinned=True, index=index) as t:
+        want0 = segment_tensor(t, index, 0, [0, 1], suffix).view(torch.uint8).clone()
+        want1 = segment_tensor(t, index, 1, [0, 1], suffix).view(torch.uint8).clone()
+        if no_wait:
+            t._wait_fences = lambda slots: None
+        out = torch.empty((2,) + shape, dtype=dt, device="cuda")
+        torch.cuda.synchronize()
+        torch.cuda._sleep(int(2e9))                 # ~1 s of GPU time ahead of the copy on this stream
+        segment_into(t, index, 0, [0, 1], suffix, out, non_blocking=True)
+        t.ensure(1, [0, 1])                          # demand ensure: evicts layer 0, refills the same slots
+        torch.cuda.synchronize()
+        return out.cpu().view(torch.uint8), want0, want1
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA: a pinned tier and a queued device copy")
+def test_a_refill_cannot_overwrite_a_slot_a_queued_copy_has_not_read(arena):
+    """#60: with the fence the refill waits for the queued copy, so the copy reads layer 0's rows."""
+    got, want0, want1 = _queued_copy_then_refill(arena, no_wait=False)
+    assert not torch.equal(want0, want1)             # distinct layers, so a wrong read cannot pass by coincidence
+    assert torch.equal(got, want0)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA: a pinned tier and a queued device copy")
+def test_without_the_fence_the_queued_copy_reads_the_refill(arena):
+    """The mutation arm, and the evidence that the race is real: with fills not waiting, the refill lands before the
+    queued copy runs, and the copy delivers layer 1's bytes under layer 0's row IDs."""
+    got, want0, want1 = _queued_copy_then_refill(arena, no_wait=True)
+    assert not torch.equal(got, want0)
+    assert torch.equal(got, want1)
