@@ -319,8 +319,23 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
     LORA_PATH_STATS["padded"] += 1
 
     dev = a_cat.device
-    from nf4_grouped import to_device_i32
-    if torch.is_tensor(expert_ids) and expert_ids.is_cuda:
+    from nf4_grouped import to_device_i32, _host_reuse_enabled, _stream_key, HOST_REUSE_STATS
+    host_ids = None if (torch.is_tensor(expert_ids) and expert_ids.is_cuda) else [int(expert_ids[g]) for g in nz]
+    # GNF4_HOST_REUSE=1 (opt-in): the gate_up and down deltas of one MoE layer pass share their grouping, so the
+    # down call reuses the gate_up call's device plan (`eid`, `flat`) instead of re-uploading the ids and
+    # rebuilding the flat index -- about ten launches and one transfer per pass, values identical (the key is the
+    # host grouping itself, plus device and stream). Host ids only (a device `expert_ids` would need a read to
+    # key on), never under capture, lean path only.
+    pkey = None
+    if (host_ids is not None and _lean_delta_enabled() and dev.type == "cuda" and _host_reuse_enabled()
+            and not torch.cuda.is_current_stream_capturing()):
+        pkey = (tuple(rows), tuple(host_ids), _stream_key(dev))
+        plan = _PLAN_MEMO.get(pkey)
+        if plan is not None:
+            HOST_REUSE_STATS["plan_hits"] += 1
+            eid, flat, unique = plan
+            return _lora_delta_padded(a_cat, lora_A, lora_B, eid, flat, len(rows), widest, unique, scaling)
+    if host_ids is None:
         # Select the surviving groups ON DEVICE. One index_select, no round trip.
         sz_i32, nz_i = to_device_i32((rows, nz), dev)
         eid = expert_ids[nz_i.to(torch.int64)].to(torch.int64)
@@ -328,8 +343,7 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
         # Host data: a list, or a CPU tensor (Bugbot, PR #85 — the old
         # per-element path accepted CPU tensors and indexing one with the CUDA
         # `nz_i` above raises). `int(expert_ids[g])` is host-only for both.
-        sz_i32, eid_i32 = to_device_i32((rows, [int(expert_ids[g]) for g in nz]),
-                                        dev)
+        sz_i32, eid_i32 = to_device_i32((rows, host_ids), dev)
         eid = eid_i32.to(torch.int64)
     sz = sz_i32.to(torch.int64)
     # Row -> (group, slot within group). Built on device: the whole point is to
@@ -360,8 +374,34 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
         torch.arange(G, device=dev) * widest - (torch.cumsum(sz, 0) - sz), sz,
         output_size=total)
     flat = torch.arange(total, device=dev) + shift
+    unique = False
+    if pkey is not None:
+        unique = len(set(host_ids)) == len(host_ids)
+        _PLAN_MEMO.clear()                 # one entry: only the gate_up -> down twin repeats
+        _PLAN_MEMO[pkey] = (eid, flat, unique)
+        HOST_REUSE_STATS["plan_misses"] += 1
+    return _lora_delta_padded(a_cat, lora_A, lora_B, eid, flat, G, widest, unique, scaling)
 
-    A, B = lora_A[eid], lora_B[eid]                    # [G, r, K], [G, N, r]
+
+_PLAN_MEMO: dict = {}
+
+
+def _lora_delta_padded(a_cat, lora_A, lora_B, eid, flat, G, widest, unique, scaling):
+    """The lean padded delta given its device plan (``eid`` the [G] expert ids, ``flat`` row -> padded row).
+
+    ``unique`` (host-known distinct ids, GNF4_HOST_REUSE=1 only) gathers the adapters through ``_GatherRows``
+    instead of advanced indexing. Same forward values (both are row copies); the backward differs only in
+    route: advanced indexing's backward is ``index_put_(accumulate=True)``, which SORTS its indices first (a
+    radix sort plus index arithmetic, ~10 launches per adapter), while ``_GatherRows``' is a zero fill and
+    one ``index_copy_`` -- no sort and no atomics (``index_select``'s own backward, ``index_add_``, measured
+    ~0.4 ms of device time slower per layer backward on an A2000 here). With distinct ids every gradient row
+    receives exactly one value on both routes, so the gradients are equal.
+    """
+    dev = a_cat.device
+    if unique:
+        A, B = _GatherRows.apply(lora_A, eid), _GatherRows.apply(lora_B, eid)
+    else:
+        A, B = lora_A[eid], lora_B[eid]                # [G, r, K], [G, N, r]
     x = torch.zeros(G * widest, a_cat.shape[1], dtype=A.dtype, device=dev)
     x.index_copy_(0, flat, a_cat.to(A.dtype))
     d = torch.bmm(torch.bmm(x.view(G, widest, -1), A.transpose(1, 2)),

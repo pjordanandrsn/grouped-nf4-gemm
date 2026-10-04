@@ -1,5 +1,48 @@
 # Changelog
 
+## Unreleased
+
+### `GNF4_HOST_REUSE=1`: one MoE layer pass stops re-uploading and re-deriving the same grouping (opt-in; default unchanged)
+
+- **Why.** experts4bit-qlora's fused training step is host-bound on fast cards: the same RTX 5090 arm steps at very different
+  speeds on different host CPUs. Within one MoE layer pass the gate_up and down projections share one grouping, yet each:
+  - uploads `expert_ids` for its GEMM;
+  - uploads `(rows, ids)` for its LoRA delta, then rebuilds the delta's flat padded-row index (about ten launches);
+  - and the backward's dgrad uploads `expert_ids` twice more.
+
+  That is 8 transfers per layer forward + backward, 4 of them repeats. The adapters are also gathered with advanced
+  indexing, whose backward sorts its indices (a radix sort plus index arithmetic, about ten launches per adapter).
+- **What.** All three changes sit behind the one flag:
+  - `to_device_i32` keeps a small LRU (8 entries) keyed on the uploaded integers, the device and the current stream, and returns
+    the earlier device tensor on a repeat. It is never consulted or filled under capture.
+  - `lora_delta_grouped`'s lean padded path keeps a one-entry memo of its device plan (`eid`, `flat`), so the down delta reuses
+    the gate_up delta's.
+  - With host-known distinct expert ids, the adapters are gathered through `_GatherRows`, whose backward is a zero fill and
+    one `index_copy_` (no sort, no atomics). `index_select`'s own backward, an atomic `index_add_`, measured about 0.4 ms of
+    device time slower per layer backward on an A2000, so it is not used.
+  - `HOST_REUSE_STATS` counts hits and misses.
+- **Measured on an RTX A2000** (`bench/host-reuse/`): one `ExpertsLoRA` layer at Qwen3-30B-A3B's shape (380 tokens, r=16, bf16
+  adapters, a skewed router, experts4bit-qlora's `enable_fast_train(dgrad=True)`), three interleaved off/on pairs of 300
+  repetitions, on a host shared with other jobs:
+
+  | phase | off, median host ms | on, median host ms |
+  |---|---|---|
+  | forward | 3.193 / 3.150 / 2.947 | 2.784 / 2.822 / 2.906 |
+  | backward | 3.003 / 2.871 / 2.720 | 2.401 / 2.422 / 2.508 |
+
+  The backward's device span also fell slightly: 18.93 / 19.16 / 19.38 ms became 18.77 / 19.01 / 19.17 ms.
+- **Values.** The forward output and every adapter gradient are `torch.equal` with the flag off and on. In deterministic mode
+  (`torch.use_deterministic_algorithms`) the input gradient is too. Outside it, the input gradient already varies from run to
+  run with the flag off, through the atomic `index_add_` behind the caller's token gather.
+- **Next.** experts4bit-qlora's TC1 measures the flag on an RTX 5090 before the default changes.
+- **Tests** (`kernel/test_host_reuse.py`):
+  - `torch.equal` on the forward and all gradients of a gate_up -> down twin, flag off vs on, including a repeated-id case
+    that keeps advanced indexing;
+  - the memo hits only identical integers with the same split, is per stream, is bounded, and is off by default;
+  - a capture neither reads nor fills it.
+
+  `test_pinned_ring.py` pins the flag off, since it watches the transfer itself.
+
 ## 0.35.0 — 2026-10-03 — three defaults for experts4bit-qlora's fused training step, all value-identical: the pinned index ring outside capture, the lean padded LoRA delta, and the prefill M-tile height from the group sizes
 
 **0.35.0.** Three defaults change, and no output changes. Every result is bit-identical to 0.34.1's, and each previous setting is one environment variable away:
