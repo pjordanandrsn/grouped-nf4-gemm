@@ -2138,12 +2138,14 @@ was wrong.
 - **#60** — arena staging blocks ~30% of a training step; the next
   layer's rows are prefetchable (guarded by a CUDA event, with a
   `hot_rows` floor of two layers' experts).
-- **#71** — `PINNED_ROW_FACTOR`'s 1.9 was PyTorch's caching host allocator
-  rounding each pinned request up to a power of two, not a per-byte premium.
-  `capacity_for_bytes` now models that exactly (`pinned_request_cost`,
-  `kernel/receipts-71/`). On cgroup v1 a pinned power-of-two byte costs 1.004. The
-  cgroup v2 per-byte charge is being read in lane K29 before the next release.
-  (#60 and #71 are `gnf4.open.issues`.)
+- **#71 closed.** `PINNED_ROW_FACTOR`'s 1.9 was PyTorch's caching host
+  allocator rounding each pinned request up to a power of two, not a per-byte
+  premium. `capacity_for_bytes` models it exactly (`pinned_request_cost`). Every
+  pinned request is measured at 0.4–1.0 % over its power of two, in both regimes:
+  - cgroup v1 (`kernel/receipts-71/`);
+  - cgroup v2 (lane K29, `gnf4.kernel.k29-pinned-charge-cgroup-v2.5090.2026-10-04`).
+
+  (#60 is `gnf4.open.issues`.)
 - **`docs/context-budgets.md` is rung-one only** (A2000-measured
   KB/token); full-depth real-weight confirmation is pending and the K3
   row is a declared gap. Its own text forbids promoting pending rows to
@@ -2724,14 +2726,15 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - gnf4.kernel.k26-nf4-decode-ablation.5090.2026-10-01 [measured]: K26 (pre-registered 2026-10-01, #430): on the RTX 5090 at the NF4 families' B=16 expert shapes (Granite 32 layers, OLMoE 16; per-layer synthetic stores, seeded top-8 routing, both GEMMs per layer in one CUDA graph), the per-nibble codebook lookup is about 80 % of K25's time: K25 (nf4_smallm.gemm_nf4_grouped_smallm) 5.869 / 9.898 ms/step against 1.310 / 2.050 with the lookup replaced by nibble - 8 (affine/pair 0.223 / 0.207, DECODE by the registered rule). An exact 4-level select-tree decode over the 16 fp32 codebook values is bit-identical to K25 and runs at 2.189 / 3.794 (0.373 / 0.383 of K25; 49 / 56 % of the copy floor), so the registered pointer names it as K25's decode. The served _gemm_nf4_grouped runs at 5.650 / 9.540; its own path with the tree is not bit-identical and not faster (1.073 / 1.037).
 - gnf4.kernel.k27-nf4-tree-precision.5090.2026-10-01 [measured]: K27 (pre-registered 2026-10-01, #434): on the RTX 5090 at the NF4 families' B=16 expert shapes (K26's harness), K25 with the select-tree decode at the served kernel's weight precision (fp32 weights through TF32 MMA, dot_bf16=False; best plan BLOCK_N 32 / KC 64 / 4 warps / 3 stages) runs at 2.588 / 4.847 ms/step against the served _gemm_nf4_grouped's 5.780 / 9.660 (0.448 / 0.502, Granite / OLMoE), with its rms error against an fp64 product equal to the served kernel's (ratio 1.000 both), TF32_PATH by the registered rule; in bf16 (best plan 32 / 128) it runs at 0.317 / 0.325, bit-equal to the paired lookup, at 1.35x the served error.
 - gnf4.kernel.k28-pdl-decode-chain.5090.2026-10-04 [measured]: K28 (pre-registered 2026-10-04, #449): on the RTX 5090, a CUDA-graph replay of 48 layers of the served Qwen3-30B-A3B B=1 decode layer's 19 grouped-nf4-gemm kernels (912) runs at 2.3632 ms with GNF4_PDL=1 (programmatic dependent launch, #448) against 2.6576 ms without (x1.125), 0.323 us saved per gnf4 kernel, with every output bitwise identical; LEVER by the registered rule (bar 0.25 us). With the served step's attention and router stand-ins interleaved (two more ATen kernels a layer) the saving is 0.217 us per gnf4 kernel (2.8468 -> 2.6489 ms). A microbenchmark of gnf4's kernels, not a served speed.
+- gnf4.kernel.k29-pinned-charge-cgroup-v2.5090.2026-10-04 [measured]: K29 (pre-registered 2026-10-04, #458): on a rented RTX 5090 container under cgroup v2, a pinned host request (torch.empty(N, pin_memory=True)) is charged its next power of two. Over 18 rows (9 sizes, 340 MB to 4 GiB, x2), charged / pow2ceil(N) = 1.0048-1.0103 (median 1.0054), and a pageable byte costs 1.0021 (R2 1.0). CONFIRMED by the registered rule ([0.97, 1.06]): the power-of-two pinned-tier model (pinned_request_cost / capacity_for_bytes, #457) holds on v2 as on v1 (r 1.0043-1.005, kernel/receipts-71/).
 
 Open items (no evidence either way):
 
 - gnf4.open.context-budgets-rung-two [open]: OPEN: context-budgets.md's KB/token table is rung-one (A2000) measured; full-depth real-weight confirmation is pending and the K3 row is a declared gap. Its own text forbids promoting pending rows to READMEs.
-- gnf4.open.issues [open]: OPEN issues at 2026-10-04: #60 (arena staging blocks ~30% of a training step), #71 (pinned-tier sizing: the power-of-two model is on main, and the cgroup v2 confirmation is lane K29).
+- gnf4.open.issues [open]: OPEN issues at 2026-10-04: #60 (arena staging blocks ~30% of a training step).
 
 Projections (arithmetic, not runs):
 
 - gnf4.projection.multiarch [projected]: PROJECTED (stamped pre-silicon): the pure-waterfall gen5 row is falsified; the revised gen4 band 2.4-3.0 tok/s is confirmed (L40S 2.60-2.61); the revised gen5 band 4.0-5.0 missed narrowly (H100 PCIe 3.924); unified-memory rows are ceilings only (17-22 tok/s on 128 GB boxes). NF4-vs-bf16 is a 3.56x byte reduction, not 4x.
 
-(45 active claims listed, 2 open, 1 projected; retired and superseded claims are omitted on purpose.)
+(46 active claims listed, 2 open, 1 projected; retired and superseded claims are omitted on purpose.)

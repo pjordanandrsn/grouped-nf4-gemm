@@ -18,3 +18,5 @@ ladder's 128-row (340 MB) and 512-row (1359 MB) tiers round to 512 and 2048 MB, 
 inside its recorded brackets. `capacity_for_bytes` now models the rounding (`pinned_request_cost`).
 `kernel/test_nvme_residency.py::test_pinned_landing_charge_matches_the_model_on_this_box` checks it on any box with
 CUDA and a readable cgroup charge. It passed on this A2000.
+
+**cgroup v2 (lane K29, 2026-10-04):** a rented RTX 5090 container (kernel 6.8.0-138, driver 590.48.01) read r = 1.0048–1.0103 over 18 pinned rows, with a pageable slope of 1.0021. That is CONFIRMED by the registered rule. See `../RESULTS-k29-pinned-charge-cgroup-v2.md`.
