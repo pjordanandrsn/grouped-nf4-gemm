@@ -2457,6 +2457,11 @@ Above the size threshold where dequant+`grouped_mm` wins (roofline: compute-boun
 dispatch falls back exactly as #1949 does. The kernel must never be a regression: dispatch
 is conservative, calibrated on the Phase-1 baseline table.
 
+Training (`FusedGroupedNf4`) has its own fallback under `GNF4_TRAIN_GEMM=auto`, each step read on the full training step by
+experts4bit-qlora. On sm_90 it is dequant + `torch._grouped_mm` (TC1c amendment 6). Elsewhere a call with at most
+`nf4_route.DENSE_AUTO_MAX_GROUPS` present groups dequantizes one expert at a time into `torch.mm` (TC1 amendment 22), and
+calls with more groups stay on the fused kernels.
+
 ## Deviations from the roadmap (recorded at Gate 0)
 
 1. **`kbit_gemm_context.md` does not exist** — not local, not in any pjordanandrsn repo
