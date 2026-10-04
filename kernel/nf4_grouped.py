@@ -23,6 +23,7 @@ states are de-nested on the host at repack), no bias, nf4 only.
 
 from __future__ import annotations
 
+import collections
 import os
 
 import torch
@@ -407,6 +408,31 @@ class _PinnedRing:
 _RINGS: dict = {}
 
 
+# Host-reuse memo for `to_device_i32` (GNF4_HOST_REUSE=1, opt-in). A fused MoE training layer pass uploads the SAME host
+# integers several times: the gate_up and down GEMMs each upload `expert_ids`, the two LoRA deltas each upload
+# (rows, ids), and the dgrad kernels upload `expert_ids` again in backward: 8 uploads per layer forward + backward,
+# 4 of them repeats (a cProfile of one Qwen3-30B-A3B-shaped layer on an RTX A2000 host: ~170 us a call, 5 per
+# forward). This memo returns the device tensor an identical earlier upload produced. Identical VALUES by
+# construction (the key is the uploaded integers themselves); the key also carries the device and the current
+# stream, so a consumer on another stream never sees a tensor whose copy it has no dependency on. Never consulted or
+# filled under capture (a captured graph must own its staging -- see _PinnedIndexArena), and callers must not
+# mutate the returned tensors -- already the contract: every in-tree consumer reads them as kernel indices or
+# converts them with a dtype-changing `.to()`.
+_UPLOAD_MEMO: "collections.OrderedDict" = collections.OrderedDict()
+_UPLOAD_MEMO_SIZE = 8
+HOST_REUSE_STATS = {"upload_hits": 0, "upload_misses": 0, "plan_hits": 0, "plan_misses": 0}
+
+
+def _host_reuse_enabled() -> bool:
+    """Off unless ``GNF4_HOST_REUSE=1``. Value-identical host-side reuse (see ``_UPLOAD_MEMO`` and
+    ``nf4_qlora.lora_delta_grouped``); opt-in until a within-box A/B decides the default."""
+    return os.environ.get("GNF4_HOST_REUSE", "0").strip() == "1"
+
+
+def _stream_key(dev):
+    return (str(dev), torch.cuda.current_stream(dev).cuda_stream)
+
+
 def _pinned_ring_enabled() -> bool:
     """On unless ``GNF4_PINNED_RING=0``. Measured (experts4bit-qlora TC1 amendment 10, tc1-5090-38, one RTX 5090): with
     e4b's single-read grouping, the ring took a fused MoE training layer pass from 13 host syncs to 1 and the training
@@ -498,8 +524,16 @@ def to_device_i32(seqs, device):
                 "inside a capture is not capturable. Set GNF4_PIN_ARENA_INTS "
                 "to at least %d, or reserve() the arena before capturing."
                 % (ar.host.numel(), ar.off, total, 2 * (ar.off + total)))
+    key = None
     if not capturing:
         flat = [int(v) for s in seqs for v in s]
+        if cuda and _host_reuse_enabled():
+            key = (tuple(lens), tuple(flat), _stream_key(dev))
+            hit = _UPLOAD_MEMO.get(key)
+            if hit is not None:
+                _UPLOAD_MEMO.move_to_end(key)
+                HOST_REUSE_STATS["upload_hits"] += 1
+                return list(hit)
         packed = None
         if cuda and _pinned_ring_enabled():
             # The default (GNF4_PINNED_RING=0 turns it off): a reused pinned slot, no
@@ -531,6 +565,11 @@ def to_device_i32(seqs, device):
     for n in lens:
         out.append(packed[off:off + n])
         off += n
+    if key is not None:
+        _UPLOAD_MEMO[key] = tuple(out)
+        if len(_UPLOAD_MEMO) > _UPLOAD_MEMO_SIZE:
+            _UPLOAD_MEMO.popitem(last=False)
+        HOST_REUSE_STATS["upload_misses"] += 1
     return out
 
 

@@ -21,6 +21,9 @@ def _drop_rings():
 
 def _fresh(monkeypatch, on=True, slots=None, slot_ints=None):
     monkeypatch.setenv("GNF4_PINNED_RING", "1" if on else "0")
+    # These tests watch the TRANSFER (ring vs pageable). GNF4_HOST_REUSE=1's upload memo answers a repeated
+    # upload without any transfer, so it is pinned off here; test_host_reuse.py covers it.
+    monkeypatch.setenv("GNF4_HOST_REUSE", "0")
     if slots is not None:
         monkeypatch.setenv("GNF4_PINNED_RING_SLOTS", str(slots))
     if slot_ints is not None:
