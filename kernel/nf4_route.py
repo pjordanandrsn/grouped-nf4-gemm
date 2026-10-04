@@ -33,12 +33,13 @@ _AUTO_ROUTE: dict = {}                                     # device index -> the
 
 
 def train_gemm_route(dev=None) -> str:
-    """``GNF4_TRAIN_GEMM`` = ``auto`` (default) | ``fused`` | ``grouped_mm``. ``auto`` is ``grouped_mm`` on a CUDA device of compute
-    capability 9.0 when this torch has ``_grouped_mm``, and ``fused`` everywhere else (other cards, CPU). ``dev`` defaults to the
-    current CUDA device."""
+    """``GNF4_TRAIN_GEMM`` = ``auto`` (default) | ``fused`` | ``grouped_mm`` | ``dense``. ``auto`` is ``grouped_mm`` on a CUDA device
+    of compute capability 9.0 when this torch has ``_grouped_mm``, and ``fused`` everywhere else (other cards, CPU). ``dense`` (opt-in,
+    any CUDA card) dequantizes one present expert at a time and runs its GEMM through ``torch.mm``. ``dev`` defaults to the current
+    CUDA device."""
     v = os.environ.get("GNF4_TRAIN_GEMM", "auto").strip().lower()
-    if v not in ("auto", "fused", "grouped_mm"):
-        raise ValueError(f"GNF4_TRAIN_GEMM must be 'auto', 'fused' or 'grouped_mm', got {v!r}")
+    if v not in ("auto", "fused", "grouped_mm", "dense"):
+        raise ValueError(f"GNF4_TRAIN_GEMM must be 'auto', 'fused', 'grouped_mm' or 'dense', got {v!r}")
     if v != "auto":
         return v
     if dev is None:
@@ -147,3 +148,63 @@ def grouped_mm_dgrad(grad_out, B, absmax, sizes, expert_ids):
     W = dequant_groups(B, absmax, eids, N, K)
     ROUTE_STATS["dgrad"] += 1
     return torch._grouped_mm(grad_out.contiguous().to(torch.bfloat16), W, offs=offs)
+
+
+ROUTE_STATS.setdefault("dense_fwd", 0)
+ROUTE_STATS.setdefault("dense_dgrad", 0)
+
+
+def _host_plan(sizes, expert_ids, dev):
+    """(host sizes, device eids int32) for the per-expert loop. Device-side sizes cost one host read here: the loop slices by them."""
+    sz = [int(v) for v in (sizes.tolist() if torch.is_tensor(sizes) else sizes)]
+    if torch.is_tensor(expert_ids) and expert_ids.is_cuda:
+        eids = expert_ids.to(torch.int32)
+    else:
+        (eids,) = to_device_i32(([int(e) for e in expert_ids],), dev)
+    return sz, eids
+
+
+def dense_forward(a_cat, B, absmax, sizes, expert_ids):
+    """``gemm_4bit_grouped``'s contract (``a_cat [T, K]`` group-sorted, returns ``[T, N]`` bf16) as a per-expert loop: each present
+    expert is dequantized alone (:func:`dequant_groups` on one id, bit-equal to ``dequant_ref`` in bf16) and multiplied with ``torch.mm``.
+    One expert's bf16 weight is the only transient (Mixtral's gate_up: 235 MB), and any CUDA card runs it. Not bit-identical to the
+    fused kernel (cuBLAS's accumulation order). Measured on an RTX A2000: 3.4x the fused forward at Mixtral-8x7B's shapes with 1,024
+    rows per expert, 1.7x at Qwen3-30B-A3B's with 256; the fused kernel wins at Qwen3's down projection with 64 rows."""
+    dev = a_cat.device
+    if dev.type != "cuda":
+        raise RuntimeError("GNF4_TRAIN_GEMM=dense needs a CUDA device")
+    E, N, half = B.shape
+    K = half * 2
+    sz, eids = _host_plan(sizes, expert_ids, dev)
+    a = a_cat.contiguous().to(torch.bfloat16)
+    out = torch.empty(a.shape[0], N, device=dev, dtype=torch.bfloat16)
+    r0 = 0
+    for g, n in enumerate(sz):
+        if n:
+            W = dequant_groups(B, absmax, eids[g:g + 1], N, K)[0]          # [N, K]
+            torch.mm(a[r0:r0 + n], W.t(), out=out[r0:r0 + n])
+        r0 += n
+    ROUTE_STATS["dense_fwd"] += 1
+    return out
+
+
+def dense_dgrad(grad_out, B, absmax, sizes, expert_ids):
+    """``dgrad_4bit_grouped``'s contract (``grad_out [T, N]``, returns ``grad_a [T, K]`` bf16) as :func:`dense_forward`'s per-expert loop:
+    ``grad_out_g @ W_g``. Measured on an RTX A2000: 7.7x the fused dgrad at Mixtral's gate_up shape, 4.6x at Qwen3-30B-A3B's."""
+    dev = grad_out.device
+    if dev.type != "cuda":
+        raise RuntimeError("GNF4_TRAIN_GEMM=dense needs a CUDA device")
+    E, N, half = B.shape
+    K = half * 2
+    sz, eids = _host_plan(sizes, expert_ids, dev)
+    g_out = grad_out.contiguous().to(torch.bfloat16)
+    out = torch.empty(g_out.shape[0], K, device=dev, dtype=torch.bfloat16)
+    r0 = 0
+    for g, n in enumerate(sz):
+        if n:
+            W = dequant_groups(B, absmax, eids[g:g + 1], N, K)[0]
+            torch.mm(g_out[r0:r0 + n], W, out=out[r0:r0 + n])
+        r0 += n
+    ROUTE_STATS["dense_dgrad"] += 1
+    return out
+
