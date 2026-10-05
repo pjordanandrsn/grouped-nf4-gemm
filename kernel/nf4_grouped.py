@@ -36,9 +36,9 @@ from _triton_shim import tl, triton  # noqa: F401  (re-exported names)
 from _triton_shim import UnsupportedShapeError, device_shared_mem_limit  # noqa: F401
 from _triton_shim import prebind, prebind_requested
 
-#: GNF4_TRITON_PREBIND=1 (opt-in, read at import; _triton_shim.prebind): the training GEMMs launch without Triton's per-call argument
+#: GNF4_TRITON_PREBIND (on by default, =0 off, read at import; _triton_shim.prebind): the training GEMMs launch without Triton's per-call argument
 #: binding, and the host work around them that repeats for one grouping -- the expert-id upload's key, the M-tile height -- is
-#: remembered by value (_ValueMemo). Values identical; off by default.
+#: remembered by value (_ValueMemo). Values identical.
 _PREBIND = prebind_requested()
 
 #: ``tl.gather`` arrived in triton 3.3. Bind it ONCE here rather than naming it
@@ -438,7 +438,7 @@ class _ValueMemo:
     host time per 128-group call on an RTX A2000 host, paid by every training GEMM. Here a lookup is one C-level list ``==`` per
     entry. Only an all-``int`` snapshot is stored, so a caller's elements compare by numeric value against plain ints: a hit means
     ``int(v)`` equals the stored value for every element (a float or a 0-dim tensor compares by value too), so the result is the
-    one the full path would build. Used under GNF4_TRITON_PREBIND=1 only."""
+    one the full path would build. Used unless GNF4_TRITON_PREBIND=0."""
 
     def __init__(self, size: int = 8):
         self.entries = collections.deque(maxlen=size)
@@ -1006,7 +1006,7 @@ def _gemm_nf4_grouped(
     tl.store(out_ptrs, acc.to(tl.bfloat16), mask=m_mask[:, None] & n_mask[None, :])
 
 
-# GNF4_TRITON_PREBIND=1 (opt-in): the training forward's launch without Triton's per-call argument binding (_triton_shim.prebind)
+# GNF4_TRITON_PREBIND (on unless =0): the training forward's launch without Triton's per-call argument binding (_triton_shim.prebind)
 _gemm_nf4_grouped_launch = prebind(_gemm_nf4_grouped)
 
 
@@ -1791,7 +1791,7 @@ def _dgrad_nf4_grouped(
     tl.store(out_ptrs, acc.to(tl.bfloat16), mask=m_mask[:, None] & k_mask[None, :])
 
 
-# GNF4_TRITON_PREBIND=1 (opt-in): the dgrad launch without Triton's per-call argument binding (_triton_shim.prebind)
+# GNF4_TRITON_PREBIND (on unless =0): the dgrad launch without Triton's per-call argument binding (_triton_shim.prebind)
 _dgrad_nf4_grouped_launch = prebind(_dgrad_nf4_grouped)
 
 # Measured on an RTX A2000 by sweeping (BLOCK_M, BLOCK_N, BLOCK_K, num_warps) over

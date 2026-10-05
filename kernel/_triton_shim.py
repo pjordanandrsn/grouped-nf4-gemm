@@ -239,7 +239,7 @@ def device_shared_mem_limit(device=None) -> int:
         return 0
 
 
-# --- GNF4_TRITON_PREBIND (opt-in) ------------------------------------------------------------------------------------------------
+# --- GNF4_TRITON_PREBIND (on by default since experts4bit-qlora TC1 amendments 26 / 30; =0 turns it off) ------
 #
 # A Triton launch, ``kernel[grid](...)``, spends most of its host time before the driver call: it binds the arguments to the
 # signature, specializes each one (dtype, 16-byte alignment, ``== 1`` and ``% 16`` of integers), formats that into a string key,
@@ -249,8 +249,10 @@ def device_shared_mem_limit(device=None) -> int:
 # that key call the kernel's own launcher directly. Same compiled binary, same arguments, same stream: bit-identical outputs
 # (test_triton_prebind). A Triton release this was not read against, a launch hook (profilers), a pre-run hook, a callable grid, a
 # changed global, or an argument of another type takes Triton's own launch. One knob is read less often than Triton reads it:
-# triton 3.4 re-reads TRITON_DEBUG at every launch, the prebound path once per kernel (3.6 itself reads it once, at import). Off
-# unless GNF4_TRITON_PREBIND=1, read when the kernel's module is imported; off, ``prebind`` returns the kernel itself.
+# triton 3.4 re-reads TRITON_DEBUG at every launch, the prebound path once per kernel (3.6 itself reads it once, at import). On by
+# default, read when the kernel's module is imported; GNF4_TRITON_PREBIND=0 turns it off, and off ``prebind`` returns the kernel itself.
+# The default follows experts4bit-qlora's TC1 amendments 26 and 30 (one RTX 5090 each, triton 3.4): the training step at 0.973x (matched
+# arm) and 0.980x (shipped arm, 60 steps) of the flag off, held-out within 0.0012.
 
 #: Triton releases whose launch protocol (``JITFunction.run`` -> ``CompiledKernel.run``) the prebound path was read against.
 PREBIND_TRITON = ((3, 4), (3, 6))
@@ -262,7 +264,7 @@ _MISSING = object()
 
 
 def prebind_requested() -> bool:
-    return os.environ.get("GNF4_TRITON_PREBIND", "0").strip() == "1"
+    return os.environ.get("GNF4_TRITON_PREBIND", "1").strip() != "0"
 
 
 def _triton_version():
@@ -273,7 +275,7 @@ def _triton_version():
 
 
 def prebind(fn, force: bool = False):
-    """``fn`` wrapped in :class:`Prebound` when ``GNF4_TRITON_PREBIND=1`` (or ``force``) and this Triton is supported; else ``fn``."""
+    """``fn`` wrapped in :class:`Prebound` unless ``GNF4_TRITON_PREBIND=0`` (``force`` wraps regardless), when this Triton is supported; else ``fn``."""
     if not (force or prebind_requested()) or not HAS_TRITON or _triton_version() not in PREBIND_TRITON:
         return fn
     from triton.runtime.jit import JITFunction
