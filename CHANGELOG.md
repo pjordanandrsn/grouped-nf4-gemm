@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Shared tooling: `check_change_impact.py` accepts a `changelog.d/` fragment as the CHANGELOG companion where a repository keeps one (tooling only)
+
+- experts4bit-qlora moves its `## Unreleased` entries to one file per change in `changelog.d/`, because every merge left
+  every other open pull request DIRTY on the one hunk they all rewrote. There, a fragment the diff adds or edits satisfies
+  a `CHANGELOG.md` companion (public-api-change, new-kernel-capability). A version bump still needs `CHANGELOG.md` itself,
+  because the release writes it.
+- **Inert here:** this repository has no `changelog.d/`, so every rule reads as before. Shared tooling lands here first,
+  then the identical file goes to experts4bit-qlora. Moving this repository's own `## Unreleased` to fragments is a
+  separate change. No package code changes.
+
 ### Docs: A2000 timings out as speed evidence (testbed-policy audit; docs and comments only)
 
 - **Why.** The RTX A2000 is a correctness-only testbed (experts4bit-qlora's testbed policy, standing since 2026-07-27,
