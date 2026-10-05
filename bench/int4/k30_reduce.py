@@ -135,8 +135,9 @@ def reduce(p1: dict, p2: dict) -> dict:
         out["new_vs_best"] = new / best
         out["old_vs_best"] = old / best
         out["self_pair_max"] = max(max(abs(c["self_pair_new"] - 1), abs(c["self_pair_old"] - 1)) for c in cells)
+        present = sorted({c["R"] for c in cells})          # a rehearsal sweeps a subset of R; never divide by nothing
         out["by_R"] = {R: sum(c["new_p1"] + c["new_p2"] for c in cells if c["R"] == R)
-                       / sum(c["old_p1"] + c["old_p2"] for c in cells if c["R"] == R) for R in RS if R >= SPLITK_R_FLOOR}
+                       / sum(c["old_p1"] + c["old_p2"] for c in cells if c["R"] == R) for R in present}
         if abs(out["S_p1"] - out["S_p2"]) > PASS_SPREAD:
             void.append(f"unstable instrument: S_p1 {out['S_p1']:.4f} vs S_p2 {out['S_p2']:.4f}")
     if void:
@@ -165,7 +166,8 @@ def check_installed_plan() -> None:
 
 # ---------------------------------------------------------------------------------------------------- self-test --
 
-def _synthetic(sms: int, gpu: str, scale_new: float, *, jitter: float = 0.0, drop: tuple | None = None) -> dict:
+def _synthetic(sms: int, gpu: str, scale_new: float, *, jitter: float = 0.0, drop: tuple | None = None,
+               only_rs: tuple | None = None) -> dict:
     """A pass in load()'s shape: every swept sk costs 1.0 ms except the R-aware pick at R >= 16, which costs
     scale_new (and the N-only pick 1.0). jitter multiplies every time, for the stability arm."""
     cells = {}
@@ -173,7 +175,7 @@ def _synthetic(sms: int, gpu: str, scale_new: float, *, jitter: float = 0.0, dro
         for proj in PROJS:
             N, K = shape(fam, proj)
             for R in RS:
-                if drop == (fam, proj, R):
+                if drop == (fam, proj, R) or (only_rs is not None and R not in only_rs):
                     continue
                 sks = sorted({1, 2, 3, 4, 6, 8, 16, plan_sk(N, K)} & set(range(1, max(1, (K // 32) // 4) + 1))
                              | {plan_sk(N, K, R, sms), plan_sk(N, K)})
@@ -193,6 +195,8 @@ def self_test() -> int:
         ("a missing cell is VOID", _synthetic(58, CARD, 0.90), _synthetic(58, CARD, 0.90, drop=("olmoe", "down", 64)),
          "VOID"),
         ("unstable passes are VOID", _synthetic(58, CARD, 0.90), _synthetic(58, CARD, 0.80), "VOID"),
+        ("a rehearsal's two-R sweep is VOID, not a crash", _synthetic(26, "NVIDIA RTX A2000 12GB", 0.90, only_rs=(16, 128)),
+         _synthetic(26, "NVIDIA RTX A2000 12GB", 0.90, only_rs=(16, 128)), "VOID"),
     ]
     # the R-aware pick differs from the N-only one somewhere at 58 SMs, or the instrument could not tell them apart
     acts = sum(plan_sk(*shape(f, p), R, 58) != plan_sk(*shape(f, p)) for f in FAMILIES for p in PROJS for R in RS)
