@@ -45,3 +45,16 @@ def test_final_release_tag_ignores_prereleases():
     assert cm.final_release_tag("v0.31.0.dev2") is None
     assert cm.final_release_tag("v0.31.0.post1") is None
     assert cm.final_release_tag("0.31.0") is None
+
+
+def test_changelog_fragments_only_where_the_repository_keeps_the_directory(tmp_path):
+    # check_change_impact accepts a changelog.d/ fragment as the CHANGELOG.md
+    # companion only where the directory exists (experts4bit-qlora since
+    # 2026-10-05); without it, CHANGELOG.md itself stays required.
+    ci = _load("check_change_impact")
+    changed = {"changelog.d/1.md", "changelog.d/README.md", "changelog.d/deleted.md", "changelog.d/x.txt", "CHANGELOG.md"}
+    assert ci.changelog_fragments(tmp_path, changed) == []
+    (tmp_path / "changelog.d").mkdir()
+    for name in ("1.md", "README.md", "x.txt"):
+        (tmp_path / "changelog.d" / name).write_text("### t\n", encoding="utf-8")
+    assert ci.changelog_fragments(tmp_path, changed) == ["changelog.d/1.md"]
