@@ -9,10 +9,9 @@ Qwen3-30B-A3B's layer-0 gate_up with the model's own activations and routing (ke
 tests assert it with ``torch.equal`` on random data at the served shapes, on any CUDA part:
 
 - ``gemv_int4_b32``: one program per row. Its split-K count comes from ``_plan``, whose row term is gated to
-  parts with <= ``SPLITK_R_TERM_MAX_SMS`` SMs; above that the plan is N-only, so every row count gets the same
-  split count and the partials are reduced in the same order. The test pins the > 64-SM plan (the 5090's), so
-  it asserts the route P63 read on any part. On a <= 64-SM part the box's own plan can change the split count
-  with the rows; that is not claimed and not tested here.
+  parts with <= ``SPLITK_R_TERM_MAX_SMS`` SMs. The gate is 0 since K30 (2026-10-05), so on every part the plan
+  is N-only: every row count gets the same split count and the partials are reduced in the same order. The
+  test pins the N-only plan (the 5090's), so it asserts the route P63 read on any part.
 - the NF4 dot-pad decode GEMV: one program per row, no split-K unless ``GNF4_GEMV_SPLITK`` is set. It is the
   default decode route at its census shapes on >= 160-SM parts; the test forces the dispatch there on any part
   and asserts from ``dispatch_counts()`` that the dot-pad kernel ran.

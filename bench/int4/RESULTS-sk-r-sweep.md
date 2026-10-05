@@ -205,3 +205,23 @@ does not carry to sm_120**, as the caveat above said it might. The R term is now
 `sm_count <= SPLITK_R_TERM_MAX_SMS` (64): the measured class keeps the win in these receipts,
 larger parts keep the N-only plan until the same harness is run on that class and sets its own
 target. Receipts: the private record, `receipts/experts4bit-qlora/2026-09-10/p39-box1-3/`.
+
+## Erratum (2026-10-05): this sweep is not speed evidence, its sk = 1 cells were under-priced, and the term is off
+
+Three corrections, none of which edits the record above:
+
+- **The card.** Every timing here is an RTX A2000's. Under the testbed policy (the A2000 is a correctness-only testbed;
+  every timing, ratio or band basis comes from rented compute on the target card) these rows cannot carry a speed
+  claim, set a constant or gate a CI test. The register row that quoted them,
+  `gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10`, is retired (#476, the A2000-timing audit), and
+  `SK_R_BOUND` and the receipt-timing tests are gone from `kernel/test_int4_b32.py`.
+- **The instrument.** `sk_sweep.py` ran `reduce_partials` only for sk > 1. The served wrapper runs it at every sk,
+  sk = 1 included, as the fp32 → bf16 cast. So every sk = 1 cell above priced the GEMV without a launch and an R × N
+  fp32 read the served path always pays (K30 Amendment 1, `kernel/PREREG-k30-splitk-r-term-l4.md`). That bias favours
+  sk = 1, the pick the R term makes at large R. The harness is corrected; these rows are the uncorrected record.
+- **The rented read.** K30 ran the corrected harness twice on one rented NVIDIA L4 (58 SMs) on 2026-10-05 and read
+  **OFF** by its registered rule: over the 24 cells at R ≥ 16 the R-aware pick's summed time is 1.0101× the N-only
+  pick's, and 1.1781× at its worst cell (qwen3_moe gate_up, R = 128)
+  (`gnf4.kernel.k30-splitk-r-term.l4.2026-10-05`, `kernel/RESULTS-k30-splitk-r-term-l4.md`). So
+  `SPLITK_R_TERM_MAX_SMS` is 0 (#482) and no part takes the term. `SPLITK_TARGET_BLOCKS_PER_SM = 8`, the 1.011× /
+  1.136× and the "never slower on any cell" property above describe the A2000 record, not the shipped plan.
