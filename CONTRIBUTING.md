@@ -33,6 +33,11 @@ pre-push hook, scanning with the same `.github/private-markers.txt`:
 The pure-torch `dequant_ref` is the CPU-checkable oracle; the fused
 `gemm_4bit_grouped` requires CUDA (it says so, loudly, if called on CPU).
 
+## Changelog entries
+
+Add `changelog.d/<pr-or-slug>.md` holding your `### Title` and body; never edit `CHANGELOG.md`'s `## Unreleased` by hand.
+The release writes the fragments into `CHANGELOG.md`; the format is in [`changelog.d/README.md`](changelog.d/README.md).
+
 ## Hardware we'd love help measuring
 
 The cross-vendor projections (`PROJECTIONS-multiarch.md`) are stamped
