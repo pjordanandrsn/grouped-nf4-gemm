@@ -248,14 +248,16 @@ def device_shared_mem_limit(device=None) -> int:
 # the compiled kernel it returns is remembered under a key built from the same facts Triton specializes on; later launches with
 # that key call the kernel's own launcher directly. Same compiled binary, same arguments, same stream: bit-identical outputs
 # (test_triton_prebind). A Triton release this was not read against, a launch hook (profilers), a pre-run hook, a callable grid, a
-# changed global, or an argument of another type takes Triton's own launch. One knob is read less often than Triton reads it:
-# triton 3.4 re-reads TRITON_DEBUG at every launch, the prebound path once per kernel (3.6 itself reads it once, at import). On by
-# default, read when the kernel's module is imported; GNF4_TRITON_PREBIND=0 turns it off, and off ``prebind`` returns the kernel itself.
+# changed global, or an argument of another type takes Triton's own launch; under triton 3.7 so does a registered compiler-stages
+# hook (``knobs.runtime.add_stages_inspection_hook``), which 3.7 adds to its kernel key. One knob is read less often than Triton
+# reads it: triton 3.4 re-reads TRITON_DEBUG at every launch, the prebound path once per kernel (3.6 and 3.7 themselves read it
+# once, at import). On by default, read when the kernel's module is imported; GNF4_TRITON_PREBIND=0 turns it off, and off
+# ``prebind`` returns the kernel itself.
 # The default follows experts4bit-qlora's TC1 amendments 26 and 30 (one RTX 5090 each, triton 3.4): the training step at 0.973x (matched
 # arm) and 0.980x (shipped arm, 60 steps) of the flag off, held-out within 0.0012.
 
 #: Triton releases whose launch protocol (``JITFunction.run`` -> ``CompiledKernel.run``) the prebound path was read against.
-PREBIND_TRITON = ((3, 4), (3, 6))
+PREBIND_TRITON = ((3, 4), (3, 6), (3, 7))
 #: Launches through the prebound path, and through Triton's own (the first launch of a key, or a fallback).
 PREBIND_STATS = {"prebound": 0, "triton": 0}
 _PREBIND_MAX_KEYS = 4096           # integer values are keyed exactly; a sweep over sizes must not grow it forever
@@ -295,10 +297,13 @@ class Prebound:
         self.defaults = {p.name: p.default for p in fn.params if p.has_default}
         self.kernels = {}
         self.device = self.stream = None       # Triton's own device / stream getters, bound at the first launch
-        # 3.6 adds an instrumentation mode to every launch's options. 3.4 re-reads TRITON_DEBUG from the environment at every launch
-        # (1.4 us on an RTX A2000 host), 3.6 once at import: read here once per kernel under 3.4, per launch under 3.6.
+        # 3.6 and 3.7 add an instrumentation mode to every launch's options. 3.4 re-reads TRITON_DEBUG from the environment at every
+        # launch (1.4 us on an RTX A2000 host), 3.6 and 3.7 once at import: read here once per kernel under 3.4, per launch otherwise.
         self.compilation = getattr(knobs, "compilation", None)
         self.debug = knobs.runtime.debug if _triton_version() < (3, 6) else None
+        # Triton 3.7 keys a launch on a registered compiler-stages hook (its custom pass pipeline), and the launch that compiles a key
+        # under AsyncCompileMode returns a FutureKernel proxy rather than the CompiledKernel (3.6 resolves it first).
+        self.v37 = _triton_version() >= (3, 7)
 
     def __getitem__(self, grid):
         if callable(grid):
@@ -311,9 +316,10 @@ class Prebound:
 
     def launch(self, grid, *args, **kwargs):
         fn, rt = self.fn, self.knobs.runtime
-        # A registered launch hook (3.4: a callable; 3.6: a non-empty HookChain) needs Triton's launch metadata: take its path.
+        # A registered launch hook (3.4: a callable; 3.6, 3.7: a non-empty HookChain) needs Triton's launch metadata, and under 3.7 a
+        # registered stages hook adds its pipeline's hash to Triton's key: take Triton's path.
         if getattr(rt.launch_enter_hook, "calls", rt.launch_enter_hook) or getattr(rt.launch_exit_hook, "calls", rt.launch_exit_hook) \
-                or fn.pre_run_hooks:
+                or fn.pre_run_hooks or (self.v37 and rt.add_stages_inspection_hook is not None):
             return self._triton(grid, args, kwargs)
         try:
             # every parameter in signature order (the launcher's argument list), constexprs and defaults included
@@ -333,9 +339,10 @@ class Prebound:
             return self._triton(grid, args, kwargs)
         if hit is None:
             kernel = self._triton(grid, args, kwargs)
-            # Kept only for plain arguments (a tensor passed by keyword would sit in the key, by identity) and a launchable kernel.
+            # Kept only for plain arguments (a tensor passed by keyword would sit in the key, by identity) and a launchable kernel: under
+            # 3.7 not a FutureKernel (a later launch of the key, once Triton's cache holds the CompiledKernel, keeps that).
             if (len(full) == len(self.names) and all(isinstance(a, (T,) + _PREBIND_PLAIN) for a in args)
-                    and all(type(v) in _PREBIND_PLAIN for v in kwargs.values())
+                    and all(type(v) in _PREBIND_PLAIN for v in kwargs.values()) and not (self.v37 and hasattr(kernel, "result"))
                     and all(hasattr(kernel, a) for a in ("run", "function", "packed_metadata"))):
                 if len(self.kernels) >= _PREBIND_MAX_KEYS:
                     self.kernels.clear()

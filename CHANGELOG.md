@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+### The training GEMMs' prebound launches (`GNF4_TRITON_PREBIND`) cover triton 3.7
+
+- **Why.** torch 2.12 and Unsloth's environment ship triton 3.7.1, where `prebind` returned the kernel itself: under the default flag
+  the value memos engaged there, but the fused forward, the dgrad and the route's dequant kept Triton's own launch.
+- **What.** `PREBIND_TRITON` gains `(3, 7)`, with two branches that only 3.7 takes. Nothing changes under 3.4 or 3.6, and no default
+  changes.
+  - A registered compiler-stages hook (`knobs.runtime.add_stages_inspection_hook`) takes Triton's path: 3.7 adds its pipeline hash to
+    the kernel key.
+  - A `FutureKernel` is never kept. Under `AsyncCompileMode`, the 3.7 launch that compiles a key returns that proxy rather than the
+    `CompiledKernel` (3.6 resolves it first); a later launch keeps the `CompiledKernel` Triton's cache then holds.
+- **Read against triton 3.7.1's source.** The launch is the call 3.6 makes.
+  - `JITFunction.run` passes `CompiledKernel.run` the same positional list: grid, stream, function, packed metadata, launch metadata,
+    the enter and exit hooks, then every parameter in signature order.
+  - Unchanged from 3.6.0: the binder, `compute_cache_key`, `CompiledKernel`, and the native specializer (`python/src/specialize.cc`,
+    byte-identical). A tensor is still keyed on its dtype and 16-byte alignment, an integer on `== 1`, `% 16` and its width.
+  - Unchanged knobs: `runtime.debug` (read once, at import), the launch hook chains' `.calls`, `compilation.instrumentation_mode`.
+  - The NVIDIA launcher is now one C entry point instead of a module generated per signature. It takes the same arguments, skips
+    constexprs by annotation and calls no hook passed as `None`.
+- **Measured** on the RTX A2000 box's host (Xeon W-1250, 12 threads, load average 13–31, the bench at nice 10), torch 2.12.1 /
+  triton 3.7.1. Host µs per call, each timed after a synchronize; median of 300 (whole calls) or 1,500 (`dequant_groups`)
+  interleaved pairs; three runs. Qwen3-30B-A3B's experts, as in 0.40.0's entry. Flag off → on is the whole flag. Launchers only
+  keeps the value memos on in both arms and differs only in the launch: what this adds under triton 3.7.
+
+  | call | flag off → on | launchers only: Triton's → prebound |
+  |---|---|---|
+  | `FusedGroupedNf4.apply`, fused route, gate_up / down | 439–483 → 334–377 / 489–526 → 372–399 | 380–446 → 363–411 / 376–473 → 350–438 |
+  | `FusedGroupedNf4.backward`, dgrad kernel, gate_up / down | 320–384 → 255–295 / 327–396 → 254–300 | 291–348 → 261–313 / 293–352 → 254–323 |
+  | `dequant_groups` (launch and allocation, 16 groups), gate_up / down | 68–76 → 57–61 / 63–79 → 51–63 | 64–95 → 53–78 / 56–81 → 47–68 |
+
+  Launchers only, a pair saves 16.5–52.1 µs on the forward, 20.3–39.5 on the dgrad and 9.4–17.6 on `dequant_groups`. Triton
+  3.7.1's own launch is cheaper than 3.4's or 3.6's, so the saving is smaller than 0.40.0's (those runs were on another day, at
+  another load).
+- **Tests** under triton 3.7.1 on that A2000. `kernel/test_triton_prebind.py`: 16 passed. Two new tests cover the 3.7 branches, and
+  each fails with its branch removed. The suites over these modules pass the same flag off and on: 489 passed, 25 skipped; 28
+  passed in `test_shape_feasibility.py`.
+
 ### Default: the training GEMMs' prebound launches (`GNF4_TRITON_PREBIND`) are on; `=0` turns them off
 
 - **Why.** experts4bit-qlora's TC1 amendments 26 and 30 read the prebound launches, together with e4b's own (`E4B_TRITON_PREBIND`),
