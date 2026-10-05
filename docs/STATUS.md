@@ -266,11 +266,17 @@ was wrong.
   tuned by a 48-cell timing sweep on the A2000, and the row that carried
   that sweep is retired
   (`gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10`, retired 2026-10-05:
-  an A2000 timing; the A2000 is a correctness-only testbed), so the term's
-  gain is unverified on any target card. It stays gated to parts with ≤ 64
-  SMs after a 5090 step-level read of 1.0064 (the constant does not transfer
-  across SM classes) until a rented ≤ 64-SM read keeps it or gates it off;
-  MXFP4 keeps the N-only plan.
+  an A2000 timing; the A2000 is a correctness-only testbed). That sweep also
+  skipped the reduce launch the served path pays at sk = 1 (K30 Amendment 1).
+  **K30 read the term on a rented NVIDIA L4 (58 SMs) on 2026-10-05: OFF.**
+  Over the 24 cells at R ≥ 16 the R-aware pick costs 1.0101× the N-only
+  pick's summed time, and 1.1781× at its worst cell (qwen3_moe gate_up at
+  R = 128, where it drops the split to sk 1). KEEP needed ≤ 0.97 and ≤ 1.02
+  (`gnf4.kernel.k30-splitk-r-term.l4.2026-10-05`, measured;
+  `kernel/RESULTS-k30-splitk-r-term-l4.md`). By the registered rule the term
+  goes off on every part (`SPLITK_R_TERM_MAX_SMS = 0`, its own PR); until
+  that lands, parts with ≤ 64 SMs still take it. The 5090 already plans
+  N-only after its step-level read of 1.0064, and MXFP4 keeps the N-only plan.
 - **K14 is refuted: at M=16 no shipped int4 arm beats dequant-then-GEMM
   on the attention projections.** On the 5090 the grouped int4 GEMM at
   its best swept configuration is 1.12–2.00× slower than the bf16 path

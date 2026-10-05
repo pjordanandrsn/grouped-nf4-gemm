@@ -1,0 +1,9 @@
+## granitemoe down  N=1536 K=512  plan sk=4 (cap 4), tiles=12, NVIDIA L4 58 SMs
+   R=   1 | sk1=7.2 sk2=5.7 sk3=5.8 sk4=5.7 us | BEST sk=2  (plan sk=4 costs x1.012)
+   R=   2 | sk1=7.3 sk2=8.5 sk3=8.7 sk4=8.4 us | BEST sk=1  (plan sk=4 costs x1.164)
+   R=   4 | sk1=9.3 sk2=8.2 sk3=8.4 sk4=8.6 us | BEST sk=2  (plan sk=4 costs x1.060)
+   R=   8 | sk1=8.6 sk2=8.8 sk3=8.3 sk4=8.6 us | BEST sk=3  (plan sk=4 costs x1.037)
+   R=  16 | sk1=12.5 sk2=11.3 sk3=11.5 sk4=11.3 us | BEST sk=2  (plan sk=4 costs x1.003)
+   R=  32 | sk1=19.2 sk2=19.2 sk3=19.5 sk4=19.6 us | BEST sk=1  (plan sk=4 costs x1.020)
+   R=  64 | sk1=35.2 sk2=35.4 sk3=36.0 sk4=36.7 us | BEST sk=1  (plan sk=4 costs x1.045)
+   R= 128 | sk1=68.5 sk2=69.9 sk3=72.4 sk4=73.4 us | BEST sk=1  (plan sk=4 costs x1.070)

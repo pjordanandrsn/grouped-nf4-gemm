@@ -1,0 +1,5 @@
+NVIDIA L4, 23034 MiB, 615.71.09, GPU-c78c68bf-6162-1d29-2f0e-00efc65ce2d6
+power.limit,clocks.max.sm,pcie.gen.max,pcie.width.max 72.00 W, 2040 MHz, 3, 16
+Model name:                              Intel(R) Xeon(R) Silver 4114 CPU @ 2.20GHz
+               total        used        free      shared  buff/cache   available
+Mem:             125          13          29           0          82         110
