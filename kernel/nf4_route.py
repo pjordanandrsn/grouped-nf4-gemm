@@ -26,7 +26,7 @@ import torch
 from _triton_shim import prebind, prebind_requested, tl, triton
 from nf4_grouped import BLOCKSIZE, _host_reuse_enabled, _lists_of_ints_shape, _lut, _raw_stream_key, _ValueMemo, to_device_i32
 
-#: GNF4_TRITON_PREBIND=1 (opt-in, read at import): the dequant kernel launches without Triton's per-call argument binding, the device
+#: GNF4_TRITON_PREBIND (on by default, =0 off, read at import): the dequant kernel launches without Triton's per-call argument binding, the device
 #: capability the route checks is read once per device, and one grouping's device plan is reused by value. Values identical.
 _PREBIND = prebind_requested()
 
@@ -126,7 +126,7 @@ _CAPABILITY: dict = {}
 
 
 def _capability(dev):
-    """``torch.cuda.get_device_capability(dev)``; under GNF4_TRITON_PREBIND=1 read once per indexed device (a constant of the card,
+    """``torch.cuda.get_device_capability(dev)``; unless GNF4_TRITON_PREBIND=0 read once per indexed device (a constant of the card,
     and 7-11 us a call on an RTX A2000 host, paid twice per projection)."""
     if not _PREBIND or getattr(dev, "index", None) is None:
         return torch.cuda.get_device_capability(dev)
@@ -171,7 +171,7 @@ def _dequant_groups_kernel(b_ptr, am_ptr, eid_ptr, lut_ptr, out_ptr, N, KB,
              mask=n_mask[:, None] & (rk[None, :] < 2 * KB))
 
 
-# GNF4_TRITON_PREBIND=1 (opt-in): the same kernel, launched without Triton's per-call argument binding (_triton_shim.prebind)
+# GNF4_TRITON_PREBIND (on unless =0): the same kernel, launched without Triton's per-call argument binding (_triton_shim.prebind)
 _dequant_groups_launch = prebind(_dequant_groups_kernel)
 
 # BLOCK_N 16 x BLOCK_KB 256 bytes at 8 warps: on an RTX A2000 this runs a Qwen3-30B-A3B gate_up stack at 233 GB/s (0.76x the time of
@@ -202,7 +202,7 @@ _PLAN_FAST = _ValueMemo()
 def _plan(sizes, expert_ids, dev):
     """(eids int32 device, offs int32 device = inclusive cumsum of sizes) for one call; host lists go through to_device_i32.
 
-    Under GNF4_TRITON_PREBIND=1 the plan of a grouping already seen on this device and stream is reused by value -- a layer's
+    Unless GNF4_TRITON_PREBIND=0, the plan of a grouping already seen on this device and stream is reused by value -- a layer's
     gate_up and down calls, forward and dgrad, share one -- instead of rebuilding its upload key and relaunching the cumsum."""
     if _PREBIND and _lists_of_ints_shape((sizes, expert_ids)) and dev.type == "cuda" and _host_reuse_enabled() \
             and not torch.cuda.is_current_stream_capturing():

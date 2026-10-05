@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Default: the training GEMMs' prebound launches (`GNF4_TRITON_PREBIND`) are on; `=0` turns them off
+
+- **Why.** experts4bit-qlora's TC1 amendments 26 and 30 read the prebound launches, together with e4b's own (`E4B_TRITON_PREBIND`),
+  against the flags off on one RTX 5090 each, triton 3.4.
+  - The training step reads 0.973× on the matched arm (fp32 adapters, `tc1-5090-69`).
+  - It reads 0.980× on the shipped arm (bf16 adapters, 60-step runs, `tc1-5090-73`).
+  - Held-out moves by 0.0012 or less.
+
+  The registered decision rule (P53, P54, P55 held) makes both defaults on.
+- **What.** `prebind_requested()` now reads `GNF4_TRITON_PREBIND` as on unless it is `0`. Values are unchanged: the prebound launch runs
+  the same compiled kernel Triton's own lookup returns. A Triton release other than 3.4 or 3.6, a launch hook, a pre-run hook or a
+  callable grid still takes Triton's own path.
+
 ## 0.40.0 — 2026-10-05 — pinned-slot fence for queued device copies (#60); opt-in GNF4_TRITON_PREBIND for the training GEMMs (bit-identical)
 
 **0.40.0.** No default changes. One correctness fix and one opt-in.

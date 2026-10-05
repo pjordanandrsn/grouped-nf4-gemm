@@ -1,4 +1,4 @@
-"""GNF4_TRITON_PREBIND (opt-in; off by default): the training GEMMs' launches without Triton's per-call binding, and the host work
+"""GNF4_TRITON_PREBIND (on by default; =0 turns it off): the training GEMMs' launches without Triton's per-call binding, and the host work
 around them remembered by value, give the SAME values, bit for bit.
 
 The prebound launch (``_triton_shim.prebind``) launches the very compiled kernel Triton's own lookup returns, across odd shapes and
@@ -19,9 +19,11 @@ SUPPORTED = shim.HAS_TRITON and shim._triton_version() in shim.PREBIND_TRITON
 gpu = pytest.mark.skipif(not (CUDA and SUPPORTED), reason="needs CUDA and a Triton release the prebound path supports")
 
 
-def test_off_unless_requested(monkeypatch):
+def test_on_unless_turned_off(monkeypatch):
     sentinel = object()
     monkeypatch.delenv("GNF4_TRITON_PREBIND", raising=False)
+    assert shim.prebind_requested()                  # the default (experts4bit-qlora TC1 amendments 26 / 30)
+    monkeypatch.setenv("GNF4_TRITON_PREBIND", "0")
     assert not shim.prebind_requested() and shim.prebind(sentinel) is sentinel
     monkeypatch.setenv("GNF4_TRITON_PREBIND", "1")
     assert shim.prebind_requested()
