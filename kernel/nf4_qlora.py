@@ -44,7 +44,7 @@ LORA_PATH_STATS = {"loop": 0, "padded": 0, "grouped_mm": 0}
 # Which backward served each frozen-GEMM dgrad: the single-launch kernel, the grouped_mm route, the dense route, or the
 # per-expert decode loop -- with the loop's reason (`dgrad_eligible`'s, offload-staged storage, or dgrad_kernel=False). The loop is
 # exact and slow; it used to be taken silently, so a run asking for the kernel could not tell it had not had it.
-DGRAD_STATS = {"kernel": 0, "grouped_mm": 0, "dense": 0, "loop": 0, "loop_reasons": {}}
+DGRAD_STATS = {"kernel": 0, "grouped_mm": 0, "dense": 0, "decoded": 0, "loop": 0, "loop_reasons": {}}
 LORA_PAD_WASTE = {"last": 0.0, "max": 0.0, "last_bytes": 0, "last_bytes_alloc": 0}
 
 
@@ -97,7 +97,8 @@ class FusedGroupedNf4(torch.autograd.Function):
         ctx.dgrad_kernel = dgrad_kernel
         # GNF4_TRAIN_GEMM (nf4_route.py): `auto`, the default, takes the grouped_mm route -- dequantize + torch._grouped_mm,
         # forward and dgrad alike -- on compute capability 9.0; elsewhere the dense route (one expert at a time) for a call with
-        # at most DENSE_AUTO_MAX_GROUPS present groups, the fused kernel above that; `fused` / `grouped_mm` / `dense` force one.
+        # at most DENSE_AUTO_MAX_GROUPS present groups, the fused kernel above that; `fused` / `grouped_mm` / `dense` force one, and
+        # `decoded` (opt-in only: auto never takes it) is dequant_groups + one grouped bf16 GEMM launch per chunk of groups.
         # The choice is made here, per call, and remembered, so a backward never mixes routes.
         from nf4_route import train_gemm_route
         ctx.route = train_gemm_route(a_cat.device, len(sizes))   # validates the value; raises on an unknown one
@@ -107,6 +108,9 @@ class FusedGroupedNf4(torch.autograd.Function):
         elif ctx.route == "dense":
             from nf4_route import dense_forward
             out = dense_forward(a_cat, packed, absmax, sizes, expert_ids)
+        elif ctx.route == "decoded":
+            from nf4_route import decoded_forward
+            out = decoded_forward(a_cat, packed, absmax, sizes, expert_ids)
         else:
             out = gemm_4bit_grouped(a_cat, packed, absmax, sizes, expert_ids)
         # DO NOT stash the weight tensors themselves when a weights_fn is
@@ -196,6 +200,10 @@ class FusedGroupedNf4(torch.autograd.Function):
                     from nf4_route import dense_dgrad
                     DGRAD_STATS["dense"] += 1
                     return ((dense_dgrad(grad_out, packed, absmax, ctx.sizes, ctx.expert_ids),) + (None,) * 6)
+                if packed.device == grad_out.device and getattr(ctx, "route", "fused") == "decoded":
+                    from nf4_route import decoded_dgrad
+                    DGRAD_STATS["decoded"] += 1
+                    return ((decoded_dgrad(grad_out, packed, absmax, ctx.sizes, ctx.expert_ids),) + (None,) * 6)
                 if packed.device == grad_out.device:
                     DGRAD_STATS["kernel"] += 1
                     return ((dgrad_4bit_grouped(grad_out, packed, absmax,

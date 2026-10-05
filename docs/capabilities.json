@@ -112,7 +112,9 @@
     "nf4_route:route_for",
     "nf4_route:dequant_groups",
     "nf4_route:dense_forward",
-    "nf4_route:dense_dgrad"
+    "nf4_route:dense_dgrad",
+    "nf4_route:decoded_forward",
+    "nf4_route:decoded_dgrad"
    ],
    "documentation": [
     "docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md",
@@ -134,6 +136,7 @@
     "Loses to a CUDA-graphed per-expert baseline at some decode shapes (claim gnf4.kernel.graphed-baseline-decode-loses); shapes below the dispatch floor belong to the dequant path: nf4_grouped.decode_dispatch says so and the caller routes them there, while the op itself always runs fused (docs/STATUS.md)",
     "CUDA + Triton only; calling the kernel on CPU raises and names dequant_ref",
     "The grouped_mm training route needs compute capability 9.0 (torch 2.8's torch._grouped_mm target): GNF4_TRAIN_GEMM=auto takes it only there, and GNF4_TRAIN_GEMM=grouped_mm refuses elsewhere with the reason; it is not bit-identical to the fused kernels.",
+    "The decoded training route (GNF4_TRAIN_GEMM=decoded: dequant_groups + one grouped bf16 GEMM launch per chunk of groups, the chunk's decode transient capped by GNF4_DECODED_MAX_BYTES, default 256 MiB) is opt-in only: GNF4_TRAIN_GEMM=auto never takes it. It is not bit-identical to the fused kernels or the dense route, and no speed is claimed for it: whether it shortens a training step is experts4bit-qlora's TC1 full-step A/B, registered separately.",
     "The fidelity claim is measured against fp32 accumulation on NVIDIA tensor cores; other backends must re-measure (docs/PORTABILITY.md)",
     "Every speed figure is per card -- the census is sm_86, the head-to-head and the real-finetune cells are RTX 4090 / H100, the torch._grouped_mm cell is RTX 5090 -- and none is an architecture-wide statement; the registered comparator is this repository's own per-expert dequantize-then-GEMM loop, and no registered cell times bitsandbytes' own packed 2-D inference forward (0.50.0 and later)"
    ],

@@ -238,7 +238,9 @@ capability where `GNF4_TRAIN_GEMM=auto` takes the dequantise + `torch._grouped_m
 has_grouped_mm, requested, n_groups)` is the decision itself, a pure function (off sm_90, `auto` is `dense` for a call
 with 1 to `DENSE_AUTO_MAX_GROUPS` present groups); `train_gemm_route` resolves a live device through it.
 Below the floor `route_for` answers `None` with the reason. The launch path did not change: nothing refuses on the floor
-at launch time.
+at launch time. `GNF4_TRAIN_GEMM=decoded` is opt-in only (`auto` never answers it): per chunk of present groups, one
+`dequant_groups` launch and one grouped bf16 GEMM launch, the chunk's bf16 decode capped at `GNF4_DECODED_MAX_BYTES`
+(default `DECODED_MAX_BYTES_DEFAULT` = 256 MiB, at least one expert per chunk; `decoded_chunks` is the plan as a pure function).
 
 ## Fallback contract
 

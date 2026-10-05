@@ -54,11 +54,11 @@ def _run(route, monkeypatch, sizes, eids, N, K, seed=0):
 def test_route_matches_the_fused_kernels(monkeypatch, N, K, sizes, eids):
     monkeypatch.setattr(nf4_route, "_refuse_unless_supported", lambda dev: None)
     monkeypatch.setattr(torch, "_grouped_mm", _loop_grouped_mm, raising=False)
-    nf4_route.ROUTE_STATS.update(fwd=0, dgrad=0, dense_fwd=0, dense_dgrad=0)
+    nf4_route.ROUTE_STATS.update(fwd=0, dgrad=0, dense_fwd=0, dense_dgrad=0, decoded_fwd=0, decoded_dgrad=0)
     fo, fg = _run("fused", monkeypatch, sizes, eids, N, K)
-    assert nf4_route.ROUTE_STATS == {"fwd": 0, "dgrad": 0, "dense_fwd": 0, "dense_dgrad": 0}
+    assert nf4_route.ROUTE_STATS == {"fwd": 0, "dgrad": 0, "dense_fwd": 0, "dense_dgrad": 0, "decoded_fwd": 0, "decoded_dgrad": 0}
     ro, rg = _run("grouped_mm", monkeypatch, sizes, eids, N, K)
-    assert nf4_route.ROUTE_STATS == {"fwd": 1, "dgrad": 1, "dense_fwd": 0, "dense_dgrad": 0}
+    assert nf4_route.ROUTE_STATS == {"fwd": 1, "dgrad": 1, "dense_fwd": 0, "dense_dgrad": 0, "decoded_fwd": 0, "decoded_dgrad": 0}
     for name, x, y in (("out", fo, ro), ("grad_a", fg, rg)):
         rel = ((x - y).norm() / x.norm()).item()
         assert rel < 5e-3, (name, rel)
@@ -111,10 +111,10 @@ def test_route_env(monkeypatch):
 def test_dense_route_matches_the_fused_kernels_on_any_card(monkeypatch, N, K, sizes, eids):
     """GNF4_TRAIN_GEMM=dense: the per-expert dequant + torch.mm loop gives the fused kernels' forward and dgrad within bf16 noise,
     an empty group included, and counts itself (never the grouped_mm route's counters)."""
-    nf4_route.ROUTE_STATS.update(fwd=0, dgrad=0, dense_fwd=0, dense_dgrad=0)
+    nf4_route.ROUTE_STATS.update(fwd=0, dgrad=0, dense_fwd=0, dense_dgrad=0, decoded_fwd=0, decoded_dgrad=0)
     fo, fg = _run("fused", monkeypatch, sizes, eids, N, K)
     do, dg = _run("dense", monkeypatch, sizes, eids, N, K)
-    assert nf4_route.ROUTE_STATS == {"fwd": 0, "dgrad": 0, "dense_fwd": 1, "dense_dgrad": 1}
+    assert nf4_route.ROUTE_STATS == {"fwd": 0, "dgrad": 0, "dense_fwd": 1, "dense_dgrad": 1, "decoded_fwd": 0, "decoded_dgrad": 0}
     for name, x, y in (("out", fo, do), ("grad_a", fg, dg)):
         rel = ((x - y).norm() / x.norm()).item()
         assert rel < 5e-3, (name, rel)
@@ -152,3 +152,99 @@ def test_auto_takes_dense_for_few_groups_off_sm90(monkeypatch):
     out = nf4_qlora.gemm_4bit_grouped_train(a, B, am, many, list(range(B_E)))
     out.float().sum().backward()
     assert nf4_route.ROUTE_STATS["dense_fwd"] == 1 and nf4_route.ROUTE_STATS["dense_dgrad"] == 1, nf4_route.ROUTE_STATS
+
+
+# ------------------------------------------------------------------------------------------- GNF4_TRAIN_GEMM=decoded (opt-in)
+GATE_X = 2.0       # experts4bit-qlora RD1's correctness gate: rel. error against the fp32 reference <= 2x dense's, every call
+
+
+@pytest.mark.parametrize("N,K", [(1536, 2048), (2048, 768), (130, 192)])
+@pytest.mark.parametrize("sizes,eids", [([40, 3, 17, 9], [0, 2, 5, 7]), ([64], [4]), ([1, 0, 120, 2, 5], [1, 2, 3, 6, 7])])
+def test_decoded_route_matches_the_fused_kernels_on_any_card(monkeypatch, N, K, sizes, eids):
+    """GNF4_TRAIN_GEMM=decoded through FusedGroupedNf4: the fused kernels' forward and dgrad within bf16 noise, an empty group
+    included; it counts itself, and its backward is the decoded dgrad (never the loop, never another route's)."""
+    monkeypatch.delenv("GNF4_DECODED_MAX_BYTES", raising=False)
+    nf4_route.ROUTE_STATS.update(fwd=0, dgrad=0, dense_fwd=0, dense_dgrad=0, decoded_fwd=0, decoded_dgrad=0)
+    fo, fg = _run("fused", monkeypatch, sizes, eids, N, K)
+    before = nf4_qlora.DGRAD_STATS["decoded"]
+    do, dg = _run("decoded", monkeypatch, sizes, eids, N, K)
+    assert nf4_route.ROUTE_STATS == {"fwd": 0, "dgrad": 0, "dense_fwd": 0, "dense_dgrad": 0, "decoded_fwd": 1, "decoded_dgrad": 1}
+    assert nf4_qlora.DGRAD_STATS["decoded"] == before + 1
+    for name, x, y in (("out", fo, do), ("grad_a", fg, dg)):
+        rel = ((x - y).norm() / x.norm()).item()
+        assert rel < 5e-3, (name, rel)
+
+
+def _ref32(x, B, am, sizes, eids, N, K, mode):
+    out = torch.zeros(x.shape[0], N if mode == "fwd" else K, device="cuda", dtype=torch.float32)
+    r0 = 0
+    for e, n in zip(eids, sizes):
+        w = NG.dequant_ref(B[e], am[e], N, K).float()
+        out[r0:r0 + n] = x[r0:r0 + n].float() @ (w.t() if mode == "fwd" else w)
+        r0 += n
+    return out
+
+
+def _rel(a, b):
+    return ((a.float() - b.float()).norm() / b.float().norm()).item()
+
+
+# expert shapes and router-like ragged groupings from RD1's grid (OLMoE / Granite-H / Qwen3 down, Nemotron-H's non-gated up),
+# with few-row, one-row and empty groups, and both of the route's tilings (mean rows per group below and above the split)
+GATE_CASES = [
+    (2048, 2048, [70, 3, 1, 0, 120, 33, 9, 64]),
+    (1024, 1536, [12, 40, 5, 2, 30, 17, 1, 8]),
+    (2048, 768, [300, 150, 90, 260, 1, 0, 180, 40]),
+    (1856, 2688, [9, 1, 22, 4, 16, 7, 0, 3]),
+]
+
+
+@pytest.mark.parametrize("mode", ["fwd", "dgrad"])
+@pytest.mark.parametrize("N,K,sizes", GATE_CASES)
+def test_decoded_route_passes_the_rd1_gate_against_the_dense_route(monkeypatch, mode, N, K, sizes):
+    """The compiled route against an fp32 reference: at most 2x the error of the real `dense` route (cuBLAS, bf16 operands)
+    on every call; a call capped to two groups per chunk is bit-identical to the uncapped call; device-form sizes and ids give
+    the list form's output."""
+    monkeypatch.delenv("GNF4_DECODED_MAX_BYTES", raising=False)
+    eids = list(range(len(sizes)))
+    B, am = _stack(len(sizes), N, K, seed=N + K)
+    g = torch.Generator(device="cuda").manual_seed(N * K)
+    x = (torch.randn(sum(sizes), K if mode == "fwd" else N, device="cuda", generator=g) * 0.5).to(torch.bfloat16)
+    route = nf4_route.decoded_forward if mode == "fwd" else nf4_route.decoded_dgrad
+    dense = nf4_route.dense_forward if mode == "fwd" else nf4_route.dense_dgrad
+    y = route(x, B, am, sizes, eids)
+    ref = _ref32(x, B, am, sizes, eids, N, K, mode)
+    err, dense_err = _rel(y, ref), _rel(dense(x, B, am, sizes, eids), ref)
+    assert err <= GATE_X * dense_err, (mode, N, K, err, dense_err)
+    monkeypatch.setenv("GNF4_DECODED_MAX_BYTES", str(2 * N * K * 2))
+    assert len(nf4_route.decoded_chunks(len(sizes), N, K, nf4_route.decoded_max_bytes())) == 4
+    assert torch.equal(route(x, B, am, sizes, eids), y)
+    monkeypatch.delenv("GNF4_DECODED_MAX_BYTES")
+    dev = route(x, B, am, torch.tensor(sizes, device="cuda"), torch.tensor(eids, device="cuda", dtype=torch.int32))
+    assert torch.equal(dev, y)
+
+
+def test_the_cap_bounds_the_decode_transient(monkeypatch):
+    """GNF4_DECODED_MAX_BYTES bounds what the route allocates above its inputs and output: capped to two experts per chunk, the
+    peak stays within the cap (plus the chunk plan's small tensors); uncapped, all eight experts are decoded at once."""
+    N, K, sizes = 2048, 2048, [40, 3, 17, 9, 64, 1, 30, 12]
+    eids = list(range(len(sizes)))
+    B, am = _stack(len(sizes), N, K, seed=11)
+    x = (torch.randn(sum(sizes), K, device="cuda") * 0.5).to(torch.bfloat16)
+    expert = N * K * 2
+    out_bytes = sum(sizes) * N * 2
+
+    def peak(cap):
+        monkeypatch.setenv("GNF4_DECODED_MAX_BYTES", str(cap))
+        nf4_route.decoded_forward(x, B, am, sizes, eids)              # the plan and any first-launch state, outside the reading
+        torch.cuda.synchronize()
+        base = torch.cuda.memory_allocated()
+        torch.cuda.reset_peak_memory_stats()
+        nf4_route.decoded_forward(x, B, am, sizes, eids)
+        torch.cuda.synchronize()
+        return torch.cuda.max_memory_allocated() - base
+
+    capped = peak(2 * expert)
+    assert capped <= out_bytes + 2 * expert + 2**20, (capped, out_bytes, expert)
+    assert peak(64 * expert) >= out_bytes + 8 * expert
+

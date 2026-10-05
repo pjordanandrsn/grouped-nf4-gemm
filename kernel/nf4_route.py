@@ -46,7 +46,11 @@ DENSE_AUTO_MAX_GROUPS = 16
 MIN_CAPABILITY = (8, 0)
 #: The one compute capability ``torch._grouped_mm`` has a kernel for (torch 2.8), so the only place ``auto`` takes that route.
 GROUPED_MM_CAPABILITY = (9, 0)
-ROUTES = ("auto", "fused", "grouped_mm", "dense")
+ROUTES = ("auto", "fused", "grouped_mm", "dense", "decoded")
+
+#: ``GNF4_DECODED_MAX_BYTES``'s default: the decoded route's bf16 decode transient per chunk of groups (256 MiB, the cap
+#: experts4bit-qlora's RD1 probe read). One expert larger than the cap is decoded alone.
+DECODED_MAX_BYTES_DEFAULT = 256 * 2**20
 
 
 def route_for(capability, *, has_grouped_mm: bool, requested: str = "auto", n_groups=None) -> tuple:
@@ -56,10 +60,10 @@ def route_for(capability, *, has_grouped_mm: bool, requested: str = "auto", n_gr
     device that is not this one, or in a test without a GPU. ``capability`` is the ``(major, minor)`` compute capability, or
     ``None`` for a non-CUDA device; ``has_grouped_mm`` is whether the torch that will run has ``torch._grouped_mm``;
     ``requested`` is what ``GNF4_TRAIN_GEMM`` would say; ``n_groups`` is the call's number of present groups when known (``auto``
-    takes the dense route off sm_90 for 1 to :data:`DENSE_AUTO_MAX_GROUPS` of them). ``route`` is ``"fused"``, ``"grouped_mm"`` or
-    ``"dense"``, or ``None`` when no route of this module can train there (below :data:`MIN_CAPABILITY`, an explicit
-    ``grouped_mm`` the device cannot run, or no CUDA device): ``reason`` then says why, in the words the launch-time refusal
-    would use.
+    takes the dense route off sm_90 for 1 to :data:`DENSE_AUTO_MAX_GROUPS` of them). ``route`` is ``"fused"``, ``"grouped_mm"``,
+    ``"dense"`` or ``"decoded"``, or ``None`` when no route of this module can train there (below :data:`MIN_CAPABILITY`, an
+    explicit ``grouped_mm`` the device cannot run, or no CUDA device): ``reason`` then says why, in the words the launch-time
+    refusal would use. ``decoded`` is opt-in only: ``auto`` never answers it.
     """
     requested = str(requested).strip().lower()
     if requested not in ROUTES:
@@ -74,6 +78,8 @@ def route_for(capability, *, has_grouped_mm: bool, requested: str = "auto", n_gr
         return "fused", "GNF4_TRAIN_GEMM=fused"
     if requested == "dense":
         return "dense", "GNF4_TRAIN_GEMM=dense: per-expert dequant + torch.mm"
+    if requested == "decoded":
+        return "decoded", "GNF4_TRAIN_GEMM=decoded: dequant_groups + one grouped bf16 GEMM launch per chunk of groups (opt-in)"
     grouped_ok = has_grouped_mm and cap == GROUPED_MM_CAPABILITY
     if requested == "grouped_mm":
         if not has_grouped_mm:
@@ -94,14 +100,15 @@ def route_for(capability, *, has_grouped_mm: bool, requested: str = "auto", n_gr
 
 
 def train_gemm_route(dev=None, n_groups=None) -> str:
-    """``GNF4_TRAIN_GEMM`` = ``auto`` (default) | ``fused`` | ``grouped_mm`` | ``dense``. ``auto`` is ``grouped_mm`` on a CUDA device
-    of compute capability 9.0 when this torch has ``_grouped_mm``. On any other CUDA device it is ``dense`` for a call with 1 to
-    :data:`DENSE_AUTO_MAX_GROUPS` present groups (``n_groups``) and ``fused`` above that or when ``n_groups`` is not given; CPU is
-    ``fused``. ``dense`` dequantizes one present expert at a time and runs its GEMM through ``torch.mm``. An explicit value is used as
-    given. ``dev`` defaults to the current CUDA device. The device-level decision is :func:`route_for`."""
+    """``GNF4_TRAIN_GEMM`` = ``auto`` (default) | ``fused`` | ``grouped_mm`` | ``dense`` | ``decoded``. ``auto`` is ``grouped_mm`` on a
+    CUDA device of compute capability 9.0 when this torch has ``_grouped_mm``. On any other CUDA device it is ``dense`` for a call
+    with 1 to :data:`DENSE_AUTO_MAX_GROUPS` present groups (``n_groups``) and ``fused`` above that or when ``n_groups`` is not given;
+    CPU is ``fused``. ``dense`` dequantizes one present expert at a time and runs its GEMM through ``torch.mm``; ``decoded`` (opt-in,
+    never ``auto``) is :func:`decoded_forward`. An explicit value is used as given. ``dev`` defaults to the current CUDA device. The
+    device-level decision is :func:`route_for`."""
     v = os.environ.get("GNF4_TRAIN_GEMM", "auto").strip().lower()
     if v not in ROUTES:
-        raise ValueError(f"GNF4_TRAIN_GEMM must be 'auto', 'fused', 'grouped_mm' or 'dense', got {v!r}")
+        raise ValueError(f"GNF4_TRAIN_GEMM must be 'auto', 'fused', 'grouped_mm', 'dense' or 'decoded', got {v!r}")
     if v != "auto":
         return v
     if dev is None:
@@ -304,3 +311,183 @@ def dense_dgrad(grad_out, B, absmax, sizes, expert_ids):
     ROUTE_STATS["dense_dgrad"] += 1
     return out
 
+
+
+# ---------------------------------------------------------------------------------------------------------------- the decoded route
+# GNF4_TRAIN_GEMM=decoded (opt-in; ``auto`` never takes it -- route_for). Per chunk of present groups: ONE dequant_groups launch
+# decodes every expert of the chunk to bf16, then ONE Triton grouped bf16 GEMM launch runs every group of the chunk -- forward
+# ``a_g @ W_g^T`` and dgrad ``grad_out_g @ W_g`` through the same kernel (W read by strides). A chunk's decode transient is
+# ``groups x N x K x 2`` bytes, at most GNF4_DECODED_MAX_BYTES (default 256 MiB) and at least one expert, so the chunk count is
+# ceil(groups / max(1, cap // (N*K*2))). Two launches per chunk whatever the number of groups -- against `dense`'s two per group
+# and the fused kernels' decode once per M-tile.
+#
+# This is experts4bit-qlora's RD1 probe arm `decoded_cap` (bench/moegen/rd1/rd_probe.py), moved here unchanged in arithmetic:
+# the dequant is bit-equal to dequant_ref in bf16, the GEMM accumulates bf16 products in fp32 over BLOCK_K = 64 slices and rounds
+# once to bf16. Not bit-identical to the fused kernels (TF32, decode in the loop) nor to `dense` (cuBLAS's order). Its gate is
+# RD1's: relative error against an fp32 reference at most 2x dense's, on every call (kernel/test_nf4_decoded*.py).
+#
+# Memory, measured, not guaranteed: on one RTX 5090 (RD1's licensed reading, rd1-rp-5090-2) the route's peak above its inputs at
+# the 256 MiB cap was 180-448 MiB over eight families' expert shapes at seq 512 and 2048 (448 MiB: Mixtral-8x7B's down and
+# gate_up at seq 2048, output buffer included), against 180-2016 MiB uncapped. A cap below one expert's decoded size still
+# decodes that expert whole.
+#
+# No speed is claimed here. RD1 read the route per call on one RTX 5090; whether it shortens a training step is a TC1 full-step
+# A/B in experts4bit-qlora, registered before its box, and until it reads `auto` does not take this route anywhere.
+
+ROUTE_STATS.setdefault("decoded_fwd", 0)
+ROUTE_STATS.setdefault("decoded_dgrad", 0)
+
+#: The grouped bf16 GEMM's tiles, (BLOCK_M, BLOCK_N, BLOCK_K, num_warps, num_stages): BLOCK_M 32 below
+#: :data:`DECODED_ROWS_SPLIT` mean rows per present group, 64 at or above. Taken from RD1's receipt, where of the probe's three
+#: configs (32, 128, 64) won most calls up to ~75 mean rows and (64, 128, 64) most from ~90: a fixed rule, so a call's tiling (and
+#: its values) never depends on a timing race. BLOCK_K is 64 in both, so the two accumulate each output in the same K order.
+DECODED_TILES_SMALL = (32, 128, 64, 4, 3)
+DECODED_TILES_LARGE = (64, 128, 64, 4, 3)
+DECODED_ROWS_SPLIT = 80
+
+
+def decoded_max_bytes() -> int:
+    """``GNF4_DECODED_MAX_BYTES``: the decoded route's per-chunk decode transient in bytes, read per call (default
+    :data:`DECODED_MAX_BYTES_DEFAULT`, 256 MiB). A positive integer; anything else raises."""
+    v = os.environ.get("GNF4_DECODED_MAX_BYTES", "").strip()
+    if not v:
+        return DECODED_MAX_BYTES_DEFAULT
+    try:
+        n = int(v)
+    except ValueError:
+        n = 0
+    if n <= 0:
+        raise ValueError(f"GNF4_DECODED_MAX_BYTES must be a positive integer number of bytes, got {v!r}")
+    return n
+
+
+def decoded_chunks(n_groups: int, N: int, K: int, max_bytes: int) -> list:
+    """The decoded route's chunks of groups, ``[(g0, g1), ...]``: consecutive groups whose bf16 decode (``N * K * 2`` bytes each)
+    fits ``max_bytes``, at least one group per chunk. Pure arithmetic, so a test can ask it without a GPU."""
+    step = max(1, int(max_bytes) // (int(N) * int(K) * 2))
+    return [(g0, min(int(n_groups), g0 + step)) for g0 in range(0, int(n_groups), step)]
+
+
+def decoded_tiles(n_rows: int, n_present: int) -> tuple:
+    """The grouped bf16 GEMM's tile config for a call of ``n_rows`` rows over ``n_present`` non-empty groups."""
+    return DECODED_TILES_SMALL if n_rows < DECODED_ROWS_SPLIT * max(1, n_present) else DECODED_TILES_LARGE
+
+
+@triton.jit
+def _grouped_bf16_gemm_kernel(a_ptr, w_ptr, out_ptr, t_row0_ptr, t_rows_ptr, t_grp_ptr,
+                              N_OUT, R, s_am, s_wg, s_wr, s_wj, s_om,
+                              BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr, DOT_BF16: tl.constexpr):
+    """``out[row0 + i, j] = sum_r a[row0 + i, r] * W[g, r, j]`` for one (M-tile, N-tile) of one group: bf16 operands into tl.dot,
+    fp32 accumulation over BK slices of R, one bf16 rounding at the store. W is read by strides, so the same kernel is the
+    forward (``W[g, r, j] = W_g[j, r]``, R = K) and the dgrad (``W[g, r, j] = W_g[r, j]``, R = N). One launch covers every group
+    of a chunk; ``a`` and ``out`` are row-major with unit column stride. ``DOT_BF16`` is off only under TRITON_INTERPRET=1, whose
+    tl.dot does not take bf16 operands: there the same bf16 values enter as fp32 (as nf4_smallm's interpreter path does)."""
+    pid_m = tl.program_id(0)
+    pid_n = tl.program_id(1)
+    row0 = tl.load(t_row0_ptr + pid_m)
+    rows = tl.load(t_rows_ptr + pid_m)
+    g = tl.load(t_grp_ptr + pid_m).to(tl.int64)
+    rm = tl.arange(0, BM)
+    rn = pid_n * BN + tl.arange(0, BN)
+    rk = tl.arange(0, BK)
+    mmask = rm < rows
+    nmask = rn < N_OUT
+    a_ptrs = a_ptr + (row0 + rm).to(tl.int64)[:, None] * s_am + rk[None, :]
+    w_ptrs = w_ptr + g * s_wg + rk[:, None].to(tl.int64) * s_wr + rn[None, :].to(tl.int64) * s_wj
+    acc = tl.zeros((BM, BN), dtype=tl.float32)
+    for k0 in range(0, R, BK):
+        kmask = (k0 + rk) < R
+        a = tl.load(a_ptrs, mask=mmask[:, None] & kmask[None, :], other=0.0)
+        w = tl.load(w_ptrs, mask=kmask[:, None] & nmask[None, :], other=0.0)
+        if not DOT_BF16:
+            a = a.to(tl.float32)
+            w = w.to(tl.float32)
+        acc = tl.dot(a, w, acc)
+        a_ptrs += BK
+        w_ptrs += BK * s_wr
+    o_ptrs = out_ptr + (row0 + rm).to(tl.int64)[:, None] * s_om + rn[None, :]
+    tl.store(o_ptrs, acc.to(tl.bfloat16), mask=mmask[:, None] & nmask[None, :])
+
+
+_grouped_bf16_gemm_launch = prebind(_grouped_bf16_gemm_kernel)
+
+_DEC_PLAN: dict = {}                                       # (sizes, N, K, BLOCK_M, cap, device) -> the chunk plan
+_DEC_PLAN_MAX = 64
+
+
+def _m_tiles(sizes, bm):
+    """``build_group_tiles``' expansion, relative to the first row of ``sizes``: (row0, rows, group) per M-tile."""
+    t_row0, t_rows, t_grp, row = [], [], [], 0
+    for g, m in enumerate(sizes):
+        left = m
+        while left > 0:
+            take = min(bm, left)
+            t_row0.append(row + (m - left))
+            t_rows.append(take)
+            t_grp.append(g)
+            left -= take
+        row += m
+    return t_row0, t_rows, t_grp
+
+
+def _decoded_plan(sz, N, K, bm, cap, dev):
+    """Per chunk ``(g0, g1, r0, r1, (row0, rows, group) device int32)``, built once per grouping and shape and reused by value --
+    a layer's forward and dgrad share it. A chunk whose groups are all empty is left out (it would launch nothing)."""
+    key = (tuple(sz), N, K, bm, cap, str(dev))
+    plan = _DEC_PLAN.get(key)
+    if plan is None:
+        plan, r0 = [], 0
+        for g0, g1 in decoded_chunks(len(sz), N, K, cap):
+            r1 = r0 + sum(sz[g0:g1])
+            if r1 > r0:
+                plan.append((g0, g1, r0, r1, to_device_i32(_m_tiles(sz[g0:g1], bm), dev)))
+            r0 = r1
+        if len(_DEC_PLAN) >= _DEC_PLAN_MAX:
+            _DEC_PLAN.clear()
+        _DEC_PLAN[key] = plan
+    return plan
+
+
+def _decoded(x, B, absmax, sizes, expert_ids, mode):
+    dev = x.device
+    # CUDA-only in real use; TRITON_INTERPRET=1 runs both kernels on CPU tensors (kernel/test_nf4_decoded_interp.py).
+    if dev.type != "cuda" and os.environ.get("TRITON_INTERPRET") != "1":
+        raise RuntimeError("GNF4_TRAIN_GEMM=decoded needs a CUDA device")
+    E, N, half = B.shape
+    K = half * 2
+    sz, eids = _host_plan(sizes, expert_ids, dev) if dev.type == "cuda" else (
+        [int(v) for v in (sizes.tolist() if torch.is_tensor(sizes) else sizes)],
+        torch.as_tensor([int(e) for e in (expert_ids.tolist() if torch.is_tensor(expert_ids) else expert_ids)],
+                        dtype=torch.int32))
+    T = x.shape[0]
+    assert sum(sz) == T, (sum(sz), T)
+    bm, bn, bk, warps, stages = decoded_tiles(T, sum(1 for n in sz if n))
+    n_out = N if mode == "fwd" else K
+    x = x.contiguous().to(torch.bfloat16)
+    out = torch.empty(T, n_out, device=dev, dtype=torch.bfloat16)
+    for g0, g1, r0, r1, (row0, rows, grp) in _decoded_plan(sz, N, K, bm, decoded_max_bytes(), dev):
+        W = dequant_groups(B, absmax, eids[g0:g1], N, K)                     # [g1 - g0, N, K] bf16, one launch
+        R, s_wr, s_wj = (K, W.stride(2), W.stride(1)) if mode == "fwd" else (N, W.stride(1), W.stride(2))
+        xc, oc = x[r0:r1], out[r0:r1]
+        _grouped_bf16_gemm_launch[(row0.numel(), triton.cdiv(n_out, bn))](
+            xc, W, oc, row0, rows, grp, n_out, R, xc.stride(0), W.stride(0), s_wr, s_wj, oc.stride(0),
+            BM=bm, BN=bn, BK=bk, DOT_BF16=os.environ.get("TRITON_INTERPRET") != "1", num_warps=warps, num_stages=stages)
+        del W
+    return out
+
+
+def decoded_forward(a_cat, B, absmax, sizes, expert_ids):
+    """``gemm_4bit_grouped``'s contract (``a_cat [T, K]`` group-sorted, returns ``[T, N]`` bf16) through the decoded route: per chunk
+    of present groups (``GNF4_DECODED_MAX_BYTES``), :func:`dequant_groups` and one grouped bf16 GEMM launch. Device-side sizes cost
+    one host read (the chunks slice by them), as in :func:`dense_forward`."""
+    out = _decoded(a_cat, B, absmax, sizes, expert_ids, "fwd")
+    ROUTE_STATS["decoded_fwd"] += 1
+    return out
+
+
+def decoded_dgrad(grad_out, B, absmax, sizes, expert_ids):
+    """``dgrad_4bit_grouped``'s contract (``grad_out [T, N]``, returns ``grad_a [T, K]`` bf16) through the decoded route:
+    ``grad_out_g @ W_g`` per group, :func:`decoded_forward`'s chunks and kernel."""
+    out = _decoded(grad_out, B, absmax, sizes, expert_ids, "dgrad")
+    ROUTE_STATS["decoded_dgrad"] += 1
+    return out
