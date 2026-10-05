@@ -62,3 +62,26 @@ The registered pointer: **K25-tree in TF32, end to end on both NF4 families**.
 
 [`receipts-k27/5090/`](receipts-k27/5090/) holds `k27.json`, summary, forensics, versions, the bench and contract logs,
 the teardown proof and `SHA256SUMS`.
+
+## Erratum (2026-10-05): the speed band and the verdict lean were seeded by A2000 timings
+
+The PREREG's "What was seen before this page" records two A2000 runs: the bench's `--quick` correctness pass and the
+runner's full-mode rehearsal (experts4bit-qlora `bench/k27/`). Both are labelled not a reading, but registered
+statements draw on their timings:
+- the `tree32 / served` band, 0.45–0.65, is justified partly by OLMoE being the tighter family "as on the A2000";
+- the verdict lean, TF32_PATH at about 55 %, scales the rehearsal's A2000 TF32 ratios by the 5090-to-A2000 bf16 ratio;
+- the section reports which verdict the A2000 runs would have read.
+
+Under the testbed policy (the A2000 is a correctness-only testbed; every timing, ratio or band basis comes from rented compute on the target card; grouped-nf4-gemm#475, `docs/audits/a2000-timing-2026-10-05.md` §2), an A2000 timing may not seed a band or a prediction, whatever its label.
+
+What it changes:
+- **The registration stands as stamped.**
+- **The verdict does not rest on the A2000.** TF32_PATH comes from the rule's thresholds (`tree32 / served` ≤ 0.60 and
+  `err(tree32) / err(served)` ≤ 1.10 in both families), read on the 5090: 0.448 / 0.502, error ratio 1.000 / 1.000.
+- **The paragraph under "Against the predictions" sets the A2000 rehearsal's ratios beside the 5090's** and calls the
+  scaled prediction right in direction and conservative. That comparison is not speed evidence, and scaling an A2000
+  ratio is not a prediction method; the 5090 rows are this lane's only speed reading.
+- **The error band** (`err(tree32) / err(served)` 0.95–1.05) rests on the A2000's numerics, which the policy allows; it
+  held at 1.000 on the 5090. **The `tree16 / served` band** came from K26's 5090 read and is unaffected.
+- **For later lanes:** bands come from a 5090 or H100 reading, or from a rented microbench of the component on the
+  target card.

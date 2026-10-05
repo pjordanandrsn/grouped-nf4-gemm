@@ -39,3 +39,23 @@ experts4bit-qlora lane `k16-p5` (`bench/k16/RESULTS-k16-p5.md`, receipt `2026-09
 ## Cost
 
 Run 1 (`k16-5090`, HARNESS_ERROR, no pytest on the image): ~1 min of a $0.65/h box. Run 2 (`k16-5090-2`): ~4 min box time. Lane ceiling $0.65; receipts in the private audit tree (`receipts/experts4bit-qlora/2026-09-19/k16-5090{,-2}/`).
+
+## Erratum (2026-10-05): the go-to-rent decision leaned on an A2000 pilot's timings
+
+The PREREG's "Pilot read, not a prediction change" (2026-09-19, after the 2026-09-18 registration and before the 5090
+lane) ran K16 under K14's instrument on the house A2000 (`receipts-k16/a2000-pilot.{json,log}`). It registered
+nothing, and P1–P5 were decided on the 5090 only. But the section ends with the decision to rent, that the design is
+sound enough to rent for, and it rests that on the pilot's speed ratios over bf16. The correctness plan also names the
+A2000 for the first perf read. Under the testbed policy (the A2000 is a correctness-only testbed; every timing, ratio or band basis comes from rented compute on the target card; grouped-nf4-gemm#475, `docs/audits/a2000-timing-2026-10-05.md` §2), an A2000 timing may not filter a candidate or make the go/no-go call.
+
+What it changes:
+- **The registration stands as stamped**, and so do the predictions. They were registered on 2026-09-18, before the
+  pilot, so no band here was seeded by it.
+- **The verdict does not rest on the A2000.** P1, P2 and P3 hold on the 5090's rows alone, and the decision rule was
+  applied to them.
+- **What the pilot legitimately established is correctness:** every swept config within one bf16 ulp of the reference,
+  and both correctness suites passing on sm_86. That is a sound reason to rent; the speed ratios were not.
+- **The sweep observations above set the A2000 pilot's q/o ratios beside the 5090's.** That comparison is not speed
+  evidence; the 5090 rows are this lane's only speed reading.
+- **For later lanes:** the go-to-rent call rests on the A2000's correctness pass, or on a rented microbench of the
+  component on the target card, never on an A2000 timing.

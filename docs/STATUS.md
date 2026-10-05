@@ -35,7 +35,8 @@ cell (`gnf4.kernel.fused-more-accurate-than-dequant-bf16`).
 | Real OLMoE QLoRA finetune, fused vs per-expert loop (prose) | 4.50× (4090), 4.75× (H100) | confirmed | `gnf4.kernel.e2e-training-real-prose` |
 | vs Unsloth's own kernel, 4-bit-storage regime, decode | 1.70× (H100), 2.79× (4090) | confirmed | `gnf4.kernel.h2h-unsloth` |
 | vs `torch._grouped_mm` on bf16, Qwen3-30B cell (RTX 5090) | 2.1–6.0×, on half the bytes | measured | `gnf4.kernel.sm120-census-vs-grouped-mm` |
-| Training backward, one launch, E=256 step (A2000) | 403.7 → 26.5 ms | measured | `gnf4.kernel.dgrad` |
+| Training backward, one launch: gradient vs the exact per-expert loop (A2000, a correctness read) | ~0.0029 relative, inside the bf16 budget | measured | `gnf4.kernel.dgrad` |
+| Fused training step with it vs the per-expert loop, Qwen3-30B-A3B, 48 layers (rented RTX A6000; experts4bit-qlora's receipt) | 2.52× (1.72× without it) | measured | `gnf4.kernel.dgrad-step.a6000.2026-08-06` |
 
 **Three things that limit those numbers, stated here rather than in a
 footnote:**
@@ -258,16 +259,18 @@ was wrong.
 - **The int4-b32 split-K planner takes the row count (0.31.0).**
   `_plan(N, K)` sized split-K from `N` alone, so at large `R` every expert
   projection ran a configuration chosen for a batch it was not in and paid
-  the partials reduce to do it. With `R` and the SM count threaded — the
-  NF4 sibling planner always had them — the 48-cell A2000 sweep goes from
-  1.136× to 1.011× of the per-cell optimum and is never slower than the
-  old rule on any cell (1.102× at `R = 16`, 1.145× at `R = 128`). `R < 16`
-  returns exactly the old plan, so B=1 decode — which calls at
-  `R = top_k` — and the licensed serve configuration are untouched by
-  construction. Gated to parts with ≤ 64 SMs after a 5090 step-level read
-  of 1.0064 (the constant does not transfer across SM classes); MXFP4
-  keeps the N-only plan on its own sweep
-  (`gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10`, measured).
+  the partials reduce to do it. `R` and the SM count are now threaded, as
+  the NF4 sibling planner always had them. `R < 16` returns exactly the old
+  plan, so B=1 decode — which calls at `R = top_k` — and the licensed serve
+  configuration are untouched by construction. The term's constant was
+  tuned by a 48-cell timing sweep on the A2000, and the row that carried
+  that sweep is retired
+  (`gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10`, retired 2026-10-05:
+  an A2000 timing; the A2000 is a correctness-only testbed), so the term's
+  gain is unverified on any target card. It stays gated to parts with ≤ 64
+  SMs after a 5090 step-level read of 1.0064 (the constant does not transfer
+  across SM classes) until a rented ≤ 64-SM read keeps it or gates it off;
+  MXFP4 keeps the N-only plan.
 - **K14 is refuted: at M=16 no shipped int4 arm beats dequant-then-GEMM
   on the attention projections.** On the 5090 the grouped int4 GEMM at
   its best swept configuration is 1.12–2.00× slower than the bf16 path

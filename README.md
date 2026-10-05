@@ -244,7 +244,8 @@ private audit tree, so you cannot check it from this repository.
 | Real OLMoE QLoRA finetune, fused vs per-expert loop, real prose | 4.50× (4090), 4.75× (H100) | confirmed | `gnf4.kernel.e2e-training-real-prose` |
 | vs Unsloth's own kernel, 4-bit-storage regime, decode | 1.70× (H100, their TMA live), 2.79× (4090) | confirmed | `gnf4.kernel.h2h-unsloth` |
 | vs `torch._grouped_mm` on bf16, Qwen3-30B cell (RTX 5090) | 2.1–6.0×, on half the bytes | measured | `gnf4.kernel.sm120-census-vs-grouped-mm` |
-| Training backward in one launch, E=256 step (A2000) | 403.7 → 26.5 ms | measured | `gnf4.kernel.dgrad` |
+| Training backward in one launch: its gradient against the exact per-expert loop (A2000, a correctness read) | ~0.0029 relative, inside the bf16 budget | measured | `gnf4.kernel.dgrad` |
+| Fused training step with that backward vs the per-expert loop, Qwen3-30B-A3B at 48 layers (rented RTX A6000; experts4bit-qlora's receipt) | 2.52× (1.72× without it) | measured | `gnf4.kernel.dgrad-step.a6000.2026-08-06` |
 | Single-stream decode anchor, Qwen3-30B-A3B on the 5090 class | 7.37 ms/step ±4.2% (≈130–142 tok/s) | measured | `gnf4.serve.decode-anchor-5090` |
 | Qwen3-235B-A22B from pinned host RAM on ≤16 GB VRAM | 4.3–4.4 tok/s, five pods; `t ≈ c_box + bytes/link` | confirmed | `gnf4.flagship.235b-phaseB` |
 | gpt-oss-120b served on its exact MXFP4 bytes | ppl 26.72 vs shipped reference 26.75; the NF4 requant tax deleted | confirmed | `gnf4.mxfp4.serve-tax-deleted` |
