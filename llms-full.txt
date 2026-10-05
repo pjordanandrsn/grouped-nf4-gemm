@@ -2579,6 +2579,7 @@ python scripts/check_readme_links.py               # README links are absolute; 
 python scripts/check_system_manifest.py            # docs/system-manifest.json vs pyproject, claims, capabilities; --sibling PATH for the pair
 python scripts/check_dependency_floor.py           # version statements in current docs vs pyproject and the manifest
 python scripts/check_change_impact.py --base origin/main   # docs/change-impact.json: the companions a diff is missing
+python scripts/changelog_fragments.py --check --base origin/main   # changelog.d/ fragments; Unreleased untouched; released history append-only
 python scripts/check_capabilities.py               # docs/capabilities.json vs schema, pyproject, source, claims
 python scripts/check_claims_register.py            # docs/claims.json against docs/claims-schema.md (one schema, the same file in both repositories); --sibling ../experts4bit-qlora
 python scripts/check_readme_claims.py              # README, STATUS and solution pages quote the register: ids exist, inactive ids say so, README/STATUS tables hold current values
@@ -2622,6 +2623,9 @@ asserting triton is importable so a skip is never silent.
 
 ## 8. When you change something (change-impact rules)
 
+**Changelog:** add `changelog.d/<pr-or-slug>.md` (your `### Title` and body); never edit `CHANGELOG.md`'s `## Unreleased` by hand.
+CI refuses entries there, and any edit to a released section without the `changelog-history-edit` label ([`changelog.d/README.md`](changelog.d/README.md)).
+
 The contract is [`docs/change-impact.json`](docs/change-impact.json);
 `python scripts/check_change_impact.py --base origin/main` names the companions
 a diff is missing, and CI runs it on every pull request. Classes:
@@ -2631,11 +2635,11 @@ a diff is missing, and CI runs it on every pull request. Classes:
   layout docs, capability entry, tests wired into CI, consumer integration,
   consumer floor if required (only after the release is tagged), model-level
   measurement, quality gate, claim registration, release notes. `docs/capabilities.json`
-  and `CHANGELOG.md` in the same diff (FAIL); `docs/KERNEL_CONTRACT.md` when a
+  and a `changelog.d/` fragment in the same diff (FAIL); `docs/KERNEL_CONTRACT.md` when a
   layout constant moved (WARN).
 - **public-api-change** (signature, layout, return, or the entry-point set):
   docstring, contract, README table, capabilities entry points, the affected
-  solution page, `CHANGELOG.md` under `## Unreleased` (FAIL), the consumer-side change.
+  solution page, a `changelog.d/` fragment (FAIL; it stands in for `CHANGELOG.md`), the consumer-side change.
 - **measured-result**: receipt → claim entry → `docs/STATUS.md` (FAIL without
   it; `--allow-claims-only` downgrades) → prose quoting the ID.
 - **dependency-floor**: a version bump needs `CHANGELOG.md` (FAIL); a

@@ -18,6 +18,16 @@ note, decides whether it is still current.
 
 Historical release notes are not rewritten to this shape.
 
+Between releases nobody edits `CHANGELOG.md`'s `## Unreleased`: each change adds
+`changelog.d/<pr-or-slug>.md` ([`changelog.d/README.md`](../changelog.d/README.md)).
+The release bumps `pyproject.toml`, then runs
+`python scripts/changelog_fragments.py --release "## <version> — <date> — <title>" --intro-file <opening>`,
+which writes the section below the `## Unreleased` pointer from the fragments
+(newest first, by the commit that added each) and deletes them; edit the section
+by hand in the release pull request if it needs it. A fragment still in
+`changelog.d/` at the commit you tag merged during the release pull request's
+CI, so it shipped in this tag: fold it into the section before tagging.
+
 Example opening:
 
 > **0.30.0.** Decode steps that run the int4-b32 or MXFP4 expert GEMVs spend
