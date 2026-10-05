@@ -60,6 +60,7 @@ the README's confirmatory section for how the kernel numbers were made.
 | [`RESULTS-ikllama-ab.md`](RESULTS-ikllama-ab.md) · anchored | the ik_llama same-box A/B, in band |
 | [`provenance/gptoss20b_expert_bytes.md`](provenance/gptoss20b_expert_bytes.md) · anchored, [`provenance/gptoss20b_expert_bytes.json`](provenance/gptoss20b_expert_bytes.json) · anchored | the "before" column: 144 expert-tensor hashes of gpt-oss-20b, as a table and as JSON (`provenance/hash_expert_bytes.py` writes both) |
 | [`artifacts/pypi-family-20260718/NOTES.md`](artifacts/pypi-family-20260718/NOTES.md) | the packaging gate log for that day's wheels |
+| [`audits/a2000-timing-2026-10-05.md`](audits/a2000-timing-2026-10-05.md) | dated audit of RTX A2000 timings presented as speed evidence (the A2000 is a correctness-only testbed): what was fixed, what is left for the owner, and every b/c line in the records. Record, unanchored. |
 
 ## Research record — the cold-engine programme (plans and syntheses)
 

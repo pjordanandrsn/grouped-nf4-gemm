@@ -977,26 +977,26 @@ _F32_PRECISIONS = ("tf32", "tf32x3", "ieee")
 def _f32_dot_precision() -> str:
     """``input_precision`` for the f32 SPLIT path's two dots.
 
-    ``tf32`` is the default and the shipped behaviour. The measured
-    trade on the card where this path is the serving default (RTX
-    A2000, sm_86, torch 2.8.0+cu128 / triton 3.4.0, B=25 T=4096
-    H=32/8 D=128, ``kernel/RESULTS-319-f32-precision.md``):
+    ``tf32`` is the default and the shipped behaviour. The errors on the
+    card where this path is the serving default (RTX A2000, sm_86, torch
+    2.8.0+cu128 / triton 3.4.0, B=25 T=4096 H=32/8 D=128,
+    ``kernel/RESULTS-319-f32-precision.md``):
 
-    ========  ====================  ==========  =========
-    mode      worst split abs err   KV GB/s     vs tf32
-    ========  ====================  ==========  =========
-    tf32      0.015625 (1 bf16 ULP) 77.9        1.00x
-    tf32x3    0.000000              39.5        0.51x
-    ieee      0.000000               4.5        0.06x
-    ========  ====================  ==========  =========
+    ========  ====================
+    mode      worst split abs err
+    ========  ====================
+    tf32      0.015625 (1 bf16 ULP)
+    tf32x3    0.000000
+    ieee      0.000000
+    ========  ====================
 
-    So exactness is available and it is not free: ``tf32x3`` costs 49%
-    of the path's throughput and ``ieee`` costs 94% -- the latter lands
-    *below* the 4.8 GB/s occupancy-starved first version this kernel
-    was written to replace, which is why gnf4#319's suggested remedy
-    ("pin ``input_precision='ieee'``") is not one. In the emitted PTX
-    ``ieee`` carries no ``mma.sync`` at all, only 1045 ``fma.rn.f32``:
-    it leaves the tensor cores entirely.
+    So exactness is available and it is not free: ``tf32x3`` runs three
+    tf32 dots per product, and in the emitted PTX ``ieee`` carries no
+    ``mma.sync`` at all, only 1045 ``fma.rn.f32``: it leaves the tensor
+    cores entirely, which is why gnf4#319's suggested remedy ("pin
+    ``input_precision='ieee'``") is not one. Their throughput cost was
+    timed only on the A2000, a correctness-only testbed, so no figure is
+    quoted here.
 
     An unrecognised value RAISES rather than falling back: a typo'd
     mode that silently ran tf32 would be recorded as an exact arm.

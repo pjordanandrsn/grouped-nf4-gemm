@@ -249,18 +249,19 @@ def _gemv_int4_b32(xq_ptr, xs_ptr, w_ptr, ws_ptr, eid_ptr, part_ptr,
 # Blocks we want resident before split-K stops earning its reduce. The
 # sibling NF4 decode planner (nf4_grouped._decode_plan) spends the same
 # quantity as 4 * sm_count at BLOCK_N=64; this kernel's blocks are twice
-# as wide, and 8 * sm_count is what measured best here -- see _plan.
+# as wide, and 8 * sm_count is what an RTX A2000 timing sweep picked -- see
+# _plan for why that sweep is not speed evidence.
 SPLITK_TARGET_BLOCKS_PER_SM = 8
 
 # Row count below which the planner does not touch sk at all. B=1 decode
 # calls the grouped GEMV with R = top_k -- 4 to 8 for every MoE shipped
-# here, never 16 -- and that config is the licensed serve config. The
-# measured win below R=16 is <=1.05x, which is not worth moving it. At
-# R >= 16 the caller is batched decode (B*top_k rows), which is what
+# here, never 16 -- and that config is the licensed serve config, which
+# the floor leaves untouched by construction. At R >= 16 the caller is batched decode (B*top_k rows), which is what
 # this term is for. See _plan.
 SPLITK_R_FLOOR = 16
 
-# The R term is applied only on parts within the SM class it was measured on. P39 box 1
+# The R term is applied only on parts within the SM class its constant was swept on (the RTX A2000's 26 SMs; a timing sweep on
+# a correctness-only testbed, so the term's gain on any <= 64-SM target card is unverified -- see _plan). P39 box 1
 # (RTX 5090, 128 SMs, sm_120) ran the R-aware plan against the N-only one on a single
 # artifact-pinned pack at B=16 and read NEW/OLD = 1.0064 / 1.0063 (self-pair spread 0.0005):
 # no step-level gain and a small real regression -- on 128 SMs the rule collapses sk to 1 at
@@ -316,16 +317,14 @@ def _plan(N: int, K: int, R: int = 1, sm_count: int = 128):
     R >= 16 means batched decode (B*top_k rows), which is the regime
     this term is for.
 
-    Measured (A2000, sm_86, 26 SMs, graph replay, 48 cells over the
-    qwen3_moe/granitemoe/olmoe gate_up+down shapes, R = 1..128, full
-    cost including the reduce -- bench/int4/RESULTS-sk-r-sweep.md): the
-    N-only rule costs 1.136x the per-cell optimum; with R threaded and
-    the floor applied, 1.011x, and it is never SLOWER than the N-only
-    rule on any of the 48 cells. The win rises with R -- nothing below
-    the floor, 1.102x at R = 16, 1.145x at R = 128 summed over the six
-    shapes, and up to 1.305x on a single shape (qwen3_moe down at
-    R = 128) where sk collapses to 1 and the reduce is not launched at
-    all.
+    Tuned by a 48-cell timing sweep on the RTX A2000 (sm_86, 26 SMs,
+    graph replay, the qwen3_moe/granitemoe/olmoe gate_up+down shapes,
+    R = 1..128 -- bench/int4/RESULTS-sk-r-sweep.md). The A2000 is a
+    correctness-only testbed, so that sweep's ratios are not speed
+    evidence: the term's gain is UNVERIFIED on any target card, including
+    the <= 64-SM parts it is gated to. What holds by construction is that
+    R < 16 returns exactly the N-only plan, and that the plan only moves
+    sk, so outputs stay within the split-K reorder class (CAVEAT below).
 
     CAVEAT, and it is the reason the constant is named rather than
     inlined: sm_count enters the config, so two boxes with different SM
@@ -334,10 +333,12 @@ def _plan(N: int, K: int, R: int = 1, sm_count: int = 128):
     existing bargain, not a new one -- but it is a bargain, and anything
     asserting bitwise equality ACROSS boxes must pin sk rather than
     plan it. Within a box the plan is a pure function of (N, K, R).
-    SPLITK_TARGET_BLOCKS_PER_SM is measured on sm_86 only, and P39 showed
-    it does NOT transfer to sm_120 (128 SMs: B=16 step 0.6% slower); the
-    term is therefore gated to sm_count <= SPLITK_R_TERM_MAX_SMS until a
-    sweep on the larger class sets its own target
+    SPLITK_TARGET_BLOCKS_PER_SM was set on sm_86 only, and P39's RTX 5090
+    step read showed it does NOT transfer to sm_120 (128 SMs: B=16 step
+    0.6% slower); the term is therefore gated to sm_count <=
+    SPLITK_R_TERM_MAX_SMS until a sweep on the larger class sets its own
+    target. That gate keeps the term on for <= 64-SM parts on the A2000
+    sweep alone; a rented <= 64-SM read is open
     (bench/int4/sk_sweep.py; P39 receipts in experts4bit-qlora#533)."""
     kb = K // 32
     ku = 4 if kb % 4 == 0 else (2 if kb % 2 == 0 else 1)

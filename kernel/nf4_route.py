@@ -127,7 +127,7 @@ _CAPABILITY: dict = {}
 
 def _capability(dev):
     """``torch.cuda.get_device_capability(dev)``; unless GNF4_TRITON_PREBIND=0 read once per indexed device (a constant of the card,
-    and 7-11 us a call on an RTX A2000 host, paid twice per projection)."""
+    otherwise queried twice per projection)."""
     if not _PREBIND or getattr(dev, "index", None) is None:
         return torch.cuda.get_device_capability(dev)
     cap = _CAPABILITY.get(dev)
@@ -264,8 +264,8 @@ def dense_forward(a_cat, B, absmax, sizes, expert_ids):
     """``gemm_4bit_grouped``'s contract (``a_cat [T, K]`` group-sorted, returns ``[T, N]`` bf16) as a per-expert loop: each present
     expert is dequantized alone (:func:`dequant_groups` on one id, bit-equal to ``dequant_ref`` in bf16) and multiplied with ``torch.mm``.
     One expert's bf16 weight is the only transient (Mixtral's gate_up: 235 MB), and any CUDA card runs it. Not bit-identical to the
-    fused kernel (cuBLAS's accumulation order). Measured on an RTX A2000: 3.4x the fused forward at Mixtral-8x7B's shapes with 1,024
-    rows per expert, 1.7x at Qwen3-30B-A3B's with 256; the fused kernel wins at Qwen3's down projection with 64 rows."""
+    fused kernel (cuBLAS's accumulation order). Its speed against the fused kernel depends on rows per expert and is not quoted
+    here: the RTX A2000 that timed it is a correctness-only testbed."""
     dev = a_cat.device
     if dev.type != "cuda":
         raise RuntimeError("GNF4_TRAIN_GEMM=dense needs a CUDA device")
@@ -286,7 +286,7 @@ def dense_forward(a_cat, B, absmax, sizes, expert_ids):
 
 def dense_dgrad(grad_out, B, absmax, sizes, expert_ids):
     """``dgrad_4bit_grouped``'s contract (``grad_out [T, N]``, returns ``grad_a [T, K]`` bf16) as :func:`dense_forward`'s per-expert loop:
-    ``grad_out_g @ W_g``. Measured on an RTX A2000: 7.7x the fused dgrad at Mixtral's gate_up shape, 4.6x at Qwen3-30B-A3B's."""
+    ``grad_out_g @ W_g``."""
     dev = grad_out.device
     if dev.type != "cuda":
         raise RuntimeError("GNF4_TRAIN_GEMM=dense needs a CUDA device")

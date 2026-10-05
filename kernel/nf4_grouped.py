@@ -419,8 +419,7 @@ _RINGS: dict = {}
 # Host-reuse memo for `to_device_i32` (on by default since TC1 amendment 20; GNF4_HOST_REUSE=0 turns it off). A fused MoE training layer pass uploads the SAME host
 # integers several times: the gate_up and down GEMMs each upload `expert_ids`, the two LoRA deltas each upload
 # (rows, ids), and the dgrad kernels upload `expert_ids` again in backward: 8 uploads per layer forward + backward,
-# 4 of them repeats (a cProfile of one Qwen3-30B-A3B-shaped layer on an RTX A2000 host: ~170 us a call, 5 per
-# forward). This memo returns the device tensor an identical earlier upload produced. Identical VALUES by
+# 4 of them repeats. This memo returns the device tensor an identical earlier upload produced. Identical VALUES by
 # construction (the key is the uploaded integers themselves); the key also carries the device and the current
 # stream, so a consumer on another stream never sees a tensor whose copy it has no dependency on. Never consulted or
 # filled under capture (a captured graph must own its staging -- see _PinnedIndexArena), and callers must not
@@ -434,8 +433,8 @@ HOST_REUSE_STATS = {"upload_hits": 0, "upload_misses": 0, "plan_hits": 0, "plan_
 class _ValueMemo:
     """A few recent results keyed on HOST INT LISTS compared by value, plus a hashable context (device, stream, ...).
 
-    The memos above key on ``tuple(int(v) for v in ...)``: one ``int()`` per element and a tuple hash on every call -- 20-40 us of
-    host time per 128-group call on an RTX A2000 host, paid by every training GEMM. Here a lookup is one C-level list ``==`` per
+    The memos above key on ``tuple(int(v) for v in ...)``: one ``int()`` per element and a tuple hash on every call, paid by every
+    training GEMM. Here a lookup is one C-level list ``==`` per
     entry. Only an all-``int`` snapshot is stored, so a caller's elements compare by numeric value against plain ints: a hit means
     ``int(v)`` equals the stored value for every element (a float or a 0-dim tensor compares by value too), so the result is the
     one the full path would build. Used unless GNF4_TRITON_PREBIND=0."""
@@ -1203,9 +1202,10 @@ SPLITK_MIN_BLOCKS = 32
 def _decode_plan(N: int, K: int, T: int, sm_count: int):
     """Decode launch plan: (BLOCK_N, num_warps, split_k).
 
-    Config is the universal constant (64, 2) — dense 2-device (N, K, T)
-    sweeps put it at median regret 1.000 on both grids
-    (bench/phase2/sweeps/); the v3 confirmatory showed the v2-era A2000
+    Config is the universal constant (64, 2) — a dense (N, K, T) sweep on an
+    RTX A5000 put it at median regret 1.000 (bench/phase2/sweeps/; the RTX
+    A2000 grid beside it is not speed evidence, the A2000 being a
+    correctness-only testbed); the v3 confirmatory showed the v2-era A2000
     preference for 128/4 did not reproduce (config deltas on the 26-SM card
     are run-context noise), so the SM-conditional branch is reverted.
 
@@ -1355,11 +1355,10 @@ def _prefill_block_m(max_rows: int) -> int:
     return 128
 
 
-#: Per-tile overhead of the M-tile path in row-equivalents for the ``cost`` rule below. Fitted on an RTX A2000 (sm_86) at
-#: Qwen3-30B-A3B's expert shapes over 42 routed batches (16-4096 tokens x top-8 over 128 experts, three router skews): every
-#: config's time is ``tiles x (a + b x BLOCK_M)`` to R^2 0.998, with ``a / b`` = 118 rows (gate_up) and 109 (down). The
-#: rule's regret is flat for D in 64..128 there (geomean 1.021-1.027); 96 sits in the middle. ``GNF4_PREFILL_TILE_D``
-#: overrides it.
+#: Per-tile overhead of the M-tile path in row-equivalents for the ``cost`` rule below. 96 comes from a timing fit on an RTX
+#: A2000 (sm_86) at Qwen3-30B-A3B's expert shapes over 42 routed batches. The A2000 is a correctness-only testbed, so that
+#: fit is not speed evidence and D is not tuned on any target card: the rule's default rests on experts4bit-qlora TC1
+#: amendment 14's RTX 5090 step read, taken at D = 96 (below). ``GNF4_PREFILL_TILE_D`` overrides it.
 _TILE_D_DEFAULT = 96.0
 #: M-tile heights the prefill path actually launched, after ``prefill_fit`` (ints only -- consumers cast). Lets a training
 #: census say which rule served a step: under ``cost`` at training-sized batches the 128 count stops dominating.
@@ -1371,8 +1370,7 @@ def _prefill_tile_rule() -> str:
     ``tiles x (D + BLOCK_M)`` over the actual group sizes. ``max`` (``GNF4_PREFILL_TILE_RULE=max``, the previous default):
     the M-tile height keyed on the LARGEST group, :func:`_prefill_block_m`, which lets one hot expert put every group on
     128-row tiles. Measured on an RTX 5090 at Qwen3-30B-A3B's field recipe (``tc1-5090-43``): ``cost`` steps the fused
-    training step at 0.924 (shipped) / 0.968 (matched) of ``max``, outputs identical. On an RTX A2000's 42-batch sweep
-    ``cost`` / ``max`` ran 0.604-1.019 per batch, median 0.956."""
+    training step at 0.924 (shipped) / 0.968 (matched) of ``max``, outputs identical."""
     v = os.environ.get("GNF4_PREFILL_TILE_RULE", "cost").strip().lower()
     if v not in ("max", "cost"):
         raise ValueError(f"GNF4_PREFILL_TILE_RULE={v!r}: expected max | cost")
@@ -1794,11 +1792,11 @@ def _dgrad_nf4_grouped(
 # GNF4_TRITON_PREBIND (on unless =0): the dgrad launch without Triton's per-call argument binding (_triton_shim.prebind)
 _dgrad_nf4_grouped_launch = prebind(_dgrad_nf4_grouped)
 
-# Measured on an RTX A2000 by sweeping (BLOCK_M, BLOCK_N, BLOCK_K, num_warps) over
-# the E=256 gate_up shape (N=1536, K=512, T_cat=4096): this config ran 3.29 ms,
-# 0.91x of the FORWARD kernel's time on the same problem — i.e. dgrad reaches the
-# forward's ceiling rather than landing above it. Every config in the sweep
-# produced bit-identical output, so this is a speed choice, not a fidelity one.
+# Chosen by a (BLOCK_M, BLOCK_N, BLOCK_K, num_warps) timing sweep on an RTX A2000
+# over the E=256 gate_up shape (N=1536, K=512, T_cat=4096). The A2000 is a
+# correctness-only testbed, so this config is not tuned on any target card. Every
+# config in the sweep produced bit-identical output, so this is a speed choice,
+# not a fidelity one: a re-sweep on a rented card can change speed, never results.
 _DGRAD_DEFAULT = (32, 64, 64, 2)  # BLOCK_M, BLOCK_N, BLOCK_K, num_warps
 
 

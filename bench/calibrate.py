@@ -227,8 +227,7 @@ def gpu_benches(quick=False):
         # is the DMA engine's sustained rate; this is what a kernel that reads
         # host rows one layer at a time actually gets: experts4bit-qlora lane
         # P66 measured the pipelined gather at this rate on a gen 4 x16 RTX
-        # 5090 (14.44 GB/s implied vs 14.72 probed vs 23.07 back-to-back) and
-        # at the back-to-back rate on a gen 3 x8 A2000 where the two agree.
+        # 5090 (14.44 GB/s implied vs 14.72 probed vs 23.07 back-to-back).
         # cold_deadline.Costs.from_blob reads both and carries their ratio as
         # link_eff (grouped-nf4-gemm#400); schema gnf4-hybrid-calib/2.
         try:
