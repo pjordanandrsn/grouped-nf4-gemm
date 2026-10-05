@@ -1124,6 +1124,30 @@
     "docs/STATUS.md"
    ],
    "notes": "Lanes k30-prove-1 ($0.009) and k30-l4-1 ($0.030), teardown proven; receipts in adertha-receipts (c719ea31). Gates before timing: 138 compiled GEMV/reduce/plan tests, every swept sk within the fp32 reorder class of sk = 1, the rule self-test 8/8, the installed _plan cross-checked on all 48 cells. Post hoc and not claimed: by R the ratio is 0.9710 / 0.8980 / 0.9627 / 1.0543 at R = 16 / 32 / 64 / 128, so a capped term might win on <=64-SM parts -- a new registration, not a re-read. The registered prediction (KEEP, driven by R >= 64) is refuted. The RTX A4000 second card was not rented: an L4 OFF decides the lane (Amendment 2). The retired A2000 row gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10 is not superseded by this one: this row measures the opposite."
+  },
+  {
+   "id": "gnf4.kernel.k32-splitk-r-term.a4000.2026-10-05",
+   "area": "kernel",
+   "claim": "K32 (pre-registered 2026-10-05, #484): on one rented RTX A4000 (48 SMs, sm_86), K30's instrument and rule read int4_b32._plan's split-K R term OFF by its worst cell -- over the 24 cells at R >= 16 of the 48-cell sk_sweep.py grid (the served two-launch path, CUDA-graph replay, two passes) the R-aware pick's summed time is 0.9396x the N-only pick's (pass 1 0.9393, pass 2 0.9399), inside KEEP's S <= 0.97, but its worst cell is 1.0965x (olmoe down at R = 16), outside KEEP's W <= 1.02. It wins 18 of 24 cells; five of its six losses are at R = 16. With K30's L4 OFF, the R term's OFF stands on both <=64-SM architectures read (sm_89 and sm_86). Kernel level only.",
+   "value": 1.0965,
+   "unit": "worst cell, R-aware pick / N-only pick, over the 24 cells at R >= 16 pooled over two passes (KEEP needed <= 1.02); summed-time ratio S = 0.9396 (KEEP needed <= 0.97)",
+   "status": "measured",
+   "hardware": "RTX A4000 (sm_86, 48 SMs, 140 W power limit, driver 535.154.05), torch 2.8.0+cu128 / triton 3.4.0, rented Vast verified/secure host (machine 19242, AMD Athlon 3000G)",
+   "conditions": "grouped-nf4-gemm aa562718 (K30's measured cut; kernel/ and bench/int4/ byte-identical to main's ccf4de91), runner experts4bit-qlora 298224fd (bench/k30/, K30_CARD=A4000); E = 128 synthetic int4-b32 experts; 60 graph replays after 12 warm-ups per (R, sk); one shape per process; two passes back to back",
+   "measured_on": "2026-10-05",
+   "evidence": [
+    "kernel/RESULTS-k32-splitk-r-term-a4000.md",
+    "kernel/PREREG-k32-splitk-r-term-a4000.md",
+    "kernel/receipts-k32/a4000/k30_verdict.json",
+    "kernel/receipts-k32/a4000/summary.txt",
+    "kernel/receipts-k32/a4000/forensics.txt",
+    "bench/int4/k30_reduce.py",
+    "bench/int4/sk_sweep.py"
+   ],
+   "quoted_in": [
+    "docs/STATUS.md"
+   ],
+   "notes": "Lane k32-a4000-1 cost $0.016, teardown proven; receipt in adertha-receipts (aafc263b). Gates before timing: 138 compiled GEMV/reduce/plan tests, every swept sk within the fp32 reorder class of sk = 1, the rule self-test 8/8, the installed _plan cross-checked on all 48 cells at 48 SMs. Registered consequence: none -- the lane could not change the default (K30 OFF, KEEP needs both; #482 plans N-only on every part). Registered expectation OFF held, but for a different reason than predicted: the large R = 64-128 cells that decided the L4 are wins here, and the losses are at R = 16. Post hoc and not claimed: by R the ratio is 1.0272 / 0.9680 / 0.9535 / 0.9144 at R = 16 / 32 / 64 / 128, the opposite pattern to the L4's (gnf4.kernel.k30-splitk-r-term.l4.2026-10-05)."
   }
  ]
 }

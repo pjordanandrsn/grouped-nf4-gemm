@@ -1,0 +1,9 @@
+## granitemoe gate_up  N=1024 K=1536  plan sk=12 (cap 12), tiles=8, NVIDIA RTX A4000 48 SMs
+   R=   1 | sk1=19.4 sk2=11.5 sk3=9.0 sk4=7.9 sk6=7.1 sk8=7.3 sk12=6.7 us | BEST sk=12  = plan
+   R=   2 | sk1=19.5 sk2=11.6 sk3=9.1 sk4=9.0 sk6=8.0 sk8=8.1 sk12=8.1 us | BEST sk=6  (plan sk=12 costs x1.015)
+   R=   4 | sk1=19.5 sk2=13.8 sk3=10.7 sk4=11.4 sk6=10.6 sk8=10.9 sk12=11.1 us | BEST sk=6  (plan sk=12 costs x1.048)
+   R=   8 | sk1=33.5 sk2=24.6 sk3=23.6 sk4=30.5 sk6=25.6 sk8=27.3 sk12=25.9 us | BEST sk=3  (plan sk=12 costs x1.095)
+   R=  16 | sk1=44.1 sk2=54.1 sk3=45.7 sk4=48.4 sk6=47.3 sk8=47.7 sk12=45.3 us | BEST sk=1  (plan sk=12 costs x1.028)
+   R=  32 | sk1=115.7 sk2=105.5 sk3=102.4 sk4=102.3 sk6=103.4 sk8=104.4 sk12=107.3 us | BEST sk=4  (plan sk=12 costs x1.048)
+   R=  64 | sk1=196.2 sk2=188.1 sk3=186.7 sk4=189.5 sk6=189.3 sk8=190.7 sk12=196.6 us | BEST sk=3  (plan sk=12 costs x1.053)
+   R= 128 | sk1=362.6 sk2=358.6 sk3=363.3 sk4=367.2 sk6=366.2 sk8=370.3 sk12=384.6 us | BEST sk=2  (plan sk=12 costs x1.072)

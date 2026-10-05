@@ -1,0 +1,5 @@
+gnf4 0.41.0 @aa562718b9eadceeab746f0fb8d07462e23c2b28
+int4_b32 from /opt/conda/lib/python3.11/site-packages/int4_b32.py
+torch 2.8.0+cu128
+triton 3.4.0
+SPLITK_R_TERM_MAX_SMS 64 SPLITK_R_FLOOR 16 SPLITK_TARGET_BLOCKS_PER_SM 8
