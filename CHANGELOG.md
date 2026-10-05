@@ -1,6 +1,21 @@
 # Changelog
 
-## Unreleased
+## 0.41.0 — 2026-10-05 — GNF4_TRITON_PREBIND on by default (experts4bit-qlora TC1 amendments 26/30: Qwen3-30B-A3B training step 0.973 matched / 0.980 shipped on an RTX 5090, bit-identical); prebound launches cover triton 3.7
+
+**0.41.0.** One default changes, by a rule registered and read in experts4bit-qlora (TC1 amendments 26 and 30):
+`GNF4_TRITON_PREBIND` is on.
+
+- **Prebound launches are the default.** The training GEMMs (the fused forward's M-tile, the dgrad, and the route's
+  dequant) launch without Triton's per-call argument binding. They run the same compiled kernels, so outputs are
+  bit-identical.
+  - On an RTX 5090, with e4b's own `E4B_TRITON_PREBIND` on alongside, Qwen3-30B-A3B's training step was **0.973×** on
+    the matched arm and **0.980×** [0.957, 1.003] on the shipped arm, with held-out loss unchanged.
+  - P53, P54 and P55 HELD (`e4b.train.prebind.qwen3.5090.2026-10-05`). The gain is small, and the shipped interval
+    reaches 1.0.
+  - `GNF4_TRITON_PREBIND=0` restores Triton's own launch.
+- **Triton 3.7 is covered** (#471), alongside 3.4 and 3.6. Any other Triton release keeps Triton's own launch, as do
+  launch hooks, callable grids and changed globals.
+- `docs/system-manifest.json` is unchanged.
 
 ### The training GEMMs' prebound launches (`GNF4_TRITON_PREBIND`) cover triton 3.7
 
