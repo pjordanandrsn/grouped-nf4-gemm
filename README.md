@@ -227,7 +227,9 @@ expert-stack matmul cheap; e4b decides which bytes are where.
 Which training kernel route a device gets (the fused kernels, or the dequantise + `torch._grouped_mm` route on compute
 capability 9.0) can be asked without the device: `nf4_route.route_for(capability, has_grouped_mm=..., n_groups=...)` returns the
 route and the reason (per call: off sm_90, `auto` is `dense` for 1 to 16 present groups), or `None` with the reason below
-the sm_80 floor.
+the sm_80 floor. `GNF4_TRAIN_GEMM=decoded` (`nf4_route.decoded_forward` / `decoded_dgrad`) is opt-in only, never `auto`:
+per chunk of present groups, `dequant_groups` plus one grouped bf16 GEMM launch, the chunk's decode capped by
+`GNF4_DECODED_MAX_BYTES` (default 256 MiB). No speed is claimed for it.
 
 ## What is measured
 

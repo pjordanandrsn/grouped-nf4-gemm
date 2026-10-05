@@ -236,7 +236,9 @@ expert-stack matmul cheap; e4b decides which bytes are where.
 Which training kernel route a device gets (the fused kernels, or the dequantise + `torch._grouped_mm` route on compute
 capability 9.0) can be asked without the device: `nf4_route.route_for(capability, has_grouped_mm=..., n_groups=...)` returns the
 route and the reason (per call: off sm_90, `auto` is `dense` for 1 to 16 present groups), or `None` with the reason below
-the sm_80 floor.
+the sm_80 floor. `GNF4_TRAIN_GEMM=decoded` (`nf4_route.decoded_forward` / `decoded_dgrad`) is opt-in only, never `auto`:
+per chunk of present groups, `dequant_groups` plus one grouped bf16 GEMM launch, the chunk's decode capped by
+`GNF4_DECODED_MAX_BYTES` (default 256 MiB). No speed is claimed for it.
 
 ## Source: docs/SOLUTIONS.md (https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/SOLUTIONS.md)
 
@@ -1220,7 +1222,9 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
     "nf4_route:route_for",
     "nf4_route:dequant_groups",
     "nf4_route:dense_forward",
-    "nf4_route:dense_dgrad"
+    "nf4_route:dense_dgrad",
+    "nf4_route:decoded_forward",
+    "nf4_route:decoded_dgrad"
    ],
    "documentation": [
     "docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md",
@@ -1242,6 +1246,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
     "Loses to a CUDA-graphed per-expert baseline at some decode shapes (claim gnf4.kernel.graphed-baseline-decode-loses); shapes below the dispatch floor belong to the dequant path: nf4_grouped.decode_dispatch says so and the caller routes them there, while the op itself always runs fused (docs/STATUS.md)",
     "CUDA + Triton only; calling the kernel on CPU raises and names dequant_ref",
     "The grouped_mm training route needs compute capability 9.0 (torch 2.8's torch._grouped_mm target): GNF4_TRAIN_GEMM=auto takes it only there, and GNF4_TRAIN_GEMM=grouped_mm refuses elsewhere with the reason; it is not bit-identical to the fused kernels.",
+    "The decoded training route (GNF4_TRAIN_GEMM=decoded: dequant_groups + one grouped bf16 GEMM launch per chunk of groups, the chunk's decode transient capped by GNF4_DECODED_MAX_BYTES, default 256 MiB) is opt-in only: GNF4_TRAIN_GEMM=auto never takes it. It is not bit-identical to the fused kernels or the dense route, and no speed is claimed for it: whether it shortens a training step is experts4bit-qlora's TC1 full-step A/B, registered separately.",
     "The fidelity claim is measured against fp32 accumulation on NVIDIA tensor cores; other backends must re-measure (docs/PORTABILITY.md)",
     "Every speed figure is per card -- the census is sm_86, the head-to-head and the real-finetune cells are RTX 4090 / H100, the torch._grouped_mm cell is RTX 5090 -- and none is an architecture-wide statement; the registered comparator is this repository's own per-expert dequantize-then-GEMM loop, and no registered cell times bitsandbytes' own packed 2-D inference forward (0.50.0 and later)"
    ],
@@ -2476,7 +2481,9 @@ capability where `GNF4_TRAIN_GEMM=auto` takes the dequantise + `torch._grouped_m
 has_grouped_mm, requested, n_groups)` is the decision itself, a pure function (off sm_90, `auto` is `dense` for a call
 with 1 to `DENSE_AUTO_MAX_GROUPS` present groups); `train_gemm_route` resolves a live device through it.
 Below the floor `route_for` answers `None` with the reason. The launch path did not change: nothing refuses on the floor
-at launch time.
+at launch time. `GNF4_TRAIN_GEMM=decoded` is opt-in only (`auto` never answers it): per chunk of present groups, one
+`dequant_groups` launch and one grouped bf16 GEMM launch, the chunk's bf16 decode capped at `GNF4_DECODED_MAX_BYTES`
+(default `DECODED_MAX_BYTES_DEFAULT` = 256 MiB, at least one expert per chunk; `decoded_chunks` is the plan as a pure function).
 
 ## Fallback contract
 
