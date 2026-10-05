@@ -192,7 +192,7 @@ jobs:
         run: cd bench/phase1 && python -m pytest test_plan_modes.py -q
 
       - name: packaging allowlist + test-wiring guard + the register/prose checkers' own tests
-        run: cd kernel && python -m pytest test_packaging_covers_kernel.py test_check_readme_links.py test_check_scripts.py test_check_claims_register.py test_check_readme_claims.py test_check_shared_tooling.py test_check_capabilities_role.py -q
+        run: cd kernel && python -m pytest test_packaging_covers_kernel.py test_check_readme_links.py test_check_scripts.py test_check_claims_register.py test_check_readme_claims.py test_check_shared_tooling.py test_check_capabilities_role.py test_changelog_fragments.py -q
 
   wheel-smoke:
     if: ${{ github.event_name != 'pull_request' || github.event.action == 'ready_for_review' || github.event.label.name == 'ready-to-merge' }}
@@ -260,6 +260,18 @@ jobs:
         run: python scripts/check_system_manifest.py --require-tags
       - name: version statements in the current docs agree with pyproject and the manifest's current record
         run: python scripts/check_dependency_floor.py
+      - name: CHANGELOG (Unreleased is changelog.d/ fragments, one file per change; released history is append-only against the merge base unless the PR carries the changelog-history-edit label)
+        # Pull requests compare against the merge base (the full-history
+        # checkout above has it); a push to main checks the fragments and
+        # the pointer only. The label is for a deliberate correction to a
+        # released section, never for adding an entry.
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HISTORY_EDIT: ${{ contains(github.event.pull_request.labels.*.name, 'changelog-history-edit') }}
+        run: |
+          ARGS=(--check --base "$BASE")
+          if [ "$HISTORY_EDIT" = "true" ]; then ARGS+=(--allow-history-edit); fi
+          python scripts/changelog_fragments.py "${ARGS[@]}"
       - name: change-impact contract on pull requests (the companions this diff is missing)
         if: github.event_name == 'pull_request'
         run: python scripts/check_change_impact.py --base ${{ github.event.pull_request.base.sha }}
