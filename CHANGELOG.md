@@ -1,5 +1,75 @@
 # Changelog
 
+## Unreleased
+
+### `NF4_QLORA_COMPACT_DELTA=1`: the compact delta's backward frees each intermediate at its last use (opt-in; default unchanged)
+
+- **Why.** experts4bit-qlora's TC1 amendment 36 measured the flag on an RTX 5090 (box `tc1-5090-80`, whole-layer gradient
+  checkpointing). Both arms stepped faster, but the matched arm's peak (fp32 adapters) rose 27.49 → 27.72 GB, **+0.23 GB**; the
+  shipped arm's (bf16 adapters) was unchanged. The registration had predicted a lower peak.
+  - `_CompactPaddedDelta.backward` held every intermediate until it returned. The padded output grad `gd` `[G, W, N]` was still
+    live while the block `x` and its grad `gx` (both `[G, W, K]`) were rebuilt and computed. The autograd path frees its `gd`
+    before `gx` exists.
+- **What.** The backward drops (`del`) each intermediate after its last use:
+  - the gathered `B` after `gh`, and `gd` after `gBt`;
+  - the gathered `A` after `gx`, and `x` and `gh` after `gAt`;
+  - `gx` once `grad_a` is gathered (before its dtype cast), and `gAt` and `gBt` once the adapter grads are scattered.
+
+  Every op, operand layout and dtype, and the order of the calls, are unchanged. The incoming grad stays held by autograd until
+  the node returns, so it is not dropped.
+- **Values.** Forward and every gradient stay `torch.equal` to the autograd path, in the existing grid and at every cell below.
+- **Measured on an RTX A2000** (torch 2.8.0+cu128, host load average 12–20, the bench at nice 10). One `lora_delta_grouped` call
+  per cell: 128 experts, top-8, r=16, gate_up K=2048 → N=1536 and down K=768 → N=2048, bf16 activations, `GNF4_HOST_REUSE` on.
+  The router has the skew of `bench/host-reuse/` (logits `randn + linspace(1.5, -1.5)` over the experts). Peaks are
+  `max_memory_allocated` above what was allocated before the forward, in MiB, and were identical in two runs.
+
+  | projection, tokens, adapters | G × widest | backward peak: autograd / compact before / compact after | forward + backward peak |
+  |---|---|---|---|
+  | gate_up, 380, fp32 | 106 × 112 | 264.2 / 360.6 / **227.9** | 264.2 / 360.6 / **227.9** |
+  | down, 380, fp32 | 106 × 112 | 193.1 / 250.4 / **136.2** | 193.1 / 250.4 / **170.2** |
+  | gate_up, 380, bf16 | 106 × 112 | 120.2 / 186.2 / **114.0** | 120.2 / 186.2 / **114.0** |
+  | down, 380, bf16 | 106 × 112 | 92.1 / 127.4 / **68.1** | 92.1 / 127.4 / **85.1** |
+  | gate_up, 1100, fp32 | 114 × 312 | 717.4 / 973.1 / **636.6** | 717.4 / 973.1 / **636.6** |
+  | down, 1100, fp32 | 114 × 312 | 514.8 / 637.2 / **370.6** | 514.8 / 637.2 / **472.6** |
+  | gate_up, 1100, bf16 | 114 × 312 | 324.3 / 483.3 / **318.3** | 324.3 / 483.3 / **318.3** |
+  | down, 1100, bf16 | 114 × 312 | 244.5 / 323.2 / **185.3** | 244.5 / 323.2 / **236.3** |
+
+  - **Before**, the compact backward peaked 24–55 % above the autograd path's, with every intermediate live at once at the return.
+    **After**, it is 2–30 % below in every cell.
+  - **Where the peak now sits.** For gate_up it is `x` and `gx` together, the same two blocks the autograd path holds in that
+    bmm's backward (read with `torch.cuda.memory._record_memory_history`). For down it is `gd` with the gathered adapters, and the
+    forward's peak is the higher one.
+  - **A harsher router.** With one expert taking every token (G = 128, widest = tokens), compact after is also at or below the
+    autograd path in all eight cells. The closest is gate_up, bf16, 1,100 tokens: 1,152.1 / 1,623.2 / 1,148.4 MiB.
+  - **Time is unchanged by this patch.** The figures are medians of 200 interleaved repetitions; each cell shows two runs as
+    "run 1, run 2", in ms per call, timed from an idle GPU.
+
+    | projection, tokens, adapters | host fwd, before → after | host bwd | device fwd | device bwd | device bwd, autograd |
+    |---|---|---|---|---|---|
+    | gate_up, 380, fp32 | 0.64, 0.48 → 0.64, 0.48 | 0.89, 0.67 → 0.85, 0.66 | 3.01, 2.96 → 3.01, 2.96 | 5.42, 5.40 → 5.40, 5.39 | 4.47, 4.46 |
+    | down, 380, fp32 | 0.73, 0.45 → 0.72, 0.46 | 0.99, 0.55 → 1.00, 0.54 | 1.87, 1.79 → 1.87, 1.79 | 4.39, 4.41 → 4.39, 4.42 | 3.94, 3.99 |
+    | gate_up, 380, bf16 | 0.61, 0.34 → 0.62, 0.34 | 0.80, 0.47 → 0.81, 0.46 | 1.20, 1.09 → 1.21, 1.10 | 2.06, 2.02 → 2.07, 2.02 | 1.64, 1.60 |
+    | down, 380, bf16 | 0.53, 0.31 → 0.53, 0.31 | 0.67, 0.45 → 0.69, 0.45 | 0.92, 0.84 → 0.93, 0.84 | 1.57, 1.53 → 1.56, 1.53 | 1.35, 1.32 |
+    | gate_up, 1100, fp32 | 0.67, 0.54 → 0.68, 0.53 | 1.01, 0.79 → 1.04, 0.81 | 7.90, 7.91 → 7.90, 7.90 | 14.55, 14.61 → 14.55, 14.59 | 12.20, 12.25 |
+    | down, 1100, fp32 | 0.69, 0.64 → 0.70, 0.65 | 1.01, 0.97 → 1.04, 0.94 | 4.59, 4.60 → 4.59, 4.61 | 12.02, 12.14 → 11.99, 12.13 | 11.02, 11.14 |
+    | gate_up, 1100, bf16 | 0.62, 0.59 → 0.64, 0.61 | 0.89, 0.79 → 0.88, 0.81 | 2.78, 2.79 → 2.79, 2.80 | 5.07, 5.09 → 5.07, 5.10 | 4.01, 4.05 |
+    | down, 1100, bf16 | 0.52, 0.51 → 0.50, 0.51 | 0.64, 0.65 → 0.66, 0.67 | 2.09, 2.09 → 2.09, 2.09 | 3.74, 3.74 → 3.75, 3.75 | 3.30, 3.30 |
+
+    The compact backward's device time is still 0.2–2.4 ms above the autograd path's: the block rebuild that 0.36.0 recorded.
+- **Not measured here:** whether TC1's training peak with the flag on now falls back to or below the flag-off peak. That is a
+  re-measure on the consumer's box.
+- **Not in this change.** Computing `gAt` before `gx` would free `x` before `gx` exists. In the same cells, gate_up's backward peak
+  would fall a further 30–33 % below this patch (227.9 → 158.9 MiB at 380 tokens, fp32), with values bit-identical. The forward
+  peak then becomes the binding one (204.0 MiB in that cell). It reorders two calls, so it is left to a separate change.
+- **Tests** (`kernel/test_compact_delta.py`). `test_compact_backward_peak_at_most_autograd` is CUDA-only. It runs one forward +
+  backward at the hot-expert case, with gate_up-like and down-like widths, bf16 and fp32 adapters, and `GNF4_HOST_REUSE` off and on.
+  It asserts `torch.equal` on the output and all three gradients, and that the compact forward, backward and combined peaks are at
+  most the autograd path's.
+  - Against the unpatched backward it fails 7 of 8 cases under torch 2.8 and all 8 under torch 2.11.
+  - On the A2000, with the patch: `test_compact_delta.py` gives 71 passed and 20 skipped (host reuse on CPU), and
+    `test_lora_delta_lean.py` 104 passed. With `test_host_reuse.py`, `test_nf4_qlora_grad.py` and `test_eids_forms.py` added, the
+    run gives 220 passed and 21 skipped, both with `NF4_QLORA_COMPACT_DELTA` unset and with it set to 1.
+
 ## 0.41.0 — 2026-10-05 — GNF4_TRITON_PREBIND on by default (experts4bit-qlora TC1 amendments 26/30: Qwen3-30B-A3B training step 0.973 matched / 0.980 shipped on an RTX 5090, bit-identical); prebound launches cover triton 3.7
 
 **0.41.0.** One default changes, by a rule registered and read in experts4bit-qlora (TC1 amendments 26 and 30):

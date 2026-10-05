@@ -2,7 +2,8 @@
 
 The bar is ``torch.equal`` on the forward and every gradient against the autograd path (flag off), for distinct and repeated
 expert ids, bf16 and fp32 adapters, scaling 1 and not, with and without GNF4_HOST_REUSE (which is what supplies distinct-id
-knowledge); plus the point of it: far fewer bytes saved for backward.
+knowledge); plus the point of it: far fewer bytes saved for backward, without a larger backward transient than the autograd
+path's.
 """
 import pytest
 import torch
@@ -85,6 +86,53 @@ def _saved_bytes(dev, compact, monkeypatch):
 def test_compact_delta_saves_far_less(monkeypatch, dev):
     full, compact = _saved_bytes(dev, False, monkeypatch), _saved_bytes(dev, True, monkeypatch)
     assert compact * 8 < full, (compact, full)
+
+
+def _peaks(dev, compact, ad_dtype, K, N, monkeypatch):
+    """One forward + backward of a hot-expert delta: (out, d_a, d_A, d_B) and the forward and backward peaks of
+    ``max_memory_allocated``, each above what was allocated before the forward (the inputs, adapters and output grad)."""
+    monkeypatch.setenv("NF4_QLORA_LORA_PATH", "padded")
+    monkeypatch.setenv("NF4_QLORA_COMPACT_DELTA", "1" if compact else "0")
+    _fresh()
+    E, R = 16, 16
+    sizes = [60, 2, 2, 2, 2, 2, 2, 2]                 # the hot-expert case above: 8 x 60 padded rows for 74 real ones
+    eids = list(range(8))
+    g = torch.Generator().manual_seed(3)
+    a = torch.randn(sum(sizes), K, generator=g).to(torch.bfloat16).to(dev).requires_grad_(True)
+    A = (torch.randn(E, R, K, generator=g) * 0.05).to(ad_dtype).to(dev).requires_grad_(True)
+    B = (torch.randn(E, N, R, generator=g) * 0.05).to(ad_dtype).to(dev).requires_grad_(True)
+    gout = torch.randn(sum(sizes), N, generator=g).to(ad_dtype).to(dev)
+    torch.cuda.synchronize()
+    base = torch.cuda.memory_allocated()
+    torch.cuda.reset_peak_memory_stats()
+    out = lora_delta_grouped(a, A, B, sizes, eids, 1.0)
+    torch.cuda.synchronize()
+    fwd = torch.cuda.max_memory_allocated() - base
+    torch.cuda.reset_peak_memory_stats()
+    out.backward(gout)
+    torch.cuda.synchronize()
+    bwd = torch.cuda.max_memory_allocated() - base
+    return (out.detach(), a.grad, A.grad, B.grad), fwd, bwd
+
+
+@pytest.mark.skipif(not CUDA, reason="max_memory_allocated is a CUDA allocator statistic")
+@pytest.mark.parametrize("ad_dtype", [torch.bfloat16, torch.float32])
+@pytest.mark.parametrize("K,N", [(512, 384), (384, 512)])   # gate_up-like (K > N) and down-like (N > K)
+@pytest.mark.parametrize("reuse", ["0", "1"])
+def test_compact_backward_peak_at_most_autograd(monkeypatch, ad_dtype, K, N, reuse):
+    """The compact node saves less, so its backward must not spend that on a larger transient: its peak over one forward +
+    backward is at most the autograd path's. While its backward held every intermediate to the return (the padded output
+    grad still live when the block and its grad were rebuilt), these cases failed on an RTX A2000 by 1.0-2.1 MB: 7 of 8
+    under torch 2.8, all 8 under torch 2.11."""
+    monkeypatch.setenv("GNF4_HOST_REUSE", reuse)
+    old, fwd_old, bwd_old = _peaks("cuda", False, ad_dtype, K, N, monkeypatch)
+    new, fwd_new, bwd_new = _peaks("cuda", True, ad_dtype, K, N, monkeypatch)
+    for name, o, n in zip(("out", "d_a", "d_A", "d_B"), old, new):
+        assert o.dtype == n.dtype and o.shape == n.shape, name
+        assert torch.equal(o, n), f"{name} differs (max |diff| {(o.float() - n.float()).abs().max().item()})"
+    assert fwd_new <= fwd_old, (fwd_new, fwd_old)
+    assert bwd_new <= bwd_old, f"compact backward peak {bwd_new} B > autograd {bwd_old} B"
+    assert max(fwd_new, bwd_new) <= max(fwd_old, bwd_old)
 
 
 def test_off_by_default(monkeypatch):
