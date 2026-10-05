@@ -1,6 +1,22 @@
 # Changelog
 
-## Unreleased
+## 0.40.0 — 2026-10-05 — pinned-slot fence for queued device copies (#60); opt-in GNF4_TRITON_PREBIND for the training GEMMs (bit-identical)
+
+**0.40.0.** No default changes. One correctness fix and one opt-in.
+
+- **Fix: pinned slots are fenced against queued device copies** (`nvme_residency`, #60).
+  - A non-blocking copy out of a pinned `ColdTier` slot is queued when `segment_into` returns. A later fill into that
+    slot could overwrite bytes the copy had yet to read, delivering another row's bytes under the right row IDs.
+  - `segment_into` now records a CUDA event after its non-blocking copies, and a fill waits on its slot's fence.
+    `stats()` gains `fence_waits` and `fence_wait_ns`.
+  - Shown on an RTX A2000 with a mutation arm: with the stream held, the unfenced refill landed first.
+- **Opt-in: `GNF4_TRITON_PREBIND=1`.** The training GEMMs (the fused forward's M-tile, the dgrad, and the route's dequant)
+  launch without Triton's per-call argument binding, and their per-call host work is reused by value. Outputs are
+  bit-identical.
+  - Measured on the A2000 box's host: `FusedGroupedNf4` forward 633–654 → 433–452 µs per call, and dgrad 448 → 320 µs.
+  - Not measured on a training step. experts4bit-qlora's TC1 amendment 26 is registered to read it, and the default
+    stays off until a registered A/B licenses it.
+- `docs/system-manifest.json` is unchanged.
 
 ### Opt-in: the training GEMMs launch without Triton's per-call argument binding, and their per-call host work is reused by value (`GNF4_TRITON_PREBIND=1`)
 
