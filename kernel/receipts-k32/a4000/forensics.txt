@@ -1,0 +1,5 @@
+NVIDIA RTX A4000, 16376 MiB, 535.154.05, GPU-61019fa7-89fe-7641-ea2e-56c15ec8b232
+power.limit,clocks.max.sm,pcie.gen.max,pcie.width.max 140.00 W, 2100 MHz, 2, 16
+Model name:                         AMD Athlon 3000G with Radeon Vega Graphics
+               total        used        free      shared  buff/cache   available
+Mem:              46           4           7           0          35          42

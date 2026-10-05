@@ -1,0 +1,9 @@
+## qwen3_moe gate_up  N=1536 K=2048  plan sk=16 (cap 16), tiles=12, NVIDIA RTX A4000 48 SMs
+   R=   1 | sk1=24.7 sk2=14.2 sk3=11.7 sk4=9.2 sk6=9.3 sk8=8.2 sk16=8.6 us | BEST sk=8  (plan sk=16 costs x1.059)
+   R=   2 | sk1=24.7 sk2=14.4 sk3=12.9 sk4=10.8 sk6=11.7 sk8=10.8 sk16=11.8 us | BEST sk=8  (plan sk=16 costs x1.090)
+   R=   4 | sk1=36.1 sk2=26.6 sk3=23.5 sk4=23.1 sk6=25.8 sk8=26.0 sk16=25.9 us | BEST sk=4  (plan sk=16 costs x1.121)
+   R=   8 | sk1=44.3 sk2=38.7 sk3=43.6 sk4=42.5 sk6=41.3 sk8=43.8 sk16=43.3 us | BEST sk=2  (plan sk=16 costs x1.119)
+   R=  16 | sk1=95.8 sk2=91.9 sk3=94.2 sk4=96.8 sk6=92.8 sk8=94.9 sk16=96.5 us | BEST sk=2  (plan sk=16 costs x1.051)
+   R=  32 | sk1=174.2 sk2=191.2 sk3=185.0 sk4=187.9 sk6=187.8 sk8=190.4 sk16=191.5 us | BEST sk=1  (plan sk=16 costs x1.099)
+   R=  64 | sk1=383.5 sk2=373.4 sk3=373.3 sk4=376.9 sk6=381.9 sk8=388.0 sk16=393.9 us | BEST sk=3  (plan sk=16 costs x1.055)
+   R= 128 | sk1=739.6 sk2=736.9 sk3=739.7 sk4=740.4 sk6=749.1 sk8=759.5 sk16=789.6 us | BEST sk=2  (plan sk=16 costs x1.072)

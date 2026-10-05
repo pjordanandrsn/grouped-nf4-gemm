@@ -277,7 +277,12 @@ was wrong.
   is off on every part (`SPLITK_R_TERM_MAX_SMS = 0`), so every card plans
   N-only at every R, as the 5090 already did after its step-level read of
   1.0064; MXFP4 keeps the N-only plan. A test enforces the default; the
-  mechanism stays, tested under a monkeypatched gate.
+  mechanism stays, tested under a monkeypatched gate. **K32 read the second
+  ≤ 64-SM architecture on a rented RTX A4000 (48 SMs, sm_86): OFF too**, by
+  its worst cell (1.0965×, olmoe down at R = 16) although its summed time
+  passed (0.9396×) (`gnf4.kernel.k32-splitk-r-term.a4000.2026-10-05`,
+  measured; `kernel/RESULTS-k32-splitk-r-term-a4000.md`). So the OFF stands
+  on both architectures read, which lose at opposite ends of R.
 - **K14 is refuted: at M=16 no shipped int4 arm beats dequant-then-GEMM
   on the attention projections.** On the 5090 the grouped int4 GEMM at
   its best swept configuration is 1.12–2.00× slower than the bf16 path

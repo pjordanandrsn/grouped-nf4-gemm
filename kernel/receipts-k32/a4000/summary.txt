@@ -1,0 +1,36 @@
+card NVIDIA RTX A4000, 48 SMs, rehearsal=0
+gnf4 0.41.0 @aa562718b9eadceeab746f0fb8d07462e23c2b28
+int4_b32 from /opt/conda/lib/python3.11/site-packages/int4_b32.py
+torch 2.8.0+cu128
+triton 3.4.0
+SPLITK_R_TERM_MAX_SMS 64 SPLITK_R_FLOOR 16 SPLITK_TARGET_BLOCKS_PER_SM 8
+........................................................................ [ 52%]
+..................................................................       [100%]
+138 passed, 64 deselected in 6.44s
+K30 sk check: PASS
+  ok  a clear win keeps the term: KEEP (want KEEP)
+  ok  the second card reads on its own SM count: KEEP (want KEEP)
+  ok  a 2 % win is not enough: OFF (want OFF)
+  ok  a loss turns it off: OFF (want OFF)
+  ok  the wrong card is VOID: VOID (want VOID)
+  ok  a missing cell is VOID: VOID (want VOID)
+  ok  unstable passes are VOID: VOID (want VOID)
+  ok  a rehearsal's two-R sweep is VOID, not a crash: VOID (want VOID)
+K30 rule self-test: 8/8 cases; the R term changes the pick on 23 of 48 cells at 58 SMs
+K30 plan cross-check OK: the installed _plan matches the reducer on all 48 cells at 48 SMs
+swept k30p1 qwen3_moe gate_up
+swept k30p1 qwen3_moe down
+swept k30p1 granitemoe gate_up
+swept k30p1 granitemoe down
+swept k30p1 olmoe gate_up
+swept k30p1 olmoe down
+swept k30p2 qwen3_moe gate_up
+swept k30p2 qwen3_moe down
+swept k30p2 granitemoe gate_up
+swept k30p2 granitemoe down
+swept k30p2 olmoe gate_up
+swept k30p2 olmoe down
+K30 plan cross-check OK: the installed _plan matches the reducer on all 48 cells at 48 SMs
+K30 S=0.9396 (p1 0.9393, p2 0.9399) W=1.0965 at olmoe/down R=16; N-only 1.0825x and R-aware 1.0171x the per-cell optimum; self-pair max 0.0077
+K30 by R: R=16 1.0272, R=32 0.9680, R=64 0.9535, R=128 0.9144
+K30_VERDICT OFF on NVIDIA RTX A4000 (48 SMs)

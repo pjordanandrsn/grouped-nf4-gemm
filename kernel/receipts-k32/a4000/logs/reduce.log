@@ -1,0 +1,4 @@
+K30 plan cross-check OK: the installed _plan matches the reducer on all 48 cells at 48 SMs
+K30 S=0.9396 (p1 0.9393, p2 0.9399) W=1.0965 at olmoe/down R=16; N-only 1.0825x and R-aware 1.0171x the per-cell optimum; self-pair max 0.0077
+K30 by R: R=16 1.0272, R=32 0.9680, R=64 0.9535, R=128 0.9144
+K30_VERDICT OFF on NVIDIA RTX A4000 (48 SMs)

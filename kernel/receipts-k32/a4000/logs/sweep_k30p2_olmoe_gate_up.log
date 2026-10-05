@@ -1,0 +1,9 @@
+## olmoe gate_up  N=2048 K=2048  plan sk=16 (cap 16), tiles=16, NVIDIA RTX A4000 48 SMs
+   R=   1 | sk1=21.1 sk2=12.4 sk3=10.2 sk4=9.1 sk6=8.2 sk8=8.0 sk16=8.6 us | BEST sk=8  (plan sk=16 costs x1.079)
+   R=   2 | sk1=32.1 sk2=20.3 sk3=17.4 sk4=15.6 sk6=15.6 sk8=20.0 sk16=16.0 us | BEST sk=6  (plan sk=16 costs x1.026)
+   R=   4 | sk1=36.7 sk2=27.6 sk3=28.1 sk4=36.4 sk6=31.9 sk8=34.2 sk16=32.9 us | BEST sk=2  (plan sk=16 costs x1.192)
+   R=   8 | sk1=49.1 sk2=65.7 sk3=57.3 sk4=58.8 sk6=54.0 sk8=57.0 sk16=56.2 us | BEST sk=1  (plan sk=16 costs x1.144)
+   R=  16 | sk1=154.2 sk2=142.6 sk3=133.7 sk4=135.4 sk6=131.9 sk8=133.1 sk16=136.6 us | BEST sk=6  (plan sk=16 costs x1.036)
+   R=  32 | sk1=274.8 sk2=262.4 sk3=258.3 sk4=258.6 sk6=262.8 sk8=266.4 sk16=277.5 us | BEST sk=3  (plan sk=16 costs x1.074)
+   R=  64 | sk1=488.4 sk2=481.4 sk3=481.9 sk4=488.2 sk6=493.6 sk8=497.6 sk16=520.2 us | BEST sk=2  (plan sk=16 costs x1.081)
+   R= 128 | sk1=970.3 sk2=988.8 sk3=989.1 sk4=995.8 sk6=1013.2 sk8=1037.4 sk16=1079.1 us | BEST sk=1  (plan sk=16 costs x1.112)
