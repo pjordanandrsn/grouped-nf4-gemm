@@ -1,5 +1,6 @@
 """K30's reducer and decision rule (kernel/PREREG-k30-splitk-r-term-l4.md): does the int4-b32 split-K R term win on a
-<= 64-SM card, read from the 48-cell `sk_sweep.py` grid run twice on one rented NVIDIA L4?
+<= 64-SM card, read from the 48-cell `sk_sweep.py` grid run twice on one rented card (the NVIDIA L4; the RTX A4000 second,
+only after an L4 KEEP -- Amendment 2). One verdict per card; the lane's rule over the two is in the prereg.
 
     python k30_reduce.py --self-test
     python k30_reduce.py <rows-dir> <out.json> [--check-installed-plan]
@@ -15,7 +16,7 @@ The rule, fixed before the data (the prereg's "Rule"):
   * Per cell c, pooled over both passes: r_c = (new_p1 + new_p2) / (old_p1 + old_p2), where new is the sweep's time at
     the R-aware plan's sk for this card's SM count and old is its time at the N-only plan's sk.
   * S = sum over cells of (new_p1 + new_p2) / sum of (old_p1 + old_p2): the summed-time ratio. W = max over cells of r_c.
-  * VOID if: the card is not an NVIDIA L4 or has more than 64 SMs; a cell is missing or a plan's sk was not swept; the
+  * VOID if: the card is not one of CARDS or has more than 64 SMs; a cell is missing or a plan's sk was not swept; the
     two passes disagree on the card; or the instrument is unstable, |S_p1 - S_p2| > 0.02 (each pass's own S).
   * KEEP if S <= 0.97 and W <= 1.02: the R term earns its cross-card-class bargain at kernel level on this card.
   * OFF otherwise: no rented reading supports the term, so it should not be on by default anywhere.
@@ -34,7 +35,9 @@ SPLITK_R_FLOOR = 16
 SPLITK_TARGET_BLOCKS_PER_SM = 8
 SPLITK_R_TERM_MAX_SMS = 64
 MAX_SMS = 64
-CARD = "NVIDIA L4"
+#: K30's two registered cards (Amendment 2): the L4 (58 SMs, sm_89) and, only after an L4 KEEP, the RTX A4000 (48, sm_86).
+CARDS = ("NVIDIA L4", "NVIDIA RTX A4000")
+CARD = CARDS[0]
 S_KEEP, W_KEEP, PASS_SPREAD = 0.97, 1.02, 0.02
 
 
@@ -84,8 +87,8 @@ def reduce(p1: dict, p2: dict) -> dict:
     if len(cards) != 1:
         void.append(f"passes disagree on the card: {sorted(cards)}")
     gpu, sms = sorted(cards)[0]
-    if gpu != CARD:
-        void.append(f"card is {gpu!r}, the lane registers {CARD!r}")
+    if gpu not in CARDS:
+        void.append(f"card is {gpu!r}, the lane registers {CARDS}")
     if sms > MAX_SMS:
         void.append(f"{sms} SMs is above the {MAX_SMS}-SM class the R term is gated to")
     cells, per_pass = [], {"p1": [0.0, 0.0], "p2": [0.0, 0.0]}
@@ -189,6 +192,8 @@ def _synthetic(sms: int, gpu: str, scale_new: float, *, jitter: float = 0.0, dro
 def self_test() -> int:
     cases = [
         ("a clear win keeps the term", _synthetic(58, CARD, 0.90), _synthetic(58, CARD, 0.90), "KEEP"),
+        ("the second card reads on its own SM count", _synthetic(48, "NVIDIA RTX A4000", 0.90),
+         _synthetic(48, "NVIDIA RTX A4000", 0.90), "KEEP"),
         ("a 2 % win is not enough", _synthetic(58, CARD, 0.98), _synthetic(58, CARD, 0.98), "OFF"),
         ("a loss turns it off", _synthetic(58, CARD, 1.05), _synthetic(58, CARD, 1.05), "OFF"),
         ("the wrong card is VOID", _synthetic(58, "NVIDIA L40S", 0.90), _synthetic(58, "NVIDIA L40S", 0.90), "VOID"),

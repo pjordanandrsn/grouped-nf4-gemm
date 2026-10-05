@@ -49,7 +49,7 @@ This lane does not touch a model, a checkpoint or a download.
    - every sk the sweep will time must match the sk = 1 output within split-K's fp32 reorder
      (max |Δ| ≤ 1e-2 · max |out|);
    - otherwise rc 22, and no sweep runs.
-3. `k30_reduce.py --self-test`: 7 rule cases, plus the check that at 58 SMs the R term changes the pick on some cells (23 of
+3. `k30_reduce.py --self-test`: 8 rule cases, plus the check that at 58 SMs the R term changes the pick on some cells (23 of
    48).
 
 ## Rule (in `k30_reduce.py`, fixed here)
@@ -179,3 +179,47 @@ card. Gate 2 passed on all 12 cells, with every swept sk within 6.8e-4 of sk = 1
 cross-check passed. Both passes swept all six shapes. The reducer then crashed on the rehearsal's own two-R grid: its
 per-R summary divided by the R values that had no cells. That is a VOID-path crash a full run cannot reach. It is
 fixed, a seventh self-test case covers it, and the rehearsal is re-run on the fixed commit before any rental.
+
+## Amendment 2 — 2026-10-05, after main moved, before any rental or data
+
+**What changed under the lane.** On the owner's decisions relayed on grouped-nf4-gemm#475 (issuecomment-5994344079):
+
+- **#476 retired the row and the receipt tests.** `gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10` is retired
+  ("an A2000 timing"). The A2000 receipt tests (`SK_R_BOUND`, the receipt-cell tests) are out of
+  `kernel/test_int4_b32.py`.
+  - So the registered follow-ups "the A2000 row is retired" and "the `SK_R_BOUND` tests become structural" are already
+    done.
+  - KEEP now means: the card's rows become the receipt behind the constant, and a kernel-level row on that card is
+    registered.
+  - OFF now means: `SPLITK_R_TERM_MAX_SMS` is set so that no part takes the R term.
+- **adertha-agents #167 added the classes.** `L4` and `RTX A4000` are in `allowed_gpus`.
+- **The question's reach is narrower than §1 implied.**
+  - Since P88, e4b's int4 server sends device-grouped decode rows at B > 1 to K19's small-M GEMM.
+  - So the split-K GEMV, and the R term with it, is reached only by three paths: `E4B_INT4_GROUPED_SMALLM=0`, the
+    singleton GEMV at T > 1, and direct callers of `gemv_int4_b32`.
+  - That is the relay's code reading, backed by P112's launch accounting.
+  - A KEEP or OFF changes those paths only. The kernel sweep still answers it, and a step-level read of today's default
+    server would compare identical kernels.
+
+**A second card, conditional (the two-card rule for performance portability).**
+
+- **Box 2 is one RTX A4000** (48 SMs, sm_86): the architecture the R term was first fitted on, but a rented and
+  uncontended part.
+- **It is rented only if the L4 reads KEEP.** An L4 OFF already decides the default, since a default needs a win on
+  every card it ships to.
+- **Same instrument.** Same commit, gates, rule and thresholds; `K30_CARD=A4000` selects the card check.
+
+**The lane's verdict:**
+
+| L4 | A4000 | lane | what follows |
+|---|---|---|---|
+| OFF | not rented | **OFF** | the R term off on every part |
+| KEEP | KEEP | **KEEP** | both cards' rows are the receipt |
+| KEEP | OFF | **OFF** | as above: no win on one ≤64-SM architecture is no default |
+| KEEP | VOID twice (host-limited) | **UNRESOLVED** | the term stays as it is, unverified, and the lane says so |
+
+- **The reducer** accepts either card by exact name (`CARDS`), and its self-test gains a 48-SM case (8 cases).
+- **Budget.**
+  - The A4000 box gets the same 1.5 h guard at a declared ≤ $0.40/h.
+  - The L4's proving rental covers the provider class and image for both cards.
+  - The lane's hard stop rises to **$4**.
