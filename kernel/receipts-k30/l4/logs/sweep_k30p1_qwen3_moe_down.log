@@ -1,0 +1,9 @@
+## qwen3_moe down  N=2048 K=768  plan sk=6 (cap 6), tiles=16, NVIDIA L4 58 SMs
+   R=   1 | sk1=9.6 sk2=6.3 sk3=6.2 sk4=6.2 sk6=6.0 us | BEST sk=6  = plan
+   R=   2 | sk1=9.7 sk2=7.5 sk3=6.3 sk4=6.4 sk6=6.8 us | BEST sk=3  (plan sk=6 costs x1.087)
+   R=   4 | sk1=10.9 sk2=8.9 sk3=8.3 sk4=8.3 sk6=7.7 us | BEST sk=6  = plan
+   R=   8 | sk1=14.0 sk2=12.0 sk3=11.3 sk4=11.4 sk6=11.7 us | BEST sk=3  (plan sk=6 costs x1.036)
+   R=  16 | sk1=20.3 sk2=19.1 sk3=19.2 sk4=19.5 sk6=19.7 us | BEST sk=2  (plan sk=6 costs x1.029)
+   R=  32 | sk1=35.2 sk2=35.6 sk3=35.7 sk4=36.1 sk6=36.9 us | BEST sk=1  (plan sk=6 costs x1.048)
+   R=  64 | sk1=78.6 sk2=78.2 sk3=82.3 sk4=82.2 sk6=85.0 us | BEST sk=2  (plan sk=6 costs x1.087)
+   R= 128 | sk1=338.3 sk2=344.7 sk3=342.4 sk4=347.5 sk6=368.0 us | BEST sk=1  (plan sk=6 costs x1.088)

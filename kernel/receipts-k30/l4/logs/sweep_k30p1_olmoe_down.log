@@ -1,0 +1,9 @@
+## olmoe down  N=2048 K=1024  plan sk=8 (cap 8), tiles=16, NVIDIA L4 58 SMs
+   R=   1 | sk1=11.5 sk2=8.7 sk3=8.4 sk4=8.3 sk6=6.4 sk8=5.8 us | BEST sk=8  = plan
+   R=   2 | sk1=11.6 sk2=8.4 sk3=7.3 sk4=9.4 sk6=8.2 sk8=8.3 us | BEST sk=3  (plan sk=8 costs x1.140)
+   R=   4 | sk1=13.6 sk2=10.6 sk3=9.5 sk4=9.3 sk6=9.6 sk8=8.9 us | BEST sk=8  = plan
+   R=   8 | sk1=17.8 sk2=14.6 sk3=14.0 sk4=13.8 sk6=14.1 sk8=14.1 us | BEST sk=4  (plan sk=8 costs x1.018)
+   R=  16 | sk1=26.6 sk2=24.3 sk3=24.6 sk4=24.5 sk6=25.0 sk8=25.5 us | BEST sk=2  (plan sk=8 costs x1.050)
+   R=  32 | sk1=46.1 sk2=46.2 sk3=46.4 sk4=46.6 sk6=47.5 sk8=48.5 us | BEST sk=1  (plan sk=8 costs x1.052)
+   R=  64 | sk1=146.7 sk2=148.1 sk3=157.4 sk4=177.2 sk6=192.9 sk8=211.1 us | BEST sk=1  (plan sk=8 costs x1.439)
+   R= 128 | sk1=477.5 sk2=470.6 sk3=481.9 sk4=445.0 sk6=456.6 sk8=482.5 us | BEST sk=4  (plan sk=8 costs x1.084)

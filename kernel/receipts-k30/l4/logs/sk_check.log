@@ -1,0 +1,13 @@
+ok  qwen3_moe gate_up N=1536 K=2048 R=16 sks=[1, 2, 3, 4, 6, 8, 16] worst rel 7.58e-04
+ok  qwen3_moe gate_up N=1536 K=2048 R=128 sks=[1, 2, 3, 4, 6, 8, 16] worst rel 2.82e-03
+ok  qwen3_moe down N=2048 K=768 R=16 sks=[1, 2, 3, 4, 6] worst rel 2.20e-06
+ok  qwen3_moe down N=2048 K=768 R=128 sks=[1, 2, 3, 4, 6] worst rel 1.05e-03
+ok  granitemoe gate_up N=1024 K=1536 R=16 sks=[1, 2, 3, 4, 6, 8, 12] worst rel 5.62e-05
+ok  granitemoe gate_up N=1024 K=1536 R=128 sks=[1, 2, 3, 4, 6, 8, 12] worst rel 1.28e-03
+ok  granitemoe down N=1536 K=512 R=16 sks=[1, 2, 3, 4] worst rel 0.00e+00
+ok  granitemoe down N=1536 K=512 R=128 sks=[1, 2, 3, 4] worst rel 2.51e-03
+ok  olmoe gate_up N=2048 K=2048 R=16 sks=[1, 2, 3, 4, 6, 8, 16] worst rel 1.53e-06
+ok  olmoe gate_up N=2048 K=2048 R=128 sks=[1, 2, 3, 4, 6, 8, 16] worst rel 1.30e-03
+ok  olmoe down N=2048 K=1024 R=16 sks=[1, 2, 3, 4, 6, 8] worst rel 3.54e-06
+ok  olmoe down N=2048 K=1024 R=128 sks=[1, 2, 3, 4, 6, 8] worst rel 2.37e-04
+K30 sk check: PASS

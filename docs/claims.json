@@ -1100,6 +1100,30 @@
     "kernel/receipts-k29/5090/verdict.json",
     "kernel/receipts-k29/5090/forensics.txt"
    ]
+  },
+  {
+   "id": "gnf4.kernel.k30-splitk-r-term.l4.2026-10-05",
+   "area": "kernel",
+   "claim": "K30 (pre-registered 2026-10-05, #478, Amendments 1-2): on one rented NVIDIA L4 (58 SMs), int4_b32._plan's split-K R term does not earn its default -- over the 24 cells at R >= 16 of the 48-cell sk_sweep.py grid (qwen3_moe / granitemoe / olmoe gate_up + down, R = 16..128, CUDA-graph replay, the served two-launch path with reduce_partials at every sk), the R-aware pick's summed time is 1.0101x the N-only pick's (pass 1 1.0100, pass 2 1.0101) and its worst cell 1.1781x (qwen3_moe gate_up at R = 128, sk 1 against sk 16), so the registered rule (KEEP iff <= 0.97 and <= 1.02) reads OFF. It wins 20 of the 24 cells and loses the three largest gate_up cells, where it collapses the split to sk 1. Kernel level only; the term is off e4b's default server path since P88.",
+   "value": 1.0101,
+   "unit": "summed time, R-aware pick / N-only pick, over the 24 cells at R >= 16, pooled over two passes (KEEP needed <= 0.97); worst cell 1.1781",
+   "status": "measured",
+   "hardware": "NVIDIA L4 (sm_89, 58 SMs, 72 W power limit, driver 615.71.09, PCIe gen 3 x16), torch 2.8.0+cu128 / triton 3.4.0, rented Vast verified/secure host (machine 77226, Xeon Silver 4114)",
+   "conditions": "grouped-nf4-gemm aa562718 (prereg/k30; kernel/ and bench/int4/ byte-identical to main's ccf4de91, #478's squash), runner experts4bit-qlora 13232663 (bench/k30/, identical to main's ca9141b8); E = 128 synthetic int4-b32 experts; 60 graph replays after 12 warm-ups per (R, sk); one shape per process; two passes back to back",
+   "measured_on": "2026-10-05",
+   "evidence": [
+    "kernel/RESULTS-k30-splitk-r-term-l4.md",
+    "kernel/PREREG-k30-splitk-r-term-l4.md",
+    "kernel/receipts-k30/l4/k30_verdict.json",
+    "kernel/receipts-k30/l4/summary.txt",
+    "kernel/receipts-k30/l4/forensics.txt",
+    "bench/int4/k30_reduce.py",
+    "bench/int4/sk_sweep.py"
+   ],
+   "quoted_in": [
+    "docs/STATUS.md"
+   ],
+   "notes": "Lanes k30-prove-1 ($0.009) and k30-l4-1 ($0.030), teardown proven; receipts in adertha-receipts (c719ea31). Gates before timing: 138 compiled GEMV/reduce/plan tests, every swept sk within the fp32 reorder class of sk = 1, the rule self-test 8/8, the installed _plan cross-checked on all 48 cells. Post hoc and not claimed: by R the ratio is 0.9710 / 0.8980 / 0.9627 / 1.0543 at R = 16 / 32 / 64 / 128, so a capped term might win on <=64-SM parts -- a new registration, not a re-read. The registered prediction (KEEP, driven by R >= 64) is refuted. The RTX A4000 second card was not rented: an L4 OFF decides the lane (Amendment 2). The retired A2000 row gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10 is not superseded by this one: this row measures the opposite."
   }
  ]
 }
