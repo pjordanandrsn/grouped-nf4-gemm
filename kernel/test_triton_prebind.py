@@ -2,8 +2,8 @@
 around them remembered by value, give the SAME values, bit for bit.
 
 The prebound launch (``_triton_shim.prebind``) launches the very compiled kernel Triton's own lookup returns, across odd shapes and
-misaligned pointers, and takes Triton's own path on a Triton release it was not written for, under a launch hook, or with a
-callable grid. ``_ValueMemo`` -- behind the faster ``to_device_i32`` hit, ``_prefill_block_m_cost`` and the grouped_mm route's
+misaligned pointers, and takes Triton's own path on a Triton release it was not written for, under a launch hook (or, under triton
+3.7, a stages hook), or with a callable grid. ``_ValueMemo`` -- behind the faster ``to_device_i32`` hit, ``_prefill_block_m_cost`` and the grouped_mm route's
 ``_plan`` -- only ever answers with what the full path would build: a changed list, context or element type is a miss. The bar is
 ``torch.equal`` against the flag off for the fused forward, the dgrad and the route's dequant.
 """
@@ -37,7 +37,7 @@ def test_unsupported_triton_version_keeps_tritons_launch(monkeypatch):
     k = NG._dgrad_nf4_grouped
     if SUPPORTED and type(k).__name__ == "JITFunction":
         assert isinstance(shim.prebind(k, force=True), shim.Prebound)
-    for v in ((3, 3), (3, 5), (3, 7), (4, 0), None):
+    for v in ((3, 3), (3, 5), (3, 8), (4, 0), None):
         monkeypatch.setattr(shim, "_triton_version", lambda v=v: v)
         assert shim.prebind(k, force=True) is k
 
@@ -231,3 +231,75 @@ def test_launch_hook_and_callable_grid_take_tritons_path(monkeypatch):
     assert shim.PREBIND_STATS == before                                  # a callable grid is Triton's own launch
     for g in range(2):
         assert torch.equal(out[g], NG.dequant_ref(B[g], am[g], 32, 128).to(torch.bfloat16))
+
+
+def _tritons_kernel(fn, args, kw):
+    """The compiled kernel Triton's own ``run`` would launch for these arguments (its binder, key and per-device cache)."""
+    from triton import knobs
+    from triton.runtime.driver import driver
+    kw = dict(kw, debug=kw.get("debug", fn.debug) or knobs.runtime.debug)
+    if shim._triton_version() >= (3, 6):
+        kw["instrumentation_mode"] = knobs.compilation.instrumentation_mode
+    caches = fn.device_caches[driver.active.get_current_device()]
+    _, spec, opts = caches[-1](*args, **kw)
+    if len(caches) == 5:
+        from triton.runtime.jit import compute_cache_key
+        return caches[0].get(compute_cache_key(caches[1], spec, opts))
+    return caches[0].get(str(spec) + str(opts))
+
+
+@gpu
+def test_a_stages_hook_takes_tritons_path_under_triton_37():
+    """Triton 3.7 adds a registered compiler-stages hook's pipeline hash to its kernel key (3.4 and 3.6 do not), so under 3.7 a launch
+    with one registered takes Triton's path."""
+    if shim._triton_version() < (3, 7):
+        pytest.skip("this Triton does not key a launch on the stages hook")
+    from triton import knobs
+    p = shim.Prebound(NR._dequant_groups_kernel)
+    B, am = _stack(2, 32, 128, seed=2)
+    e = torch.arange(2, dtype=torch.int32, device="cuda")
+    out = torch.empty(2, 32, 128, dtype=torch.bfloat16, device="cuda")
+    args = (B, am, e, NG._lut(B.device), out, 32, 64, B.stride(0), B.stride(1), am.stride(0), am.stride(1), out.stride(0), out.stride(1))
+    kw = dict(BLOCK_N=16, BLOCK_KB=256, QB=32, num_warps=8)
+    for _ in range(2):
+        p[(2, 2, 1)](*args, **kw)
+
+    def hook(*a):                                                        # bare: the key's (key, hash); with the stages at compile
+        return ("prebind-test", "0") if not a else None
+
+    saved, knobs.runtime.add_stages_inspection_hook = knobs.runtime.add_stages_inspection_hook, hook
+    try:
+        before = dict(shim.PREBIND_STATS)
+        out.zero_()
+        p[(2, 2, 1)](*args, **kw)
+        assert shim.PREBIND_STATS == {"prebound": before["prebound"], "triton": before["triton"] + 1}
+    finally:
+        knobs.runtime.add_stages_inspection_hook = saved
+    for g in range(2):
+        assert torch.equal(out[g], NG.dequant_ref(B[g], am[g], 32, 128).to(torch.bfloat16))
+
+
+if shim.HAS_TRITON:
+    tl = shim.tl
+
+    @shim.triton.jit
+    def _plus_one(X, Y, n, BLOCK: tl.constexpr):
+        i = tl.arange(0, BLOCK)
+        m = i < n
+        tl.store(Y + i, tl.load(X + i, mask=m) + 1, mask=m)
+
+
+@gpu
+def test_async_compile_keeps_only_tritons_compiled_kernel():
+    """Under AsyncCompileMode the launch that compiles a key returns a FutureKernel proxy in triton 3.7 (3.6 resolves it first): what
+    is kept is the CompiledKernel Triton's own lookup returns, never the proxy."""
+    ac = pytest.importorskip("triton.runtime._async_compile")
+    from concurrent.futures import ThreadPoolExecutor
+    p = shim.Prebound(_plus_one)                                         # a kernel no other test compiles
+    x = torch.arange(32, device="cuda", dtype=torch.float32)
+    ys = [torch.empty_like(x) for _ in range(3)]
+    with ThreadPoolExecutor(1) as pool, ac.AsyncCompileMode(pool):
+        got = [p[(1,)](x, y, 32, BLOCK=32) for y in ys]
+    ((kept, *_),) = p.kernels.values()
+    assert not hasattr(kept, "result") and kept is _tritons_kernel(_plus_one, (x, ys[0], 32), dict(BLOCK=32)) and got[-1] is kept
+    assert all(torch.equal(y, x + 1) for y in ys)
