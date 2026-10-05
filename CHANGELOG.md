@@ -123,6 +123,18 @@
   `kernel/ERRATA.md` points there.
 - **Not in this change:** the rented reads (the ≤ 64-SM split-K step read), and re-sweeping the speed-only constants.
 
+### K31 registered: the split-K R term on a second <=64-SM card, an RTX A4000 (bench only)
+
+- `kernel/PREREG-k31-splitk-r-term-a4000.md`: K30's instrument and rule, unchanged (prereg/k30 `00da974`), on one rented
+  RTX A4000 (48 SMs, sm_86) beside K30's L4 (58 SMs, sm_89). The owner chose the two cards with "KEEP needs both"
+  (#479). The term stays on only if both lanes read KEEP; an OFF on either card turns it off for the class.
+- `bench/int4/k31_reduce.py` imports `k30_reduce.py` and changes only the registered card and the pass prefixes. Its
+  self-test runs K30's seven cases plus three of its own, and asserts that at 48 SMs the R term changes the pick on all
+  24 cells at R >= 16. The box runner lives in experts4bit-qlora `bench/k31/`.
+- The registration records why the read is kernel-level. Since P88 (K19 by default) e4b's int4 server sends every B > 1
+  decode row to K19, so the split-K GEMV's R term is reached only by `E4B_INT4_GROUPED_SMALLM=0`, the singleton GEMV at
+  T > 1, and direct callers.
+
 ## 0.41.0 — 2026-10-05 — GNF4_TRITON_PREBIND on by default (experts4bit-qlora TC1 amendments 26/30: Qwen3-30B-A3B training step 0.973 matched / 0.980 shipped on an RTX 5090, bit-identical); prebound launches cover triton 3.7
 
 **0.41.0.** One default changes, by a rule registered and read in experts4bit-qlora (TC1 amendments 26 and 30):
