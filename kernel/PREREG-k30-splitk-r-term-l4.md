@@ -150,3 +150,28 @@ receipts.
 4. **Any teardown that cannot be proven stops the lane.**
 
 Amendments, dated, go below this line before any data is read.
+
+## Amendment 1 — 2026-10-05, after the A2000 rehearsal, before any L4 data
+
+**What the rehearsal found.** Correctness gate 2 (`k30_sk_check.py`) failed on all 12 cells, with errors of order 1 and
+NaNs. The cause is not the kernel; it is the instrument both scripts shared:
+
+- With the fused reduce off (the shipped default), `_gemv_int4_b32` stores fp32 partials at **every** sk, including
+  sk = 1.
+- The served wrapper `gemv_int4_b32` therefore always calls `reduce_partials`, at sk = 1 as the fp32 → bf16 cast.
+- `sk_sweep.py` called the reduce only for `sk > 1`. So its sk = 1 cell left the output unwritten (the NaNs), and it
+  priced as free a launch plus an R × N fp32 read and bf16 write that the served path always pays.
+
+That bias favours sk = 1, which is exactly the pick the R term makes at large R (23 of 48 cells change pick at 58 SMs,
+most of them to sk = 1). The committed A2000 rows behind the term were taken with it. Two comments repeated the error:
+`_plan`'s "sk collapses to no reduce", and `test_plan_stops_splitting_once_the_grid_is_full`'s "no reduce launch at
+all". Both are corrected.
+
+**The changes, all before any L4 data:**
+
+- `sk_sweep.py` and `k30_sk_check.py` run `reduce_partials` at every sk, so every cell times the served two-launch path.
+- The instrument is otherwise unchanged: same grid, same replay, same shapes, two passes.
+- "Unchanged `sk_sweep.py`" in §Instrument now means the sweep at this amendment's commit.
+- The rule, the thresholds, the gates and the budget are unchanged.
+
+The rehearsal is re-run on this commit before any rental. Its outcome is recorded here as correctness only.
