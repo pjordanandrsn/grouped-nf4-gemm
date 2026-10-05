@@ -174,3 +174,16 @@ No A2000 time is quoted anywhere, and its rows are not committed as receipts.
 4. **Any teardown that cannot be proven stops the lane.**
 
 Amendments, dated, go below this line before any data is read.
+
+## Withdrawn — 2026-10-05, before any run
+
+**The owner chose to fold the A4000 into K30** rather than run a separate lane. The question was put in this
+session's chat after the maintainer session decided the same on #478. K31 never rented, rehearsed or read anything.
+
+**Where the A4000 reading lives now.** K30 (grouped-nf4-gemm#478, merged `ccf4de9`) carries the RTX A4000 as its box 2,
+under its Amendment 2:
+- the A4000 is rented only after an L4 KEEP, since an L4 OFF already decides the default;
+- KEEP needs the rule to hold on both cards, and OFF follows if either fails.
+
+That is the combination this registration proposed. Box 2 runs under K30's run ids and manifests. The work item
+(#479) is closed, and nothing here is deleted.
