@@ -49,7 +49,7 @@ This lane does not touch a model, a checkpoint or a download.
    - every sk the sweep will time must match the sk = 1 output within split-K's fp32 reorder
      (max |Δ| ≤ 1e-2 · max |out|);
    - otherwise rc 22, and no sweep runs.
-3. `k30_reduce.py --self-test`: 6 rule cases, plus the check that at 58 SMs the R term changes the pick on some cells (23 of
+3. `k30_reduce.py --self-test`: 7 rule cases, plus the check that at 58 SMs the R term changes the pick on some cells (23 of
    48).
 
 ## Rule (in `k30_reduce.py`, fixed here)
@@ -174,4 +174,8 @@ all". Both are corrected.
 - "Unchanged `sk_sweep.py`" in §Instrument now means the sweep at this amendment's commit.
 - The rule, the thresholds, the gates and the budget are unchanged.
 
-The rehearsal is re-run on this commit before any rental. Its outcome is recorded here as correctness only.
+**Rehearsal 2, on the amended sweep (correctness only).** Gate 1 passed: 140 GEMV, reduce and plan tests compiled on the
+card. Gate 2 passed on all 12 cells, with every swept sk within 6.8e-4 of sk = 1. The self-test and the installed-plan
+cross-check passed. Both passes swept all six shapes. The reducer then crashed on the rehearsal's own two-R grid: its
+per-R summary divided by the R values that had no cells. That is a VOID-path crash a full run cannot reach. It is
+fixed, a seventh self-test case covers it, and the rehearsal is re-run on the fixed commit before any rental.
