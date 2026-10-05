@@ -166,11 +166,11 @@ class FusedGroupedNf4(torch.autograd.Function):
             # budget, but not zero, so exactness was treated as something a
             # training run should not silently inherit.
             #
-            # What that left out is the price, which 0.7.0 had already measured
-            # and published: against this same per-expert decode oracle the
-            # kernel runs 5.92 ms vs 61.78 ms on gate_up at E=256, and 3.28 ms
-            # vs 85.12 ms on down (A2000, T_cat=4096) -- and the composed
-            # training step 403.7 -> 26.5 ms. The loop materializes a decoded
+            # What that left out is the price. experts4bit-qlora's dgrad gate
+            # (bench/dgrad-gate/, Qwen3-30B-A3B at 48 layers on a rented RTX
+            # A6000, the published 0.7.0 wheel) read the fused training step at
+            # 2.52x the reference loop with this kernel and 1.72x without it.
+            # The loop materializes a decoded
             # expert per group, which is precisely the round trip the fused
             # forward exists to avoid, so the shipped default was paying the
             # forward's whole thesis back in the backward.
@@ -255,9 +255,8 @@ def gemm_4bit_grouped_train(a_cat, packed, absmax, sizes, expert_ids,
 class _GatherRows(torch.autograd.Function):
     """``src.index_select(0, idx)`` for UNIQUE ``idx``, whose backward is a plain
     scatter. Autograd's own backward for ``index_select`` is ``index_add_``, which
-    must assume repeats and so adds atomically -- slow in bf16 on sm_86: 4.9 ms
-    a step against 1.9 ms for this scatter in a 2-layer Qwen3-MoE profile on an
-    RTX A2000. With every row written at most once a copy is the same bytes:
+    must assume repeats and so adds atomically, where unique rows need only a
+    plain scatter. With every row written at most once a copy is the same bytes:
     ``0 + g == g``."""
 
     @staticmethod
@@ -305,12 +304,12 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
     Batched by default. This ran as a Python loop over experts, which put ``2E``
     matmul nodes per projection per layer on the autograd graph and paid for them
     again in backward. Padding the groups and running two ``bmm``s instead
-    measured **3.0x on the end-to-end training step** at E=256 (401 -> 134 ms,
-    A2000, 512 tokens, top_k 8, hidden 512) for +36% peak memory, with gradients
-    agreeing to 1.6e-3 — inside the bf16 noise floor of ~6.5e-3. It was the
-    cheapest win in the lane by a wide margin: batching the *backward's* decode
-    loop bought only 1.24x and cost 4.4x peak memory, because that one has to
-    materialize the weight stack and this one does not.
+    takes those nodes off the graph for +36% peak memory (RTX A2000, E=256,
+    512 tokens, top_k 8, hidden 512), with gradients agreeing to 1.6e-3 —
+    inside the bf16 noise floor of ~6.5e-3. Batching the *backward's* decode
+    loop instead cost 4.4x peak memory, because that one has to materialize
+    the weight stack and this one does not. (The step times read beside these
+    were on the A2000, a correctness-only testbed, and are not quoted.)
 
     Padding is the one hazard. Group sizes come from the router, so a hot expert
     makes ``max(sizes)`` large and the padded block ``G * max(sizes)`` rows wide
@@ -430,8 +429,8 @@ def _lora_delta_padded(a_cat, lora_A, lora_B, eid, flat, G, widest, unique, scal
     instead of advanced indexing. Same forward values (both are row copies); the backward differs only in
     route: advanced indexing's backward is ``index_put_(accumulate=True)``, which SORTS its indices first (a
     radix sort plus index arithmetic, ~10 launches per adapter), while ``_GatherRows``' is a zero fill and
-    one ``index_copy_`` -- no sort and no atomics (``index_select``'s own backward, ``index_add_``, measured
-    ~0.4 ms of device time slower per layer backward on an A2000 here). With distinct ids every gradient row
+    one ``index_copy_`` -- no sort and no atomics (``index_select``'s own backward, ``index_add_``, adds
+    atomically). With distinct ids every gradient row
     receives exactly one value on both routes, so the gradients are equal.
     """
     if _compact_delta_enabled():

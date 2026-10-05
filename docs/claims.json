@@ -750,7 +750,7 @@
     "docs/STATUS.md",
     "CHANGELOG.md#0330--2026-09-23--two-opt-in-int4-b32-gemv-variants-both-exact-and-neither-a-default-k17-fused_reducetrue-k18-gemv_int4_b32_grouped-319-was-a-mislabelled-test-arm-not-an-f32-kernel-defect-87s-int64-expert-offset-promotion-is-now-guarded-by-a-cpu-test-ci-runs"
    ],
-   "notes": "A negative-result row on purpose: the kernel is exact and ships, the hypothesis that its launch was the cost did not survive the card. The P54 census row it targeted (_reduce_partials 0.300 ms/step at B=1 in experts4bit-qlora) is GPU time the kernel spends either way, not a launch removal recovers. Lane k17-5090-1 cost $0.0888 (estimate $0.65); receipts in adertha-receipts 4aff79c. The A2000 pilot (receipts-k17/a2000-pilot.json, free) showed 0.0-2.8 us at R=1 and was recorded as a warning before the launch."
+   "notes": "A negative-result row on purpose: the kernel is exact and ships, the hypothesis that its launch was the cost did not survive the card. The P54 census row it targeted (_reduce_partials 0.300 ms/step at B=1 in experts4bit-qlora) is GPU time the kernel spends either way, not a launch removal recovers. Lane k17-5090-1 cost $0.0888 (estimate $0.65); receipts in adertha-receipts 4aff79c. An A2000 pilot ran before the launch (receipts-k17/a2000-pilot.json). Edited 2026-10-05: its timings, quoted here before and recorded as a pre-launch warning, are not speed evidence under the testbed policy (the A2000 is a correctness-only testbed)."
   },
   {
    "id": "gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22",
@@ -977,7 +977,7 @@
     "docs/STATUS.md",
     "CHANGELOG.md"
    ],
-   "notes": "Pre-registered in experts4bit-qlora #741 (P1 [0.55, 0.75] REFUTED; P2 [20, 30] GB/s HELD; P3 [12, 18] GB/s refuted on run 2; P4 <= 10 % spread HELD at 9.7 %). The decision rule's refuted branch: the two hosts' difference is stated, not explained (idle link state, NUMA placement of the pinned buffer and the DMA engine's behaviour were not measured); a second box is a new draw under its own amendment. The gen 3 x8 control (the NAS A2000, bench/cold-engine/calib-a2000-400/) reads 1.0. Lane cost $0.0146 (one refused pre-rental launch at $0: a dirty receipts worktree), teardown proven."
+   "notes": "Pre-registered in experts4bit-qlora #741 (P1 [0.55, 0.75] REFUTED; P2 [20, 30] GB/s HELD; P3 [12, 18] GB/s refuted on run 2; P4 <= 10 % spread HELD at 9.7 %). The decision rule's refuted branch: the two hosts' difference is stated, not explained (idle link state, NUMA placement of the pinned buffer and the DMA engine's behaviour were not measured); a second box is a new draw under its own amendment. Edited 2026-10-05: an A2000 link_eff quoted here as a control is not speed evidence under the testbed policy; the committed A2000 blob (bench/cold-engine/calib-a2000-400/) stays a schema fixture for kernel/test_cold_deadline.py. Lane cost $0.0146 (one refused pre-rental launch at $0: a dirty receipts worktree), teardown proven."
   },
   {
    "id": "gnf4.kernel.k20-k19-plan-sweep.5090.2026-10-01",

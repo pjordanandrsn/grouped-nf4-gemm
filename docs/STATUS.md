@@ -365,10 +365,9 @@ was wrong.
   `bench/calibrate.py` probe (schema `gnf4-hybrid-calib/2`: the same 64 MB copy one at a time) and a consumer-passed
   `gpu_us_fixed` for the path's own fixed per-call kernels; a /1 blob is refused unless `link_eff` is passed
   explicitly. Measured so far: **0.64** on P66's 5090 host (EPYC 7C13), **0.873 / 0.960** on P69's (EPYC 7663;
-  `gnf4.calib.link-efficiency.5090.2026-09-24`, the registered [0.55, 0.75] REFUTED there), **1.0** on the gen 3 x8
-  A2000 (`bench/cold-engine/calib-a2000-400/`). So the factor is the box's, not the card class's, and it lives in each
-  box's own blob. Open: why two gen 4 x16 hosts differ (idle link state, NUMA placement of the pinned buffer, the DMA
-  engine — none measured), and the hybrid tier's mixed-layer dispatch term, which `cold_dest="deadline"` still omits.
+  `gnf4.calib.link-efficiency.5090.2026-09-24`, the registered [0.55, 0.75] REFUTED there). So the factor is the
+  box's, not the card class's, and it lives in each box's own blob. Open: why two gen 4 x16 hosts differ (idle link
+  state, NUMA placement of the pinned buffer, the DMA engine — none measured), and the hybrid tier's mixed-layer dispatch term, which `cold_dest="deadline"` still omits.
 - **#60** — arena staging blocks ~30% of a training step; the next
   layer's rows are prefetchable (guarded by a CUDA event, with a
   `hot_rows` floor of two layers' experts).

@@ -243,8 +243,8 @@ def device_shared_mem_limit(device=None) -> int:
 #
 # A Triton launch, ``kernel[grid](...)``, spends most of its host time before the driver call: it binds the arguments to the
 # signature, specializes each one (dtype, 16-byte alignment, ``== 1`` and ``% 16`` of integers), formats that into a string key,
-# looks the compiled kernel up and builds launch metadata -- 30-90 us a launch under triton 3.4 on an RTX A2000 host, against a
-# 4-7 us driver call. ``prebind`` wraps a kernel so that the FIRST launch of each specialization goes through Triton unchanged and
+# looks the compiled kernel up and builds launch metadata -- host work the driver call itself does not need. ``prebind`` wraps a
+# kernel so that the FIRST launch of each specialization goes through Triton unchanged and
 # the compiled kernel it returns is remembered under a key built from the same facts Triton specializes on; later launches with
 # that key call the kernel's own launcher directly. Same compiled binary, same arguments, same stream: bit-identical outputs
 # (test_triton_prebind). A Triton release this was not read against, a launch hook (profilers), a pre-run hook, a callable grid, a
@@ -298,7 +298,7 @@ class Prebound:
         self.kernels = {}
         self.device = self.stream = None       # Triton's own device / stream getters, bound at the first launch
         # 3.6 and 3.7 add an instrumentation mode to every launch's options. 3.4 re-reads TRITON_DEBUG from the environment at every
-        # launch (1.4 us on an RTX A2000 host), 3.6 and 3.7 once at import: read here once per kernel under 3.4, per launch otherwise.
+        # launch, 3.6 and 3.7 once at import: read here once per kernel under 3.4, per launch otherwise.
         self.compilation = getattr(knobs, "compilation", None)
         self.debug = knobs.runtime.debug if _triton_version() < (3, 6) else None
         # Triton 3.7 keys a launch on a registered compiler-stages hook (its custom pass pipeline), and the launch that compiles a key

@@ -39,8 +39,7 @@ pipelined gather moved cold rows at 11-16 GB/s while this module was given
 a 23.07 GB/s ``b_link`` -- the bytes-over-link term under-predicted the
 measured transfer 1.57-2.02x. The calibration's ``b_link`` is a 40-deep
 back-to-back copy loop; the gather runs at the SINGLE-copy rate the same box
-probes at 14.72 GB/s (on a gen 3 x8 A2000 the two rates agree and the model
-read 0.97-1.02x). So the link term now carries a measured ``link_eff``
+probes at 14.72 GB/s. So the link term now carries a measured ``link_eff``
 (``Costs.from_blob`` derives it from ``b_link.h2d_64mb_single`` /
 ``b_link.h2d_64mb`` -- ``bench/calibrate.py`` records both since schema
 ``gnf4-hybrid-calib/2``). The same lane found the pipelined residency
@@ -139,7 +138,7 @@ def gpu_us(rows: int, uniq: int, c: Costs) -> float:
     ``b_link * link_eff``: the gather is a kernel reading host memory one
     row at a time, and lane P66 measured it at the box's single-copy rate,
     not the back-to-back rate the calibration's ``b_link`` is (0.64 of it on
-    a gen 4 x16 RTX 5090, 1.0 on a gen 3 x8 A2000). The device-side read is
+    one gen 4 x16 RTX 5090 host, 0.87-0.96 on another). The device-side read is
     included at ``b_vram``. ``gpu_us_fixed`` is the path's own fixed
     per-call cost, measured by the consumer (P66: +10 launches, +2 copies
     per layer whatever the cold fraction -- 24.7 us/layer captured and
