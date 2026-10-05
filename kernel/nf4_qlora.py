@@ -490,6 +490,11 @@ class _CompactPaddedDelta(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, g):
+        # Every intermediate is dropped at its last use, as autograd frees each node's buffers once that node has run. Held to
+        # the return, the padded output grad `gd` [G, W, N] was still live while the block `x` and its grad `gx` (both
+        # [G, W, K]) were built -- a larger transient than the autograd path's, which has freed `gd` before `gx` exists
+        # (experts4bit-qlora TC1 amendment 36: training peak +0.23 GB with fp32 adapters). Only references move: every op,
+        # operand layout, dtype and the order of the calls are unchanged, so every gradient is the same bytes.
         a_cat, lora_A, lora_B, eid, flat, h = ctx.saved_tensors
         G, W, unique = ctx.G, ctx.widest, ctx.unique
         if unique:
@@ -497,19 +502,26 @@ class _CompactPaddedDelta(torch.autograd.Function):
         else:
             A, B = lora_A[eid], lora_B[eid]
         gd = g.new_zeros((G * W,) + tuple(g.shape[1:]))                   # the gather's backward: a scatter
-        gd.index_copy_(0, flat, g)
+        gd.index_copy_(0, flat, g)                                         # (`g` itself is held by autograd until this returns)
         gd = gd.view(G, W, -1)
         gh = gd.bmm(B)                                                     # BmmBackward0 of d = h @ B^T
+        del B
         gBt = h.transpose(1, 2).bmm(gd)
+        del gd, h                                                          # before the block is rebuilt (`h` stays saved on ctx)
         x = torch.zeros(G * W, a_cat.shape[1], dtype=A.dtype, device=a_cat.device)
         x.index_copy_(0, flat, a_cat.to(A.dtype))
         gx = gh.bmm(A)                                                     # BmmBackward0 of h = x @ A^T
+        del A
         gAt = x.view(G, W, -1).transpose(1, 2).bmm(gh)
+        del x, gh
         grad_a = None
         if ctx.needs_input_grad[0]:
             grad_a = gx.view(G * W, -1).index_select(0, flat)              # index_copy_'s backward for its source
+            del gx                                                         # before the cast's copy and the adapters' grads
             if grad_a.dtype != a_cat.dtype:
                 grad_a = grad_a.to(a_cat.dtype)                            # the .to(A.dtype)'s backward
+        else:
+            del gx
         gA = gB = None
         if ctx.needs_input_grad[1]:
             gA = torch.zeros_like(lora_A)
@@ -517,12 +529,14 @@ class _CompactPaddedDelta(torch.autograd.Function):
                 gA.index_copy_(0, eid, gAt.transpose(1, 2))
             else:
                 gA.index_put_((eid,), gAt.transpose(1, 2), accumulate=True)
+        del gAt
         if ctx.needs_input_grad[2]:
             gB = torch.zeros_like(lora_B)
             if unique:
                 gB.index_copy_(0, eid, gBt.transpose(1, 2))
             else:
                 gB.index_put_((eid,), gBt.transpose(1, 2), accumulate=True)
+        del gBt
         return grad_a, gA, gB, None, None, None, None, None
 
 
