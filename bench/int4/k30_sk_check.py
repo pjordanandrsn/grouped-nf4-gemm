@@ -1,7 +1,8 @@
 """K30's correctness gate (kernel/PREREG-k30-splitk-r-term-l4.md), run on the card BEFORE any timing.
 
 For every shape `sk_sweep.py` times, at R = 16 and R = 128, every sk the sweep will time must produce what sk = 1
-produces (no partials, no reduce) to within split-K's fp32 reorder: max |out_sk - out_1| <= 1e-2 * max |out_1|. A
+produces, through the served two-launch path (`reduce_partials` at every sk, at sk = 1 as the cast), to within
+split-K's fp32 reorder: max |out_sk - out_1| <= 1e-2 * max |out_1|. A
 timing of a configuration that computes something else is not a timing of the plan. Exits 22 on any failure, so the
 runner produces no perf number. Uses the installed int4_b32, exactly as the sweep does.
 
@@ -46,8 +47,7 @@ def main() -> int:
                     dst = torch.empty(R, N, dtype=torch.bfloat16, device=dev)
                     _gemv_int4_b32[(tiles, R, sk)](xq, xs, packed, scales, eids, part, part, dst,
                                                    N, K=K, R=R, BLOCK_N=bn, SK=sk, KU=ku, FUSED_REDUCE=0, num_warps=wp)
-                    if sk > 1:
-                        reduce_partials(part, sk, R, N, out=dst)
+                    reduce_partials(part, sk, R, N, out=dst)   # at sk = 1 too: the served two-launch path
                     outs[sk] = dst.float()
                 torch.cuda.synchronize()
                 ref = outs[1]

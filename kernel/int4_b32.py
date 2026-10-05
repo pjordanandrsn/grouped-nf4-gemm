@@ -345,7 +345,8 @@ def _plan(N: int, K: int, R: int = 1, sm_count: int = 128):
     sk = 8 if (triton.cdiv(N, 128) * 8) >= 256 else 16
     if R >= SPLITK_R_FLOOR and sm_count <= SPLITK_R_TERM_MAX_SMS:
         # blocks already resident without splitting; when they alone
-        # cover the target, want == 1 and sk collapses to no reduce.
+        # cover the target, want == 1 and sk collapses to 1 (no split; the
+        # two-launch wrapper still runs reduce_partials as the bf16 cast).
         # Parts above SPLITK_R_TERM_MAX_SMS keep the N-only plan (P39).
         programs = triton.cdiv(N, 128) * R
         want = triton.cdiv(SPLITK_TARGET_BLOCKS_PER_SM * sm_count, programs)

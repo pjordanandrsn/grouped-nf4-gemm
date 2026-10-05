@@ -20,8 +20,13 @@ Hence: sweep every sk up to the cap, including the planned one.
 Measurement follows int4_b32's own two load-bearing rules: graph replay, never
 eager; and configs compared under that metric, because an eager sweep
 anti-selects split-K (the reduce pays a launch the replay does not). Every cell
-reports the FULL cost including the reduce, since sk=1 needs no reduce at all
-and a kernel-only number would flatter the split arms.
+reports the FULL cost of the served two-launch path, `gemv_int4_b32` with the
+fused reduce off (the shipped default): the GEMV stores fp32 partials at EVERY
+sk, including sk = 1, and `reduce_partials` always runs, at sk = 1 as the
+fp32 -> bf16 cast. Until K30's rehearsal (2026-10-05) this sweep skipped the
+reduce at sk = 1 -- so its sk = 1 cell priced a launch and an R x N fp32 read
+the served path always pays as free, and left the output unwritten. The
+committed A2000 rows (`sk_*.json`) were taken that way.
 
 One (family, proj) per PROCESS: the first attempt hit an illegal memory access
 whose fatal traceback landed on the NEXT shape's manual_seed -- async faults
@@ -112,8 +117,7 @@ def main():
                 _gemv_int4_b32[(tiles, R, sk)](
                     xq, xs, packed, scales, eids, part, part, dst,
                     N, K=K, R=R, BLOCK_N=bn, SK=sk, KU=ku, FUSED_REDUCE=0, num_warps=wp)
-                if sk > 1:
-                    reduce_partials(part, sk, R, N, out=dst)
+                reduce_partials(part, sk, R, N, out=dst)        # at sk = 1 too: the served path's cast
             try:
                 times[sk] = timed_replay(call)
             except Exception as e:                          # noqa: BLE001
