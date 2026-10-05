@@ -16,7 +16,8 @@ K30's, frozen at its measured cut `aa562718`. Every number below is read from th
 
 | | |
 |---|---|
-| run | `k32-a4000-1`, 2026-10-05, status OK, teardown `vast-destroy` complete, **$0.016** |
+| registration | `prereg/k32` at `29a8c121` (18:59:33Z; the registration itself `ce48bb4`, 18:59:21Z), before the box started (19:00:32Z) and its teardown (19:07:25Z); squash-merged to main as `3aa897d` (#484) |
+| run | `k32-a4000-1`, 2026-10-05 19:00–19:07Z, status OK, teardown `vast-destroy` complete, **$0.016** |
 | card | NVIDIA RTX A4000, 48 SMs, 16,376 MiB, driver 535.154.05, power limit 140 W (`forensics.txt`); Vast verified/secure machine 19242, AMD Athlon 3000G host |
 | stack | torch 2.8.0+cu128, triton 3.4.0, grouped-nf4-gemm 0.41.0 at `aa562718` (`versions.txt`) |
 | runner | experts4bit-qlora `298224fd`, `bench/k30/` with `K30_CARD=A4000` |
