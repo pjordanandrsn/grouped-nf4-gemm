@@ -274,9 +274,10 @@ was wrong.
   R = 128, where it drops the split to sk 1). KEEP needed ≤ 0.97 and ≤ 1.02
   (`gnf4.kernel.k30-splitk-r-term.l4.2026-10-05`, measured;
   `kernel/RESULTS-k30-splitk-r-term-l4.md`). By the registered rule the term
-  goes off on every part (`SPLITK_R_TERM_MAX_SMS = 0`, its own PR); until
-  that lands, parts with ≤ 64 SMs still take it. The 5090 already plans
-  N-only after its step-level read of 1.0064, and MXFP4 keeps the N-only plan.
+  is off on every part (`SPLITK_R_TERM_MAX_SMS = 0`), so every card plans
+  N-only at every R, as the 5090 already did after its step-level read of
+  1.0064; MXFP4 keeps the N-only plan. A test enforces the default; the
+  mechanism stays, tested under a monkeypatched gate.
 - **K14 is refuted: at M=16 no shipped int4 arm beats dequant-then-GEMM
   on the attention projections.** On the 5090 the grouped int4 GEMM at
   its best swept configuration is 1.12–2.00× slower than the bf16 path

@@ -1395,7 +1395,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
    "limitations": [
     "The int4-b32 GEMV and the calibrated packer are measured-private (claims gnf4.serve.int4-b32-gemv, gnf4.serve.gptq-pack-int4-b32): the receipts live in the consumer's private audit tree",
     "Split-K on the NF4 dot-pad decode GEMV (nf4_grouped, GNF4_GEMV_SPLITK, lane K7) was refuted once and ships dormant there (the retired claim gnf4.retired.splitk-gemv records the refutation); the int4-b32 GEMV's own split-K is the shipped, measured plan (int4_b32._plan, reduced by reduce_partials)",
-    "Split-K on the int4-b32 GEMV is planned from (N, K, R, SM count) for R >= 16 activation rows on parts with <= 64 SMs; that row-count term was tuned on an A2000 timing sweep (the A2000 is a correctness-only testbed), so its gain is unverified on any target card; B=1 decode (R = top_k) and parts above 64 SMs keep the N-only plan, and bitwise equality across boxes must pin sk rather than plan it",
+    "Split-K on the int4-b32 GEMV is planned from (N, K) alone on every part: the row-count term (R >= 16, gated by SPLITK_R_TERM_MAX_SMS) is off since K30 read it OFF on a rented NVIDIA L4 (claim gnf4.kernel.k30-splitk-r-term.l4.2026-10-05), so the plan no longer depends on the SM count and two cards plan the same sk for the same call",
     "Whether int4 experts pass a quality gate is the consumer's per-family question (experts4bit-qlora docs/STATUS.md): small-active-parameter models fail it with round-to-nearest packing",
     "The single-stream decode anchor (claim gnf4.serve.decode-anchor-5090) is a consumer-measured anchor of the serving class on a knob-off basis, not a measurement of this lane, and is not cited here as its evidence",
     "K16: int4_smallm.gemm_int4_b32_smallm is a small-M single-projection GEMM -- in-register int4 dequant, per-block scaling inside the tile, bf16 tensor-core MMA over fat K chunks, split-K fused into the launch (kernel/PREREG-k16-smallm-int4-gemm.md). Measured on the RTX 5090 class at M=16 (claim gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19): it beats this package's bf16 dequant path on every attention shape and meets the pre-registered Marlin bar; the single-scale control (P4) was not tested and the model-level step saving (P5) is pending. Nothing in this package routes to it; the consumer's route is opt-in (experts4bit-qlora E4B_ATTN_INT4_SMALLM=1)",
@@ -2044,9 +2044,10 @@ was wrong.
   R = 128, where it drops the split to sk 1). KEEP needed ≤ 0.97 and ≤ 1.02
   (`gnf4.kernel.k30-splitk-r-term.l4.2026-10-05`, measured;
   `kernel/RESULTS-k30-splitk-r-term-l4.md`). By the registered rule the term
-  goes off on every part (`SPLITK_R_TERM_MAX_SMS = 0`, its own PR); until
-  that lands, parts with ≤ 64 SMs still take it. The 5090 already plans
-  N-only after its step-level read of 1.0064, and MXFP4 keeps the N-only plan.
+  is off on every part (`SPLITK_R_TERM_MAX_SMS = 0`), so every card plans
+  N-only at every R, as the 5090 already did after its step-level read of
+  1.0064; MXFP4 keeps the N-only plan. A test enforces the default; the
+  mechanism stays, tested under a monkeypatched gate.
 - **K14 is refuted: at M=16 no shipped int4 arm beats dequant-then-GEMM
   on the attention projections.** On the 5090 the grouped int4 GEMM at
   its best swept configuration is 1.12–2.00× slower than the bf16 path
