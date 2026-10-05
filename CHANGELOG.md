@@ -18,8 +18,9 @@
   Every op, operand layout and dtype, and the order of the calls, are unchanged. The incoming grad stays held by autograd until
   the node returns, so it is not dropped.
 - **Values.** Forward and every gradient stay `torch.equal` to the autograd path, in the existing grid and at every cell below.
-- **Measured on an RTX A2000** (torch 2.8.0+cu128, host load average 12–20, the bench at nice 10). One `lora_delta_grouped` call
-  per cell: 128 experts, top-8, r=16, gate_up K=2048 → N=1536 and down K=768 → N=2048, bf16 activations, `GNF4_HOST_REUSE` on.
+- **Allocator peaks, read on an RTX A2000** (torch 2.8.0+cu128; the A2000 is a correctness testbed, and allocator bytes do not
+  depend on contention). One `lora_delta_grouped` call per cell: 128 experts, top-8, r=16, gate_up K=2048 → N=1536 and down
+  K=768 → N=2048, bf16 activations, `GNF4_HOST_REUSE` on.
   The router has the skew of `bench/host-reuse/` (logits `randn + linspace(1.5, -1.5)` over the experts). Peaks are
   `max_memory_allocated` above what was allocated before the forward, in MiB, and were identical in two runs.
 
@@ -41,23 +42,13 @@
     forward's peak is the higher one.
   - **A harsher router.** With one expert taking every token (G = 128, widest = tokens), compact after is also at or below the
     autograd path in all eight cells. The closest is gate_up, bf16, 1,100 tokens: 1,152.1 / 1,623.2 / 1,148.4 MiB.
-  - **Time is unchanged by this patch.** The figures are medians of 200 interleaved repetitions; each cell shows two runs as
-    "run 1, run 2", in ms per call, timed from an idle GPU.
-
-    | projection, tokens, adapters | host fwd, before → after | host bwd | device fwd | device bwd | device bwd, autograd |
-    |---|---|---|---|---|---|
-    | gate_up, 380, fp32 | 0.64, 0.48 → 0.64, 0.48 | 0.89, 0.67 → 0.85, 0.66 | 3.01, 2.96 → 3.01, 2.96 | 5.42, 5.40 → 5.40, 5.39 | 4.47, 4.46 |
-    | down, 380, fp32 | 0.73, 0.45 → 0.72, 0.46 | 0.99, 0.55 → 1.00, 0.54 | 1.87, 1.79 → 1.87, 1.79 | 4.39, 4.41 → 4.39, 4.42 | 3.94, 3.99 |
-    | gate_up, 380, bf16 | 0.61, 0.34 → 0.62, 0.34 | 0.80, 0.47 → 0.81, 0.46 | 1.20, 1.09 → 1.21, 1.10 | 2.06, 2.02 → 2.07, 2.02 | 1.64, 1.60 |
-    | down, 380, bf16 | 0.53, 0.31 → 0.53, 0.31 | 0.67, 0.45 → 0.69, 0.45 | 0.92, 0.84 → 0.93, 0.84 | 1.57, 1.53 → 1.56, 1.53 | 1.35, 1.32 |
-    | gate_up, 1100, fp32 | 0.67, 0.54 → 0.68, 0.53 | 1.01, 0.79 → 1.04, 0.81 | 7.90, 7.91 → 7.90, 7.90 | 14.55, 14.61 → 14.55, 14.59 | 12.20, 12.25 |
-    | down, 1100, fp32 | 0.69, 0.64 → 0.70, 0.65 | 1.01, 0.97 → 1.04, 0.94 | 4.59, 4.60 → 4.59, 4.61 | 12.02, 12.14 → 11.99, 12.13 | 11.02, 11.14 |
-    | gate_up, 1100, bf16 | 0.62, 0.59 → 0.64, 0.61 | 0.89, 0.79 → 0.88, 0.81 | 2.78, 2.79 → 2.79, 2.80 | 5.07, 5.09 → 5.07, 5.10 | 4.01, 4.05 |
-    | down, 1100, bf16 | 0.52, 0.51 → 0.50, 0.51 | 0.64, 0.65 → 0.66, 0.67 | 2.09, 2.09 → 2.09, 2.09 | 3.74, 3.74 → 3.75, 3.75 | 3.30, 3.30 |
-
-    The compact backward's device time is still 0.2–2.4 ms above the autograd path's: the block rebuild that 0.36.0 recorded.
-- **Not measured here:** whether TC1's training peak with the flag on now falls back to or below the flag-off peak. That is a
-  re-measure on the consumer's box.
+  - **Time is not read here.** The A2000 is a correctness testbed only, so this entry carries no timing. The RTX 5090 reads
+    are experts4bit-qlora's TC1 amendments 36 and 37: the full Qwen3-30B-A3B training step with the flag on runs 0.969 / 0.967
+    of the flag-off step on the matched arm and 0.970 / 0.948 on the shipped arm, before and after this patch.
+- **The training peak, measured since:** experts4bit-qlora's TC1 amendment 37 (`tc1-5090-83`, a second host) read the matched
+  arm's peak with the flag on at 27.189 GB against 27.477 GB off, **−0.288 GB**, where amendment 36 had read +0.229 GB without
+  this patch. The flag stays opt-in; the default decision is proposed as TC1 amendment 38
+  (pjordanandrsn/experts4bit-qlora#1125).
 - **Not in this change.** Computing `gAt` before `gx` would free `x` before `gx` exists. In the same cells, gate_up's backward peak
   would fall a further 30–33 % below this patch (227.9 → 158.9 MiB at 380 tokens, fp32), with values bit-identical. The forward
   peak then becomes the binding one (204.0 MiB in that cell). It reorders two calls, so it is left to a separate change.

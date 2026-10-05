@@ -174,9 +174,10 @@ def _dequant_groups_kernel(b_ptr, am_ptr, eid_ptr, lut_ptr, out_ptr, N, KB,
 # GNF4_TRITON_PREBIND (on unless =0): the same kernel, launched without Triton's per-call argument binding (_triton_shim.prebind)
 _dequant_groups_launch = prebind(_dequant_groups_kernel)
 
-# BLOCK_N 16 x BLOCK_KB 256 bytes at 8 warps: on an RTX A2000 this runs a Qwen3-30B-A3B gate_up stack at 233 GB/s (0.76x the time of
-# bitsandbytes' dequantize_4bit, 5.1x faster than this module's first kernel, which gathered the LUT and the absmax per element and is
-# what made experts4bit-qlora's TC1c amendment 4 boxes slower) and down at 0.93x bitsandbytes; bit-equal throughout.
+# BLOCK_N 16 x BLOCK_KB 256 bytes at 8 warps; bit-equal to dequant_ref in bf16 throughout. This module's first kernel gathered the LUT
+# and the absmax per element, and is what made experts4bit-qlora's TC1c amendment 4 boxes slower. Speed is read on rented cards only:
+# on an RTX 5090 this decoder runs 0.94-1.01x the time of bitsandbytes' dequantize_4bit on large shapes and 0.65x on kv-sized ones
+# (experts4bit-qlora bench/dq1/RESULTS-dq1.md, DQ1 run 2).
 _DQ_BLOCK_N, _DQ_BLOCK_KB, _DQ_WARPS = 16, 256, 8
 
 
