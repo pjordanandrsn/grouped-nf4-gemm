@@ -34,6 +34,12 @@ import torch
 # case — and otherwise lets the kernels still DEFINE while a launch raises.
 from _triton_shim import tl, triton  # noqa: F401  (re-exported names)
 from _triton_shim import UnsupportedShapeError, device_shared_mem_limit  # noqa: F401
+from _triton_shim import prebind, prebind_requested
+
+#: GNF4_TRITON_PREBIND=1 (opt-in, read at import; _triton_shim.prebind): the training GEMMs launch without Triton's per-call argument
+#: binding, and the host work around them that repeats for one grouping -- the expert-id upload's key, the M-tile height -- is
+#: remembered by value (_ValueMemo). Values identical; off by default.
+_PREBIND = prebind_requested()
 
 #: ``tl.gather`` arrived in triton 3.3. Bind it ONCE here rather than naming it
 #: inside a kernel, because triton's JIT walks the whole kernel AST to build its
@@ -425,6 +431,44 @@ _UPLOAD_MEMO_SIZE = 8
 HOST_REUSE_STATS = {"upload_hits": 0, "upload_misses": 0, "plan_hits": 0, "plan_misses": 0}
 
 
+class _ValueMemo:
+    """A few recent results keyed on HOST INT LISTS compared by value, plus a hashable context (device, stream, ...).
+
+    The memos above key on ``tuple(int(v) for v in ...)``: one ``int()`` per element and a tuple hash on every call -- 20-40 us of
+    host time per 128-group call on an RTX A2000 host, paid by every training GEMM. Here a lookup is one C-level list ``==`` per
+    entry. Only an all-``int`` snapshot is stored, so a caller's elements compare by numeric value against plain ints: a hit means
+    ``int(v)`` equals the stored value for every element (a float or a 0-dim tensor compares by value too), so the result is the
+    one the full path would build. Used under GNF4_TRITON_PREBIND=1 only."""
+
+    def __init__(self, size: int = 8):
+        self.entries = collections.deque(maxlen=size)
+
+    def get(self, lists, ctx):
+        for snap, c, out in self.entries:
+            if c == ctx and snap == lists:
+                return out
+        return None
+
+    def put(self, lists, ctx, out):
+        if all(type(v) is int for s in lists for v in s):
+            self.entries.appendleft((tuple([list(s) for s in lists]), ctx, out))
+        return out
+
+
+def _lists_of_ints_shape(seqs) -> bool:
+    """Every sequence a plain ``list`` (what the value memo compares against its snapshots)."""
+    return type(seqs) is tuple and all(type(s) is list for s in seqs)
+
+
+def _raw_stream_key(dev):
+    """(device, raw current-stream handle) for a CUDA device, without building a ``torch.cuda.Stream`` object."""
+    idx = dev.index if dev.index is not None else torch.cuda.current_device()
+    return (dev, torch._C._cuda_getCurrentRawStream(idx))
+
+
+_UPLOAD_FAST = _ValueMemo()
+
+
 def _host_reuse_enabled() -> bool:
     """On unless ``GNF4_HOST_REUSE=0``. Value-identical host-side reuse (see ``_UPLOAD_MEMO`` and
     ``nf4_qlora.lora_delta_grouped``). Measured (experts4bit-qlora TC1 amendment 20, tc1-5090-51, one RTX 5090, every other
@@ -491,6 +535,20 @@ def to_device_i32(seqs, device):
     (``kernel/prereg_capturability_scope.json``). **Capturability is a
     precondition, not a speedup.**
     """
+    if _PREBIND and _lists_of_ints_shape(seqs) and _host_reuse_enabled():
+        # GNF4_TRITON_PREBIND: the upload memo below, looked up by value instead of through its int()-converted tuple key
+        dev = torch.device(device)
+        if dev.type == "cuda" and not torch.cuda.is_current_stream_capturing():
+            ctx = _raw_stream_key(dev)
+            hit = _UPLOAD_FAST.get(seqs, ctx)
+            if hit is not None:
+                HOST_REUSE_STATS["upload_hits"] += 1
+                return list(hit)
+            return list(_UPLOAD_FAST.put(seqs, ctx, tuple(_to_device_i32(seqs, device))))
+    return _to_device_i32(seqs, device)
+
+
+def _to_device_i32(seqs, device):
     lens = [len(s) for s in seqs]
     total = sum(lens)
     dev = torch.device(device)
@@ -948,6 +1006,10 @@ def _gemm_nf4_grouped(
     tl.store(out_ptrs, acc.to(tl.bfloat16), mask=m_mask[:, None] & n_mask[None, :])
 
 
+# GNF4_TRITON_PREBIND=1 (opt-in): the training forward's launch without Triton's per-call argument binding (_triton_shim.prebind)
+_gemm_nf4_grouped_launch = prebind(_gemm_nf4_grouped)
+
+
 @triton.jit
 def _gemv_nf4_grouped(
     a_ptr,
@@ -1317,6 +1379,9 @@ def _prefill_tile_rule() -> str:
     return v
 
 
+_BLOCK_M_FAST = _ValueMemo(4)
+
+
 def _prefill_block_m_cost(sizes, d: float | None = None) -> int:
     """The M-tile height in (16, 32, 64, 128) minimising ``sum(ceil(rows / BLOCK_M)) x (D + BLOCK_M)``: each tile pays a
     fixed decode of its expert's weight slice (``D`` rows' worth) plus its rows' MMA, padding included. Ties go to the
@@ -1324,6 +1389,13 @@ def _prefill_block_m_cost(sizes, d: float | None = None) -> int:
     if d is None:
         v = os.environ.get("GNF4_PREFILL_TILE_D")
         d = float(v) if v else _TILE_D_DEFAULT
+    if _PREBIND and type(sizes) is list:       # GNF4_TRITON_PREBIND: one grouping's gate_up and down calls share the answer
+        hit = _BLOCK_M_FAST.get((sizes,), d)
+        return hit if hit is not None else _BLOCK_M_FAST.put((sizes,), d, _block_m_cost(sizes, d))
+    return _block_m_cost(sizes, d)
+
+
+def _block_m_cost(sizes, d: float) -> int:
     t16 = t32 = t64 = t128 = 0
     for r in sizes:
         r = int(r)
@@ -1571,7 +1643,7 @@ def gemm_4bit_grouped(
     PREFILL_BM_STATS[block_m] = PREFILL_BM_STATS.get(block_m, 0) + 1
     t_row0, t_rows, t_group = build_group_tiles(sizes, block_m, dev)
     grid = (t_row0.numel(), triton.cdiv(N, block_n))
-    _gemm_nf4_grouped[grid](
+    _gemm_nf4_grouped_launch[grid](
         a_cat,
         B,
         absmax,
@@ -1719,6 +1791,9 @@ def _dgrad_nf4_grouped(
     tl.store(out_ptrs, acc.to(tl.bfloat16), mask=m_mask[:, None] & k_mask[None, :])
 
 
+# GNF4_TRITON_PREBIND=1 (opt-in): the dgrad launch without Triton's per-call argument binding (_triton_shim.prebind)
+_dgrad_nf4_grouped_launch = prebind(_dgrad_nf4_grouped)
+
 # Measured on an RTX A2000 by sweeping (BLOCK_M, BLOCK_N, BLOCK_K, num_warps) over
 # the E=256 gate_up shape (N=1536, K=512, T_cat=4096): this config ran 3.29 ms,
 # 0.91x of the FORWARD kernel's time on the same problem — i.e. dgrad reaches the
@@ -1793,7 +1868,7 @@ def dgrad_4bit_grouped(grad_out, B, absmax, sizes, expert_ids, config=None):
         else to_device_i32((expert_ids,), dev)[0]
     ).to(torch.int32)
     out = torch.empty(T, K, dtype=torch.bfloat16, device=dev)
-    _dgrad_nf4_grouped[(t_row0.numel(), triton.cdiv(K, block_k))](
+    _dgrad_nf4_grouped_launch[(t_row0.numel(), triton.cdiv(K, block_k))](
         grad_out.contiguous(),
         B,
         absmax,

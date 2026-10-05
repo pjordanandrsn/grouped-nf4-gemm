@@ -413,6 +413,7 @@ def test_interp_impossible_limit_refuses_before_any_launch(monkeypatch):
             raise AssertionError("the M-tile kernel was launched after a refusal")
 
     monkeypatch.setattr(NG, "_gemm_nf4_grouped", _NeverLaunch())
+    monkeypatch.setattr(NG, "_gemm_nf4_grouped_launch", _NeverLaunch())     # the name the wrapper launches through
     with pytest.raises(UnsupportedShapeError) as ei:
         NG.gemm_4bit_grouped(acts, B, A, sizes, torch.tensor(ids, dtype=torch.int32),
                              prefill_variant=V0)

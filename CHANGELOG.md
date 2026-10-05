@@ -2,6 +2,50 @@
 
 ## Unreleased
 
+### Opt-in: the training GEMMs launch without Triton's per-call argument binding, and their per-call host work is reused by value (`GNF4_TRITON_PREBIND=1`)
+
+- **Why.** experts4bit-qlora's training step on an H100 is host-bound (device busy 0.46 in its profile). On the host, a
+  `FusedGroupedNf4` call pays Triton's launcher, which binds and specializes every argument and formats a string key. It also pays
+  per-call work that repeats for one grouping: an int-converted tuple key over 128 expert ids, the M-tile cost rule, and the route's
+  capability query and plan (with a cumsum launch).
+- **What.** Off by default; the flag is read when the modules are imported.
+  - `_triton_shim.prebind(kernel)` lets the first launch of each specialization go through Triton and keeps the compiled kernel it
+    returns. Its key is what Triton specializes on: each tensor's dtype and 16-byte alignment, each integer's value, every other
+    argument's type and value, the launch options, the device and the debug knobs. Later launches with that key call the kernel's own
+    launcher. `_gemm_nf4_grouped` (the training forward's M-tile path), `_dgrad_nf4_grouped` and `nf4_route._dequant_groups_kernel`
+    launch through it. Off, `prebind` returns the kernel itself.
+  - `nf4_grouped._ValueMemo` keeps recent results keyed on host int lists compared by value (one C-level list `==`). Behind it,
+    `to_device_i32`'s upload memo is looked up by value, `_prefill_block_m_cost` runs once per grouping, and the grouped_mm route's
+    `_plan` (expert ids and offsets) is shared by a layer's gate_up and down, forward and dgrad.
+  - The grouped_mm route reads the device capability once per indexed device.
+- **Unchanged values.** Same compiled binaries, arguments and stream; outputs are bit-identical. Triton's own launch serves a Triton
+  release other than 3.4 and 3.6, a registered launch or pre-run hook, a callable grid, a changed global the kernel reads, and an
+  argument of another type. Under triton 3.4, `TRITON_DEBUG` is read once per kernel rather than at every launch (3.6 itself reads
+  it once). The value memo stores only all-int snapshots, so a hit is what the full path would build. It is never used under stream
+  capture, and `GNF4_HOST_REUSE=0` turns it off with the existing memo.
+- **Measured** on the RTX A2000 box's host: a Xeon W-1250 at load average 18–44 on its 12 threads, the bench at nice 10. Host µs per
+  call, each timed after a synchronize; median of 300 (whole calls) or 1,500 (pieces) interleaved off/on pairs; two runs per torch.
+  Qwen3-30B-A3B's experts: E=128, top-8 over 4,096 tokens (sequence 2048 × micro-batch 2), so 128 groups and 32,768 rows; gate_up
+  N=1536 K=2048, down N=2048 K=768.
+
+  | call | torch 2.8.0 / triton 3.4.0: off → on | torch 2.11.0 / triton 3.6.0: off → on |
+  |---|---|---|
+  | `FusedGroupedNf4.apply`, fused route, gate_up / down | 633–654 → 433–452 / 582–617 → 408–423 | 621–640 → 460–482 / 602–610 → 437–461 |
+  | `FusedGroupedNf4.backward`, dgrad kernel, gate_up / down | 448–450 → 318–322 / 408–437 → 293–310 | 433–470 → 327–356 / 426–430 → 330–334 |
+  | grouped_mm route: `_plan`, gate_up / down | 105–112 → 12–13 / 87–90 → 10–11 | 97–112 → 10–13 / 99–104 → 11–12 |
+  | grouped_mm route: `_refuse_unless_supported` | 10–13 → 3.5–4.6 | 6–12 → 2.4–4.4 |
+  | `dequant_groups` (launch and allocation, 16 groups), gate_up / down | 131–135 → 78–83 / 85–118 → 52–71 | 140–153 → 110–124 / 95–100 → 79 |
+
+  The route's whole call is not timed: torch 2.8 has no `_grouped_mm` kernel for sm_86, and torch 2.11's synchronizes there.
+- **Not measured.** No training step, and no H100 or RTX 5090 host. The default stays off until a registered A/B reads it.
+- **Tests.** `kernel/test_triton_prebind.py` (wired into CI's GPU-labelled step). Against the flag off, the fused forward, the dgrad
+  and the route's dequant match under `torch.equal`: odd N, K at and off 128, few and many groups, misaligned activations. Every
+  prebound launch is the very compiled kernel Triton's lookup returns. A launch hook, a callable grid and an unsupported Triton
+  release take Triton's path. On CPU, the value memo answers only what the full path would build, the M-tile memo is
+  value-identical, and the capability is read once per indexed device. On an RTX A2000 under torch 2.8.0 and 2.11.0, flag off and
+  on: 14 passed in it, and the suites over these modules pass the same either way (428 passed, 21 skipped; 28 passed in
+  interpreter mode). The shape-feasibility test now also guards the name the forward launches through.
+
 ### `nvme_residency`: pinned slots are fenced against queued device copies (#60)
 
 - **The race.** A non-blocking copy out of a pinned slot is queued, not done, when `segment_into` returns. A later fill
