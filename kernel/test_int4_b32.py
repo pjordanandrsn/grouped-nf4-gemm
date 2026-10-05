@@ -743,9 +743,10 @@ def test_plan_sk_never_exceeds_the_n_only_rule(N, K, sm):
 @pytest.mark.parametrize("N,K", _PLAN_SHAPES)
 @pytest.mark.parametrize("sm", [26, 48, 64])   # the SM class the term is gated to; above it the N-only plan holds (P39)
 def test_plan_stops_splitting_once_the_grid_is_full(N, K, sm):
-    """Enough rows to fill the target on their own => sk == 1, i.e. no
-    partials and no reduce launch at all. That is the mechanism the term
-    exists for: the reduce is not made cheaper, it stops being launched."""
+    """Enough rows to fill the target on their own => sk == 1: no split.
+    The served two-launch wrapper still runs ``reduce_partials`` at sk == 1
+    as the fp32 -> bf16 cast; the sweep that motivated this term skipped
+    that launch at sk == 1 (found by K30's rehearsal, 2026-10-05)."""
     triton = pytest.importorskip("triton")
     from int4_b32 import SPLITK_TARGET_BLOCKS_PER_SM, _plan
     tiles = triton.cdiv(N, 128)
