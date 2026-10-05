@@ -324,7 +324,8 @@ def dense_dgrad(grad_out, B, absmax, sizes, expert_ids):
 # This is experts4bit-qlora's RD1 probe arm `decoded_cap` (bench/moegen/rd1/rd_probe.py), moved here unchanged in arithmetic:
 # the dequant is bit-equal to dequant_ref in bf16, the GEMM accumulates bf16 products in fp32 over BLOCK_K = 64 slices and rounds
 # once to bf16. Not bit-identical to the fused kernels (TF32, decode in the loop) nor to `dense` (cuBLAS's order). Its gate is
-# RD1's: relative error against an fp32 reference at most 2x dense's, on every call (kernel/test_nf4_decoded*.py).
+# RD1's: relative error against an fp32 reference at most 2x dense's, on every call (kernel/test_nf4_decoded_interp.py in the
+# interpreter, kernel/test_nf4_route.py compiled).
 #
 # Memory, measured, not guaranteed: on one RTX 5090 (RD1's licensed reading, rd1-rp-5090-2) the route's peak above its inputs at
 # the 256 MiB cap was 180-448 MiB over eight families' expert shapes at seq 512 and 2048 (448 MiB: Mixtral-8x7B's down and
@@ -455,10 +456,7 @@ def _decoded(x, B, absmax, sizes, expert_ids, mode):
         raise RuntimeError("GNF4_TRAIN_GEMM=decoded needs a CUDA device")
     E, N, half = B.shape
     K = half * 2
-    sz, eids = _host_plan(sizes, expert_ids, dev) if dev.type == "cuda" else (
-        [int(v) for v in (sizes.tolist() if torch.is_tensor(sizes) else sizes)],
-        torch.as_tensor([int(e) for e in (expert_ids.tolist() if torch.is_tensor(expert_ids) else expert_ids)],
-                        dtype=torch.int32))
+    sz, eids = _host_plan(sizes, expert_ids, dev)
     T = x.shape[0]
     assert sum(sz) == T, (sum(sz), T)
     bm, bn, bk, warps, stages = decoded_tiles(T, sum(1 for n in sz if n))
