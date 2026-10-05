@@ -250,7 +250,8 @@ def _gemv_int4_b32(xq_ptr, xs_ptr, w_ptr, ws_ptr, eid_ptr, part_ptr,
 # sibling NF4 decode planner (nf4_grouped._decode_plan) spends the same
 # quantity as 4 * sm_count at BLOCK_N=64; this kernel's blocks are twice
 # as wide, and 8 * sm_count is what an RTX A2000 timing sweep picked -- see
-# _plan for why that sweep is not speed evidence.
+# _plan for why that sweep is not speed evidence. Inert while
+# SPLITK_R_TERM_MAX_SMS is 0 (K30).
 SPLITK_TARGET_BLOCKS_PER_SM = 8
 
 # Row count below which the planner does not touch sk at all. B=1 decode
@@ -260,15 +261,17 @@ SPLITK_TARGET_BLOCKS_PER_SM = 8
 # this term is for. See _plan.
 SPLITK_R_FLOOR = 16
 
-# The R term is applied only on parts within the SM class its constant was swept on (the RTX A2000's 26 SMs; a timing sweep on
-# a correctness-only testbed, so the term's gain on any <= 64-SM target card is unverified -- see _plan). P39 box 1
-# (RTX 5090, 128 SMs, sm_120) ran the R-aware plan against the N-only one on a single
-# artifact-pinned pack at B=16 and read NEW/OLD = 1.0064 / 1.0063 (self-pair spread 0.0005):
-# no step-level gain and a small real regression -- on 128 SMs the rule collapses sk to 1 at
-# R=128 where the old sk=16 was worth more than the reduce it saved. The mechanism stands; the
-# CONSTANT above does not transfer across SM classes. Until a sweep on that class sets its own
-# target, parts with more SMs than this keep the N-only plan at every R.
-SPLITK_R_TERM_MAX_SMS = 64
+# The R term applies only on parts with sm_count <= this, and 0 means NO part takes it: every card
+# plans N-only at every R. History:
+#   - P39 box 1 (RTX 5090, 128 SMs) read the R-aware plan 0.6 % slower at B=16 on a pack-pinned A/B, so
+#     the term was gated to <= 64 SMs (gnf4#358), where its only receipt was an A2000 sweep -- a
+#     correctness-only testbed, whose sk = 1 cells also skipped the reduce launch (K30 Amendment 1).
+#   - K30 (2026-10-05, one rented NVIDIA L4, 58 SMs, kernel/RESULTS-k30-splitk-r-term-l4.md) read it
+#     OFF by its registered rule: the R-aware pick's summed time over the 24 cells at R >= 16 is
+#     1.0101x the N-only pick's, worst cell 1.1781x (qwen3_moe gate_up at R = 128, sk 1 vs sk 16).
+# The mechanism stays (its tests run it under a monkeypatched gate); turning it back on for any class
+# takes a new registered read on that class.
+SPLITK_R_TERM_MAX_SMS = 0
 
 _SM_CACHE: dict[str, int] = {}
 
@@ -317,14 +320,17 @@ def _plan(N: int, K: int, R: int = 1, sm_count: int = 128):
     R >= 16 means batched decode (B*top_k rows), which is the regime
     this term is for.
 
-    Tuned by a 48-cell timing sweep on the RTX A2000 (sm_86, 26 SMs,
-    graph replay, the qwen3_moe/granitemoe/olmoe gate_up+down shapes,
-    R = 1..128 -- bench/int4/RESULTS-sk-r-sweep.md). The A2000 is a
-    correctness-only testbed, so that sweep's ratios are not speed
-    evidence: the term's gain is UNVERIFIED on any target card, including
-    the <= 64-SM parts it is gated to. What holds by construction is that
-    R < 16 returns exactly the N-only plan, and that the plan only moves
-    sk, so outputs stay within the split-K reorder class (CAVEAT below).
+    **OFF on every part since K30** (``SPLITK_R_TERM_MAX_SMS = 0``): on a
+    rented NVIDIA L4 (58 SMs) the R-aware pick's summed time over the 24
+    cells at R >= 16 is 1.0101x the N-only pick's and 1.1781x at its worst
+    cell, against a KEEP bar of <= 0.97 / <= 1.02
+    (kernel/RESULTS-k30-splitk-r-term-l4.md). The term had been tuned by an
+    RTX A2000 timing sweep (bench/int4/RESULTS-sk-r-sweep.md), which is not
+    speed evidence. With the gate at 0 every call returns the N-only plan;
+    the code below is kept so a future registered read can re-enable it.
+    What holds by construction either way is that R < 16 returns exactly
+    the N-only plan, and that the plan only moves sk, so outputs stay
+    within the split-K reorder class (CAVEAT below).
 
     CAVEAT, and it is the reason the constant is named rather than
     inlined: sm_count enters the config, so two boxes with different SM
@@ -333,13 +339,11 @@ def _plan(N: int, K: int, R: int = 1, sm_count: int = 128):
     existing bargain, not a new one -- but it is a bargain, and anything
     asserting bitwise equality ACROSS boxes must pin sk rather than
     plan it. Within a box the plan is a pure function of (N, K, R).
-    SPLITK_TARGET_BLOCKS_PER_SM was set on sm_86 only, and P39's RTX 5090
-    step read showed it does NOT transfer to sm_120 (128 SMs: B=16 step
-    0.6% slower); the term is therefore gated to sm_count <=
-    SPLITK_R_TERM_MAX_SMS until a sweep on the larger class sets its own
-    target. That gate keeps the term on for <= 64-SM parts on the A2000
-    sweep alone; a rented <= 64-SM read is open
-    (bench/int4/sk_sweep.py; P39 receipts in experts4bit-qlora#533)."""
+    With the gate at 0 no part plans from its SM count, so the plan is
+    the same on every card. SPLITK_TARGET_BLOCKS_PER_SM was set on sm_86
+    only; P39's RTX 5090 step read (128 SMs: B=16 step 0.6% slower) and
+    K30's L4 kernel sweep (58 SMs: OFF) both read it against the N-only
+    rule (bench/int4/sk_sweep.py; P39 receipts in experts4bit-qlora#533)."""
     kb = K // 32
     ku = 4 if kb % 4 == 0 else (2 if kb % 2 == 0 else 1)
     sk = 8 if (triton.cdiv(N, 128) * 8) >= 256 else 16
@@ -347,7 +351,7 @@ def _plan(N: int, K: int, R: int = 1, sm_count: int = 128):
         # blocks already resident without splitting; when they alone
         # cover the target, want == 1 and sk collapses to 1 (no split; the
         # two-launch wrapper still runs reduce_partials as the bf16 cast).
-        # Parts above SPLITK_R_TERM_MAX_SMS keep the N-only plan (P39).
+        # Unreached while SPLITK_R_TERM_MAX_SMS is 0 (K30).
         programs = triton.cdiv(N, 128) * R
         want = triton.cdiv(SPLITK_TARGET_BLOCKS_PER_SM * sm_count, programs)
         capped, sk = sk, 1

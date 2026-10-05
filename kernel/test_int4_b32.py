@@ -683,9 +683,35 @@ _PLAN_SHAPES = [(1536, 2048), (2048, 768), (1024, 1536), (1536, 512),
                 (2048, 2048), (2048, 1024), (5120, 8192), (4096, 4096)]
 
 
+@pytest.fixture
+def r_term_on(monkeypatch):
+    """The R term is OFF by default since K30 (SPLITK_R_TERM_MAX_SMS = 0). The mechanism's own tests run with
+    it switched back on at its old <= 64-SM gate, so the code a future registered read could re-enable stays
+    tested rather than merely kept."""
+    pytest.importorskip("triton")
+    import int4_b32
+    monkeypatch.setattr(int4_b32, "SPLITK_R_TERM_MAX_SMS", 64)
+    return 64
+
+
+@pytest.mark.parametrize("N,K", _PLAN_SHAPES)
+def test_the_r_term_is_off_by_default_on_every_sm_count(N, K):
+    """K30's registered consequence, enforced rather than just set: on a rented NVIDIA L4 (58 SMs) the R term
+    read OFF (summed 1.0101x the N-only pick, worst cell 1.1781x; kernel/RESULTS-k30-splitk-r-term-l4.md).
+    So by default every card plans N-only at every R, the <= 64-SM class included. Re-enabling it for any
+    class takes a new registered read on that class."""
+    pytest.importorskip("triton")
+    from int4_b32 import SPLITK_R_FLOOR, SPLITK_R_TERM_MAX_SMS, _plan
+    assert SPLITK_R_TERM_MAX_SMS == 0, "K30 read the R term OFF; turning it on needs a new registered read"
+    want = _plan(N, K)
+    for sm in (26, 48, 58, 64, 84, 128, 132, 170):
+        for R in (SPLITK_R_FLOOR, 17, 32, 64, 128, 256, 1024):
+            assert _plan(N, K, R, sm) == want, (N, K, R, sm)
+
+
 @pytest.mark.parametrize("N,K", _PLAN_SHAPES)
 @pytest.mark.parametrize("sm", [26, 84, 128, 132])
-def test_plan_decode_is_unchanged_by_the_r_term(N, K, sm):
+def test_plan_decode_is_unchanged_by_the_r_term(N, K, sm, r_term_on):
     """R <= 1 must return exactly the N-only rule's sk, on every SM count.
 
     Decode (M=1) is every census cell and the licensed serve config, so
@@ -720,7 +746,7 @@ def test_the_floor_clears_every_shipped_top_k():
 
 @pytest.mark.parametrize("N,K", _PLAN_SHAPES)
 @pytest.mark.parametrize("sm", [26, 84, 128, 132])
-def test_plan_sk_never_exceeds_the_n_only_rule(N, K, sm):
+def test_plan_sk_never_exceeds_the_n_only_rule(N, K, sm, r_term_on):
     """sk is non-increasing in R, and never above the N-only value.
 
     Load-bearing beyond tidiness: callers may preallocate ``part`` as
@@ -741,8 +767,8 @@ def test_plan_sk_never_exceeds_the_n_only_rule(N, K, sm):
 
 
 @pytest.mark.parametrize("N,K", _PLAN_SHAPES)
-@pytest.mark.parametrize("sm", [26, 48, 64])   # the SM class the term is gated to; above it the N-only plan holds (P39)
-def test_plan_stops_splitting_once_the_grid_is_full(N, K, sm):
+@pytest.mark.parametrize("sm", [26, 48, 64])   # the SM class the term was gated to before K30; above it the N-only plan holds (P39)
+def test_plan_stops_splitting_once_the_grid_is_full(N, K, sm, r_term_on):
     """Enough rows to fill the target on their own => sk == 1: no split.
     The served two-launch wrapper still runs ``reduce_partials`` at sk == 1
     as the fp32 -> bf16 cast; the sweep that motivated this term skipped
@@ -756,7 +782,7 @@ def test_plan_stops_splitting_once_the_grid_is_full(N, K, sm):
 
 
 @pytest.mark.parametrize("N,K", _PLAN_SHAPES)
-def test_plan_ku_still_divides_the_k_blocks(N, K):
+def test_plan_ku_still_divides_the_k_blocks(N, K, r_term_on):
     """The pre-existing invariant the docstring calls out: a KU that does
     not divide K//32 reads past the row tail. Threading R must not
     disturb it, and sk must never exceed the number of spans."""
@@ -769,11 +795,10 @@ def test_plan_ku_still_divides_the_k_blocks(N, K):
         assert sk <= max(1, kb // ku), (N, K, R, sk, ku)
 
 
-# The R term's constant was tuned on an A2000 timing sweep (bench/int4/RESULTS-sk-r-sweep.md).
-# The A2000 is a correctness-only testbed, so those timings are not asserted here: the plan's
-# speed waits on a rented read of a <= 64-SM card. What is pinned is structural.
+# The R term's constant was tuned on an A2000 timing sweep (bench/int4/RESULTS-sk-r-sweep.md), not
+# speed evidence; K30's rented L4 read turned the term OFF on every part. What is pinned is structural.
 
-def test_plan_is_a_pure_function_of_n_k_r():
+def test_plan_is_a_pure_function_of_n_k_r(r_term_on):
     """Within a box (a fixed SM count) the plan is a pure function of (N, K, R):
     the same call returns the same plan whatever was planned before it, so a
     captured decode path and a preallocated ``part`` buffer get the
@@ -789,11 +814,11 @@ def test_plan_is_a_pure_function_of_n_k_r():
 
 @pytest.mark.parametrize("N,K", _PLAN_SHAPES)
 @pytest.mark.parametrize("sm", [84, 128, 132, 170])
-def test_plan_keeps_the_n_only_rule_above_the_measured_sm_class(N, K, sm):
+def test_plan_keeps_the_n_only_rule_above_the_measured_sm_class(N, K, sm, r_term_on):
     """P39 box 1 (RTX 5090, 128 SMs): the R-aware plan read 0.6% SLOWER at B=16 on a
     pack-pinned A/B -- the sm_86 constant does not transfer. Above
-    SPLITK_R_TERM_MAX_SMS every R returns the N-only plan until that class has its
-    own sweep; at or below it the R term acts, its gain unverified on a target card."""
+    SPLITK_R_TERM_MAX_SMS every R returns the N-only plan. Run under ``r_term_on`` (the
+    pre-K30 gate of 64): the shipped gate is 0, and K30 read the term OFF on an L4."""
     pytest.importorskip("triton")
     from int4_b32 import SPLITK_R_FLOOR, SPLITK_R_TERM_MAX_SMS, _plan
     assert sm > SPLITK_R_TERM_MAX_SMS

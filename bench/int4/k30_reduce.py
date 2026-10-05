@@ -31,6 +31,8 @@ import sys
 FAMILIES = {"qwen3_moe": (2048, 768), "granitemoe": (1536, 512), "olmoe": (2048, 1024)}
 PROJS = ("gate_up", "down")
 RS = (1, 2, 4, 8, 16, 32, 64, 128)
+# K30's measured cut (aa562718): the gate was 64 then. The consequence of K30's OFF set the shipped gate to 0, so
+# --check-installed-plan refuses on any later cut by design; this file is the lane's instrument, not a mirror of main.
 SPLITK_R_FLOOR = 16
 SPLITK_TARGET_BLOCKS_PER_SM = 8
 SPLITK_R_TERM_MAX_SMS = 64

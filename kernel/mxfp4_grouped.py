@@ -272,11 +272,10 @@ def gemv_mxfp4_b32(xq, xs, blocks, scales, eids, N: int, K: int,
     R = eids.numel()
     assert blocks.dtype == torch.uint8 and scales.dtype == torch.uint8
     assert scales.shape[-1] == K // MX_BLOCK, (scales.shape, K)
-    # _plan takes R now and this grid is the same shape, but the R term's
-    # only receipts are RTX A2000 timing sweeps (bench/int4/RESULTS-sk-r-sweep.md
-    # for int4, rows/mx_*.json for this e2m1 loop), and the A2000 is a
-    # correctness-only testbed. Deliberately the N-only decode plan until an
-    # MXFP4-specific rule has a receipt from a rented card.
+    # The N-only decode plan, as every int4-b32 call now takes too: the R term
+    # is off on every part since K30 (a rented L4 read it OFF), and this e2m1
+    # loop's own R sweep (rows/mx_*.json) was A2000 timing, not speed evidence.
+    # An MXFP4-specific rule would need its own registered read on a rented card.
     bn, wp, sk, ku = _plan(N, K)
     if part is None:
         part = torch.empty(sk * R, N, dtype=torch.float32, device=xq.device)
