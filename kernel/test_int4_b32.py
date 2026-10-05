@@ -10,7 +10,6 @@ path the accumulation identity is checked to ~1e-6 in fp32.
 """
 import math
 import os
-import pathlib
 
 import pytest
 
@@ -680,9 +679,6 @@ def _plan_n_only(N, K):
 
 # the census/serve shapes (gate_up and down for each family) plus two
 # wide-N cells that take the other side of the N-only rule's branch
-# the bound the sweep receipt documents; see bench/int4/RESULTS-sk-r-sweep.md
-SK_R_BOUND = 1.07
-
 _PLAN_SHAPES = [(1536, 2048), (2048, 768), (1024, 1536), (1536, 512),
                 (2048, 2048), (2048, 1024), (5120, 8192), (4096, 4096)]
 
@@ -745,12 +741,11 @@ def test_plan_sk_never_exceeds_the_n_only_rule(N, K, sm):
 
 
 @pytest.mark.parametrize("N,K", _PLAN_SHAPES)
-@pytest.mark.parametrize("sm", [26, 48, 64])   # the measured SM class; above it the N-only plan holds (P39)
+@pytest.mark.parametrize("sm", [26, 48, 64])   # the SM class the term is gated to; above it the N-only plan holds (P39)
 def test_plan_stops_splitting_once_the_grid_is_full(N, K, sm):
     """Enough rows to fill the target on their own => sk == 1, i.e. no
-    partials and no reduce launch at all. This is where the measured
-    1.10x-1.31x at R >= 8 comes from: the reduce is not made cheaper,
-    it stops being launched."""
+    partials and no reduce launch at all. That is the mechanism the term
+    exists for: the reduce is not made cheaper, it stops being launched."""
     triton = pytest.importorskip("triton")
     from int4_b32 import SPLITK_TARGET_BLOCKS_PER_SM, _plan
     tiles = triton.cdiv(N, 128)
@@ -773,69 +768,22 @@ def test_plan_ku_still_divides_the_k_blocks(N, K):
         assert sk <= max(1, kb // ku), (N, K, R, sk, ku)
 
 
-def _receipt_cells():
-    """Every swept cell as (row, {sk: ms}, sm_count). Hard-asserts the
-    receipts are present -- test_decode_anchor's rule: read the
-    receipt, never skip past a missing one."""
-    import json
-    rows_dir = pathlib.Path(__file__).resolve().parents[1] / "bench" / "int4" / "rows"
-    files = sorted(rows_dir.glob("sk_*.json"))
-    assert files, f"sk-sweep receipts missing from {rows_dir}"
-    out = []
-    for f in files:
-        doc = json.load(f.open())
-        for r in doc["rows"]:
-            out.append((r, {int(k): v for k, v in r["ms"].items()}, doc["sms"]))
-    assert len(out) == 48, f"expected 48 swept cells, receipts carry {len(out)}"
-    return out
+# The R term's constant was tuned on an A2000 timing sweep (bench/int4/RESULTS-sk-r-sweep.md).
+# The A2000 is a correctness-only testbed, so those timings are not asserted here: the plan's
+# speed waits on a rented read of a <= 64-SM card. What is pinned is structural.
 
-
-def test_plan_is_never_slower_than_the_n_only_rule_on_a_swept_cell():
-    """The property the floor buys, and the reason this change is safe:
-    on every measured cell the R-aware pick is at least as fast as the
-    N-only one. Not 'faster on average' -- never worse, anywhere."""
+def test_plan_is_a_pure_function_of_n_k_r():
+    """Within a box (a fixed SM count) the plan is a pure function of (N, K, R):
+    the same call returns the same plan whatever was planned before it, so a
+    captured decode path and a preallocated ``part`` buffer get the
+    configuration they were built for. _plan's CAVEAT rests on this."""
     pytest.importorskip("triton")
     from int4_b32 import _plan
-    for r, t, sm in _receipt_cells():
-        sk = _plan(r["N"], r["K"], r["R"], sm)[2]
-        assert sk in t, (r["family"], r["proj"], r["R"], sk, sorted(t))
-        assert t[sk] <= t[_plan_n_only(r["N"], r["K"])] * 1.0 + 1e-12, (
-            f"{r['family']}/{r['proj']} R={r['R']}: sk{sk} is slower than "
-            f"the N-only sk{_plan_n_only(r['N'], r['K'])}")
-
-
-def test_plan_choice_is_within_the_measured_bound_where_it_acts():
-    """Above the floor -- where the rule actually chooses -- the pick
-    must cost no more than SK_R_BOUND x the best sk MEASURED for that
-    cell. The times are receipts, not derived from the code, so
-    retuning SPLITK_TARGET_BLOCKS_PER_SM has to keep earning its keep
-    against measurements rather than against arithmetic."""
-    pytest.importorskip("triton")
-    from int4_b32 import SPLITK_R_FLOOR, _plan
-    acted = worst = 0
-    worst_at = None
-    for r, t, sm in _receipt_cells():
-        if r["R"] < SPLITK_R_FLOOR:
-            continue
-        acted += 1
-        ratio = t[_plan(r["N"], r["K"], r["R"], sm)[2]] / min(t.values())
-        if ratio > worst:
-            worst, worst_at = ratio, (r["family"], r["proj"], r["R"])
-    assert acted == 24, f"expected 24 cells above the floor, found {acted}"
-    assert worst <= SK_R_BOUND, f"{worst:.3f}x at {worst_at} exceeds {SK_R_BOUND}"
-
-
-def test_plan_beats_the_n_only_rule_on_the_swept_cells():
-    """The reason to take the change at all: summed over the sweep, the
-    R-aware pick must be faster than the N-only one. Guards against a
-    retune that improves the worst case by giving up the win."""
-    pytest.importorskip("triton")
-    from int4_b32 import _plan
-    n_only = r_aware = 0.0
-    for r, t, sm in _receipt_cells():
-        n_only += t[_plan_n_only(r["N"], r["K"])]
-        r_aware += t[_plan(r["N"], r["K"], r["R"], sm)[2]]
-    assert n_only / r_aware >= 1.10, f"only {n_only / r_aware:.3f}x over the N-only rule"
+    calls = [(N, K, R, sm) for N, K in _PLAN_SHAPES
+             for R in (0, 1, 8, 15, 16, 32, 128, 1024) for sm in (26, 48, 64, 128)]
+    first = {c: _plan(*c) for c in calls}
+    for c in reversed(calls):
+        assert _plan(*c) == first[c], c
 
 
 @pytest.mark.parametrize("N,K", _PLAN_SHAPES)
@@ -844,12 +792,12 @@ def test_plan_keeps_the_n_only_rule_above_the_measured_sm_class(N, K, sm):
     """P39 box 1 (RTX 5090, 128 SMs): the R-aware plan read 0.6% SLOWER at B=16 on a
     pack-pinned A/B -- the sm_86 constant does not transfer. Above
     SPLITK_R_TERM_MAX_SMS every R returns the N-only plan until that class has its
-    own sweep; at or below it the R term acts exactly as the receipts say."""
+    own sweep; at or below it the R term acts, its gain unverified on a target card."""
     pytest.importorskip("triton")
     from int4_b32 import SPLITK_R_FLOOR, SPLITK_R_TERM_MAX_SMS, _plan
     assert sm > SPLITK_R_TERM_MAX_SMS
     want = _plan_n_only(N, K)
     for R in (1, SPLITK_R_FLOOR, 32, 128, 1024):
         assert _plan(N, K, R, sm)[2] == want, (N, K, R, sm)
-    # and the measured class still acts above the floor (the receipt tests pin the values)
+    # and the gated class still acts above the floor
     assert _plan(1536, 2048, 128, 26)[2] == 1

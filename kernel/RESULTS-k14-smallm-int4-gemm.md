@@ -109,3 +109,26 @@ Two ledger rows, **$0.0653**, against a $1.50 lane ceiling — `k14-stagea`
 ($0.0364) ran the lane in 90 seconds. The A2000 dry-run that produced
 Amendment 1 was free and is the reason the second box measured the kernel
 rather than a default.
+
+## Erratum (2026-10-05): Amendment 1's redesign was seeded by A2000 timings
+
+Amendment 1 (`PREREG-k14-smallm-int4-gemm.md`, 2026-09-11, before any rented box) changed Stage A from one config of
+the `gemm` arm to a twelve-config sweep. Its stated basis was the house A2000's dry-run: the bf16 roofline table and
+the shipped-versus-best table in the amendment. The amendment labels those numbers motivation, not evidence, but says
+they are why the design changed. Under the testbed policy (the A2000 is a correctness-only testbed; every timing, ratio or band basis comes from rented compute on the target card; grouped-nf4-gemm#475, `docs/audits/a2000-timing-2026-10-05.md` §2), an A2000 timing may not seed a design decision either.
+
+What it changes:
+- **The registration stands as stamped**, Amendment 1 included.
+- **The verdict does not rest on the A2000.** REFUTED is read on the 5090 alone. The sweep only widened what Stage A
+  measured, so it could strengthen a refutation but not manufacture one: at its best of twelve configs the `gemm` arm
+  still lost to bf16 on every shape on the 5090.
+- **The sweep's justification now rests on structure and on the 5090.** A single projection is one M-tile, so its grid
+  is `1 × cdiv(N, block_n)`: a program count read from the code, not a timing. The 5090's own table shows what the
+  A2000 numbers were used to argue: the shipped `bn64/w8` ran 2.4× to 6.3× bf16, its best config 1.12× to 2.00×.
+- **Two passages above quote the A2000 dry-run, and neither is speed evidence.** Prediction 1's paragraph sets the
+  dry-run's two ratios against the 5090's; the refutation stands on the 5090's 1.205× and 1.123× alone. The Cost
+  section calls the dry-run the reason the second box measured the kernel rather than a default; the reason that
+  survives is the program count above.
+- **For later lanes:** a design change of this kind is seeded by a rented microbench of the component on the target
+  card, not by an A2000 dry-run. The A2000 run proves the harness executes, the purpose Amendment 1 gave it, and
+  nothing more.

@@ -70,3 +70,25 @@ K26_VERDICT DECODE: affine/pair granite 0.223, olmoe 0.207: <= 0.6 in both -- th
 
 [`receipts-k26/5090/`](receipts-k26/5090/) holds `k26.json`, summary, forensics, versions, the bench and contract logs,
 the teardown proof and `SHA256SUMS`.
+
+## Erratum (2026-10-05): two prediction bands were informed by A2000 timings
+
+The PREREG's "What was seen before this page" records the bench's `--quick` correctness pass on the house A2000 and the
+timings it showed (`affine / pair`, `tree / pair`, `stree / served`), and says the predictions are informed by that
+pass. So the DECODE band (`affine / pair` 0.10–0.40) and the `tree / pair` band (0.40–0.75) were seeded by A2000
+timings. Under the testbed policy (the A2000 is a correctness-only testbed; every timing, ratio or band basis comes from rented compute on the target card; grouped-nf4-gemm#475, `docs/audits/a2000-timing-2026-10-05.md` §2), an A2000 timing may not seed a prediction, whatever its label ("not a reading, but seen").
+
+What it changes:
+- **The registration stands as stamped.**
+- **The verdict and the registered pointer do not rest on the A2000.** They come from the rule's thresholds
+  (`affine / pair` ≤ 0.60 for DECODE, `tree / pair` ≤ 0.80 for the pointer), which the PREREG states in its rule
+  section without reference to the A2000 pass, read on the 5090: 0.223 / 0.207 and 0.373 / 0.383.
+- **The prediction table above reads two A2000-seeded bands.** DECODE held; `tree / pair` landed just below its band.
+  That miss is the cost the policy names: a band seeded on sm_86 timings, read on sm_120.
+- **What the A2000 pass legitimately established is numerics:** K25 against the oracle, the copy control and `tree`
+  bit-equal, `stree` not bit-equal to the served kernel. The 5090 reproduced each.
+- **`served / pair` 0.95–1.10** came from experts4bit-qlora lane P92's in-model census, not from the A2000 pass, and is
+  unaffected.
+- **For later lanes:** K27's registration repeated the pattern (its erratum is in
+  `RESULTS-k27-nf4-tree-precision.md`). Bands come from a 5090 or H100 reading, or from a rented microbench of the
+  component on the target card.

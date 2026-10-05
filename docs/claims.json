@@ -128,11 +128,11 @@
   {
    "id": "gnf4.kernel.dgrad",
    "area": "kernel",
-   "claim": "dgrad_4bit_grouped is the training backward in one launch: gate_up E=256 5.92 ms vs 61.78 ms for the per-expert loop, down 3.28 vs 85.12 ms (A2000, T_cat=4096); one training step at E=256 goes 403.7 to 26.5 ms. On by default since 0.9.1; gradient lands ~2.9e-3 from the exact loop, inside the bf16 budget.",
-   "value": "403.7 -> 26.5",
-   "unit": "ms per step, E=256",
+   "claim": "dgrad_4bit_grouped is the training backward in one launch over the packed bytes, with no per-expert Python loop: its gradient lands ~2.9e-3 (relative) from the exact per-expert loop, inside the bf16 budget, and every tile config in its sweep produces bit-identical output. On by default since 0.9.1. Not a speed claim: the rented speed reading is gnf4.kernel.dgrad-step.a6000.2026-08-06.",
+   "value": 0.0029,
+   "unit": "relative error of the one-launch gradient against the exact per-expert loop (inside the bf16 budget, not zero)",
    "status": "measured",
-   "hardware": "A2000 (sm_86)",
+   "hardware": "A2000 (sm_86), a correctness read",
    "measured_on": "2026-08-06",
    "evidence": [
     "CHANGELOG.md#070--2026-08-06",
@@ -141,7 +141,34 @@
      "path": "bench/dgrad-gate/RESULTS-dgrad-gate.md"
     }
    ],
-   "notes": "measured_on is the date of the 0.7.0 entry that records the A2000 cells, and the run date the dgrad-gate receipt states. Evidence CHANGELOG.md#070--2026-08-06 (the 0.7.0 release entry): the A2000 cells (gate_up 5.92 vs 61.78 ms, down 3.28 vs 85.12 ms, the composed step 403.7 -> 26.5 ms) are recorded in the 0.7.0 release entry; no kernel/RESULTS-*.md carries them, which the earlier glob implied"
+   "notes": "measured_on is the date of the 0.7.0 entry that records the correctness result, and the run date the dgrad-gate receipt states. Evidence CHANGELOG.md#070--2026-08-06 (the 0.7.0 release entry) records the ~2.9e-3 gradient error against the exact loop and the bit-identical tile sweep; experts4bit-qlora's bench/dgrad-gate/ adds the layer-composed read (dgrad adds nothing to the composed gradient error at 16 and 48 layers). Relabelled 2026-10-05 under the testbed policy (the A2000 is a correctness-only testbed; maintainer decision 1 on #475, docs/audits/a2000-timing-2026-10-05.md section 2): the row's headline was an A2000 step time and its claim quoted A2000 per-shape kernel timings. Those leave value, unit and claim; the 0.7.0 release entry keeps them as the record, and they are not speed evidence. The value is now the correctness result the claim already stated. The speed headline is gnf4.kernel.dgrad-step.a6000.2026-08-06 (a rented RTX A6000, experts4bit-qlora's dgrad gate)."
+  },
+  {
+   "id": "gnf4.kernel.dgrad-step.a6000.2026-08-06",
+   "area": "kernel",
+   "claim": "On a rented RTX A6000, Qwen3-30B-A3B at 48 layers resident, from the published wheels (experts4bit-qlora 0.11.0, grouped-nf4-gemm 0.7.0): experts4bit-qlora's fused training step runs at 2.52x the reference per-expert loop with this package's one-launch dgrad backward (5.075 vs 12.781 s/step) and 1.72x without it (7.420 s/step), and dgrad adds nothing to the composed gradient error (4.97e-2 -> 4.99e-2 mean relative over 192 tensors at step 0).",
+   "value": 2.52,
+   "unit": "x the reference per-expert loop's step rate, fused step with dgrad (without dgrad: 1.72x)",
+   "status": "measured",
+   "hardware": "RTX A6000 (sm_86, 47.5 GB), one rented pod; torch 2.8.0+cu128; experts4bit-qlora 0.11.0 and grouped-nf4-gemm 0.7.0 installed from PyPI",
+   "conditions": "experts4bit-qlora bench/dgrad-gate/dgrad_gate.py: Qwen/Qwen3-30B-A3B, 48 layers, resident (offload=False), 314,572,800 trainable parameters, seq 512, 8 steps of forward + backward + AdamW per arm; s/step is the mean wall time over the 8 steps (step 0, which also captures the gradients, included); four arms from one model load with adapter snapshot/restore, so every arm starts bit-identical on identical data; one draw per arm; frozen check 192 tensors / 15.2 GiB hashed, 0 changed, the flipped-byte control detects",
+   "measured_on": "2026-08-06",
+   "evidence": [
+    "CHANGELOG.md#071--2026-08-06",
+    {
+     "repository": "experts4bit-qlora",
+     "path": "bench/dgrad-gate/RESULTS-dgrad-gate.md#results"
+    },
+    {
+     "repository": "experts4bit-qlora",
+     "path": "bench/dgrad-gate/gate_48L_qwen30b_a6000.json"
+    }
+   ],
+   "quoted_in": [
+    "README.md#what-is-measured",
+    "docs/STATUS.md#what-it-does-today"
+   ],
+   "notes": "EVIDENCE: the receipt is experts4bit-qlora's bench/dgrad-gate/ (RESULTS-dgrad-gate.md's 48-layer table and gate_48L_qwen30b_a6000.json): cross-repository entries, resolved when scripts/check_claims_register.py is given --sibling. This repository's 0.7.1 release entry records the same gate run from the published wheels. Added 2026-10-05 as the rented speed headline in place of gnf4.kernel.dgrad's A2000 step time (maintainer decision 1 on #475; docs/audits/a2000-timing-2026-10-05.md section 2). measured_on is the receipt's own date. One draw per arm on one pod. The same gate's 16-layer OLMoE run (a rented RTX A5000) read 1.99x with dgrad and 1.54x without, and its 20-step real-data trajectory gate on the A6000 read 2.87x with dgrad (traj_20step_alpaca_a6000.json)."
   },
   {
    "id": "gnf4.kernel.expert-offset-boundary.5090.2026-09-05",
@@ -637,7 +664,7 @@
    "claim": "int4_b32._plan takes the activation-row count R and the SM count: for R >= 16 on parts with <= 64 SMs, split-K is sized so about 8 blocks per SM are resident and collapses to sk = 1 (no reduce launch) where the grid alone covers that; below R = 16 the plan is exactly the previous N-only rule on every SM count. Measured on an RTX A2000 (26 SMs; CUDA-graph replay; full cost including reduce_partials) over 48 cells -- qwen3_moe / granitemoe / olmoe gate_up + down at R = 1..128: the N-only rule costs 1.136x the per-cell optimum, the R-aware rule 1.011x, never slower than the N-only rule on any cell; 1.102x at R = 16 rising to 1.145x at R = 128 summed over the six shapes.",
    "value": 1.011,
    "unit": "x the per-cell optimum over 48 cells (the N-only rule: 1.136x)",
-   "status": "measured",
+   "status": "retired",
    "hardware": "RTX A2000 12GB (sm_86, 26 SMs), torch 2.8.0+cu128 / triton 3.4.0",
    "conditions": "kernel-level GEMV timings at a fixed row count, not step-level; the 8 x sm_count target is measured on sm_86 only and the term is gated to sm_count <= 64 (SPLITK_R_TERM_MAX_SMS) after a 5090 step-level read of 1.0064 / 1.0063 NEW/OLD at B=16 (experts4bit-qlora#533, P39); mxfp4_grouped.gemv_mxfp4_b32 deliberately keeps the N-only plan (its own 32-cell sweep, bench/int4/mx_sweep.py, regressed 2 cells by 15-17%)",
    "measured_on": "2026-09-10",
@@ -654,7 +681,9 @@
     "docs/STATUS.md",
     "CHANGELOG.md#0310--2026-09-18--batched-int4-decode-plans-split-k-from-the-row-count-two-pre-registered-kernel-lanes-reported-k14-refuted-k15-comparator"
    ],
-   "notes": "measured_on is the receipt's commit date (PR #357, 2026-09-10); the RESULTS file states no run date. B=1 decode calls the grouped GEMV at R = top_k (4 or 8 for every shipped MoE), so SPLITK_R_FLOOR = 16 leaves every B=1 cell and the licensed serve configuration untouched by construction; kernel/test_int4_b32.py pins R < 16 to a verbatim copy of the old rule, re-derives the worst-cell bound (SK_R_BOUND 1.07; measured 1.064x, granitemoe/down at R = 16) from the receipts, and fails if a shipped model routes to >= 16 experts. sm_count enters the plan, so bitwise equality across boxes must pin sk rather than plan it; within a box the plan is a pure function of (N, K, R)."
+   "notes": "measured_on is the receipt's commit date (PR #357, 2026-09-10); the RESULTS file states no run date. B=1 decode calls the grouped GEMV at R = top_k (4 or 8 for every shipped MoE), so SPLITK_R_FLOOR = 16 leaves every B=1 cell and the licensed serve configuration untouched by construction; kernel/test_int4_b32.py pins R < 16 to a verbatim copy of the old rule and fails if a shipped model routes to >= 16 experts (until 2026-10-05 it also re-derived a worst-cell bound, SK_R_BOUND 1.07, and the sweep's win over the N-only rule from these receipts). sm_count enters the plan, so bitwise equality across boxes must pin sk rather than plan it; within a box the plan is a pure function of (N, K, R). Retired 2026-10-05 (maintainer decision 2 on #475; docs/audits/a2000-timing-2026-10-05.md section 2): every number in the row is an A2000 kernel timing, and the A2000 is a correctness-only testbed. The plan is unchanged: SPLITK_R_TERM_MAX_SMS still keeps the R term on for parts with <= 64 SMs until a rented <= 64-SM step-level read (an L4 or an RTX A4000) either keeps it on a receipt of its own or gates it off; flipping the gate changes split-K grouping on those parts (reorder class, not bitwise). kernel/test_int4_b32.py no longer asserts the plan against these timings; its structural tests stand.",
+   "retired_reason": "an A2000 timing; the A2000 is a correctness-only testbed",
+   "retired_on": "2026-10-05"
   },
   {
    "id": "gnf4.kernel.k14-smallm-int4-gemm-refuted.5090.2026-09-11",

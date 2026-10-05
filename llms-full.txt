@@ -469,7 +469,7 @@ Register: [`claims.json`](../claims.json). Measured, fp8 compute path: claim `gn
 ## Source: docs/solutions/int4-decode-gemv.md (https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/int4-decode-gemv.md)
 
 # How do I run a single-token INT4 decode GEMV over routed MoE experts, and pack calibrated (GPTQ) weights for it?
-<!-- summary: gemv_int4_b32 runs the batch-1 int4-b32 decode GEMV with exact integer accumulation, and gptq_pack_int4_b32 packs calibrated weights onto the same bytes; the served GEMV's throughput and the calibrated pack's quality are measured-private, while its split-K planner, the small-M GEMM and the two opt-in GEMV variants are measured in public. -->
+<!-- summary: gemv_int4_b32 runs the batch-1 int4-b32 decode GEMV with exact integer accumulation, and gptq_pack_int4_b32 packs calibrated weights onto the same bytes; the served GEMV's throughput and the calibrated pack's quality are measured-private, while the small-M GEMM and the two opt-in GEMV variants are measured in public. -->
 
 Use the int4-b32 lane of `grouped-nf4-gemm`: `int4_pack_ref.pack_int4_b32` packs a weight onto a uniform symmetric int4 grid with one fp16 scale per 32 elements, `int4_b32.gemv_int4_b32` runs the decode GEMV on int8-quantised activations with exact integer accumulation and split-K partials, and `gptq_pack.gptq_pack_int4_b32` chooses grid points against calibration activations while emitting byte-identical format.
 
@@ -579,7 +579,7 @@ The CPU block passes its assertions and prints two output errors; on skewed chan
 - Pack from source weights only; quantising onto an already-quantised grid compounds the cost (`int4_pack_ref` docstring).
 - Time under CUDA-graph replay, never eager: eager sweeps anti-select split-K. Split-K on the NF4 decode GEMV was refuted and ships dormant as the evidence ([`STATUS.md`](../STATUS.md)).
 - `int4_b32` is not importable without triton; no ROCm or XPU ([`PORTABILITY.md`](../PORTABILITY.md)).
-- The served GEMV's throughput and the calibrated pack's quality numbers are measured-private: real runs whose receipts live in a private audit tree, not checkable here. The split-K planner, the small-M GEMM, the two opt-in variants and the row-invariance reads are measured, with public receipts (Evidence, below).
+- The served GEMV's throughput and the calibrated pack's quality numbers are measured-private: real runs whose receipts live in a private audit tree, not checkable here. The small-M GEMM, the two opt-in variants and the row-invariance reads are measured, with public receipts (Evidence, below). The split-K planner's row-count term was tuned on an A2000 timing sweep, so its gain is unverified on any target card (Evidence, below).
 
 ## Related
 
@@ -587,7 +587,7 @@ The CPU block passes its assertions and prints two output errors; on skewed chan
 
 ## Evidence
 
-Register: [`claims.json`](../claims.json). Measured-private, labelled as such: claim `gnf4.serve.int4-b32-gemv` (dense and grouped decode cells, plus the M-tile GEMM), claim `gnf4.serve.gptq-pack-int4-b32` (calibrated attention packs on Qwen3-30B-A3B). Measured: claim `gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10` (the split-K planner takes the row count and SM count), claim `gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19` (the small-M GEMM), claims `gnf4.kernel.k17-fused-splitk-gemv.5090.2026-09-21` and `gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22` (the two opt-in variants), claims `gnf4.kernel.int4-gemv-row-invariant.5090.2026-09-24` and `gnf4.kernel.int4-grouped-gemm-reorder.5090.2026-09-24` (row-count invariance, `kernel/test_row_invariance_gpu.py`); the K14 refutation and the K15 comparator are claims `gnf4.kernel.k14-smallm-int4-gemm-refuted.5090.2026-09-11` and `gnf4.kernel.k15-marlin-comparator.5090.2026-09-11`. Nothing on this page is at the confirmed tier. What is checkable here is correctness: `kernel/test_int4_b32.py` pins the GEMV and grouped GEMM against `dequant_int4_ref`; `kernel/test_gptq_pack.py` pins format identity and the calibrated-versus-rounding margin on CPU.
+Register: [`claims.json`](../claims.json). Measured-private, labelled as such: claim `gnf4.serve.int4-b32-gemv` (dense and grouped decode cells, plus the M-tile GEMM), claim `gnf4.serve.gptq-pack-int4-b32` (calibrated attention packs on Qwen3-30B-A3B). Measured: claim `gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19` (the small-M GEMM), claims `gnf4.kernel.k17-fused-splitk-gemv.5090.2026-09-21` and `gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22` (the two opt-in variants), claims `gnf4.kernel.int4-gemv-row-invariant.5090.2026-09-24` and `gnf4.kernel.int4-grouped-gemm-reorder.5090.2026-09-24` (row-count invariance, `kernel/test_row_invariance_gpu.py`); the K14 refutation and the K15 comparator are claims `gnf4.kernel.k14-smallm-int4-gemm-refuted.5090.2026-09-11` and `gnf4.kernel.k15-marlin-comparator.5090.2026-09-11`. Retired: claim `gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10` (the split-K planner takes the row count and SM count) is retired, because its numbers are A2000 timings and the A2000 is a correctness-only testbed; the plan ships unchanged and a rented read on a part with 64 or fewer SMs is open. Nothing on this page is at the confirmed tier. What is checkable here is correctness: `kernel/test_int4_b32.py` pins the GEMV and grouped GEMM against `dequant_int4_ref`; `kernel/test_gptq_pack.py` pins format identity and the calibrated-versus-rounding margin on CPU.
 
 ## Source: docs/solutions/native-mxfp4-moe-inference.md (https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/native-mxfp4-moe-inference.md)
 
@@ -1389,14 +1389,13 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
    "claim_ids": [
     "gnf4.serve.int4-b32-gemv",
     "gnf4.serve.gptq-pack-int4-b32",
-    "gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10",
     "gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19",
     "gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22"
    ],
    "limitations": [
     "The int4-b32 GEMV and the calibrated packer are measured-private (claims gnf4.serve.int4-b32-gemv, gnf4.serve.gptq-pack-int4-b32): the receipts live in the consumer's private audit tree",
     "Split-K on the NF4 dot-pad decode GEMV (nf4_grouped, GNF4_GEMV_SPLITK, lane K7) was refuted once and ships dormant there (the retired claim gnf4.retired.splitk-gemv records the refutation); the int4-b32 GEMV's own split-K is the shipped, measured plan (int4_b32._plan, reduced by reduce_partials)",
-    "Split-K on the int4-b32 GEMV is planned from (N, K, R, SM count) for R >= 16 activation rows on parts with <= 64 SMs (claim gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10); B=1 decode (R = top_k) and parts above 64 SMs keep the N-only plan, and bitwise equality across boxes must pin sk rather than plan it",
+    "Split-K on the int4-b32 GEMV is planned from (N, K, R, SM count) for R >= 16 activation rows on parts with <= 64 SMs; that row-count term was tuned on an A2000 timing sweep (the A2000 is a correctness-only testbed), so its gain is unverified on any target card; B=1 decode (R = top_k) and parts above 64 SMs keep the N-only plan, and bitwise equality across boxes must pin sk rather than plan it",
     "Whether int4 experts pass a quality gate is the consumer's per-family question (experts4bit-qlora docs/STATUS.md): small-active-parameter models fail it with round-to-nearest packing",
     "The single-stream decode anchor (claim gnf4.serve.decode-anchor-5090) is a consumer-measured anchor of the serving class on a knob-off basis, not a measurement of this lane, and is not cited here as its evidence",
     "K16: int4_smallm.gemm_int4_b32_smallm is a small-M single-projection GEMM -- in-register int4 dequant, per-block scaling inside the tile, bf16 tensor-core MMA over fat K chunks, split-K fused into the launch (kernel/PREREG-k16-smallm-int4-gemm.md). Measured on the RTX 5090 class at M=16 (claim gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19): it beats this package's bf16 dequant path on every attention shape and meets the pre-registered Marlin bar; the single-scale control (P4) was not tested and the model-level step saving (P5) is pending. Nothing in this package routes to it; the consumer's route is opt-in (experts4bit-qlora E4B_ATTN_INT4_SMALLM=1)",
@@ -1806,7 +1805,8 @@ cell (`gnf4.kernel.fused-more-accurate-than-dequant-bf16`).
 | Real OLMoE QLoRA finetune, fused vs per-expert loop (prose) | 4.50× (4090), 4.75× (H100) | confirmed | `gnf4.kernel.e2e-training-real-prose` |
 | vs Unsloth's own kernel, 4-bit-storage regime, decode | 1.70× (H100), 2.79× (4090) | confirmed | `gnf4.kernel.h2h-unsloth` |
 | vs `torch._grouped_mm` on bf16, Qwen3-30B cell (RTX 5090) | 2.1–6.0×, on half the bytes | measured | `gnf4.kernel.sm120-census-vs-grouped-mm` |
-| Training backward, one launch, E=256 step (A2000) | 403.7 → 26.5 ms | measured | `gnf4.kernel.dgrad` |
+| Training backward, one launch: gradient vs the exact per-expert loop (A2000, a correctness read) | ~0.0029 relative, inside the bf16 budget | measured | `gnf4.kernel.dgrad` |
+| Fused training step with it vs the per-expert loop, Qwen3-30B-A3B, 48 layers (rented RTX A6000; experts4bit-qlora's receipt) | 2.52× (1.72× without it) | measured | `gnf4.kernel.dgrad-step.a6000.2026-08-06` |
 
 **Three things that limit those numbers, stated here rather than in a
 footnote:**
@@ -2029,16 +2029,18 @@ was wrong.
 - **The int4-b32 split-K planner takes the row count (0.31.0).**
   `_plan(N, K)` sized split-K from `N` alone, so at large `R` every expert
   projection ran a configuration chosen for a batch it was not in and paid
-  the partials reduce to do it. With `R` and the SM count threaded — the
-  NF4 sibling planner always had them — the 48-cell A2000 sweep goes from
-  1.136× to 1.011× of the per-cell optimum and is never slower than the
-  old rule on any cell (1.102× at `R = 16`, 1.145× at `R = 128`). `R < 16`
-  returns exactly the old plan, so B=1 decode — which calls at
-  `R = top_k` — and the licensed serve configuration are untouched by
-  construction. Gated to parts with ≤ 64 SMs after a 5090 step-level read
-  of 1.0064 (the constant does not transfer across SM classes); MXFP4
-  keeps the N-only plan on its own sweep
-  (`gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10`, measured).
+  the partials reduce to do it. `R` and the SM count are now threaded, as
+  the NF4 sibling planner always had them. `R < 16` returns exactly the old
+  plan, so B=1 decode — which calls at `R = top_k` — and the licensed serve
+  configuration are untouched by construction. The term's constant was
+  tuned by a 48-cell timing sweep on the A2000, and the row that carried
+  that sweep is retired
+  (`gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10`, retired 2026-10-05:
+  an A2000 timing; the A2000 is a correctness-only testbed), so the term's
+  gain is unverified on any target card. It stays gated to parts with ≤ 64
+  SMs after a 5090 step-level read of 1.0064 (the constant does not transfer
+  across SM classes) until a rented ≤ 64-SM read keeps it or gates it off;
+  MXFP4 keeps the N-only plan.
 - **K14 is refuted: at M=16 no shipped int4 arm beats dequant-then-GEMM
   on the attention projections.** On the 5090 the grouped int4 GEMM at
   its best swept configuration is 1.12–2.00× slower than the bf16 path
@@ -2706,7 +2708,8 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - gnf4.kernel.sm120-census-vs-grouped-mm [measured]: At the Qwen3-30B-A3B serving cell (E=128, top-8, B=16) on an RTX 5090, gemm_4bit_grouped runs the routed expert GEMM in 0.42 / 0.21 ms where torch._grouped_mm on unquantised bf16 takes 0.88-1.30 ms: 2.1-6.0x across two boxes, on half the weight bytes.
 - gnf4.kernel.graphed-baseline-decode-loses [confirmed]: Against a CUDA-graphed per-expert baseline at the decode band (T=32) the fused path LOSES on both 4090 and H100 (0.949x, 0.858x); the memory-traffic win survives only at training shape on bandwidth-limited cards (1.489x on the 4090, parity 1.059x on the H100).
 - gnf4.kernel.e2e-training-real-prose [confirmed]: Inside a real OLMoE QLoRA finetune, fused vs the per-expert loop runs 4.50x on a 4090 and 4.75x on an H100 on real prose; random token ids understate it at 2.75x / 2.81x because prose routes to 98.4% of experts (cv 0.687) where random ids hit 87.5% (cv 1.463).
-- gnf4.kernel.dgrad [measured]: dgrad_4bit_grouped is the training backward in one launch: gate_up E=256 5.92 ms vs 61.78 ms for the per-expert loop, down 3.28 vs 85.12 ms (A2000, T_cat=4096); one training step at E=256 goes 403.7 to 26.5 ms. On by default since 0.9.1; gradient lands ~2.9e-3 from the exact loop, inside the bf16 budget.
+- gnf4.kernel.dgrad [measured]: dgrad_4bit_grouped is the training backward in one launch over the packed bytes, with no per-expert Python loop: its gradient lands ~2.9e-3 (relative) from the exact per-expert loop, inside the bf16 budget, and every tile config in its sweep produces bit-identical output. On by default since 0.9.1. Not a speed claim: the rented speed reading is gnf4.kernel.dgrad-step.a6000.2026-08-06.
+- gnf4.kernel.dgrad-step.a6000.2026-08-06 [measured]: On a rented RTX A6000, Qwen3-30B-A3B at 48 layers resident, from the published wheels (experts4bit-qlora 0.11.0, grouped-nf4-gemm 0.7.0): experts4bit-qlora's fused training step runs at 2.52x the reference per-expert loop with this package's one-launch dgrad backward (5.075 vs 12.781 s/step) and 1.72x without it (7.420 s/step), and dgrad adds nothing to the composed gradient error (4.97e-2 -> 4.99e-2 mean relative over 192 tensors at step 0).
 - gnf4.kernel.expert-offset-boundary.5090.2026-09-05 [measured]: Every kernel that scales an expert id or a block-table row by a stride computes the base offset in int64: the 10 boundary cases of kernel/test_expert_offset_boundary.py -- five below-boundary controls in-process and five above-boundary cases in fresh processes, for the NF4 decode GEMV (scalar, split-K, wide-load, dot-pad), the NF4 M-tile and dgrad, the MXFP4 GEMM / GEMV / gemv_mxfp4_b32, the int4-b32 GEMV and M-tile, and the fp8 paged decode kernels -- pass against the pure-torch references on an RTX 5090, closing #87 by observation (PR #342).
 - gnf4.kernel.word-boundary-wide-dotpad.5090.2026-09-23 [measured]: The word-addressed NF4 decode routes -- wide loads and dot-pad, the default decode route on parts with >= 160 SMs at its census shapes -- read the right expert past their own 2^31-word (8 GiB) offset boundary on an RTX 5090: the 4 cases of kernel/test_offset_boundary_words_gpu.py (scalar and split-K with wide loads, dot-pad and dot-pad split-K) pass on the shipped kernels, and all 4 fail by reading the decoy at the int32-wrapped address when the six int64 promotions are stripped, closing #374.
 - gnf4.kernel.combine-rows-accuracy.5090.2026-09-23 [measured]: int4_b32.combine_rows, the fused MoE top-k weight-and-sum that experts4bit-qlora runs on every MoE layer by default, is a correct fp32 sum of its terms followed by the bf16 cast -- every element within the error bound of a correct fp32 summation in some order, in 144 of 144 census cases at every served family's (top_k, hidden) on an RTX 5090 -- but it is NOT bitwise the torch chain it replaced: 95 of 144 cases differ, 392 of 9,069,312 elements, closing #393 with an accuracy contract instead of a bitwise one.
@@ -2728,7 +2731,6 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - gnf4.mxfp4.train-9.82gb [confirmed]: gpt-oss-120b QLoRA on native MXFP4 bytes trains at 9.82 GB peak VRAM with 144/144 sha256(file) == sha256(loaded) == sha256(post-train): the frozen base is byte-identical after training.
 - gnf4.k3.oracle-exact [measured]: The reference MXFP4 decode reproduces Kimi K3's own declared reference (compressed-tensors 0.17.1, mxfp4-pack-quantized) exactly: 33,030,144 elements across w1/w3/w2, max abs delta 0; an arena round-trip on a byte-verified 1.56 TB store came back 48/48 segments identical with a byte-flip control, row fixed at 17,547,264 B.
 - gnf4.cold-engine.phase0-premise-refuted [measured]: The cold-engine 'free floor' premise (bnb's CPU dequantize_4bit as a ready-made decode arm) is REFUTED on the target NAS box: no AVX-512, bnb falls to its reference path at 0.041 GB/s against a ~12 GB/s DDR ceiling. Design-stage; no registered claims.
-- gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10 [measured]: int4_b32._plan takes the activation-row count R and the SM count: for R >= 16 on parts with <= 64 SMs, split-K is sized so about 8 blocks per SM are resident and collapses to sk = 1 (no reduce launch) where the grid alone covers that; below R = 16 the plan is exactly the previous N-only rule on every SM count. Measured on an RTX A2000 (26 SMs; CUDA-graph replay; full cost including reduce_partials) over 48 cells -- qwen3_moe / granitemoe / olmoe gate_up + down at R = 1..128: the N-only rule costs 1.136x the per-cell optimum, the R-aware rule 1.011x, never slower than the N-only rule on any cell; 1.102x at R = 16 rising to 1.145x at R = 128 summed over the six shapes.
 - gnf4.kernel.k14-smallm-int4-gemm-refuted.5090.2026-09-11 [measured]: K14 (pre-registered): at M=16 no shipped int4 arm beats the bf16 dequant-then-GEMM path on Qwen3-30B-A3B's four attention projections -- the grouped int4 GEMM at the best of twelve swept block configurations is 1.12-2.00x slower, the int4 GEMV 1.46-2.40x slower -- so the registered mix saving over 48 layers is 0.000 ms/step against a 0.5 ms bar: REFUTED. q_proj's bf16 path reads 16.78 MB in 10.35 us (106% of the measured 1528 GB/s streaming ceiling); k_proj / v_proj are launch-bound at 1.74x the 3.57 us floor.
 - gnf4.kernel.k15-marlin-comparator.5090.2026-09-11 [measured]: K15 (pre-registered): vLLM 0.28.0's Marlin GPTQ kernel at g128 runs Qwen3-30B-A3B's q_proj in 6.37 us and o_proj in 8.28 us at M=16 on the same RTX 5090 where this package's bf16 dequant path takes 10.3 / 16.5 us (1.62x / 1.99x) and its best int4 arm 12.5 / 18.9 us; at matched bytes (g32) Marlin still wins (8.18 / 8.24 us), so the advantage is the kernel, not the weight format. Substituting Marlin where measured saves 0.583-0.812 ms/step, inside the 0.5-1.0 ms band the pre-registration fixed as INCONCLUSIVE; experts4bit-qlora#564's 1.67 ms estimate is refuted as too optimistic (Marlin runs at 34-50% of the streaming ceiling, not at it).
 - gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19 [measured]: K16 (pre-registered 2026-09-18): the small-M int4-b32 GEMM int4_smallm.gemm_int4_b32_smallm (in-register int4 dequantisation, per-32-block scaling inside the tile, bf16 tensor-core MMA over K chunks of 128-256, split-K with the reduction fused into the launch) at M=16 on Qwen3-30B-A3B's attention projections on the RTX 5090: q_proj 6.35 us (this package's bf16 dequant path 10.37, K14's grouped GEMM 12.56), k_proj 4.37 (6.23), v_proj 4.49 (6.29), o_proj 6.39 (18.61, K14 20.73); launch floor 4.61 us. P1 (within 1.4x of Marlin g128, <= 8.9 / 11.6 us) HOLDS at 1.00x / 0.77x of K15's Marlin rows; P2 (beats the bf16 path on q/o) HOLDS; P3 (k/v within 1.2x of bf16) HOLDS; P4 (single-scale control) NOT TESTED -- the bench carried no control arm; P5 (>= 0.4 ms/step at B=16 once routed) HOLDS in the consumer (experts4bit-qlora lane k16-p5, bench/k16/RESULTS-k16-p5.md, 2026-09-19): the bf16 GEMM family carrying the attention projections falls 2.35 ms/step and this kernel costs 1.30 in its place, the timed B=16 step 12.25 -> 11.19 ms (-1.06, -8.6%); the consumer's route defaults to auto from 0.36.2.
