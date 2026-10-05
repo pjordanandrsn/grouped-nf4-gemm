@@ -41,9 +41,10 @@ This lane does not touch a model, a checkpoint or a download.
 
 ## Correctness first (no timing if any of these fails)
 
-1. `kernel/test_int4_b32.py`, compiled on the card (`TRITON_INTERPRET=0`): the GEMV against its reference, `reduce_partials`
-   against torch and the slot-order sum, and the plan's structural tests. The `SK_R_BOUND` receipt tests read the
-   committed A2000 rows; they are run because they are in the file, and their result is not evidence of anything here.
+1. `kernel/test_int4_b32.py -k "gemv_matches_reference or reduce_partials or plan_"`, compiled on the card
+   (`TRITON_INTERPRET=0`): the GEMV against its reference, `reduce_partials` against torch and the slot-order sum, and
+   the plan's structural tests. The `SK_R_BOUND` receipt tests read the committed A2000 rows. They run because the
+   filter selects them, and their result is not evidence of anything here.
 2. `bench/int4/k30_sk_check.py`, at R = 16 and R = 128 on every shape:
    - every sk the sweep will time must match the sk = 1 output within split-K's fp32 reorder
      (max |Δ| ≤ 1e-2 · max |out|);
@@ -119,10 +120,16 @@ receipts.
 - **Prerequisite.** `L4` must be in `adertha-agents` `adertha/compute/policy.json` `allowed_gpus`, with its RunPod
   mapping row. It is not yet, and the change is the owner's to make.
 - **Guard and estimate.**
-  - Guard 0.9 h, which is under 1 h, so no proving rental is required.
-  - Runtime estimate about 35 min: install ~3; the correctness gates ~5; 2 passes × 6 shapes, each at most 8 R ×
-    8 sk graph-replayed calls plus their Triton compiles, ~20–25; the reducer under a minute.
-  - Estimate ≤ $0.36 GPU plus the launcher's download allowance.
+  - `R`, `SK` and `K` are `constexpr` in the GEMV, so the first pass compiles about 330 kernel variants. The
+    second pass reads them from Triton's cache.
+  - No runtime on this card exists to size a guard from. The A2000 rehearsal's durations are not used: sizing a guard
+    from them is the P66 mistake. So the guard is generous instead: **1.5 h for the reading** (`k30-l4-<n>`).
+  - Because that exceeds 1 h, the policy's **proving rental** comes first: `k30-prove-<n>`, `K30_PROVE=1`, the same
+    provider class and image, a 0.25 h guard. It records the card check and forensics and exits, so it proves attach,
+    pre-flight, handoff, receipt and teardown.
+  - The reading's budget per pass is `K30_PASS_NEED_S` = 1,500 s; a pass that cannot fit is skipped `host-limited`.
+  - Estimate: proving rental ≤ $0.10, reading ≤ $0.60 at the declared ceiling (expected well under half of it), plus
+    the launcher's download allowance in its own estimate.
 - **Stops and attempts.**
   - Hard stop $3 for the lane.
   - At most two attempts. A pre-flight VOID excludes its machine by receipt for the second attempt, and a second VOID
