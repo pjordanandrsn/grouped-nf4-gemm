@@ -85,11 +85,34 @@ def _lean_delta_enabled() -> bool:
 _PAD_BUCKET_RATIO = 2
 
 
-def _pad_buckets_enabled() -> bool:
-    """Off unless ``NF4_QLORA_PAD_BUCKETS=1``: the lean padded delta pads each bucket of similar-sized groups to that
-    bucket's own widest group instead of padding every group to the hottest one (``_lora_delta_bucketed``). Unset or
-    ``0`` is the single block, op for op. Opt-in until a training step reads its peak and its time."""
-    return os.environ.get("NF4_QLORA_PAD_BUCKETS", "0").strip() == "1"
+#: ``NF4_QLORA_PAD_BUCKETS=auto``'s gate: a call buckets when it carries at least this many routed rows (the sum of its group
+#: sizes, tokens x top-k). Placed from a census of every delta call in experts4bit-qlora's TC1 (amendment 49's re-ask): at the
+#: field recipe (Qwen3-30B-A3B, seq 2048, micro-batch 2) the calls carried 3,968 routed rows at the median and 9,040 at most; on
+#: packed 4,096-token rows every call carries 32,768 (4,096 x top-8), where buckets took 4.29 GB off the fp32 arm's peak and
+#: stepped it 0.893 (TC1 amendment 48). ``NF4_QLORA_PAD_BUCKETS_MIN_ROWS`` overrides it.
+_PAD_BUCKETS_AUTO_MIN_ROWS = 16384
+
+
+def _pad_buckets_mode() -> str:
+    """``"0"`` (the single block; unset), ``"1"`` (every call bucketed) or ``"auto"`` (bucketed where the call carries at least
+    ``_pad_buckets_min_rows()`` routed rows), from ``NF4_QLORA_PAD_BUCKETS``. Anything else is the single block."""
+    v = os.environ.get("NF4_QLORA_PAD_BUCKETS", "0").strip().lower()
+    return v if v in ("1", "auto") else "0"
+
+
+def _pad_buckets_min_rows() -> int:
+    v = os.environ.get("NF4_QLORA_PAD_BUCKETS_MIN_ROWS")
+    return int(v) if v else _PAD_BUCKETS_AUTO_MIN_ROWS
+
+
+def _pad_buckets_enabled(total=None) -> bool:
+    """Whether this call pads by buckets (``_lora_delta_bucketed``: each bucket of similar-sized groups padded to its own widest
+    group instead of every group to the hottest one). ``NF4_QLORA_PAD_BUCKETS=1``: always; ``auto``: when ``total`` (the call's
+    routed rows) is at least ``_pad_buckets_min_rows()``; unset or ``0``: never -- the single block, op for op. Opt-in."""
+    mode = _pad_buckets_mode()
+    if mode == "1":
+        return True
+    return mode == "auto" and total is not None and total >= _pad_buckets_min_rows()
 
 
 def _pad_buckets(rows):
@@ -383,7 +406,10 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
     shapes differ). It applies where the single block would pad (the `auto` rule
     still sizes the single block), not to ``NF4_QLORA_LEAN_DELTA=0``'s body; with
     ``NF4_QLORA_COMPACT_DELTA=1`` also set, buckets win.
-    ``LORA_PATH_STATS["padded_bucketed"]`` counts it.
+    ``LORA_PATH_STATS["padded_bucketed"]`` counts it. ``NF4_QLORA_PAD_BUCKETS=auto``
+    buckets only a call carrying at least ``_PAD_BUCKETS_AUTO_MIN_ROWS`` (16,384)
+    routed rows (``NF4_QLORA_PAD_BUCKETS_MIN_ROWS`` overrides it) and gives every
+    smaller call the single block, op for op.
     """
     # `sizes` is a host sequence by contract (the kernel launch grid comes off
     # it), so which groups are non-empty is a host-side fact and needs no device
@@ -415,7 +441,7 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
     if path == "grouped_mm":
         LORA_PATH_STATS["grouped_mm"] += 1
         return _lora_delta_grouped_mm(a_cat, lora_A, lora_B, rows, nz, expert_ids, scaling)
-    if _pad_buckets_enabled() and _lean_delta_enabled():   # NF4_QLORA_PAD_BUCKETS=1: the lean path, padded per bucket
+    if _pad_buckets_enabled(total) and _lean_delta_enabled():   # NF4_QLORA_PAD_BUCKETS=1, or auto past its row gate: padded per bucket
         LORA_PATH_STATS["padded_bucketed"] += 1
         return _lora_delta_grouped_bucketed(a_cat, lora_A, lora_B, rows, nz, expert_ids, widest, scaling)
     LORA_PATH_STATS["padded"] += 1

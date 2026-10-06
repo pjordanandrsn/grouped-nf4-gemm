@@ -255,6 +255,47 @@ def test_off_by_default(monkeypatch):
     assert nf4_qlora._pad_buckets_enabled() is True
 
 
+def test_auto_gates_on_routed_rows(monkeypatch):
+    """``auto`` buckets a call only when it carries at least ``_pad_buckets_min_rows()`` routed rows (default 16,384: TC1's field
+    recipe peaked at 9,040 a call, packed 4,096-token rows carry 32,768); ``NF4_QLORA_PAD_BUCKETS_MIN_ROWS`` overrides it; any other
+    value is the single block."""
+    monkeypatch.delenv("NF4_QLORA_PAD_BUCKETS_MIN_ROWS", raising=False)
+    monkeypatch.setenv("NF4_QLORA_PAD_BUCKETS", "auto")
+    assert nf4_qlora._pad_buckets_min_rows() == nf4_qlora._PAD_BUCKETS_AUTO_MIN_ROWS == 16384
+    assert nf4_qlora._pad_buckets_enabled(9040) is False and nf4_qlora._pad_buckets_enabled(32768) is True
+    assert nf4_qlora._pad_buckets_enabled(16384) is True and nf4_qlora._pad_buckets_enabled(16383) is False
+    assert nf4_qlora._pad_buckets_enabled() is False                      # no row count: never bucketed under auto
+    monkeypatch.setenv("NF4_QLORA_PAD_BUCKETS_MIN_ROWS", "50")
+    assert nf4_qlora._pad_buckets_enabled(49) is False and nf4_qlora._pad_buckets_enabled(50) is True
+    for v in ("yes", "2", " AUTO "):
+        monkeypatch.setenv("NF4_QLORA_PAD_BUCKETS", v)
+        assert nf4_qlora._pad_buckets_mode() == ("auto" if v.strip().lower() == "auto" else "0"), v
+
+
+@pytest.mark.parametrize("dev", DEVICES)
+def test_auto_routes_each_call_by_its_rows(monkeypatch, dev):
+    """End to end under ``auto``: a call under the gate is the single block (counted ``padded``, the same bytes as unset), a call at
+    or over it is bucketed (counted ``padded_bucketed``, equal to the single block to rounding)."""
+    monkeypatch.setenv("NF4_QLORA_LORA_PATH", "padded")
+    small, big = ([3, 1, 0, 2, 4], [0, 1, 2, 3, 4]), ([60, 2, 0, 2, 9, 1, 5], [4, 0, 2, 1, 3, 5, 6])
+    monkeypatch.setenv("NF4_QLORA_PAD_BUCKETS_MIN_ROWS", str(sum(big[0])))
+    for sizes, eids, want in ((small[0], small[1], "padded"), (big[0], big[1], "padded_bucketed")):
+        inputs = _inputs(dev, sizes, eids, torch.bfloat16, torch.float32)
+        monkeypatch.setenv("NF4_QLORA_PAD_BUCKETS", "0")
+        _fresh()
+        ref = _run(lora_delta_grouped, inputs, sizes, eids, 2.0)
+        monkeypatch.setenv("NF4_QLORA_PAD_BUCKETS", "auto")
+        _fresh()
+        before = dict(nf4_qlora.LORA_PATH_STATS)
+        got = _run(lora_delta_grouped, inputs, sizes, eids, 2.0)
+        assert nf4_qlora.LORA_PATH_STATS[want] == before[want] + 1, (sizes, want)
+        for name, x, y in zip(("out", "d_a", "d_A", "d_B"), got, ref):
+            if want == "padded":
+                assert torch.equal(x, y), name                             # under the gate: the single block itself
+            else:
+                _rounding_close(x, y, name)
+
+
 # --- what the flag does not touch, and what wins when it meets the compact delta ---
 
 def test_lean_delta_off_ignores_buckets(monkeypatch):
