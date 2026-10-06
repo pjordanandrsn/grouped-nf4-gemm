@@ -122,7 +122,9 @@ def _pad_buckets_enabled(total=None) -> bool:
 
 def _pad_ladder_enabled() -> bool:
     """Off unless ``NF4_QLORA_PAD_BUCKETS_LADDER=1``: round every bucket's width AND group count up to ``_ladder_up``'s rungs, so
-    the bucketed delta's batched products repeat their shapes from call to call (opt-in until an A/B reads it).
+    the bucketed delta's batched products repeat their shapes from call to call. Opt-in: its first training A/B (experts4bit-qlora
+    TC1 amendment 54, torch 2.8, fp32 adapters, on a host where the step was not host-bound) read 1.010 of the default buckets' time,
+    with ``aten::bmm``'s CPU self time per call cut about tenfold; where the host is the bottleneck it is unread.
 
     Why: the router makes nearly every call's bucket shapes new, and a cuBLAS fp32 batched product costs host time per NEW shape
     (experts4bit-qlora TC1 amendment 24 on an RTX 5090: 119 us on a shape the process had not used against 38 us on a repeated one,
