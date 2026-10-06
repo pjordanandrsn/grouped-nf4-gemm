@@ -246,13 +246,17 @@ def test_unset_and_zero_are_main_op_for_op(monkeypatch, sizes, eids, act_dtype, 
             assert x.dtype == y.dtype and torch.equal(x, y), f"flag {flag!r}: {name} differs"
 
 
-def test_off_by_default(monkeypatch):
+def test_auto_is_the_default(monkeypatch):
+    """Unset is ``auto`` (experts4bit-qlora TC1 amendment 50): a call under the row gate keeps the single block, one at or over it
+    buckets. ``0`` is the single block everywhere, ``1`` buckets every call."""
     monkeypatch.delenv("NF4_QLORA_PAD_BUCKETS", raising=False)
-    assert nf4_qlora._pad_buckets_enabled() is False
+    monkeypatch.delenv("NF4_QLORA_PAD_BUCKETS_MIN_ROWS", raising=False)
+    assert nf4_qlora._pad_buckets_mode() == "auto"
+    assert nf4_qlora._pad_buckets_enabled(9040) is False and nf4_qlora._pad_buckets_enabled(32768) is True
     monkeypatch.setenv("NF4_QLORA_PAD_BUCKETS", "0")
-    assert nf4_qlora._pad_buckets_enabled() is False
+    assert nf4_qlora._pad_buckets_mode() == "0" and nf4_qlora._pad_buckets_enabled(32768) is False
     monkeypatch.setenv("NF4_QLORA_PAD_BUCKETS", "1")
-    assert nf4_qlora._pad_buckets_enabled() is True
+    assert nf4_qlora._pad_buckets_enabled() is True and nf4_qlora._pad_buckets_enabled(1) is True
 
 
 def test_auto_gates_on_routed_rows(monkeypatch):
