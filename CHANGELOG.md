@@ -4,6 +4,364 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
+## 0.42.0 — 2026-10-06 — bucketed LoRA-delta padding on by default as auto; the int4-b32 split-K R term off on every part (experts4bit-qlora TC1 amendments 47–50; K30/K32)
+
+**0.42.0.** Two defaults change, each by a rule registered and read before it changed:
+
+- **Bucketed LoRA-delta padding is on by default as `auto`** (experts4bit-qlora TC1 amendments 47–50; #490, #491, #492). A
+  grouped-LoRA delta call with at least 16,384 routed rows pads each bucket of similar-sized expert groups to its own widest group,
+  instead of padding every group to the hottest. Every smaller call keeps the single padded block, op for op.
+  - On packed 4,096-token rows (Qwen3-30B-A3B, one RTX 5090) the fp32 adapters' step ran at 0.893× with the peak 4.29 GB lower, and
+    the bf16 adapters' at 0.933×, with held-out loss unchanged.
+  - At TC1's field recipe the gate never fired.
+  - That evidence is one model on one card. Other families' calls that reach the gate change on this package's correctness tests:
+    equal within rounding, not bit for bit.
+  - `NF4_QLORA_PAD_BUCKETS=0` restores the previous behaviour exactly.
+- **The int4-b32 split-K R term is off on every part** (`SPLITK_R_TERM_MAX_SMS = 0`), K30's registered consequence. K30 (an NVIDIA
+  L4) and K32 (an RTX A4000) read it OFF, losing at opposite ends of R. Every card plans the split N-only.
+
+Also opt-in, with defaults unchanged:
+- the decoded training route (`GNF4_TRAIN_GEMM=decoded`);
+- the compact delta's backward freeing intermediates at last use (`NF4_QLORA_COMPACT_DELTA=1`);
+- `NF4_QLORA_PAD_BUCKETS=1`.
+
+Plus GraniteMoe's fused expert stack in `bake_nf4`, and the A2000-timing audit's relabels (no output change).
+
+### Bucketed LoRA-delta padding is on by default as `auto` (experts4bit-qlora TC1 amendments 47-50)
+
+- **What changes.** `NF4_QLORA_PAD_BUCKETS` unset now means `auto`: a grouped-LoRA delta call carrying at least 16,384 routed rows pads
+  each bucket of similar-sized expert groups to its own widest group, and every smaller call keeps the single padded block, op for op.
+  `0` keeps the single block everywhere; `1` buckets every call. `NF4_QLORA_PAD_BUCKETS_MIN_ROWS` still moves the gate.
+- **Why, by experts4bit-qlora's registered rule (TC1 amendment 50).**
+  - Amendment 47's allocator census put 6.1 GB of e4b's packed-row excess over Unsloth in the single block, which pads every expert to
+    the hottest expert's rows (about 11.6x the routed rows at 4,096 tokens).
+  - On packed 4,096-token rows, buckets stepped the fp32 arm at 0.893 of the single block's time with 4.29 GB off its peak, and the bf16
+    arm at 0.933; held-out unchanged (amendment 48).
+  - At the field recipe (calls of at most 9,040 routed rows) the gate never fired: 49,152 single-block calls per arm, with held-out and
+    peak unchanged (amendment 50). Amendment 49 could not settle unconditional buckets' speed there, which is why the default is gated.
+- **The evidence's scope.** The calls this changes, those with at least 16,384 routed rows, were measured on one model
+  (Qwen3-30B-A3B, top-8, packed 4,096-token rows) on one RTX 5090. Other families' calls that reach the gate (gpt-oss at 4,096 tokens
+  x top-4 sits exactly at it) change on this package's correctness tests: every bucketed geometry here matches the single block and the
+  per-expert loop within rounding, not bit for bit. No speed or memory was measured for them.
+- **The way back.** `NF4_QLORA_PAD_BUCKETS=0` restores the previous behaviour exactly: the single block on every call, op for op.
+- **Tests.** The bucket test file pins the new default; CI's kernel list reads 548 passed on CPU and 996 passed on an RTX A2000 (CUDA).
+
+### `NF4_QLORA_PAD_BUCKETS=auto`: bucketed padding only where a call carries at least 16,384 routed rows
+
+- **Why.** experts4bit-qlora's TC1 read bucketed padding on packed 4,096-token rows as 0.893 of the single block's step and 4.29 GB
+  lighter on the fp32 arm (amendment 48). At the field recipe its two boxes could not settle the speed: the single block's own draws came
+  8-21 % apart (amendment 49 and its re-ask). Their census of every delta call put the field recipe's calls at 9,040 routed rows at most
+  (median 3,968). Packed rows carry exactly 32,768 a call.
+- **What.** `NF4_QLORA_PAD_BUCKETS=auto` buckets a call when its routed rows (the sum of its group sizes) reach `_PAD_BUCKETS_AUTO_MIN_ROWS`
+  (16,384; `NF4_QLORA_PAD_BUCKETS_MIN_ROWS` overrides it), and gives every smaller call the single block, op for op. `1` still buckets
+  every call; unset or `0` is unchanged. Opt-in.
+- **Tests.** `kernel/test_lora_delta_pad_buckets.py`: the gate's boundary, the override and unknown values; end to end, a call under
+  the gate is the single block bit for bit, and a call at the gate is bucketed and equal to it to rounding.
+
+### `NF4_QLORA_PAD_BUCKETS=1`: the lean padded LoRA delta pads each bucket of similar-sized groups to its own widest, not every group to the hottest (opt-in; default unchanged)
+
+- **Why.** An allocator census in experts4bit-qlora (TC1 amendment 47, row `e4b.train.memory-census.packed-4k.qwen3.5090.2026-10-06`) on an RTX 5090 (Qwen3-30B-A3B, packed rows of 4,096 real tokens,
+  micro-batch 1, top-8 of 128 experts, fp32 adapters) put its training peak 7.47 GB above Unsloth's. 6.1 GB of that was the
+  padded LoRA delta: the zero-padded input block `[G * widest, K]` and the `bmm` products.
+  - Every non-empty group is padded to the hottest group's rows. At the down projection that is about 380,000 padded rows
+    for 32,768 real ones (~11.6x).
+  - `NF4_QLORA_COMPACT_DELTA=1` saves less for backward but still allocates the same-width block in its forward.
+- **What.** Behind the new flag, the lean padded path (`lora_delta_grouped`'s default body) pads by buckets.
+  - **The rule** (`_pad_buckets`, host only): sort the non-empty groups by rows (stable), then cut greedily from the
+    narrowest. A bucket takes every next group with at most twice its first group's rows. So in every bucket the widest
+    group has at most 2x the narrowest's rows, and the padded rows are at most twice the real rows. The single block's
+    `G * max(rows)` is unbounded in the skew.
+  - **The delta** (`_lora_delta_bucketed`): one zero-filled buffer of `sum(G_b * W_b)` rows in the adapters' dtype takes
+    every real row in one `index_copy_`. It is split into the buckets' `[G_b * W_b, K]` blocks (views). The adapters are
+    gathered once in bucket order and split the same way. Each bucket runs the two `bmm`s at its own width. The outputs are
+    concatenated, and one `_GatherRows` gather through the flat index puts the real rows back in the caller's order. Only
+    standard autograd ops (`index_copy_`, `split`, `bmm`, `cat`, the gathers), so gradients take the single block's route,
+    bucket by bucket.
+  - **The plan** is built from host facts as the single block's is: one batched `to_device_i32` upload (row counts, ids in
+    bucket order, each group's first padded row) and `repeat_interleave(..., output_size=total)`. Nothing reads the device,
+    so the path is capture-safe in the same way.
+  - **`GNF4_HOST_REUSE`'s plan memo is extended, not bypassed.** A bucketed plan carries its bucket list and is stored under
+    the single block's key plus a `"buckets"` tag, so neither path reads the other's plan. The down delta reuses the gate_up
+    delta's bucketed plan.
+  - **With `NF4_QLORA_COMPACT_DELTA=1` also set, buckets win:** the bucketed path never calls `_CompactPaddedDelta`.
+  - **Unchanged:** the `auto` route rule still sizes the single block, so a call it sends to the loop still loops.
+    `NF4_QLORA_LEAN_DELTA=0`'s body, the loop and `grouped_mm` are not bucketed.
+  - **Counted:** `LORA_PATH_STATS["padded_bucketed"]` counts bucketed calls (instead of `padded`). Each bucketed call
+    writes `LORA_PAD_WASTE`'s `last_rows_single` (`G * widest`), `last_rows_bucketed` and `last_buckets`; nothing else
+    writes those three keys.
+- **Unset or `0` is main, op for op.** A dispatch-mode log of every aten op, forward and backward, with its operands'
+  shapes and dtypes, is identical to main's single-block body. Outputs and gradients are `torch.equal`, and the stats are
+  the same. Checked against main's module across the padded, auto and loop routes, lean on and off, and compact on and off
+  (288 cases), and pinned in the new test against a verbatim copy.
+- **Values with the flag on: equal to rounding, not bit for bit.** Each real row gets the same arithmetic, but the `bmm`s
+  run at other shapes, and a BLAS can pick its kernel, or split a reduction, by shape. On CPU (torch 2.13, arm64,
+  Accelerate) the same rows through `bmm` at M = 60 and at M = 2 already round differently. Over the test's 7 routing cases,
+  3 dtype pairs, scaling 1 and 2 and 5 seeds:
+  - single-bucket cases are bit-identical;
+  - with bf16 adapters, outputs and input gradients are bit-identical. Adapter gradients are too, except where one expert
+    id repeats three times (the accumulation runs in bucket order): at most 2^-7.5 of the tensor's largest entry, about one
+    bf16 ulp there;
+  - with fp32 adapters, every fp32 tensor differs by at most 2^-21.3 of its largest entry (a few fp32 ulps). A bf16 input
+    gradient differs by bf16 rounding, at most 2^-15.6 of its largest entry.
+- **Padded rows**, from the bucket rule on seeded routings: 4,096 tokens, each sent to 8 distinct experts of 128 with
+  Zipf(s) weights. These are row counts, not an allocator read.
+
+  | s | real rows | single block, rows (x real) | bucketed, rows (x real) | buckets | fewer padded rows |
+  |---|---|---|---|---|---|
+  | 0.8 | 32,768 | 342,144 (10.44x) | 44,067 (1.345x) | 6 | 7.76x |
+  | 1.0 | 32,768 | 440,960 (13.46x) | 44,375 (1.354x) | 6 | 9.94x |
+  | 1.2 | 32,768 | 499,200 (15.23x) | 43,050 (1.314x) | 7 | 11.60x |
+
+  At the census's shape the rule bounds the bucketed rows at 65,536, at least 5.8x fewer than its ~380,000.
+- **Not read here.** No GPU was used. The training step's peak and time with the flag on are open, as is its launch cost:
+  about two more `bmm`s per extra bucket, plus a `cat` each way. The CUDA-only tests below did not run.
+- **Tests** (`kernel/test_lora_delta_pad_buckets.py`, wired into CI's GPU-labelled step). On CPU: 81 passed, 7 skipped
+  (CUDA-only).
+  - The plan follows the rule and tiles the padded rows.
+  - Output and all three gradients match the single block to rounding: skewed, hot-expert, empty, single-group, and
+    distinct and repeated ids; bf16/bf16, bf16/fp32 and fp32/fp32; scaling 1 and 2. They match the per-expert loop to
+    the existing tolerance.
+  - The Zipf(1) case above runs through both paths, and its padded rows equal the rule's.
+  - Unset and `0` are main's single block, op for op.
+  - `NF4_QLORA_LEAN_DELTA=0` ignores the flag, and with the compact flag buckets win.
+  - CUDA only: device-tensor ids, the plan memo's hit on the gate_up -> down twin, and the bucketed forward and backward
+    peaks below the single block's on a hot-expert case.
+
+### The decoded training route's docs cite its training-step read: no measurable saving, so `auto` does not take it (docs only)
+
+- **Where.** `nf4_route`'s module comment, the `grouped-nf4-gemm` capability's limitation, and the README route paragraph now cite
+  experts4bit-qlora's TC1 amendment 46 (one RTX 5090, experts4bit-qlora#1221).
+- **The read.** Decoded/fused 1.005 [0.979, 1.031] on OLMoE-1B-7B and 1.066 on Qwen3-30B-A3B.
+- **Unchanged.** `GNF4_TRAIN_GEMM=decoded` stays opt-in, and "no speed is claimed" stays alongside.
+
+### `bake_nf4(fused_marker=...)`: GraniteMoe's fused expert stack bakes
+
+- The fused layout (one 3-D `[E, 2I, H]` gate-first stack per layer, plus its `[E, H, I]` down partner) was found
+  only under names containing `.experts.`, the Gemma-4 spelling.
+- GraniteMoe has no `experts` segment: `model.layers.N.block_sparse_moe.input_linear.weight` and
+  `...output_linear.weight`. It now bakes with `fused_marker=".block_sparse_moe."` and
+  `fused_proj=("input_linear.weight", "output_linear.weight")`.
+- The default stays `.experts.`, so nothing else changes.
+- When a checkpoint has no `expert` keys but does have `...input_linear.weight`, the no-experts diagnostic now names
+  those two arguments.
+- Checked end to end on `ibm-granite/granite-3.1-3b-a800m-instruct` (RTX A2000 host):
+  - 1,280 rows (1.7 GB) baked in 47 s;
+  - experts4bit-qlora's paged server built on the arena and served 4 × 1,024-token prompts;
+  - the serve estimate held (allocator peak 1.3% under it).
+
+### The decoded training route, opt-in: `GNF4_TRAIN_GEMM=decoded` (dequant_groups + one grouped bf16 GEMM launch per chunk of groups; `auto` untouched)
+
+- **What it is:** `nf4_route.decoded_forward` / `decoded_dgrad`, also reached through `FusedGroupedNf4` (forward and dgrad):
+  - per chunk of present groups, one `dequant_groups` launch decodes the chunk's experts to bf16;
+  - then one new Triton kernel, `_grouped_bf16_gemm_kernel`, runs every group of the chunk, with bf16 operands, fp32
+    accumulation and one bf16 rounding.
+- **The cap:** each chunk's decode transient is at most `GNF4_DECODED_MAX_BYTES` (default 256 MiB, and at least one expert).
+  `decoded_chunks` is the plan as a pure function.
+- **Origin:** experts4bit-qlora's RD1 probe arm `decoded_cap`, moved here with the arithmetic unchanged.
+- **Opt-in only.** `route_for` answers `decoded` only when asked, and `auto` never takes it, on any card or group count.
+- **Correctness gate in CI:** RD1's gate, the route's error against an fp32 reference at most 2× the dense route's.
+  - It runs in the interpreter on CPU (`kernel/test_nf4_decoded_interp.py`).
+  - It also runs compiled, against the real `dense` route and the fused kernels (`kernel/test_nf4_route.py`).
+  - Two more checks: a capped call is bit-identical to the uncapped one, and the cap bounds the measured transient.
+- **No speed claim.** Whether the route shortens a training step is experts4bit-qlora's TC1 full-step A/B, registered before
+  its box.
+- **Measured memory:** RD1's per-call reading on one RTX 5090 put the route's peak at 180–448 MiB above its inputs at the
+  256 MiB cap. That is a bound measured on one card, not a guarantee.
+
+### Read: K32 — the split-K R term on one rented RTX A4000 reads OFF too, by its worst cell (bench and docs only)
+
+- K30's instrument and rule on the second ≤64-SM architecture (48 SMs, sm_86). The summed time passed (0.9396x the
+  N-only pick; KEEP needed <= 0.97) but the worst cell failed (1.0965x at olmoe down R = 16; KEEP needed <= 1.02), so the
+  read is OFF. With K30's L4 OFF, the term's OFF stands on both architectures read. As registered, nothing changes.
+- `kernel/RESULTS-k32-splitk-r-term-a4000.md`, `kernel/receipts-k32/a4000/`, register row
+  `gnf4.kernel.k32-splitk-r-term.a4000.2026-10-05` (measured), `docs/STATUS.md`. Run `k32-a4000-1` cost $0.016.
+
+### K32 registered: K30's split-K R-term sweep on one rented RTX A4000, the second ≤64-SM architecture (bench only)
+
+- `kernel/PREREG-k32-splitk-r-term-a4000.md`: K30's instrument and rule, frozen at its measured cut `aa562718`, on one
+  rented RTX A4000 (48 SMs, sm_86) via e4b's `bench/k30/` runner (`K30_CARD=A4000`).
+- The lane cannot change the default. K30's OFF stands, since KEEP needs both cards. An A4000 OFF makes that OFF
+  two-card; an A4000 KEEP is reported as an sm_86-specific observation.
+
+### K30's OFF, the last three places: the int4 solution page, the row-invariance test's docstring, an erratum on the A2000 sweep (docs and comments only)
+
+- `docs/solutions/int4-decode-gemv.md` still said the split-K row term's gain was unverified and a rented read was open.
+  It now says the term is off on every part (`SPLITK_R_TERM_MAX_SMS = 0`) since K30 read it OFF on a rented NVIDIA L4,
+  and cites `gnf4.kernel.k30-splitk-r-term.l4.2026-10-05`.
+- `kernel/test_row_invariance_gpu.py`'s docstring said a <= 64-SM part's own plan could change the split count with the
+  rows. With the gate at 0 no part plans from its SM count. Comment only; the test is unchanged.
+- `bench/int4/RESULTS-sk-r-sweep.md`, the A2000 sweep the retired row cites, gains a dated erratum (the
+  experts4bit-qlora#1128 pattern) and its record stands. The erratum makes three points:
+  - its timings are not speed evidence;
+  - its sk = 1 cells skipped the `reduce_partials` launch the served path pays (K30 Amendment 1);
+  - K30's rented read turned the term off.
+
+### The int4-b32 split-K R term is off on every part (`SPLITK_R_TERM_MAX_SMS = 0`, K30's registered consequence)
+
+- K30 read the term OFF on a rented NVIDIA L4 (#481). Over the 24 cells at R >= 16 the R-aware pick's summed time was
+  1.0101x the N-only pick's, worst cell 1.1781x; KEEP needed <= 0.97 and <= 1.02. Every card now plans split-K from
+  (N, K) alone, as the 5090 already did. Outputs on <= 64-SM parts at R >= 16 move within the split-K reorder class.
+  B=1 decode is unchanged, since it was below the floor.
+- The mechanism stays, and its tests run under a monkeypatched gate. `test_the_r_term_is_off_by_default_on_every_sm_count`
+  enforces the default; with the gate set back to 64 it fails 8 of 8.
+
+### Read: K30 — the int4-b32 split-K R term on one rented NVIDIA L4 reads OFF (bench and docs only)
+
+- Over the 24 cells at R >= 16 of the 48-cell `sk_sweep.py` grid, the R-aware pick's summed time is 1.0101x the N-only
+  pick's (pass 1 1.0100, pass 2 1.0101), and its worst cell is 1.1781x (qwen3_moe gate_up at R = 128). KEEP needed <= 0.97
+  and <= 1.02. It wins 20 of the 24 cells and loses the three largest gate_up cells, where it drops the split to sk 1.
+- `kernel/RESULTS-k30-splitk-r-term-l4.md`, `kernel/receipts-k30/l4/`, register row
+  `gnf4.kernel.k30-splitk-r-term.l4.2026-10-05` (measured), `docs/STATUS.md`. Run `k30-l4-1` cost $0.030 and the proving
+  rental $0.009. The consequence, `SPLITK_R_TERM_MAX_SMS = 0`, is its own PR.
+
+### Changelog entries are one file each in `changelog.d/`; `## Unreleased` is no longer edited by hand (tooling only)
+
+- **The rule** (experts4bit-qlora since #1149): a change adds `changelog.d/<pr-or-slug>.md`, exactly the `### Title` and body
+  it would have put under `## Unreleased`. That section's body is now one pointer paragraph. New files never conflict, so
+  concurrent pull requests stop going DIRTY on the one hunk they all rewrote.
+- **`scripts/changelog_fragments.py` is shared tooling** (added to `SHARED`; this repository is upstream, experts4bit-qlora
+  carries the identical file). `--release` writes the fragments into the new version's section, newest first by the
+  commit that added each, and deletes them. `--render` previews the section. `--check` runs in CI. It refuses entries
+  under `## Unreleased` and malformed fragments. Released history is append-only: the merge base's released sections must
+  survive byte for byte as the file's tail, so only a release adds to them, and an unreleased fragment leaves only by
+  being released. A deliberate edit to a released section passes with the `changelog-history-edit` label.
+- **Migration.** The five sections under `## Unreleased` moved, unchanged, into `changelog.d/<original PR>-<slug>.md`.
+  Joined in their old order they reproduce the old section byte for byte. The released sections are byte-identical.
+- `kernel/test_changelog_fragments.py` (the same file as experts4bit-qlora's `tests/test_changelog_fragments.py`) is
+  wired into CI. CONTRIBUTING.md, AGENTS.md section 8, `docs/RELEASE_NOTES_GUIDE.md` and `docs/change-impact.json`
+  state the rule. No package code changes.
+
+### K30 registered: does the int4-b32 split-K R term win on a <=64-SM card? (bench only)
+
+- `kernel/PREREG-k30-splitk-r-term-l4.md`: the 48-cell `bench/int4/sk_sweep.py` (unchanged) twice on one rented NVIDIA
+  L4, after the compiled int4_b32 suite, a per-sk agreement check and the rule's self-test. KEEP if the R-aware pick's
+  summed time is <= 0.97 of the N-only pick's and no cell is > 1.02 worse; OFF otherwise. No band is borrowed from the
+  A2000 sweep that set the term.
+- `bench/int4/k30_reduce.py` (the rule, a 6-case self-test, and an on-box cross-check that the installed `_plan` picks
+  what it prices) and `bench/int4/k30_sk_check.py` (every swept sk agrees with sk = 1 before any timing). The box
+  runner lives in experts4bit-qlora `bench/k30/`.
+
+### Shared tooling: `check_change_impact.py` accepts a `changelog.d/` fragment as the CHANGELOG companion where a repository keeps one (tooling only)
+
+- experts4bit-qlora moves its `## Unreleased` entries to one file per change in `changelog.d/`, because every merge left
+  every other open pull request DIRTY on the one hunk they all rewrote. There, a fragment the diff adds or edits satisfies
+  a `CHANGELOG.md` companion (public-api-change, new-kernel-capability). A version bump still needs `CHANGELOG.md` itself,
+  because the release writes it.
+- **Inert here:** this repository has no `changelog.d/`, so every rule reads as before. Shared tooling lands here first,
+  then the identical file goes to experts4bit-qlora. Moving this repository's own `## Unreleased` to fragments is a
+  separate change. No package code changes.
+
+### A2000-timing audit, the owner's decisions applied: the dgrad row relabelled, the split-K row retired, its timing tests out, four lane errata (no output change)
+
+- **Why.** The maintainer's decisions 1, 2, 3 and 5 on #475, for the items that need no rented compute. The RTX A2000 is a
+  correctness-only testbed, so an A2000 timing may not be a headline, a CI gate or a band basis.
+- **`gnf4.kernel.dgrad` is no longer a speed row.** Its id stays, and its value is now the correctness result the claim
+  already stated: one launch, gradient ~2.9e-3 (relative) from the exact per-expert loop, inside the bf16 budget. The README
+  and STATUS tables quote that, and the 0.7.0 entry keeps the A2000 step time as the record.
+- **New row `gnf4.kernel.dgrad-step.a6000.2026-08-06`, the rented speed headline.** On a rented RTX A6000 with Qwen3-30B-A3B
+  at 48 layers and the published wheels, the fused training step runs 2.52x the reference loop with dgrad and 1.72x without.
+  The receipt is in experts4bit-qlora (`bench/dgrad-gate/RESULTS-dgrad-gate.md`), cited as cross-repository evidence. The
+  README and STATUS tables quote it.
+- **`gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10` is retired**, with the reason "an A2000 timing; the A2000 is a
+  correctness-only testbed". STATUS, `docs/solutions/int4-decode-gemv.md` and `docs/capabilities.json` no longer cite it as
+  current.
+  - **The plan is unchanged.** `SPLITK_R_TERM_MAX_SMS` still keeps the R term on for parts with 64 SMs or fewer. A rented
+    read on such a card decides whether the term stays; flipping the gate is reorder-class.
+- **`kernel/test_int4_b32.py` stops asserting the plan against A2000 timing receipts.**
+  - Three tests go, with `SK_R_BOUND`: the worst-cell bound, the summed win over the N-only rule, and the per-cell
+    never-slower comparison. The last is the same kind of timing gate, so it went with the other two.
+  - The structural tests stay: R < 16 returns the N-only plan on every SM count; sk never grows with R; the grid-full
+    collapse to sk = 1; KU divides the k-blocks; the N-only plan above 64 SMs.
+  - New: `test_plan_is_a_pure_function_of_n_k_r` pins the property `_plan`'s caveat states.
+- **Errata, registrations as stamped** (the experts4bit-qlora#1128 pattern). Each RESULTS gains a dated erratum naming its
+  A2000-seeded basis, and says that its verdict rests on the 5090 alone:
+  - K14, Amendment 1's redesign;
+  - K16, the pilot's go-to-rent call;
+  - K26, its DECODE and `tree / pair` bands;
+  - K27, its speed band and verdict lean.
+- **`prereg_dequant_forward_floorfree.json` is anchored**, so it is not edited. A VOID A2000 smoke motivated where its F1
+  band sits; the erratum sits beside it (`kernel/prereg_dequant_forward_floorfree.ERRATUM-2026-10-05.md`), and
+  `kernel/ERRATA.md` points there.
+- **Not in this change:** the rented reads (the ≤ 64-SM split-K step read), and re-sweeping the speed-only constants.
+
+### Docs: A2000 timings out as speed evidence (testbed-policy audit; docs and comments only)
+
+- **Why.** The RTX A2000 is a correctness-only testbed (experts4bit-qlora's testbed policy, standing since 2026-07-27,
+  re-stated 2026-10-05): an A2000 timing may not seed a prediction, filter a candidate, or appear as speed evidence. An
+  audit of both repositories found such timings in this package's comments and docs. The findings table, including what is
+  left for the owner, is [`docs/audits/a2000-timing-2026-10-05.md`](docs/audits/a2000-timing-2026-10-05.md).
+- **Comments** (no behaviour change, no constant moved). `_triton_shim.py`, `cold_deadline.py`, `fp8_paged_attn.py`,
+  `int4_b32.py`, `mxfp4_grouped.py`, `nf4_grouped.py`, `nf4_qlora.py`, `nf4_route.py` and `bench/calibrate.py` no longer
+  quote A2000 timings, bandwidths or ratios. The dgrad default now cites experts4bit-qlora's rented A6000 dgrad gate (2.52x
+  vs 1.72x). `link_eff` cites the two rented 5090 hosts. `fp8_paged_attn`'s precision table keeps its error column only.
+- **Comments now say where a shipped choice came from an A2000 timing**, and that it is unverified on a target card. That
+  covers the int4-b32 split-K R term and `SPLITK_TARGET_BLOCKS_PER_SM` (still on for parts with 64 SMs or fewer), MXFP4's
+  N-only plan, `_TILE_D_DEFAULT = 96`, and `_DGRAD_DEFAULT`. Outputs do not depend on any of them.
+- **STATUS, register and docs.** The A2000 `link_eff` of 1.0 leaves `STATUS.md` and `cold-engine/ARCHITECTURE-NOTES.md`.
+  Two rows' notes drop A2000 timings: K17's pre-launch pilot and P69's control.
+- **Left for the owner** (listed in the audit file): `gnf4.kernel.dgrad` (403.7 -> 26.5 ms, an A2000 timing quoted in the
+  README and STATUS tables), `gnf4.serve.int4-b32-splitk-row-term.a2000.2026-09-10` (value 1.011x, A2000), the
+  `SK_R_BOUND` test, which pins the plan against A2000 timing receipts, and the PREREG/RESULTS records.
+
+### `NF4_QLORA_COMPACT_DELTA=1`: the compact delta's backward frees each intermediate at its last use (opt-in; default unchanged)
+
+- **Why.** experts4bit-qlora's TC1 amendment 36 measured the flag on an RTX 5090 (box `tc1-5090-80`, whole-layer gradient
+  checkpointing). Both arms stepped faster, but the matched arm's peak (fp32 adapters) rose 27.49 → 27.72 GB, **+0.23 GB**; the
+  shipped arm's (bf16 adapters) was unchanged. The registration had predicted a lower peak.
+  - `_CompactPaddedDelta.backward` held every intermediate until it returned. The padded output grad `gd` `[G, W, N]` was still
+    live while the block `x` and its grad `gx` (both `[G, W, K]`) were rebuilt and computed. The autograd path frees its `gd`
+    before `gx` exists.
+- **What.** The backward drops (`del`) each intermediate after its last use:
+  - the gathered `B` after `gh`, and `gd` after `gBt`;
+  - the gathered `A` after `gx`, and `x` and `gh` after `gAt`;
+  - `gx` once `grad_a` is gathered (before its dtype cast), and `gAt` and `gBt` once the adapter grads are scattered.
+
+  Every op, operand layout and dtype, and the order of the calls, are unchanged. The incoming grad stays held by autograd until
+  the node returns, so it is not dropped.
+- **Values.** Forward and every gradient stay `torch.equal` to the autograd path, in the existing grid and at every cell below.
+- **Allocator peaks, read on an RTX A2000** (torch 2.8.0+cu128; the A2000 is a correctness testbed, and allocator bytes do not
+  depend on contention). One `lora_delta_grouped` call per cell: 128 experts, top-8, r=16, gate_up K=2048 → N=1536 and down
+  K=768 → N=2048, bf16 activations, `GNF4_HOST_REUSE` on.
+  The router has the skew of `bench/host-reuse/` (logits `randn + linspace(1.5, -1.5)` over the experts). Peaks are
+  `max_memory_allocated` above what was allocated before the forward, in MiB, and were identical in two runs.
+
+  | projection, tokens, adapters | G × widest | backward peak: autograd / compact before / compact after | forward + backward peak |
+  |---|---|---|---|
+  | gate_up, 380, fp32 | 106 × 112 | 264.2 / 360.6 / **227.9** | 264.2 / 360.6 / **227.9** |
+  | down, 380, fp32 | 106 × 112 | 193.1 / 250.4 / **136.2** | 193.1 / 250.4 / **170.2** |
+  | gate_up, 380, bf16 | 106 × 112 | 120.2 / 186.2 / **114.0** | 120.2 / 186.2 / **114.0** |
+  | down, 380, bf16 | 106 × 112 | 92.1 / 127.4 / **68.1** | 92.1 / 127.4 / **85.1** |
+  | gate_up, 1100, fp32 | 114 × 312 | 717.4 / 973.1 / **636.6** | 717.4 / 973.1 / **636.6** |
+  | down, 1100, fp32 | 114 × 312 | 514.8 / 637.2 / **370.6** | 514.8 / 637.2 / **472.6** |
+  | gate_up, 1100, bf16 | 114 × 312 | 324.3 / 483.3 / **318.3** | 324.3 / 483.3 / **318.3** |
+  | down, 1100, bf16 | 114 × 312 | 244.5 / 323.2 / **185.3** | 244.5 / 323.2 / **236.3** |
+
+  - **Before**, the compact backward peaked 24–55 % above the autograd path's, with every intermediate live at once at the return.
+    **After**, it is 2–30 % below in every cell.
+  - **Where the peak now sits.** For gate_up it is `x` and `gx` together, the same two blocks the autograd path holds in that
+    bmm's backward (read with `torch.cuda.memory._record_memory_history`). For down it is `gd` with the gathered adapters, and the
+    forward's peak is the higher one.
+  - **A harsher router.** With one expert taking every token (G = 128, widest = tokens), compact after is also at or below the
+    autograd path in all eight cells. The closest is gate_up, bf16, 1,100 tokens: 1,152.1 / 1,623.2 / 1,148.4 MiB.
+  - **Time is not read here.** The A2000 is a correctness testbed only, so this entry carries no timing. The RTX 5090 reads
+    are experts4bit-qlora's TC1 amendments 36 and 37: the full Qwen3-30B-A3B training step with the flag on runs 0.969 / 0.967
+    of the flag-off step on the matched arm and 0.970 / 0.948 on the shipped arm, before and after this patch.
+- **The training peak, measured since:** experts4bit-qlora's TC1 amendment 37 (`tc1-5090-83`, a second host) read the matched
+  arm's peak with the flag on at 27.189 GB against 27.477 GB off, **−0.288 GB**, where amendment 36 had read +0.229 GB without
+  this patch. The flag stays opt-in; the default decision is proposed as TC1 amendment 38
+  (pjordanandrsn/experts4bit-qlora#1125).
+- **Not in this change.** Computing `gAt` before `gx` would free `x` before `gx` exists. In the same cells, gate_up's backward peak
+  would fall a further 30–33 % below this patch (227.9 → 158.9 MiB at 380 tokens, fp32), with values bit-identical. The forward
+  peak then becomes the binding one (204.0 MiB in that cell). It reorders two calls, so it is left to a separate change.
+- **Tests** (`kernel/test_compact_delta.py`). `test_compact_backward_peak_at_most_autograd` is CUDA-only. It runs one forward +
+  backward at the hot-expert case, with gate_up-like and down-like widths, bf16 and fp32 adapters, and `GNF4_HOST_REUSE` off and on.
+  It asserts `torch.equal` on the output and all three gradients, and that the compact forward, backward and combined peaks are at
+  most the autograd path's.
+  - Against the unpatched backward it fails 7 of 8 cases under torch 2.8 and all 8 under torch 2.11.
+  - On the A2000, with the patch: `test_compact_delta.py` gives 71 passed and 20 skipped (host reuse on CPU), and
+    `test_lora_delta_lean.py` 104 passed. With `test_host_reuse.py`, `test_nf4_qlora_grad.py` and `test_eids_forms.py` added, the
+    run gives 220 passed and 21 skipped, both with `NF4_QLORA_COMPACT_DELTA` unset and with it set to 1.
+
 ## 0.41.0 — 2026-10-05 — GNF4_TRITON_PREBIND on by default (experts4bit-qlora TC1 amendments 26/30: Qwen3-30B-A3B training step 0.973 matched / 0.980 shipped on an RTX 5090, bit-identical); prebound launches cover triton 3.7
 
 **0.41.0.** One default changes, by a rule registered and read in experts4bit-qlora (TC1 amendments 26 and 30):
