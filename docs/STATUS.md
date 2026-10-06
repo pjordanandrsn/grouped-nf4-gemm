@@ -137,13 +137,17 @@ MXFP4 decode reproduces Kimi K3's own declared reference exactly
   4,096-token rows buckets lowered the step and the peak, and at the field
   recipe the gate never fired. That evidence is one model (Qwen3-30B-A3B) on one
   RTX 5090; other families that reach the gate change on this package's
-  correctness tests alone. It is also one environment: every speed reading was
-  taken under torch 2.12.1 / triton 3.7.1, so the effect under torch 2.8 /
-  triton 3.4 is unmeasured. experts4bit-qlora's TC1 amendment 51
-  (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-06.packed-4k-defaults`) found e4b
-  slower than expected under torch 2.8 with the default on (environment ratio
-  0.739, outside its registered band). That points at bucketing under torch 2.8
-  but does not show it, and a torch-2.8 A/B is the next registration there.
+  correctness tests alone. Two environments are measured. Amendments 48 and 50
+  read torch 2.12.1 / triton 3.7.1. Amendment 52
+  (`e4b.train.pad-buckets.torch28.qwen3.5090.2026-10-06`) read torch 2.8.0 /
+  triton 3.4.0. There the buckets step 0.983 [0.974, 0.993] (matched) and 0.939
+  (shipped) of the single block on packed rows, the matched peak is 4.24 GB
+  lower, and held-out moves by 0.0002, so the default stands there too.
+  Amendment 51's slower torch-2.8 e4b (environment ratio 0.739,
+  `e4b.train.h2h.unsloth.qwen3.5090.2026-10-06.packed-4k-defaults`) is
+  therefore not the buckets' cost. Reported, not scored: under torch 2.8 the
+  bucketed arms left the GPU idle more of the step (median utilisation 87 %
+  against 97 %), so host-side time in the bucketed delta is the open lead.
   `NF4_QLORA_PAD_BUCKETS=0` restores the single block exactly.
 - **#408 is closed: the MXFP4 prefill combine returns the same bits on every
   call (#410, 2026-09-28, RTX A2000).** `Mxfp4PipelinedGptOss._forward_prefill`

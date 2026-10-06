@@ -29,7 +29,8 @@ macOS and Windows are not exercised by CI. ROCm and XPU are port targets.
 
 **New in 0.42.0:** bucketed padding of the LoRA update is on by default (`auto`) for calls with at least 16,384
 routed rows, such as packed 4,096-token training rows; smaller calls keep the single padded block.
-Its training-speed evidence is on torch 2.12; its effect on torch 2.8 is still unmeasured.
+Measured in experts4bit-qlora's packed-row training under torch 2.12 and torch 2.8: under 2.8 it steps 0.983× the single
+block with a 4.24 GB lower peak.
 `NF4_QLORA_PAD_BUCKETS=0` restores the single block.
 [Release notes](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/CHANGELOG.md)
 
