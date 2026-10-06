@@ -420,3 +420,97 @@ def test_bucketed_peak_below_the_single_block(monkeypatch, ad_dtype):
         torch.cuda.synchronize()
         peaks[flag] = (fwd, torch.cuda.max_memory_allocated() - base)
     assert peaks["1"][0] < peaks["0"][0] and peaks["1"][1] < peaks["0"][1], peaks
+
+
+# --- NF4_QLORA_PAD_BUCKETS_LADDER=1: widths and batch counts on rungs ---
+
+def test_ladder_rungs():
+    """Every integer up to 4, then four rungs per octave: never below n, under 1.25 n above 4, idempotent, monotone."""
+    up = nf4_qlora._ladder_up
+    assert [up(n) for n in range(0, 9)] == [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    assert [up(n) for n in (9, 11, 13, 17, 19, 33, 1000, 3445)] == [10, 12, 14, 20, 20, 40, 1024, 3584]
+    prev = 0
+    for n in range(1, 70000):
+        r = up(n)
+        assert n <= r and (n <= 4 or r < 1.25 * n) and up(r) == r and r >= prev, n
+        prev = r
+    assert len({up(n) for n in range(1, 65536)}) == 60
+
+
+@pytest.mark.parametrize("rows", [[3, 3, 3, 3], [5, 1, 7], [1], [60, 2, 2, 2, 2, 2, 2, 2],
+                                  [2, 1, 90, 3, 1, 4, 75, 2, 5, 1], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+                                  [7, 7, 7, 14, 15, 28, 29, 1000, 2000, 2001]])
+def test_ladder_plan_rounds_widths_and_groups(monkeypatch, rows):
+    """Same buckets as the rule (membership by real rows), each width and batch count rounded up to a rung; real groups tile
+    the front of each bucket's block, the padded groups follow, and the total is at most 2 x 1.25 x 1.25 the real rows."""
+    monkeypatch.setenv("NF4_QLORA_PAD_BUCKETS_LADDER", "1")
+    order, buckets, pstart = nf4_qlora._pad_buckets(rows)
+    up = nf4_qlora._ladder_up
+    assert [(g, w) for g, w, _ in buckets] == [(g, up(w)) for g, w in _rule(rows)]
+    assert all(gp == up(g) and gp >= g for g, _, gp in buckets)
+    total = sum(gp * w for _, w, gp in buckets)
+    assert total <= 2 * 1.25 * 1.25 * sum(rows)
+    base, i = 0, 0
+    for g_b, w_b, gp_b in buckets:
+        for slot, g in enumerate(order[i:i + g_b]):
+            assert pstart[g] == base + slot * w_b and rows[g] <= w_b
+        base += gp_b * w_b
+        i += g_b
+    assert base == total
+    monkeypatch.setenv("NF4_QLORA_PAD_BUCKETS_LADDER", "0")
+    assert nf4_qlora._pad_buckets(rows)[1] == _rule(rows)
+
+
+@pytest.mark.parametrize("dev", DEVICES)
+@pytest.mark.parametrize("sizes,eids", CASES)
+@pytest.mark.parametrize("act_dtype,ad_dtype", DTYPES)
+def test_ladder_matches_the_single_block(monkeypatch, dev, sizes, eids, act_dtype, ad_dtype):
+    """Laddered buckets give the single block's values and gradients to rounding; the waste record counts the laddered rows."""
+    monkeypatch.setenv("NF4_QLORA_LORA_PATH", "padded")
+    inputs = _inputs(dev, sizes, eids, act_dtype, ad_dtype)
+    monkeypatch.setenv("NF4_QLORA_PAD_BUCKETS", "0")
+    _fresh()
+    single = _run(lora_delta_grouped, inputs, sizes, eids, 2.0)
+    monkeypatch.setenv("NF4_QLORA_PAD_BUCKETS", "1")
+    monkeypatch.setenv("NF4_QLORA_PAD_BUCKETS_LADDER", "1")
+    _fresh()
+    laddered = _run(lora_delta_grouped, inputs, sizes, eids, 2.0)
+    rows = [s for s in sizes if s]
+    up = nf4_qlora._ladder_up
+    assert nf4_qlora.LORA_PAD_WASTE["last_rows_bucketed"] == sum(up(g) * up(w) for g, w in _rule(rows))
+    for name, b, s in zip(("out", "d_a", "d_A", "d_B"), laddered, single):
+        _rounding_close(b, s, name)
+
+
+def test_ladder_repeats_shapes_across_routings(monkeypatch):
+    """The point of the ladder: over many Zipf(1) top-8 routings of 4,096 tokens, the bucketed products' distinct (G_b', W_b)
+    shapes are a small fraction of the unladdered (G_b, W_b) ones."""
+    def shapes(ladder):
+        monkeypatch.setenv("NF4_QLORA_PAD_BUCKETS_LADDER", "1" if ladder else "0")
+        out = set()
+        for seed in range(40):
+            rows = [s for s in _zipf_top8_sizes(seed=seed) if s]
+            out |= {(nf4_qlora._bucket_groups(b), b[1]) for b in nf4_qlora._pad_buckets(rows)[1]}
+        return out
+    plain, laddered = shapes(False), shapes(True)
+    print(f"\ndistinct bucket shapes over 40 routings: {len(plain)} plain, {len(laddered)} laddered")
+    assert len(laddered) * 3 <= len(plain)
+
+
+@pytest.mark.skipif(not CUDA, reason="the plan memo is CUDA-only")
+def test_ladder_plan_memo_is_keyed_apart(monkeypatch):
+    """A laddered plan and an unladdered one never share a memo entry, so toggling the flag between calls cannot reuse the
+    other's plan."""
+    sizes, eids = CASES[4]
+    monkeypatch.setenv("NF4_QLORA_LORA_PATH", "padded")
+    monkeypatch.setenv("GNF4_HOST_REUSE", "1")
+    monkeypatch.setenv("NF4_QLORA_PAD_BUCKETS", "1")
+    inputs = _inputs("cuda", sizes, eids, torch.bfloat16, torch.float32)
+    _fresh()
+    _run(lora_delta_grouped, inputs, sizes, eids, 1.0)
+    (k0,) = nf4_qlora._PLAN_MEMO
+    monkeypatch.setenv("NF4_QLORA_PAD_BUCKETS_LADDER", "1")
+    _run(lora_delta_grouped, inputs, sizes, eids, 1.0)
+    (k1,) = nf4_qlora._PLAN_MEMO
+    assert k0[-1] == "buckets" and k1[-1] == "buckets-ladder"
+    assert all(len(b) == 3 for b in nf4_qlora._PLAN_MEMO[k1][3])
