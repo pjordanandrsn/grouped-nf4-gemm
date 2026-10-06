@@ -40,12 +40,16 @@ _PAD_BYTES_LIMIT = 2 * 2 ** 30   # `auto` pads unless the padded block would exc
 # `torch._grouped_mm` calls over the jagged groups (no padding; CUDA, bf16, sm_90 in torch 2.8; refuses where torch has no
 # kernel for the part). `LORA_PATH_STATS` counts calls per path (ints only -- consumers cast) and `LORA_PAD_WASTE` records
 # the last / max padding-waste ratio seen, so a training census can say which path served a step and at what skew.
-LORA_PATH_STATS = {"loop": 0, "padded": 0, "grouped_mm": 0}
+# `padded_bucketed` counts the calls `NF4_QLORA_PAD_BUCKETS=1` sent through the bucketed lean padded delta (instead of, not as
+# well as, `padded`); each such call also writes `LORA_PAD_WASTE`'s `last_rows_single` (the one block's `G * widest`),
+# `last_rows_bucketed` (the buckets' total padded rows) and `last_buckets`. Nothing else writes those three keys.
+LORA_PATH_STATS = {"loop": 0, "padded": 0, "grouped_mm": 0, "padded_bucketed": 0}
 # Which backward served each frozen-GEMM dgrad: the single-launch kernel, the grouped_mm route, the dense route, or the
 # per-expert decode loop -- with the loop's reason (`dgrad_eligible`'s, offload-staged storage, or dgrad_kernel=False). The loop is
 # exact and slow; it used to be taken silently, so a run asking for the kernel could not tell it had not had it.
 DGRAD_STATS = {"kernel": 0, "grouped_mm": 0, "dense": 0, "decoded": 0, "loop": 0, "loop_reasons": {}}
-LORA_PAD_WASTE = {"last": 0.0, "max": 0.0, "last_bytes": 0, "last_bytes_alloc": 0}
+LORA_PAD_WASTE = {"last": 0.0, "max": 0.0, "last_bytes": 0, "last_bytes_alloc": 0,
+                  "last_rows_single": 0, "last_rows_bucketed": 0, "last_buckets": 0}
 
 
 def _lora_path() -> str:
@@ -75,6 +79,44 @@ def _lean_delta_enabled() -> bool:
     two can be timed against each other on one box (experts4bit-qlora#945)."""
     import os
     return os.environ.get("NF4_QLORA_LEAN_DELTA", "1").strip() != "0"
+
+
+# Within one bucket of the bucketed padded delta the widest group has at most this many times the narrowest group's rows.
+_PAD_BUCKET_RATIO = 2
+
+
+def _pad_buckets_enabled() -> bool:
+    """Off unless ``NF4_QLORA_PAD_BUCKETS=1``: the lean padded delta pads each bucket of similar-sized groups to that
+    bucket's own widest group instead of padding every group to the hottest one (``_lora_delta_bucketed``). Unset or
+    ``0`` is the single block, op for op. Opt-in until a training step reads its peak and its time."""
+    return os.environ.get("NF4_QLORA_PAD_BUCKETS", "0").strip() == "1"
+
+
+def _pad_buckets(rows):
+    """The bucket plan for the non-empty groups' row counts ``rows`` (host ints, in the caller's group order).
+
+    Sort the groups by rows (stable: equal counts keep the caller's order) and cut greedily from the narrowest: a
+    bucket takes every next group whose rows are at most ``_PAD_BUCKET_RATIO`` times its first group's, so in every
+    bucket ``W_b <= 2 * min_b`` and the bucketed block never holds more than twice the real rows (the single block holds
+    ``G * max(rows)``, unbounded in the skew). Greedy from the narrowest is the fewest buckets under that rule.
+
+    Returns ``(order, buckets, pstart)``: ``order`` the group positions in bucket order (the sort), ``buckets`` one
+    ``(G_b, W_b)`` per consecutive run of ``order``, and ``pstart[j]`` the first padded row of group ``j`` (caller's order)
+    in the concatenated blocks, whose total is ``sum(G_b * W_b)``. Pure host arithmetic: no device read."""
+    order = sorted(range(len(rows)), key=rows.__getitem__)
+    buckets, pstart = [], [0] * len(rows)
+    base = i = 0
+    while i < len(order):
+        lo, j = rows[order[i]], i
+        while j < len(order) and rows[order[j]] <= _PAD_BUCKET_RATIO * lo:
+            j += 1
+        w = rows[order[j - 1]]
+        for slot, g in enumerate(order[i:j]):
+            pstart[g] = base + slot * w
+        buckets.append((j - i, w))
+        base += (j - i) * w
+        i = j
+    return order, buckets, pstart
 
 
 class FusedGroupedNf4(torch.autograd.Function):
@@ -329,6 +371,19 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
     padded block would exceed ``_PAD_BYTES_LIMIT`` bytes (``NF4_QLORA_PAD_BYTES_LIMIT``),
     where the loop is what fits. ``NF4_QLORA_PAD_WASTE_LIMIT``, when set, re-arms the
     flop-waste guard on top. Either way the route changes, never the result.
+
+    ``NF4_QLORA_PAD_BUCKETS=1`` (opt-in; unset or ``0`` is the single block, op for
+    op) pads the lean path by buckets instead: the groups sorted by rows and cut
+    greedily so that no bucket's widest group has more than twice its narrowest's
+    rows, each bucket padded to its own widest (``_pad_buckets``,
+    ``_lora_delta_bucketed``). The padded rows drop from ``G * max(rows)`` to at
+    most twice the real rows: at 4,096 tokens, top-8 of 128 experts with a
+    Zipf(1) router (the test's seeded case), from 13.5x the real rows to 1.35x,
+    in six buckets. Values equal the single block's to rounding (the ``bmm``
+    shapes differ). It applies where the single block would pad (the `auto` rule
+    still sizes the single block), not to ``NF4_QLORA_LEAN_DELTA=0``'s body; with
+    ``NF4_QLORA_COMPACT_DELTA=1`` also set, buckets win.
+    ``LORA_PATH_STATS["padded_bucketed"]`` counts it.
     """
     # `sizes` is a host sequence by contract (the kernel launch grid comes off
     # it), so which groups are non-empty is a host-side fact and needs no device
@@ -360,6 +415,9 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
     if path == "grouped_mm":
         LORA_PATH_STATS["grouped_mm"] += 1
         return _lora_delta_grouped_mm(a_cat, lora_A, lora_B, rows, nz, expert_ids, scaling)
+    if _pad_buckets_enabled() and _lean_delta_enabled():   # NF4_QLORA_PAD_BUCKETS=1: the lean path, padded per bucket
+        LORA_PATH_STATS["padded_bucketed"] += 1
+        return _lora_delta_grouped_bucketed(a_cat, lora_A, lora_B, rows, nz, expert_ids, widest, scaling)
     LORA_PATH_STATS["padded"] += 1
 
     dev = a_cat.device
@@ -458,6 +516,98 @@ def _lora_delta_padded(a_cat, lora_A, lora_B, eid, flat, G, widest, unique, scal
     # output: no zero fill, no slice copy. `scaling` lands on the gathered
     # rows, not the padded block, and not at all when it is 1 -- both exact.
     return _scaled(_GatherRows.apply(d.view(G * widest, -1), flat), scaling)
+
+
+def _lora_delta_grouped_bucketed(a_cat, lora_A, lora_B, rows, nz, expert_ids, widest, scaling):
+    """``NF4_QLORA_PAD_BUCKETS=1``: the bucketed lean padded delta's device plan, then the delta.
+
+    The single block's plan, built the same way -- the uploads batched in one ``to_device_i32`` and ``repeat_interleave``
+    handed its ``output_size``, so nothing reads the device and the path is capture-safe exactly as the single block is --
+    with two differences: ``eid`` is in bucket order (``_pad_buckets``' sort), and ``flat`` sends a caller row of group
+    ``g`` to ``pstart[g] + slot`` in the concatenated bucket blocks rather than to ``g * widest + slot``.
+
+    GNF4_HOST_REUSE: the plan memo is EXTENDED, not bypassed. A bucketed plan carries its bucket list and is stored under
+    its own key (the single block's key plus a ``"buckets"`` tag, so neither path ever reads the other's plan), so the down
+    call reuses the gate_up call's bucketed plan as the single block's does, under the same conditions (host ids, CUDA,
+    not capturing) and in the same one-entry memo.
+    """
+    dev = a_cat.device
+    from nf4_grouped import to_device_i32, _host_reuse_enabled, _stream_key, HOST_REUSE_STATS
+    host_ids = None if (torch.is_tensor(expert_ids) and expert_ids.is_cuda) else [int(expert_ids[g]) for g in nz]
+    single_rows = len(rows) * widest
+    pkey = None
+    if (host_ids is not None and dev.type == "cuda" and _host_reuse_enabled()
+            and not torch.cuda.is_current_stream_capturing()):
+        pkey = (tuple(rows), tuple(host_ids), _stream_key(dev), "buckets")
+        plan = _PLAN_MEMO.get(pkey)
+        if plan is not None:
+            HOST_REUSE_STATS["plan_hits"] += 1
+            eid, flat, unique, buckets = plan
+            _record_buckets(single_rows, buckets)
+            return _lora_delta_bucketed(a_cat, lora_A, lora_B, eid, flat, buckets, unique, scaling)
+    order, buckets, pstart = _pad_buckets(rows)
+    _record_buckets(single_rows, buckets)
+    if host_ids is None:
+        # Device ids: select the surviving groups, in bucket order, ON DEVICE (one index_select, no round trip).
+        sz_i32, nzb_i, ps_i32 = to_device_i32((rows, [nz[g] for g in order], pstart), dev)
+        eid = expert_ids[nzb_i.to(torch.int64)].to(torch.int64)
+    else:
+        sz_i32, eid_i32, ps_i32 = to_device_i32((rows, [host_ids[g] for g in order], pstart), dev)
+        eid = eid_i32.to(torch.int64)
+    sz = sz_i32.to(torch.int64)
+    total = sum(rows)
+    shift = torch.repeat_interleave(ps_i32.to(torch.int64) - (torch.cumsum(sz, 0) - sz), sz, output_size=total)
+    flat = torch.arange(total, device=dev) + shift
+    unique = False
+    if pkey is not None:
+        unique = len(set(host_ids)) == len(host_ids)     # a permutation of the caller's ids: distinct iff they are
+        _PLAN_MEMO.clear()
+        _PLAN_MEMO[pkey] = (eid, flat, unique, buckets)
+        HOST_REUSE_STATS["plan_misses"] += 1
+    return _lora_delta_bucketed(a_cat, lora_A, lora_B, eid, flat, buckets, unique, scaling)
+
+
+def _record_buckets(single_rows, buckets):
+    """A bucketed call's padded rows beside the single block's, for a receipt (``LORA_PAD_WASTE``)."""
+    LORA_PAD_WASTE["last_rows_single"] = single_rows
+    LORA_PAD_WASTE["last_rows_bucketed"] = sum(g * w for g, w in buckets)
+    LORA_PAD_WASTE["last_buckets"] = len(buckets)
+
+
+def _lora_delta_bucketed(a_cat, lora_A, lora_B, eid, flat, buckets, unique, scaling):
+    """The bucketed lean padded delta given its device plan (``eid`` the [G] expert ids in bucket order, ``flat`` caller
+    row -> padded row, ``buckets`` the host ``(G_b, W_b)`` list).
+
+    One zero-filled buffer of ``sum(G_b * W_b)`` rows in the adapters' dtype takes every real row in ONE ``index_copy_``,
+    as the single block does, and is split into the buckets' ``[G_b * W_b, K]`` blocks: views, so the split copies
+    nothing forward and its backward is one ``cat`` of the blocks' grads. The adapters are gathered once, in bucket order
+    (``_GatherRows`` for host-known distinct ids, as on the single block), and split the same way. Each bucket runs the
+    single block's two ``bmm``s at its own width ``W_b``; the buckets' outputs are concatenated (one bucket: no copy) and
+    ONE gather through ``flat`` puts the real rows back in the caller's order (``_GatherRows``: the rows are unique, so its
+    backward is a scatter). Only standard autograd ops, so the gradients take the single block's route, bucket by bucket.
+
+    ``NF4_QLORA_COMPACT_DELTA`` is not consulted: with both flags set, buckets win (``_CompactPaddedDelta`` is a
+    single-block body, and this path never calls it).
+
+    Values: each real row gets the same arithmetic as on the single block (the same row times the same adapters, the
+    padded rows zero either way), but the ``bmm``s run at other shapes, so a BLAS that picks its kernel, or splits a
+    reduction, by shape can round differently. Equal to rounding, not promised bit for bit.
+    """
+    if unique:
+        A, B = _GatherRows.apply(lora_A, eid), _GatherRows.apply(lora_B, eid)
+    else:
+        A, B = lora_A[eid], lora_B[eid]                # [G, r, K], [G, N, r], bucket order
+    x = torch.zeros(sum(g * w for g, w in buckets), a_cat.shape[1], dtype=A.dtype, device=a_cat.device)
+    x.index_copy_(0, flat, a_cat.to(A.dtype))
+    if len(buckets) == 1:
+        ((g, w),) = buckets
+        d = torch.bmm(torch.bmm(x.view(g, w, -1), A.transpose(1, 2)), B.transpose(1, 2)).view(g * w, -1)
+    else:
+        per = [g for g, _ in buckets]
+        d = torch.cat([torch.bmm(torch.bmm(xb.view(g, w, -1), Ab.transpose(1, 2)), Bb.transpose(1, 2)).view(g * w, -1)
+                       for xb, Ab, Bb, (g, w) in zip(x.split([g * w for g, w in buckets]), A.split(per), B.split(per),
+                                                     buckets)])
+    return _scaled(_GatherRows.apply(d, flat), scaling)
 
 
 def _compact_delta_enabled() -> bool:
