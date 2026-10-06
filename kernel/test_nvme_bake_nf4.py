@@ -522,3 +522,53 @@ def test_fused_near_miss_prefix_gets_the_diagnostic_not_an_int_error(tmp_path):
         bake_nf4(str(snap), str(tmp_path / "x.arena"),
                  prefix="model.language_model",          # one segment short
                  quantize_fn=mock_quantize, log=lambda *a: None)
+
+
+def make_granite_snapshot(root, seed=23, i=I, h=H):
+    """GraniteMoe's fused stack: ``model.layers.N.block_sparse_moe.input_linear.weight`` [E, 2I, H] (gate first) and
+    ``...output_linear.weight`` [E, H, I] -- no ``experts`` segment anywhere in the name."""
+    g = torch.Generator().manual_seed(seed)
+    tensors = {}
+    for lay in range(L):
+        base = f"model.layers.{lay}.block_sparse_moe."
+        tensors[base + "input_linear.weight"] = torch.randn(E, 2 * i, h, generator=g).bfloat16()
+        tensors[base + "output_linear.weight"] = torch.randn(E, h, i, generator=g).bfloat16()
+    os.makedirs(root, exist_ok=True)
+    with open(os.path.join(root, "model.safetensors"), "wb") as f:
+        f.write(_st_bytes(tensors))
+    with open(os.path.join(root, "model.safetensors.index.json"), "w") as f:
+        json.dump({"weight_map": {k: "model.safetensors" for k in tensors}}, f)
+    return tensors
+
+
+GRANITE = dict(fused_marker=".block_sparse_moe.", fused_proj=("input_linear.weight", "output_linear.weight"))
+
+
+def test_granite_fused_stack_bakes_with_its_marker(tmp_path):
+    """The fused path with GraniteMoe's names: every row is expert e's slab of input_linear and output_linear, the
+    same bytes the Gemma-4-named fused path bakes."""
+    snap = tmp_path / "snap"
+    tensors = make_granite_snapshot(str(snap))
+    arena = str(tmp_path / "granite.arena")
+    bake_nf4(str(snap), arena, quantize_fn=mock_quantize, log=lambda *a: None, **GRANITE)
+    idx = load_index(arena)
+    assert idx["n_layers"] == L and idx["n_experts_per_layer"] == E
+    segs = {s["suffix"]: s for s in idx["segments"]}
+    raw = open(arena, "rb").read()
+    for lay in range(L):
+        gu = tensors[f"model.layers.{lay}.block_sparse_moe.input_linear.weight"]
+        dn = tensors[f"model.layers.{lay}.block_sparse_moe.output_linear.weight"]
+        for e in range(E):
+            row = (lay * E + e) * idx["row_stride"]
+            for suf, src in (("nf4.gate_up_blocks", gu[e]), ("nf4.down_blocks", dn[e])):
+                want, _ = mock_quantize(src)
+                s = segs[suf]
+                got = raw[row + s["seg_off"]: row + s["seg_off"] + s["length"]]
+                assert got == want.contiguous().view(torch.uint8).numpy().tobytes(), (lay, e, suf)
+
+
+def test_granite_without_its_marker_is_told_how_to_bake_it(tmp_path):
+    snap = tmp_path / "snap"
+    make_granite_snapshot(str(snap))
+    with pytest.raises(ValueError, match="fused_marker='.block_sparse_moe.'"):
+        bake_nf4(str(snap), str(tmp_path / "x.arena"), quantize_fn=mock_quantize, log=lambda *a: None)
