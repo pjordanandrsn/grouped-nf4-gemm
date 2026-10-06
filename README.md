@@ -229,7 +229,8 @@ capability 9.0) can be asked without the device: `nf4_route.route_for(capability
 route and the reason (per call: off sm_90, `auto` is `dense` for 1 to 16 present groups), or `None` with the reason below
 the sm_80 floor. `GNF4_TRAIN_GEMM=decoded` (`nf4_route.decoded_forward` / `decoded_dgrad`) is opt-in only, never `auto`:
 per chunk of present groups, `dequant_groups` plus one grouped bf16 GEMM launch, the chunk's decode capped by
-`GNF4_DECODED_MAX_BYTES` (default 256 MiB). No speed is claimed for it.
+`GNF4_DECODED_MAX_BYTES` (default 256 MiB). No speed is claimed for it: experts4bit-qlora's TC1 amendment 46 (one RTX 5090) read the
+training step at decoded/fused 1.005 [0.979, 1.031] on OLMoE-1B-7B and 1.066 on Qwen3-30B-A3B, so `auto` does not take it.
 
 ## What is measured
 

@@ -332,8 +332,9 @@ def dense_dgrad(grad_out, B, absmax, sizes, expert_ids):
 # gate_up at seq 2048, output buffer included), against 180-2016 MiB uncapped. A cap below one expert's decoded size still
 # decodes that expert whole.
 #
-# No speed is claimed here. RD1 read the route per call on one RTX 5090; whether it shortens a training step is a TC1 full-step
-# A/B in experts4bit-qlora, registered before its box, and until it reads `auto` does not take this route anywhere.
+# No speed is claimed here. RD1 read the route per call on one RTX 5090. The training step is experts4bit-qlora's TC1 amendment 46
+# (one RTX 5090, read in experts4bit-qlora#1221): decoded/fused 1.005 [0.979, 1.031] on OLMoE-1B-7B, 1.066 on Qwen3-30B-A3B -- no
+# measurable step-time saving, so `auto` does not take this route anywhere.
 
 ROUTE_STATS.setdefault("decoded_fwd", 0)
 ROUTE_STATS.setdefault("decoded_dgrad", 0)
