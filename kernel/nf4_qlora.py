@@ -94,9 +94,14 @@ _PAD_BUCKETS_AUTO_MIN_ROWS = 16384
 
 
 def _pad_buckets_mode() -> str:
-    """``"0"`` (the single block; unset), ``"1"`` (every call bucketed) or ``"auto"`` (bucketed where the call carries at least
-    ``_pad_buckets_min_rows()`` routed rows), from ``NF4_QLORA_PAD_BUCKETS``. Anything else is the single block."""
-    v = os.environ.get("NF4_QLORA_PAD_BUCKETS", "0").strip().lower()
+    """``"auto"`` (the DEFAULT, also when unset: bucketed where the call carries at least ``_pad_buckets_min_rows()`` routed rows),
+    ``"1"`` (every call bucketed) or ``"0"`` (the single block everywhere), from ``NF4_QLORA_PAD_BUCKETS``. Any other value is the
+    single block. ``auto`` became the default by experts4bit-qlora TC1 amendment 50's registered rule: at the field recipe its gate never
+    fired (49,152 calls per arm, all single block; held-out and peak unchanged), and on packed 4,096-token rows buckets stepped the fp32
+    arm 0.893 of the single block's time with 4.29 GB off its peak, the bf16 arm 0.933 (amendment 48)."""
+    v = os.environ.get("NF4_QLORA_PAD_BUCKETS", "").strip().lower()
+    if v == "":
+        return "auto"
     return v if v in ("1", "auto") else "0"
 
 
@@ -107,8 +112,8 @@ def _pad_buckets_min_rows() -> int:
 
 def _pad_buckets_enabled(total=None) -> bool:
     """Whether this call pads by buckets (``_lora_delta_bucketed``: each bucket of similar-sized groups padded to its own widest
-    group instead of every group to the hottest one). ``NF4_QLORA_PAD_BUCKETS=1``: always; ``auto``: when ``total`` (the call's
-    routed rows) is at least ``_pad_buckets_min_rows()``; unset or ``0``: never -- the single block, op for op. Opt-in."""
+    group instead of every group to the hottest one). ``NF4_QLORA_PAD_BUCKETS=1``: always; ``auto`` (the default, also when unset):
+    when ``total`` (the call's routed rows) is at least ``_pad_buckets_min_rows()``; ``0``: never -- the single block, op for op."""
     mode = _pad_buckets_mode()
     if mode == "1":
         return True
@@ -395,8 +400,8 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
     where the loop is what fits. ``NF4_QLORA_PAD_WASTE_LIMIT``, when set, re-arms the
     flop-waste guard on top. Either way the route changes, never the result.
 
-    ``NF4_QLORA_PAD_BUCKETS=1`` (opt-in; unset or ``0`` is the single block, op for
-    op) pads the lean path by buckets instead: the groups sorted by rows and cut
+    ``NF4_QLORA_PAD_BUCKETS=1`` (``0`` is the single block, op for op; the default
+    is ``auto``, below) pads the lean path by buckets instead: the groups sorted by rows and cut
     greedily so that no bucket's widest group has more than twice its narrowest's
     rows, each bucket padded to its own widest (``_pad_buckets``,
     ``_lora_delta_bucketed``). The padded rows drop from ``G * max(rows)`` to at
