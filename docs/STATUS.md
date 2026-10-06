@@ -1,6 +1,6 @@
 # Status — what this kernel does, what changed, what is open
 
-**As of 2026-10-05, `grouped-nf4-gemm` version 0.41.0.** One page. The README argues; this
+**As of 2026-10-06, `grouped-nf4-gemm` version 0.42.0.** One page. The README argues; this
 page states. The positions here name their entries in
 [`docs/claims.json`](claims.json), which carry the evidence paths; a line
 without a claim ID records an issue closure, a correction still outstanding
@@ -127,6 +127,18 @@ MXFP4 decode reproduces Kimi K3's own declared reference exactly
 
 ## What changed — retired, superseded, corrected
 
+- **Bucketed LoRA-delta padding is the default as `auto` (0.42.0; #490, #491,
+  #492).** `NF4_QLORA_PAD_BUCKETS` unset buckets a grouped-LoRA delta call that
+  carries at least 16,384 routed rows; every smaller call keeps the single
+  padded block, op for op. This follows experts4bit-qlora's registered rule
+  (TC1 amendments 47–50, measured there as
+  `e4b.train.pad-buckets.qwen3.5090.2026-10-06` and
+  `e4b.train.pad-buckets.auto.default-decision.5090.2026-10-06`): on packed
+  4,096-token rows buckets lowered the step and the peak, and at the field
+  recipe the gate never fired. That evidence is one model (Qwen3-30B-A3B) on one
+  RTX 5090; other families that reach the gate change on this package's
+  correctness tests alone. `NF4_QLORA_PAD_BUCKETS=0` restores the single block
+  exactly.
 - **#408 is closed: the MXFP4 prefill combine returns the same bits on every
   call (#410, 2026-09-28, RTX A2000).** `Mxfp4PipelinedGptOss._forward_prefill`
   summed each token's expert outputs with `out.index_add_`, whose CUDA float
