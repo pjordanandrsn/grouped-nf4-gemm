@@ -1,6 +1,6 @@
 ### `NF4_QLORA_PAD_BUCKETS=1`: the lean padded LoRA delta pads each bucket of similar-sized groups to its own widest, not every group to the hottest (opt-in; default unchanged)
 
-- **Why.** An allocator census in experts4bit-qlora on an RTX 5090 (Qwen3-30B-A3B, packed rows of 4,096 real tokens,
+- **Why.** An allocator census in experts4bit-qlora (TC1 amendment 47, row `e4b.train.memory-census.packed-4k.qwen3.5090.2026-10-06`) on an RTX 5090 (Qwen3-30B-A3B, packed rows of 4,096 real tokens,
   micro-batch 1, top-8 of 128 experts, fp32 adapters) put its training peak 7.47 GB above Unsloth's. 6.1 GB of that was the
   padded LoRA delta: the zero-padded input block `[G * widest, K]` and the `bmm` products.
   - Every non-empty group is padded to the hottest group's rows. At the down projection that is about 380,000 padded rows

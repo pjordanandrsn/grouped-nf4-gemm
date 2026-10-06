@@ -37,6 +37,7 @@ DTYPES = [(torch.bfloat16, torch.bfloat16), (torch.bfloat16, torch.float32), (to
 
 def _fresh():
     NG._UPLOAD_MEMO.clear()
+    NG._UPLOAD_FAST.entries.clear()   # the value-keyed upload memo (CUDA only): a hit there skips the upload's own ops
     nf4_qlora._PLAN_MEMO.clear()
 
 
