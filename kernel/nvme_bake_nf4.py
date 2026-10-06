@@ -356,6 +356,13 @@ def _explain_no_experts(sh, prefix, marker, gate_key):
         ]
     else:
         lines.append("  the checkpoint has NO keys containing 'expert' at all.")
+        granite = sorted(n for n in sh.wm if n.endswith(".input_linear.weight"))
+        if granite:
+            lines += [
+                f"  it has a fused stack without an 'experts' segment (GraniteMoe), e.g. {granite[0]!r}:",
+                "  bake it with fused_marker='.block_sparse_moe.', "
+                "fused_proj=('input_linear.weight', 'output_linear.weight').",
+            ]
     raise ValueError("\n".join(lines))
 
 
@@ -364,10 +371,18 @@ def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
              proj=PROJ, source="bf16", moe="mlp",
              mxfp4_suffixes=(".weight", ".scale"),
              fused_proj=("gate_up_proj", "down_proj"),
+             fused_marker=".experts.",
              absmax_dtype="f32"):
     """Quantize-bake. Discovers (L, E) from the checkpoint index; emits the
     same arena/index/manifest triple as the relocation bake, with the
     two-hop provenance schema.
+
+    ``fused_marker`` is the name segment a FUSED expert stack carries (one 3-D ``[E, 2I, H]`` gate-first tensor per
+    layer, and its ``[E, H, I]`` down partner named by ``fused_proj``). The default ``.experts.`` reads Gemma-4's
+    ``...experts.gate_up_proj``. GraniteMoe has no ``experts`` segment: its stack is
+    ``model.layers.N.block_sparse_moe.input_linear.weight`` (gate first: the forward activates ``chunk(2)[0]``) and
+    ``...output_linear.weight``, so it bakes with ``fused_marker=".block_sparse_moe."`` and
+    ``fused_proj=("input_linear.weight", "output_linear.weight")``.
 
     ``absmax_dtype`` is ``"f32"`` (default, unchanged), ``"bf16"``, or
     ``"auto"``. bf16 halves the absmax segment — 11.1% of a Qwen3-30B row down
@@ -421,7 +436,7 @@ def bake_nf4(snapshot, out, *, layers=None, prefix="model.layers",
     fused_names = {}
     if not es and source == "bf16":
         for name in sh.wm:
-            if (name.startswith(prefix + ".") and ".experts." in name
+            if (name.startswith(prefix + ".") and fused_marker in name
                     and name.endswith("." + fused_proj[0])):
                 # The segment at `depth` must BE the layer id. A near-miss
                 # prefix -- `model.language_model` for a checkpoint whose stack
