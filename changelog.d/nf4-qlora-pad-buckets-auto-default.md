@@ -10,4 +10,9 @@
     arm at 0.933; held-out unchanged (amendment 48).
   - At the field recipe (calls of at most 9,040 routed rows) the gate never fired: 49,152 single-block calls per arm, with held-out and
     peak unchanged (amendment 50). Amendment 49 could not settle unconditional buckets' speed there, which is why the default is gated.
+- **The evidence's scope.** The calls this changes, those with at least 16,384 routed rows, were measured on one model
+  (Qwen3-30B-A3B, top-8, packed 4,096-token rows) on one RTX 5090. Other families' calls that reach the gate (gpt-oss at 4,096 tokens
+  x top-4 sits exactly at it) change on this package's correctness tests: every bucketed geometry here matches the single block and the
+  per-expert loop within rounding, not bit for bit. No speed or memory was measured for them.
+- **The way back.** `NF4_QLORA_PAD_BUCKETS=0` restores the previous behaviour exactly: the single block on every call, op for op.
 - **Tests.** The bucket test file pins the new default; CI's kernel list reads 548 passed on CPU and 996 passed on an RTX A2000 (CUDA).
