@@ -126,8 +126,9 @@ def _pad_ladder_enabled() -> bool:
 
     Why: the router makes nearly every call's bucket shapes new, and a cuBLAS fp32 batched product costs host time per NEW shape
     (experts4bit-qlora TC1 amendment 24 on an RTX 5090: 119 us on a shape the process had not used against 38 us on a repeated one,
-    the same under torch 2.8 and 2.12). Profiled in training (amendment 53), the bucketed fp32 arm's ``aten::bmm`` took about 268 us
-    of host time per call under torch 2.8 against 86 us under torch 2.12, and the device sat idle on it. A batched product's shape is
+    the same under torch 2.8 and 2.12). Profiled in training (amendment 53), the bucketed fp32 arm's ``aten::bmm`` read about 268 us
+    of CPU self time per call under torch 2.8 against 86 us under torch 2.12, while 59.7 % of torch 2.8's added step was not device time.
+    Self time also counts waits on a full launch queue, so 268 us is an upper bound on its host work. A batched product's shape is
     ``(G_b, W_b)`` per projection, so both have to land on a fixed set for a shape to come back."""
     return os.environ.get("NF4_QLORA_PAD_BUCKETS_LADDER", "0").strip() == "1"
 
