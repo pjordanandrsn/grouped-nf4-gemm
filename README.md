@@ -27,8 +27,10 @@ GPU kernels need **Linux, an NVIDIA sm_80+ GPU, torch ≥ 2.8 and Triton ≥ 3.4
 CI tests Python 3.11. CPU pack/decode and provenance tools work without CUDA;
 macOS and Windows are not exercised by CI. ROCm and XPU are port targets.
 
-**New in 0.42.0:** automatic bucketed padding reduces wasted space in the LoRA update.
-Its training-speed evidence is on torch 2.12; the benefit on torch 2.8 is still unmeasured.
+**New in 0.42.0:** bucketed padding of the LoRA update is on by default (`auto`) for calls with at least 16,384
+routed rows, such as packed 4,096-token training rows; smaller calls keep the single padded block.
+Its training-speed evidence is on torch 2.12; its effect on torch 2.8 is still unmeasured.
+`NF4_QLORA_PAD_BUCKETS=0` restores the single block.
 [Release notes](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/CHANGELOG.md)
 
 ## Try it on your GPU
@@ -134,9 +136,9 @@ using host memory; it does not mean the whole model fits in 9.82 GB or that Logg
 ## Where it loses
 
 - **Small shapes and some graphed decode workloads:** a per-expert baseline can be faster.
-- **Weights already resident in bf16:** Unsloth's H100 prefill kernel won that comparison.
+- **Weights already resident in bf16:** Unsloth's H100 prefill kernel won that comparison, by 2.6–5.3×.
 - **Kernel speed vs whole-model speed:** a faster kernel can leave training time unchanged.
-  The decoded training route remains opt-in after its end-to-end speed test failed.
+  The decoded training route stays opt-in: its end-to-end training-step read found no measurable saving.
 
 Use the [current status](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/STATUS.md)
 to choose a route, and benchmark on real text rather than random token IDs.

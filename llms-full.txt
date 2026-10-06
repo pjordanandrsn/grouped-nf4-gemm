@@ -36,8 +36,10 @@ GPU kernels need **Linux, an NVIDIA sm_80+ GPU, torch ≥ 2.8 and Triton ≥ 3.4
 CI tests Python 3.11. CPU pack/decode and provenance tools work without CUDA;
 macOS and Windows are not exercised by CI. ROCm and XPU are port targets.
 
-**New in 0.42.0:** automatic bucketed padding reduces wasted space in the LoRA update.
-Its training-speed evidence is on torch 2.12; the benefit on torch 2.8 is still unmeasured.
+**New in 0.42.0:** bucketed padding of the LoRA update is on by default (`auto`) for calls with at least 16,384
+routed rows, such as packed 4,096-token training rows; smaller calls keep the single padded block.
+Its training-speed evidence is on torch 2.12; its effect on torch 2.8 is still unmeasured.
+`NF4_QLORA_PAD_BUCKETS=0` restores the single block.
 [Release notes](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/CHANGELOG.md)
 
 ## Try it on your GPU

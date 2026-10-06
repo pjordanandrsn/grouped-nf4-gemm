@@ -509,7 +509,6 @@
    "status": "retired",
    "retired_reason": "sm_120 became the primary serving target in 0.15.0-0.24.0: M=1 configs retuned for it, the sm_120 census, the decode anchor, M3 defaults, the int4 lanes and the fp8 paged attention were all measured on rented RTX 5090s.",
    "quoted_in": [
-    "README.md#what-was-retired",
     "docs/STATUS.md#what-changed--retired-superseded-corrected"
    ]
   },
