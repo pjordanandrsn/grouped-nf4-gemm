@@ -8,4 +8,8 @@
 - With the flag set, each bucket's width and batch count are rounded up to quarter-octave rungs, at most 25 % over each. The padded groups
   take zero adapters and no rows, so values equal the unladdered buckets' to rounding. Over 40 Zipf(1) routings of 4,096 tokens, the
   distinct bucket shapes fall from 227 to 41.
-- Off by default until a training A/B reads it. Laddered and unladdered plans never share a plan-memo entry.
+- Off by default. Laddered and unladdered plans never share a plan-memo entry.
+- First training A/B: experts4bit-qlora TC1 amendment 54, on an RTX 5090 in torch 2.8, fp32 adapters, packed rows. The ladder stepped
+  1.010 of the default buckets' time on a host where the step was not host-bound (device time 99 % of the step). It cut `aten::bmm`'s
+  CPU self time per call about tenfold (~145-150 µs to ~14-17 µs), and the padding added about 2 % of device time and 0.34 GB of
+  peak. It stays opt-in: whether it helps where the host is the bottleneck has not been read.
