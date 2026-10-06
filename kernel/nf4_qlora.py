@@ -120,6 +120,34 @@ def _pad_buckets_enabled(total=None) -> bool:
     return mode == "auto" and total is not None and total >= _pad_buckets_min_rows()
 
 
+def _pad_ladder_enabled() -> bool:
+    """Off unless ``NF4_QLORA_PAD_BUCKETS_LADDER=1``: round every bucket's width AND group count up to ``_ladder_up``'s rungs, so
+    the bucketed delta's batched products repeat their shapes from call to call (opt-in until an A/B reads it).
+
+    Why: the router makes nearly every call's bucket shapes new, and a cuBLAS fp32 batched product costs host time per NEW shape
+    (experts4bit-qlora TC1 amendment 24 on an RTX 5090: 119 us on a shape the process had not used against 38 us on a repeated one,
+    the same under torch 2.8 and 2.12). Profiled in training (amendment 53), the bucketed fp32 arm's ``aten::bmm`` read about 268 us
+    of CPU self time per call under torch 2.8 against 86 us under torch 2.12, while 59.7 % of torch 2.8's added step was not device time.
+    Self time also counts waits on a full launch queue, so 268 us is an upper bound on its host work. A batched product's shape is
+    ``(G_b, W_b)`` per projection, so both have to land on a fixed set for a shape to come back."""
+    return os.environ.get("NF4_QLORA_PAD_BUCKETS_LADDER", "0").strip() == "1"
+
+
+def _ladder_up(n: int) -> int:
+    """The smallest rung >= ``n``: every integer up to 4, then four rungs per octave (``{4, 5, 6, 7} * 2**k``), so a rung is at
+    most 25 % above ``n`` (``n <= _ladder_up(n) < 1.25 * n`` for ``n > 4``): ``n`` from 1 to 65,535 lands on 60 rungs."""
+    n = int(n)
+    if n <= 4:
+        return max(n, 0)
+    step = 1 << (n.bit_length() - 3)                   # 2**(floor(log2 n) - 2): a quarter of n's octave
+    return -(-n // step) * step
+
+
+def _bucket_groups(b) -> int:
+    """A bucket's batch count: ``G_b``, or its laddered ``G_b'`` when the plan carries one (``(G_b, W_b, G_b')``)."""
+    return b[2] if len(b) > 2 else b[0]
+
+
 def _pad_buckets(rows):
     """The bucket plan for the non-empty groups' row counts ``rows`` (host ints, in the caller's group order).
 
@@ -130,19 +158,28 @@ def _pad_buckets(rows):
 
     Returns ``(order, buckets, pstart)``: ``order`` the group positions in bucket order (the sort), ``buckets`` one
     ``(G_b, W_b)`` per consecutive run of ``order``, and ``pstart[j]`` the first padded row of group ``j`` (caller's order)
-    in the concatenated blocks, whose total is ``sum(G_b * W_b)``. Pure host arithmetic: no device read."""
+    in the concatenated blocks, whose total is ``sum(G_b * W_b)``. Pure host arithmetic: no device read.
+
+    With ``NF4_QLORA_PAD_BUCKETS_LADDER=1`` each ``W_b`` is rounded up to ``_ladder_up``'s rung and each bucket carries a third
+    entry, its batch count rounded the same way: ``(G_b, W_b, G_b')``. The ``G_b' - G_b`` padded groups follow the real ones in the
+    bucket's block, hold no row and take zero adapters, so every real row's arithmetic is unchanged; the total is
+    ``sum(G_b' * W_b)``, at most ``2 * 1.25 * 1.25`` times the real rows."""
     order = sorted(range(len(rows)), key=rows.__getitem__)
     buckets, pstart = [], [0] * len(rows)
+    ladder = _pad_ladder_enabled()
     base = i = 0
     while i < len(order):
         lo, j = rows[order[i]], i
         while j < len(order) and rows[order[j]] <= _PAD_BUCKET_RATIO * lo:
             j += 1
         w = rows[order[j - 1]]
+        if ladder:                                     # NF4_QLORA_PAD_BUCKETS_LADDER=1: the width and the batch count on rungs
+            w = _ladder_up(w)
         for slot, g in enumerate(order[i:j]):
             pstart[g] = base + slot * w
-        buckets.append((j - i, w))
-        base += (j - i) * w
+        gp = _ladder_up(j - i) if ladder else j - i    # the padded groups (gp - (j - i) of them) sit after the real ones, all zero
+        buckets.append((j - i, w, gp) if ladder else (j - i, w))
+        base += gp * w
         i = j
     return order, buckets, pstart
 
@@ -569,7 +606,7 @@ def _lora_delta_grouped_bucketed(a_cat, lora_A, lora_B, rows, nz, expert_ids, wi
     pkey = None
     if (host_ids is not None and dev.type == "cuda" and _host_reuse_enabled()
             and not torch.cuda.is_current_stream_capturing()):
-        pkey = (tuple(rows), tuple(host_ids), _stream_key(dev), "buckets")
+        pkey = (tuple(rows), tuple(host_ids), _stream_key(dev), "buckets-ladder" if _pad_ladder_enabled() else "buckets")
         plan = _PLAN_MEMO.get(pkey)
         if plan is not None:
             HOST_REUSE_STATS["plan_hits"] += 1
@@ -601,7 +638,7 @@ def _lora_delta_grouped_bucketed(a_cat, lora_A, lora_B, rows, nz, expert_ids, wi
 def _record_buckets(single_rows, buckets):
     """A bucketed call's padded rows beside the single block's, for a receipt (``LORA_PAD_WASTE``)."""
     LORA_PAD_WASTE["last_rows_single"] = single_rows
-    LORA_PAD_WASTE["last_rows_bucketed"] = sum(g * w for g, w in buckets)
+    LORA_PAD_WASTE["last_rows_bucketed"] = sum(_bucket_groups(b) * b[1] for b in buckets)
     LORA_PAD_WASTE["last_buckets"] = len(buckets)
 
 
@@ -628,6 +665,8 @@ def _lora_delta_bucketed(a_cat, lora_A, lora_B, eid, flat, buckets, unique, scal
         A, B = _GatherRows.apply(lora_A, eid), _GatherRows.apply(lora_B, eid)
     else:
         A, B = lora_A[eid], lora_B[eid]                # [G, r, K], [G, N, r], bucket order
+    if any(len(b) > 2 for b in buckets):             # NF4_QLORA_PAD_BUCKETS_LADDER=1: laddered batch counts
+        return _lora_delta_bucketed_ladder(a_cat, A, B, flat, buckets, scaling)
     x = torch.zeros(sum(g * w for g, w in buckets), a_cat.shape[1], dtype=A.dtype, device=a_cat.device)
     x.index_copy_(0, flat, a_cat.to(A.dtype))
     if len(buckets) == 1:
@@ -638,6 +677,23 @@ def _lora_delta_bucketed(a_cat, lora_A, lora_B, eid, flat, buckets, unique, scal
         d = torch.cat([torch.bmm(torch.bmm(xb.view(g, w, -1), Ab.transpose(1, 2)), Bb.transpose(1, 2)).view(g * w, -1)
                        for xb, Ab, Bb, (g, w) in zip(x.split([g * w for g, w in buckets]), A.split(per), B.split(per),
                                                      buckets)])
+    return _scaled(_GatherRows.apply(d, flat), scaling)
+
+
+def _lora_delta_bucketed_ladder(a_cat, A, B, flat, buckets, scaling):
+    """``_lora_delta_bucketed``'s body for a laddered plan (``(G_b, W_b, G_b')`` buckets): each bucket's gathered adapters are
+    zero-padded from ``G_b`` to ``G_b'`` groups (``F.pad``: its backward drops the padded slots' gradient), so the two ``bmm``s run
+    at ``[G_b', W_b, K]`` -- shapes on the ladder's rungs. The padded groups' rows are zero and ``flat`` never reads them."""
+    import torch.nn.functional as F
+    x = torch.zeros(sum(gp * w for _, w, gp in buckets), a_cat.shape[1], dtype=A.dtype, device=a_cat.device)
+    x.index_copy_(0, flat, a_cat.to(A.dtype))
+    per = [g for g, _, _ in buckets]
+    outs = []
+    for xb, Ab, Bb, (g, w, gp) in zip(x.split([gp * w for _, w, gp in buckets]), A.split(per), B.split(per), buckets):
+        if gp > g:
+            Ab, Bb = F.pad(Ab, (0, 0, 0, 0, 0, gp - g)), F.pad(Bb, (0, 0, 0, 0, 0, gp - g))
+        outs.append(torch.bmm(torch.bmm(xb.view(gp, w, -1), Ab.transpose(1, 2)), Bb.transpose(1, 2)).view(gp * w, -1))
+    d = outs[0] if len(outs) == 1 else torch.cat(outs)
     return _scaled(_GatherRows.apply(d, flat), scaling)
 
 
