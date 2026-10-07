@@ -98,7 +98,8 @@ def _wide_loads() -> bool:
 #: semantics rather than a limitation -- what was captured is
 #: exactly what every replay goes on to execute.
 _DISPATCH_COUNTS = {"dotpad": 0, "dotpad_splitk": 0,
-                    "scalar": 0, "scalar_splitk": 0}
+                    "scalar": 0, "scalar_splitk": 0,
+                    "bw_tree": 0, "bw_prmt32": 0, "bw_splitk": 0}
 
 
 def dispatch_counts() -> dict:
@@ -175,6 +176,104 @@ _DOTPAD_CONFIGS = {
 
 #: Escape hatch for debugging the v5 loop; never for real results.
 _ALLOW_UNVERIFIED_V5 = os.environ.get("GNF4_ALLOW_UNVERIFIED_V5") == "1"
+
+
+# ---------------------------------------------------------------------------
+# K33 (kernel/PREREG-k33-nf4-decode-gemv-bw.md): the bandwidth-targeted NF4 decode GEMV, opt-in.
+# ---------------------------------------------------------------------------
+
+#: Where ``GNF4_GEMV_BW=auto`` engages: exact (N, K) shapes on >= 160-SM parts. Empty until lane K33 reads, so ``auto``
+#: changes nothing today; the read fills it under its registered consequence.
+_BW_SHAPES: frozenset = frozenset()
+
+#: (BLOCK_N, KC, num_warps, split_k): 16 output rows x 256 columns (4 absmax blocks, 32 words) per program and K-step,
+#: 4 warps, no split. A registered GUESS until K33's plan sweep (``GNF4_GEMV_BW_PLAN`` overrides it per shape).
+_BW_PLAN_DEFAULT = (16, 256, 4, 1)
+
+_BW_DECODES = {"tree": 0, "prmt32": 2}
+
+
+def _bw() -> str:
+    """``GNF4_GEMV_BW``: route single-row decode calls through :func:`_gemv_nf4_bw`.
+
+    * ``0`` (the default; also unset or empty): off -- the dot-pad / scalar routes as before;
+    * ``1``: every single-row decode call, on every device (the interpreter included);
+    * ``auto``: only at ``_BW_SHAPES`` on >= 160-SM parts -- empty until lane K33 reads.
+
+    Anything else is refused rather than read as off (the ``GNF4_GEMV_DOTPAD`` rule)."""
+    v = (os.environ.get("GNF4_GEMV_BW") or "").strip().lower() or "0"
+    if v not in ("0", "1", "auto"):
+        raise ValueError(f"GNF4_GEMV_BW={os.environ.get('GNF4_GEMV_BW')!r}: expected '0', '1' or 'auto'")
+    return v
+
+
+def _bw_engages(N: int, K: int, device) -> bool:
+    mode = _bw()
+    if mode == "1":
+        return True
+    return mode == "auto" and (N, K) in _BW_SHAPES and _sm_count(device) >= 160
+
+
+def _bw_plan(N: int, K: int) -> tuple:
+    """(BLOCK_N, KC, num_warps, split_k) for one (N, K). ``GNF4_GEMV_BW_PLAN="1536,2048=16,256,4,1;2048,768=..."``
+    overrides it per shape (the ``GNF4_DECODE_PLAN`` pattern); a shape not listed takes :data:`_BW_PLAN_DEFAULT`."""
+    env = os.environ.get("GNF4_GEMV_BW_PLAN")
+    if env:
+        for entry in env.split(";"):
+            shape, _, cfg = entry.partition("=")
+            n_s, _, k_s = shape.partition(",")
+            if int(n_s) == N and int(k_s) == K:
+                bn, kc, w, sk = (int(x) for x in cfg.split(","))
+                return bn, kc, w, sk
+    return _BW_PLAN_DEFAULT
+
+
+def _bw_check_plan(plan: tuple) -> None:
+    bn, kc, warps, sk = plan
+    nb = kc // BLOCKSIZE
+    if bn < 1 or bn & (bn - 1) or kc % BLOCKSIZE or nb < 1 or nb & (nb - 1) or warps < 1 or sk < 1:
+        raise ValueError(f"GNF4_GEMV_BW plan {plan}: BLOCK_N a power of 2, KC a power-of-2 multiple of {BLOCKSIZE}, "
+                         "warps >= 1 and split_k >= 1")
+
+
+def _bw_decode(device) -> str:
+    """The codebook decode: ``prmt32`` (the PTX byte-permute table, exact fp32 codebook) on a compiled CUDA device,
+    ``tree`` (an exact 4-level select tree) under the interpreter or off CUDA. ``GNF4_GEMV_BW_DECODE`` forces one; asking
+    for ``prmt32`` where inline PTX cannot run is refused, never downgraded."""
+    interp = os.environ.get("TRITON_INTERPRET", "0") == "1"
+    compiled = (not interp) and torch.device(device).type == "cuda" and not torch.version.hip
+    v = (os.environ.get("GNF4_GEMV_BW_DECODE") or "").strip().lower()
+    if not v:
+        return "prmt32" if compiled else "tree"
+    if v not in _BW_DECODES:
+        raise ValueError(f"GNF4_GEMV_BW_DECODE={v!r}: expected one of {sorted(_BW_DECODES)}")
+    if v == "prmt32" and not compiled:
+        raise ValueError("GNF4_GEMV_BW_DECODE=prmt32 needs a compiled NVIDIA target (inline PTX); "
+                         "the interpreter and non-PTX backends take 'tree'")
+    return v
+
+
+def _bw_table_words() -> list:
+    """The prmt32 decode's 16 table words: byte plane p (0 = least significant) of the fp32 codebook, four entries per
+    word -- word ``4p + q`` holds plane p of codes ``4q .. 4q+3``, code ``4q`` in its low byte."""
+    import struct
+    planes = [struct.pack("<f", v) for v in NF4_LUT]
+    out = []
+    for p in range(4):
+        for q in range(4):
+            w = sum(planes[4 * q + i][p] << (8 * i) for i in range(4))
+            out.append(w - (1 << 32) if w >= (1 << 31) else w)
+    return out
+
+
+_BW_TABLE_CACHE: dict = {}
+
+
+def _bw_tables(device):
+    key = str(device)
+    if key not in _BW_TABLE_CACHE:
+        _BW_TABLE_CACHE[key] = torch.tensor(_bw_table_words(), dtype=torch.int32, device=device)
+    return _BW_TABLE_CACHE[key]
 
 # The NF4 codebook (QLoRA appendix / bitsandbytes source). Code 7 decodes to
 # exactly 0.0 — the zero-decode byte 0x77 the e4b mask fix relies on. The
@@ -893,6 +992,252 @@ def _gemv_nf4_dotpad_splitk(a_ptr, b_ptr, amax_ptr, ws_ptr, lut_ptr,
 
 
 @triton.jit
+def _pdl_enter_nf4(PDL: tl.constexpr):
+    """The PDL preamble, first in the K33 decode GEMV: ``int4_b32._pdl_enter``'s two PTX lines (that module imports
+    triton directly, so this one does not import it at module level). ``griddepcontrol.wait`` holds every memory access
+    below it until the previous kernel on the stream has completed; ``launch_dependents`` lets the next one launch and
+    park. Empty with ``PDL`` off."""
+    if PDL:
+        tl.inline_asm_elementwise("griddepcontrol.wait; // dummy $0", "=r", [], dtype=tl.int32, is_pure=False, pack=1)
+        tl.inline_asm_elementwise("griddepcontrol.launch_dependents; // dummy $0", "=r", [], dtype=tl.int32,
+                                  is_pure=False, pack=1)
+
+
+@triton.jit
+def _nf4_tree(nib, c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15):
+    """The codebook as an exact 4-level select tree over the code's bits (K25's decode): fp32 codebook values in, the
+    same values out -- no gather, no rounding."""
+    b0 = (nib & 1) != 0
+    b1 = (nib & 2) != 0
+    b2 = (nib & 4) != 0
+    b3 = (nib & 8) != 0
+    l0 = tl.where(b0, c1, c0)
+    l1 = tl.where(b0, c3, c2)
+    l2 = tl.where(b0, c5, c4)
+    l3 = tl.where(b0, c7, c6)
+    l4 = tl.where(b0, c9, c8)
+    l5 = tl.where(b0, c11, c10)
+    l6 = tl.where(b0, c13, c12)
+    l7 = tl.where(b0, c15, c14)
+    m0 = tl.where(b1, l1, l0)
+    m1 = tl.where(b1, l3, l2)
+    m2 = tl.where(b1, l5, l4)
+    m3 = tl.where(b1, l7, l6)
+    n0 = tl.where(b2, m1, m0)
+    n1 = tl.where(b2, m3, m2)
+    return tl.where(b3, n1, n0)
+
+
+@triton.jit
+def _nf4_prmt32(words, t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15):
+    """One packed word -> its 8 codebook values as fp32 BITS (int32), in k order, by PTX byte-permute (``prmt``)
+    table lookups: no memory gather, exact fp32.
+
+    ``t{4p+q}`` is byte plane ``p`` of codes ``4q..4q+3`` (:func:`_bw_table_words`). Element ``e`` of the word is the
+    nibble at shift ``(e//2)*8 + (4 if e even else 0)`` (bitsandbytes: element 2j high, 2j+1 low). Per half-word:
+    ``prmt`` with the codes' low 3 bits as selectors reads entries 0-7 and 8-15 of a plane; a sign-replicating ``prmt``
+    turns each code's bit 3 into a byte mask (0x9D8C / 0xBFAE: bit 7 of the source byte, the high nibble's own bit 3
+    or the low nibble's moved up by the shift); ``lop3`` 0xCA selects per byte (mask ? hi : lo); two more ``prmt``
+    rounds put each element's four plane bytes into one word (0x5140 / 0x7362 pair planes 0-1 and 2-3; 0x5410 /
+    0x7632 join them)."""
+    return tl.inline_asm_elementwise(
+        """
+        {
+        .reg .b32 s7, s7h, sh, ql, qh, lo, hi, r0, r1, r2, r3, a01, a23, b01, b23;
+        and.b32 s7, $8, 0x77777777;
+        shl.b32 sh, $8, 4;
+        shr.b32 s7h, s7, 16;
+        prmt.b32 ql, $8, sh, 0x9D8C;
+        prmt.b32 qh, $8, sh, 0xBFAE;
+        prmt.b32 lo, $9, $10, s7;
+        prmt.b32 hi, $11, $12, s7;
+        lop3.b32 r0, ql, hi, lo, 0xCA;
+        prmt.b32 lo, $13, $14, s7;
+        prmt.b32 hi, $15, $16, s7;
+        lop3.b32 r1, ql, hi, lo, 0xCA;
+        prmt.b32 lo, $17, $18, s7;
+        prmt.b32 hi, $19, $20, s7;
+        lop3.b32 r2, ql, hi, lo, 0xCA;
+        prmt.b32 lo, $21, $22, s7;
+        prmt.b32 hi, $23, $24, s7;
+        lop3.b32 r3, ql, hi, lo, 0xCA;
+        prmt.b32 a01, r0, r1, 0x5140;
+        prmt.b32 a23, r2, r3, 0x5140;
+        prmt.b32 b01, r0, r1, 0x7362;
+        prmt.b32 b23, r2, r3, 0x7362;
+        prmt.b32 $1, a01, a23, 0x5410;
+        prmt.b32 $0, a01, a23, 0x7632;
+        prmt.b32 $3, b01, b23, 0x5410;
+        prmt.b32 $2, b01, b23, 0x7632;
+        prmt.b32 lo, $9, $10, s7h;
+        prmt.b32 hi, $11, $12, s7h;
+        lop3.b32 r0, qh, hi, lo, 0xCA;
+        prmt.b32 lo, $13, $14, s7h;
+        prmt.b32 hi, $15, $16, s7h;
+        lop3.b32 r1, qh, hi, lo, 0xCA;
+        prmt.b32 lo, $17, $18, s7h;
+        prmt.b32 hi, $19, $20, s7h;
+        lop3.b32 r2, qh, hi, lo, 0xCA;
+        prmt.b32 lo, $21, $22, s7h;
+        prmt.b32 hi, $23, $24, s7h;
+        lop3.b32 r3, qh, hi, lo, 0xCA;
+        prmt.b32 a01, r0, r1, 0x5140;
+        prmt.b32 a23, r2, r3, 0x5140;
+        prmt.b32 b01, r0, r1, 0x7362;
+        prmt.b32 b23, r2, r3, 0x7362;
+        prmt.b32 $5, a01, a23, 0x5410;
+        prmt.b32 $4, a01, a23, 0x7632;
+        prmt.b32 $7, b01, b23, 0x5410;
+        prmt.b32 $6, b01, b23, 0x7632;
+        }
+        """,
+        "=r,=r,=r,=r,=r,=r,=r,=r,r,r,r,r,r,r,r,r,r,r,r,r,r,r,r,r,r",
+        [words, t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15],
+        dtype=(tl.int32, tl.int32, tl.int32, tl.int32, tl.int32, tl.int32, tl.int32, tl.int32),
+        is_pure=True, pack=1)
+
+
+@triton.jit
+def _gemv_nf4_bw(a_ptr, b_ptr, amax_ptr, out_ptr, lut_ptr, tbl_ptr, eids_ptr,
+                 K, N, T, KBLOCKS_PER_SPLIT,
+                 stride_be, stride_bn, stride_ae, stride_an,
+                 BLOCK_N: tl.constexpr, KC: tl.constexpr, DECODE: tl.constexpr,
+                 SPLITK: tl.constexpr, PDL: tl.constexpr = False):
+    """K33: the single-row NF4 decode GEMV, aimed at the streaming ceiling (kernel/PREREG-k33-nf4-decode-gemv-bw.md).
+
+    Program (g, n-tile, k-split) computes ``out[g, n]`` for BLOCK_N rows of expert ``eids[g]`` over its K span. Per
+    K-step it loads one ``[BLOCK_N, KC/64, 8]`` int32 tile -- each (row, absmax block) is 8 contiguous words, 16-byte
+    aligned, the int4-b32 GEMV's proven tile shape -- decodes each word's 8 codes (``DECODE`` 0: :func:`_nf4_tree`, 2:
+    :func:`_nf4_prmt32`; both exact fp32 codebook values), and accumulates in fp32:
+
+        part[n, blk, w] = sum_j code(n, blk, w, j) * x[blk*64 + w*8 + j]     (j = 0..7 in order)
+        acc[n]         += sum_blk (sum_w part[n, blk, w]) * absmax[n, blk]
+
+    -- absmax multiplies each 64-block's sum, as the scalar GEMV and ``dequant_ref`` associate it. The reduction tree
+    differs from the scalar GEMV's, so the two are NOT bitwise equal (the tolerance contract applies); the two decodes
+    are bitwise equal to each other, the result never depends on T, and a one-hot activation reads ``dequant_ref``
+    exactly. ``SPLITK`` stores fp32 partials ``ws[(k_split * T + g) * N + n]`` (host-reduced in split order, as the
+    scalar split-K path does); otherwise one bf16 store. b_ptr is the int32 VIEW of the packed weights."""
+    _pdl_enter_nf4(PDL)
+    g = tl.program_id(0)
+    pid_n = tl.program_id(1)
+    pid_k = tl.program_id(2)
+    eid = tl.load(eids_ptr + g).to(tl.int64)           # int64 before any stride product (the Boundaries rule)
+    offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
+    n_mask = offs_n < N
+    NB: tl.constexpr = KC // 64
+    nb = tl.arange(0, NB)
+    w8 = tl.arange(0, 8)
+    b_base = b_ptr + eid * stride_be + offs_n[:, None, None] * stride_bn
+    am_base = amax_ptr + eid * stride_ae + offs_n[:, None] * stride_an
+    a_base = a_ptr + g * K
+    KB = K // 64
+    if SPLITK:
+        kb_lo = pid_k * KBLOCKS_PER_SPLIT
+        kb_hi = tl.minimum(kb_lo + KBLOCKS_PER_SPLIT, KB)
+    else:
+        kb_lo = 0
+        kb_hi = KB
+    if DECODE == 0:
+        c0 = tl.load(lut_ptr + 0)
+        c1 = tl.load(lut_ptr + 1)
+        c2 = tl.load(lut_ptr + 2)
+        c3 = tl.load(lut_ptr + 3)
+        c4 = tl.load(lut_ptr + 4)
+        c5 = tl.load(lut_ptr + 5)
+        c6 = tl.load(lut_ptr + 6)
+        c7 = tl.load(lut_ptr + 7)
+        c8 = tl.load(lut_ptr + 8)
+        c9 = tl.load(lut_ptr + 9)
+        c10 = tl.load(lut_ptr + 10)
+        c11 = tl.load(lut_ptr + 11)
+        c12 = tl.load(lut_ptr + 12)
+        c13 = tl.load(lut_ptr + 13)
+        c14 = tl.load(lut_ptr + 14)
+        c15 = tl.load(lut_ptr + 15)
+    else:
+        t0 = tl.load(tbl_ptr + 0)
+        t1 = tl.load(tbl_ptr + 1)
+        t2 = tl.load(tbl_ptr + 2)
+        t3 = tl.load(tbl_ptr + 3)
+        t4 = tl.load(tbl_ptr + 4)
+        t5 = tl.load(tbl_ptr + 5)
+        t6 = tl.load(tbl_ptr + 6)
+        t7 = tl.load(tbl_ptr + 7)
+        t8 = tl.load(tbl_ptr + 8)
+        t9 = tl.load(tbl_ptr + 9)
+        t10 = tl.load(tbl_ptr + 10)
+        t11 = tl.load(tbl_ptr + 11)
+        t12 = tl.load(tbl_ptr + 12)
+        t13 = tl.load(tbl_ptr + 13)
+        t14 = tl.load(tbl_ptr + 14)
+        t15 = tl.load(tbl_ptr + 15)
+    acc = tl.zeros((BLOCK_N,), dtype=tl.float32)
+    for kb0 in range(kb_lo, kb_hi, NB):
+        blk = kb0 + nb
+        bmask = blk < kb_hi
+        words = tl.load(b_base + blk[None, :, None] * 8 + w8[None, None, :],
+                        mask=n_mask[:, None, None] & bmask[None, :, None], other=0)
+        xoff = a_base + blk[:, None] * 64 + w8[None, :] * 8
+        part = tl.zeros((BLOCK_N, NB, 8), dtype=tl.float32)
+        if DECODE == 0:
+            for j in tl.static_range(8):
+                nib = (words >> ((j // 2) * 8 + 4 * (1 - j % 2))) & 0xF
+                wj = _nf4_tree(nib, c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15)
+                xj = tl.load(xoff + j, mask=bmask[:, None], other=0.0).to(tl.float32)
+                part += wj * xj[None, :, :]
+        else:
+            e0, e1, e2, e3, e4, e5, e6, e7 = _nf4_prmt32(words, t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11,
+                                                          t12, t13, t14, t15)
+            part += e0.to(tl.float32, bitcast=True) * tl.load(xoff + 0, mask=bmask[:, None], other=0.0).to(tl.float32)[None, :, :]
+            part += e1.to(tl.float32, bitcast=True) * tl.load(xoff + 1, mask=bmask[:, None], other=0.0).to(tl.float32)[None, :, :]
+            part += e2.to(tl.float32, bitcast=True) * tl.load(xoff + 2, mask=bmask[:, None], other=0.0).to(tl.float32)[None, :, :]
+            part += e3.to(tl.float32, bitcast=True) * tl.load(xoff + 3, mask=bmask[:, None], other=0.0).to(tl.float32)[None, :, :]
+            part += e4.to(tl.float32, bitcast=True) * tl.load(xoff + 4, mask=bmask[:, None], other=0.0).to(tl.float32)[None, :, :]
+            part += e5.to(tl.float32, bitcast=True) * tl.load(xoff + 5, mask=bmask[:, None], other=0.0).to(tl.float32)[None, :, :]
+            part += e6.to(tl.float32, bitcast=True) * tl.load(xoff + 6, mask=bmask[:, None], other=0.0).to(tl.float32)[None, :, :]
+            part += e7.to(tl.float32, bitcast=True) * tl.load(xoff + 7, mask=bmask[:, None], other=0.0).to(tl.float32)[None, :, :]
+        am = tl.load(am_base + blk[None, :], mask=n_mask[:, None] & bmask[None, :], other=0.0)
+        acc += tl.sum(tl.sum(part, axis=2) * am, axis=1)
+    if SPLITK:
+        tl.store(out_ptr + (pid_k * T + g) * N + offs_n, acc, mask=n_mask)
+    else:
+        tl.store(out_ptr + g * N + offs_n, acc.to(tl.bfloat16), mask=n_mask)
+
+
+def _gemv_nf4_bw_launch(a_cat, B, absmax, eids, out, N, K, T, dev, bw_config=None):
+    """Launch :func:`_gemv_nf4_bw` for one single-row decode call; returns ``out``. ``bw_config`` (BLOCK_N, KC,
+    num_warps, split_k) overrides :func:`_bw_plan` (harness sweeps)."""
+    plan = tuple(bw_config) if bw_config is not None else _bw_plan(N, K)
+    _bw_check_plan(plan)
+    bn, kc, warps, sk = plan
+    decode = _bw_decode(dev)
+    eids_t = eids if torch.is_tensor(eids) else torch.as_tensor(eids, dtype=torch.int32, device=dev)
+    bw = B.view(torch.int32)
+    kb = K // BLOCKSIZE
+    try:                                   # PDL: int4_b32's switch and cap (GNF4_PDL / GNF4_PDL_MAX_ROWS)
+        from int4_b32 import _pdl_kw
+        pdl = _pdl_kw(dev, T)
+    except ImportError:
+        pdl = {}
+    common = dict(BLOCK_N=bn, KC=kc, DECODE=_BW_DECODES[decode], num_warps=warps, num_stages=2, **pdl)
+    _DISPATCH_COUNTS["bw_" + decode] += 1
+    if sk > 1:
+        span = -(-kb // sk)
+        ws = torch.empty(sk, T, N, dtype=torch.float32, device=dev)
+        _DISPATCH_COUNTS["bw_splitk"] += 1
+        _gemv_nf4_bw[(T, triton.cdiv(N, bn), sk)](
+            a_cat, bw, absmax, ws, _lut(dev), _bw_tables(dev), eids_t, K, N, T, span,
+            bw.stride(0), bw.stride(1), absmax.stride(0), absmax.stride(1), SPLITK=True, **common)
+        out.copy_(ws.sum(dim=0))           # split order, one bf16 downcast (the scalar split-K contract)
+        return out
+    _gemv_nf4_bw[(T, triton.cdiv(N, bn), 1)](
+        a_cat, bw, absmax, out, _lut(dev), _bw_tables(dev), eids_t, K, N, T, kb,
+        bw.stride(0), bw.stride(1), absmax.stride(0), absmax.stride(1), SPLITK=False, **common)
+    return out
+
+
+@triton.jit
 def _gemm_nf4_grouped(
     a_ptr,
     b_ptr,
@@ -1417,6 +1762,7 @@ def gemm_4bit_grouped(
     prefill_config: tuple | None = None,
     prefill_variant: int | None = None,
     prefill_groups: int = 1,
+    bw_config: tuple | None = None,
 ):
     """Single-launch grouped NF4 GEMM. ``a_cat [T,K]`` bf16/fp16 in group-sorted
     order, ``B [E,N,K//2]`` uint8, ``absmax [E,N,K//64]`` fp32, ``sizes`` the
@@ -1479,6 +1825,10 @@ def gemm_4bit_grouped(
             bn, warps = decode_config
         if split_k is not None:
             sk = split_k
+        # K33 opt-in (GNF4_GEMV_BW): the bandwidth-targeted single-row GEMV, ahead of dot-pad when it engages;
+        # off (the default) leaves every route below exactly as it was.
+        if _bw_engages(N, K, dev):
+            return _gemv_nf4_bw_launch(a_cat, B, absmax, eids, out, N, K, T, dev, bw_config)
         # K4: under wide loads the kernels address B in uint32 WORDS, so
         # the wrapper hands them the int32 view and word strides (legal:
         # K/2 % 4 == 0 whenever K % 8 == 0, which BLOCKSIZE enforces)
