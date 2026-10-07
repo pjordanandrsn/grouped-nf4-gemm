@@ -4,6 +4,99 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
+## 0.43.0 — 2026-10-07 — the bandwidth-targeted NF4 single-row decode GEMV, opt-in (GNF4_GEMV_BW=1; K33: 0.341x the served route on Qwen3-30B-A3B on an RTX 5090); the LoRA-delta bucket ladder, opt-in
+
+**0.43.0.** No default changes. Two opt-in capabilities:
+- `GNF4_GEMV_BW=1`, the bandwidth-targeted NF4 single-row decode GEMV. K33 read LEVER on an RTX 5090: 0.341× the
+  served route on Qwen3-30B-A3B's expert pair, bitwise the exact decode. `GNF4_GEMV_BW=auto` engages nowhere yet
+  (`_BW_SHAPES` is empty) until experts4bit-qlora's served lane P116 reads it.
+- `NF4_QLORA_PAD_BUCKETS_LADDER=1`, bucket widths on a fixed ladder for the bucketed LoRA delta.
+experts4bit-qlora's `[fast]` floor does not move for this release.
+
+### K33 read (RTX 5090): LEVER — the bandwidth-targeted NF4 decode GEMV runs Qwen3-30B-A3B's single-row expert projections at 0.341× the served route
+
+Register: `gnf4.kernel.k33-nf4-decode-gemv-bw.5090.2026-10-07`; `kernel/RESULTS-k33-nf4-decode-gemv-bw.md`.
+- **The reading** (`k33-5090-1`). The run covered every layer at each family's served shape: 8 rows, the top-8 experts,
+  one CUDA graph per projection.
+  - On Qwen3's pair, `GNF4_GEMV_BW=1` (`prmt32`) takes 0.961 ms against dot-pad's 2.818 (gate_up 0.332, down 0.357),
+    at 0.74 / 0.63 of the copy floor.
+  - `prmt32` is bitwise the exact tree decode, and every decode meets the tolerance contract.
+  - Granite and OLMoE read 0.22–0.27× their scalar GEMV.
+- **The predictions.** Numerics, the faster decode, the plan shape (BLOCK_N 16, split-K 1), the family ratios, the
+  instrument and the verdict held.
+  - The Qwen3 ratios came in faster than their bands.
+  - The int4-b32 comparator was slower than predicted: int4 / bw 1.03–1.22.
+  - PDL slowed Qwen3's and OLMoE's down projections by about 17 %.
+- **What follows (registered).** `GNF4_GEMV_BW` stays opt-in here. experts4bit-qlora registers the served lane P116 (W1
+  and W16, P110's quality bar). On its DEFAULT read this repository fills `_BW_SHAPES` and makes `auto` the default.
+- **Cost:** $0.037.
+
+### `GNF4_GEMV_BW=1`: a bandwidth-targeted NF4 single-row decode GEMV (opt-in; every default unchanged)
+
+- **Why.** At experts4bit-qlora's B=1 decode on Qwen3-30B-A3B the served NF4 expert GEMV (`_gemv_nf4_dotpad`) is
+  2.47 ms of a 6.46 ms graphed step at 3.8x its byte floor (e4b SV2's census); the scalar route runs at ~18 % of the
+  streaming ceiling. K3 / K4 / K26 put the cost in load-instruction issue and the per-element codebook gather, not in
+  bytes; the int4-b32 GEMV reads the same bytes per parameter at ~66 % of the ceiling with an arithmetic decode.
+- **What.** `nf4_grouped._gemv_nf4_bw`, reached from `gemm_4bit_grouped`'s single-row branch when `GNF4_GEMV_BW=1`
+  (ahead of dot-pad):
+  - one `[BLOCK_N, KC/64, 8]` int32 tile per K-step (8 contiguous words per row and absmax block, the int4-b32 tile
+    shape), `absmax` applied to each 64-block's sum, fp32 accumulation, optional split-K (fp32 partials, host-reduced in
+    split order);
+  - the codebook decoded exactly: `prmt32`, PTX byte-permute (`prmt`) lookups of the fp32 codebook's byte planes and
+    `lop3` selects, no memory gather, on a compiled NVIDIA target; `tree`, an exact 4-level select tree, under the
+    interpreter (`GNF4_GEMV_BW_DECODE` forces one; `prmt32` where PTX cannot run is refused);
+  - the PDL preamble, so `GNF4_PDL` / `GNF4_PDL_MAX_ROWS` reach the NF4 route as they reach the int4-b32 kernels;
+  - plan `(BLOCK_N, KC, warps, split_k)` = `(16, 256, 4, 1)` by default, `GNF4_GEMV_BW_PLAN` per shape, `bw_config=` on
+    `gemm_4bit_grouped` for harness sweeps; the dispatch tally gains `bw_tree`, `bw_prmt32`, `bw_splitk`;
+  - `GNF4_GEMV_BW=auto` engages only at `_BW_SHAPES`, which is empty until lane K33 reads.
+- **Values.** The two decodes are bitwise equal; one-hot activations read `dequant_ref` exactly; the result never
+  depends on the call's row count. Against the scalar and dot-pad routes the reduction tree differs, so the tolerance
+  contract applies (no worse than the scalar route's error by more than 5 %).
+- **Tests.** `kernel/test_nf4_gemv_bw_interp.py` (interpreter; 28 cases, including the `prmt32` assembly executed by a
+  byte-exact model of `prmt` / `lop3` over every byte value in every position, and a mutant selector it must catch);
+  `kernel/test_nf4_gemv_bw.py` (compiled: `prmt32` bitwise the tree at every candidate plan and the families' expert
+  shapes, one-hot readback, the tolerance contract, the PTX, PDL on sm_90+).
+- **Not measured.** No speed is claimed until lane K33's microbench reads on its registered card.
+
+### `NF4_QLORA_PAD_BUCKETS_LADDER=1`: bucket widths and batch counts on a fixed ladder (opt-in)
+
+- The bucketed LoRA delta's per-bucket batched products take a new shape on almost every call, because the router moves every bucket's
+  width and group count. A cuBLAS fp32 batched product costs host time per new shape: experts4bit-qlora TC1 amendment 24 measured
+  119 µs on a new shape against 38 µs on a repeated one, on an RTX 5090. Amendment 53 profiled the fp32-adapter arm under torch 2.8 at
+  about 268 µs of `aten::bmm` CPU self time per call against 86 µs under torch 2.12. That is an upper bound on host work, since self time
+  also counts waits on a full launch queue. 59.7 % of torch 2.8's added step was not device time.
+- With the flag set, each bucket's width and batch count are rounded up to quarter-octave rungs, at most 25 % over each. The padded groups
+  take zero adapters and no rows, so values equal the unladdered buckets' to rounding. Over 40 Zipf(1) routings of 4,096 tokens, the
+  distinct bucket shapes fall from 227 to 41.
+- Off by default. Laddered and unladdered plans never share a plan-memo entry.
+- First training A/B: experts4bit-qlora TC1 amendment 54, on an RTX 5090 in torch 2.8, fp32 adapters, packed rows. The ladder stepped
+  1.010 of the default buckets' time on a host where the step was not host-bound (device time 99 % of the step). It cut `aten::bmm`'s
+  CPU self time per call about tenfold (~145-150 µs to ~14-17 µs), and the padding added about 2 % of device time and 0.34 GB of
+  peak. It stays opt-in: whether it helps where the host is the bottleneck has not been read.
+
+### Make the README easier to use
+
+Lead with installation and a working first step, select current public results, and link detailed API, support, and evidence records. Keep release and development status distinct.
+
+### Docs: the bucketed-padding default is measured under torch 2.12 and torch 2.8
+
+The 0.42.0 `auto` default's (#492) first speed evidence was taken under torch 2.12.1 / triton 3.7.1 only.
+experts4bit-qlora's TC1 amendment 51 then read e4b slower than expected under torch 2.8 with the default on (environment
+ratio 0.739, against a registered [0.84, 0.98]). For a while `docs/STATUS.md` said the default's torch-2.8 effect was
+unmeasured (#494).
+
+Amendment 52 (`e4b.train.pad-buckets.torch28.qwen3.5090.2026-10-06`) has since measured it on packed rows under torch
+2.8.0 / triton 3.4.0, and all four of its predictions HELD:
+- 0.983 [0.974, 0.993] (matched) and 0.939 (shipped) of the single block's step;
+- the matched peak 4.24 GB lower;
+- held-out within 0.0002.
+
+The default stands in both measured environments, and amendment 51's slower torch-2.8 e4b is not the buckets' cost.
+Reported, not scored: under torch 2.8 the bucketed arms left the GPU idle more of the step (median utilisation 87 %
+against 97 %), so host-side time in the bucketed delta is the open lead.
+
+`NF4_QLORA_PAD_BUCKETS=0` restores the single block exactly. Docs only.
+
 ## 0.42.0 — 2026-10-06 — bucketed LoRA-delta padding on by default as auto; the int4-b32 split-K R term off on every part (experts4bit-qlora TC1 amendments 47–50; K30/K32)
 
 **0.42.0.** Two defaults change, each by a rule registered and read before it changed:

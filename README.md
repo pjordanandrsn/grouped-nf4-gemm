@@ -27,7 +27,12 @@ GPU kernels need **Linux, an NVIDIA sm_80+ GPU, torch ≥ 2.8 and Triton ≥ 3.4
 CI tests Python 3.11. CPU pack/decode and provenance tools work without CUDA;
 macOS and Windows are not exercised by CI. ROCm and XPU are port targets.
 
-**New in 0.42.0:** bucketed padding of the LoRA update is on by default (`auto`) for calls with at least 16,384
+**New in 0.43.0 (opt-in):** `GNF4_GEMV_BW=1`, a bandwidth-targeted NF4 single-row decode GEMV. On an RTX 5090 it runs
+Qwen3-30B-A3B's expert gate_up + down at 0.341× the served route, bitwise the exact decode (K33,
+[`kernel/RESULTS-k33-nf4-decode-gemv-bw.md`](kernel/RESULTS-k33-nf4-decode-gemv-bw.md)). It stays opt-in until
+experts4bit-qlora's served read (P116).
+
+**Since 0.42.0:** bucketed padding of the LoRA update is on by default (`auto`) for calls with at least 16,384
 routed rows, such as packed 4,096-token training rows; smaller calls keep the single padded block.
 Measured in experts4bit-qlora's packed-row training under torch 2.12 and torch 2.8: under 2.8 it steps 0.983× the single
 block with a 4.24 GB lower peak.

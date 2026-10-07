@@ -1,6 +1,6 @@
 # Status — what this kernel does, what changed, what is open
 
-**As of 2026-10-06, `grouped-nf4-gemm` version 0.42.0.** One page. The README argues; this
+**As of 2026-10-07, `grouped-nf4-gemm` version 0.43.0.** One page. The README argues; this
 page states. The positions here name their entries in
 [`docs/claims.json`](claims.json), which carry the evidence paths; a line
 without a claim ID records an issue closure, a correction still outstanding
