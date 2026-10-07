@@ -53,7 +53,7 @@ load (`eid = tl.load(...).to(tl.int64)`) *before* any stride product, so the
 whole base expression promotes; a stride that itself exceeds 2^31 is passed
 as an i64 argument by Triton's specialization. Carriers: `nf4_grouped`
 (`_gemm_nf4_grouped`, `_gemv_nf4_grouped`, `_gemv_nf4_grouped_splitk`,
-`_gemv_nf4_dotpad`, `_gemv_nf4_dotpad_splitk`, `_dgrad_nf4_grouped`),
+`_gemv_nf4_dotpad`, `_gemv_nf4_dotpad_splitk`, `_gemv_nf4_bw`, `_dgrad_nf4_grouped`),
 `mxfp4_grouped` (`_gemm_mxfp4_grouped`, `_gemv_mxfp4_grouped`,
 `_gemv_mxfp4_b32`), `int4_b32` (`_gemv_int4_b32`, `_gemv_int4_b32_grouped`, `_gemm_int4_b32_grouped`),
 `host_gather._gather_rows`, the `mxfp4_pipelined` / `mxfp4_residency` gathers

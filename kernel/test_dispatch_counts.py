@@ -41,7 +41,8 @@ def test_tally_starts_zero_and_resets():
     nf4_grouped._DISPATCH_COUNTS["dotpad"] = 7
     nf4_grouped.reset_dispatch_counts()
     assert nf4_grouped.dispatch_counts() == {
-        "dotpad": 0, "dotpad_splitk": 0, "scalar": 0, "scalar_splitk": 0}
+        "dotpad": 0, "dotpad_splitk": 0, "scalar": 0, "scalar_splitk": 0,
+        "bw_tree": 0, "bw_prmt32": 0, "bw_splitk": 0}
 
 
 def test_tally_accessor_returns_a_copy():
