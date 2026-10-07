@@ -570,7 +570,7 @@ The CPU block completes: the packed shapes are the gpt-oss tensor shapes and the
 ## Limitations
 
 - CUDA + Triton only for the kernels; no ROCm or XPU ([`PORTABILITY.md`](../PORTABILITY.md)). `mxfp4_grouped` binds triton through `_triton_shim`, so the pure-torch surface (`mxfp4_pack_ref`, the `mxfp4_loader` hashing, the relocation arena bake/verify) imports and runs without triton; the Triton kernels need a CUDA GPU; macOS and Windows are not exercised by CI.
-- Do not quantize-bake a checkpoint that is already MXFP4 ([README](../../README.md)); relocation keeps the bytes, re-quantizing to NF4 costs a decode per read and breaks provenance.
+- Do not quantize-bake a checkpoint that is already MXFP4: a uniform int4 grid cannot represent e2m1 levels; relocation keeps the bytes, re-quantizing to NF4 costs a decode per read and breaks provenance.
 - The e8m0 `0xFF` byte decodes as transformers' oracle does (ldexp, no NaN reservation); real checkpoints do not contain it.
 - The reference decode agrees with two independent implementations (transformers' gpt-oss path; compressed-tensors for K3). Agreement rules out a convention mismatch, not a shared misreading of the OCP spec ([`K3-PROVENANCE-CHAIN.md`](../K3-PROVENANCE-CHAIN.md)).
 - `gemv_mxfp4_b32` has a correctness gate in the tree but no entry in [`claims.json`](../claims.json): a capability without a published measurement. The MXFP4 GEMM has no separate speed census; the NF4 page's decode-speed limits apply structurally.
@@ -719,8 +719,8 @@ Both blocks finish without an assertion. The GPU block returns `[T, N]` bf16 in 
 ## Supported scope
 
 - Layout: bitsandbytes `gemm_4bit` NF4, canonical `[N, K]` per expert, blocksize 64, `K % 64 == 0`; expert-major `B [E, N, K//2]` uint8, `absmax [E, N, K//64]` fp32. `nf4_grouped.repack_from_bnb(packed_list, states, N, K)` builds these from per-expert `quantize_4bit` output and de-nests `compress_statistics`.
-- `a_cat [T, K]` bf16/fp16 group-sorted; `sizes` all `> 0`; `expert_ids` a list or int32 tensor. Sort and scatter live outside the kernel. One-token groups take the GEMV path, larger groups the M-tile path.
-- Decode GEMV routes (one-token groups): the scalar GEMV everywhere, and the dot-pad GEMV (`GNF4_GEMV_DOTPAD`, on by default) at its two registered shapes on >= 160-SM parts; it rounds both MMA operands to bf16 and ships on a quality gate, not a bitwise one. `GNF4_GEMV_BW=1` (opt-in; lane K33 reads it) routes them through a bandwidth-targeted GEMV instead: a 16-byte word tile per expert row, the fp32 codebook decoded exactly (a PTX byte-permute table compiled; a select tree under the interpreter), fp32 accumulation, `absmax` applied per 64-block as the reference does. No speed is claimed for it until K33 reads.
+- `a_cat [T, K]` bf16/fp16 group-sorted; `sizes` all `> 0`; `expert_ids` a list or int32 tensor. Sort and scatter live outside the kernel. A call whose groups are all one token takes the GEMV path; a call with any larger group takes the M-tile path for every group.
+- Decode GEMV routes (one-token groups): the scalar GEMV everywhere, and the dot-pad GEMV (`GNF4_GEMV_DOTPAD`, on by default) at its two registered shapes on >= 160-SM parts; it rounds both MMA operands to bf16 and ships on a quality gate, not a bitwise one. `GNF4_GEMV_BW=1` (opt-in) routes them through a bandwidth-targeted GEMV instead: a `[BLOCK_N, KC/64, 8]` int32 word tile per K-step loaded 16 bytes at a time, the fp32 codebook decoded exactly (a PTX byte-permute table compiled; a select tree under the interpreter), fp32 accumulation, `absmax` applied per 64-block as the reference does. Its plan is `GNF4_GEMV_BW_PLAN` (or `bw_config=`), and `GNF4_PDL` reaches it as it reaches the int4-b32 GEMVs. Lane K33 measured 0.341× the served route on Qwen3-30B-A3B's expert pair with its swept plans and `GNF4_PDL=0` (claim `gnf4.kernel.k33-nf4-decode-gemv-bw.5090.2026-10-07`, kernel level only); `GNF4_GEMV_BW=auto` engages nowhere until experts4bit-qlora's served lane P116 reads it.
 - Capture: `nf4_grouped.build_group_tiles_device(expert_ids, n_experts, block_m)` builds static device tiles; `nf4_grouped.gemm_4bit_grouped_captured(a_sorted, B, absmax, t_row0, t_rows, t_group, block_m)` runs against them.
 - Training: `nf4_grouped.dgrad_4bit_grouped(grad_out, B, absmax, sizes, expert_ids)` is the input gradient in one launch; `nf4_qlora.gemm_4bit_grouped_train` and `nf4_qlora.fused_grouped_lora` wrap it in autograd, the latter adding the LoRA delta pre-activation.
 - [`examples/dequant_tax.py`](../../examples/dequant_tax.py) times the round trip against the fused path on your GPU, with a self-pair beside every ratio.
@@ -733,7 +733,7 @@ Both blocks finish without an assertion. The GPU block returns `[T, N]` bf16 in 
 - `top_k=1` cells are instance-unstable; peak VRAM does not improve, only the forward-to-backward transient shrinks ([`STATUS.md`](../STATUS.md)).
 - The fidelity ordering is a CUDA tensor-core statement; other backends must re-measure. No ROCm or XPU ([`PORTABILITY.md`](../PORTABILITY.md)).
 - CUDA + Triton only for the kernel. `nf4_pack_ref` imports `nf4_grouped`, which binds triton through `_triton_shim`, so the pure-torch surface (pack references, `dequant_ref`, provenance, arena bake/verify) imports and runs without triton, and a `gemm_4bit_grouped` call on CPU tensors raises naming `dequant_ref` on a triton-less box too; the Triton kernels need a CUDA GPU; macOS and Windows are not exercised by CI.
-- Expert stacks past 2 GiB: every base offset is int64 — `#87` (int32 offset overflow at large `max(expert_ids)`) is closed by observation in every carrier (PR #342; boundary test `kernel/test_expert_offset_boundary.py`; GPU run on an RTX 5090 2026-09-05: 10 passed; claim `gnf4.kernel.expert-offset-boundary.5090.2026-09-05`). The word-addressed wide-load and dot-pad routes wrap at 2^31 *words* (8 GiB); they are observed past that boundary separately (`kernel/test_offset_boundary_words_gpu.py`; RTX 5090 2026-09-23: 4/4 passed, and 4/4 read the decoy with the promotions stripped; claim `gnf4.kernel.word-boundary-wide-dotpad.5090.2026-09-23`). The rule and the carrier list are under "Boundaries" in [`KERNEL_CONTRACT.md`](../KERNEL_CONTRACT.md).
+- Expert stacks past 2 GiB: every base offset is int64 — `#87` (int32 offset overflow at large `max(expert_ids)`) is closed by observation in every carrier except the opt-in `_gemv_nf4_bw`, which carries the promotion but has no boundary arm yet (PR #342; boundary test `kernel/test_expert_offset_boundary.py`; GPU run on an RTX 5090 2026-09-05: 10 passed; claim `gnf4.kernel.expert-offset-boundary.5090.2026-09-05`). The word-addressed wide-load and dot-pad routes wrap at 2^31 *words* (8 GiB); they are observed past that boundary separately (`kernel/test_offset_boundary_words_gpu.py`; RTX 5090 2026-09-23: 4/4 passed, and 4/4 read the decoy with the promotions stripped; claim `gnf4.kernel.word-boundary-wide-dotpad.5090.2026-09-23`). The rule and the carrier list are under "Boundaries" in [`KERNEL_CONTRACT.md`](../KERNEL_CONTRACT.md).
 
 ## Related
 
@@ -741,7 +741,7 @@ Both blocks finish without an assertion. The GPU block returns `[T, N]` bf16 in 
 
 ## Evidence
 
-Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.kernel.fused-more-accurate-than-dequant-bf16` (has not measured less accurate than the dequantize-to-bf16-then-GEMM comparator in any registered confirmatory cell), claim `gnf4.kernel.decode-speed-census`, claim `gnf4.kernel.energy-104-of-112`, claim `gnf4.kernel.e2e-training-real-prose`, claim `gnf4.kernel.h2h-unsloth` (4-bit-storage regime; Unsloth wins its own bf16-resident regime), claim `gnf4.kernel.graphed-baseline-decode-loses`. Measured: claim `gnf4.kernel.sm120-census-vs-grouped-mm`, claim `gnf4.kernel.dgrad`, claim `gnf4.kernel.expert-offset-boundary.5090.2026-09-05` (the 2^31 offset boundary, every carrier). Receipts under `kernel/RESULTS-*.md` with their `prereg_*.json`; property suite `kernel/test_nf4_grouped.py`.
+Register: [`claims.json`](../claims.json). K33 (opt-in decode GEMV, kernel level): `gnf4.kernel.k33-nf4-decode-gemv-bw.5090.2026-10-07`. Confirmed: claim `gnf4.kernel.fused-more-accurate-than-dequant-bf16` (has not measured less accurate than the dequantize-to-bf16-then-GEMM comparator in any registered confirmatory cell), claim `gnf4.kernel.decode-speed-census`, claim `gnf4.kernel.energy-104-of-112`, claim `gnf4.kernel.e2e-training-real-prose`, claim `gnf4.kernel.h2h-unsloth` (4-bit-storage regime; Unsloth wins its own bf16-resident regime), claim `gnf4.kernel.graphed-baseline-decode-loses`. Measured: claim `gnf4.kernel.sm120-census-vs-grouped-mm`, claim `gnf4.kernel.dgrad`, claim `gnf4.kernel.expert-offset-boundary.5090.2026-09-05` (the 2^31 offset boundary, every carrier). Receipts under `kernel/RESULTS-*.md` with their `prereg_*.json`; property suite `kernel/test_nf4_grouped.py`.
 
 ## Source: docs/solutions/stream-moe-experts-from-host-or-nvme.md (https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/stream-moe-experts-from-host-or-nvme.md)
 
@@ -862,7 +862,7 @@ The CPU block bakes, verifies the full chain (source range hash, manifest, arena
 - Expert prefetch is closed, negative, over four registered arcs; the recommended copy path is the GPU-side gather, not speculation (claim `gnf4.flagship.prefetch-closed-negative`).
 - Per-token time from host RAM is additive and per box, `t ≈ c_box + bytes/link`; a fixed fraction-of-waterfall is not the law ([`STATUS.md`](../STATUS.md)).
 - `Mxfp4NvmeResidency` is not CUDA-graph capturable: a miss is a host-side disk read.
-- Do not quantize-bake a checkpoint that already ships MXFP4 ([README](../../README.md)); relocate it.
+- Do not quantize-bake a checkpoint that already ships MXFP4 ([why](native-mxfp4-moe-inference.md)); relocate it.
 - The cold-engine premise (bitsandbytes' CPU dequant as a free decode arm) is refuted on a box without AVX-512 (claim `gnf4.cold-engine.phase0-premise-refuted`).
 - Arena staging (#60) is open and listed in [`STATUS.md`](../STATUS.md). The pinned-row factor (#71) is closed: since 0.38.0, `capacity_for_bytes` models the power-of-two rounding, measured on cgroup v1 and v2 (`gnf4.kernel.k29-pinned-charge-cgroup-v2.5090.2026-10-04`). No ROCm or XPU.
 
@@ -1127,7 +1127,8 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
     "gnf4.kernel.e2e-training-real-prose",
     "gnf4.kernel.sm120-census-vs-grouped-mm",
     "gnf4.kernel.dgrad",
-    "gnf4.kernel.energy-104-of-112"
+    "gnf4.kernel.energy-104-of-112",
+    "gnf4.kernel.k33-nf4-decode-gemv-bw.5090.2026-10-07"
    ],
    "limitations": [
     "Loses to a CUDA-graphed per-expert baseline at some decode shapes (claim gnf4.kernel.graphed-baseline-decode-loses); shapes below the dispatch floor belong to the dequant path: nf4_grouped.decode_dispatch says so and the caller routes them there, while the op itself always runs fused (docs/STATUS.md)",
@@ -1135,7 +1136,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
     "The grouped_mm training route needs compute capability 9.0 (torch 2.8's torch._grouped_mm target): GNF4_TRAIN_GEMM=auto takes it only there, and GNF4_TRAIN_GEMM=grouped_mm refuses elsewhere with the reason; it is not bit-identical to the fused kernels.",
     "The decoded training route (GNF4_TRAIN_GEMM=decoded: dequant_groups + one grouped bf16 GEMM launch per chunk of groups, the chunk's decode transient capped by GNF4_DECODED_MAX_BYTES, default 256 MiB) is opt-in only: GNF4_TRAIN_GEMM=auto never takes it. It is not bit-identical to the fused kernels or the dense route, and no speed is claimed for it. experts4bit-qlora's TC1 amendment 46 (one RTX 5090, experts4bit-qlora#1221) read the training step at decoded/fused 1.005 [0.979, 1.031] on OLMoE-1B-7B and 1.066 on Qwen3-30B-A3B, so auto does not take it.",
     "The fidelity claim is measured against fp32 accumulation on NVIDIA tensor cores; other backends must re-measure (docs/PORTABILITY.md)",
-    "GNF4_GEMV_BW=1 routes single-row decode calls through the bandwidth-targeted GEMV (lane K33), opt-in: the default and GNF4_GEMV_BW=auto leave every route as it was until K33 reads, and no speed is claimed for it. Its codebook decode is exact fp32 either way: the PTX byte-permute table (prmt32) needs a compiled NVIDIA target, and the interpreter and non-PTX backends take an exact select tree (GNF4_GEMV_BW_DECODE=tree). It is not bit-identical to the scalar or dot-pad routes (a different reduction tree; the tolerance contract applies).",
+    "GNF4_GEMV_BW=1 routes single-row decode calls through the bandwidth-targeted GEMV (lane K33), opt-in: the default and GNF4_GEMV_BW=auto leave every route as it was until experts4bit-qlora's served lane P116 reads it (_BW_SHAPES is empty). K33 read LEVER at kernel level on an RTX 5090, with its swept per-shape plans and GNF4_PDL=0 (claim gnf4.kernel.k33-nf4-decode-gemv-bw.5090.2026-10-07); the default plan and PDL read slower in the same sweep. Its codebook decode is exact fp32 either way: the PTX byte-permute table (prmt32) needs a compiled NVIDIA target, and the interpreter and non-PTX backends take an exact select tree (GNF4_GEMV_BW_DECODE=tree). It is not bit-identical to the scalar or dot-pad routes (a different reduction tree; the tolerance contract applies).",
     "Every speed figure is per card -- the census is sm_86, the head-to-head and the real-finetune cells are RTX 4090 / H100, the torch._grouped_mm cell is RTX 5090 -- and none is an architecture-wide statement; the registered comparator is this repository's own per-expert dequantize-then-GEMM loop, and no registered cell times bitsandbytes' own packed 2-D inference forward (0.50.0 and later)"
    ],
    "status": "supported"
@@ -1206,7 +1207,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
     "gnf4.k3.oracle-exact"
    ],
    "limitations": [
-    "A uniform int4 grid cannot represent e2m1 levels: do not quantise-bake an already-MXFP4 checkpoint to NF4 or int4 (README)",
+    "A uniform int4 grid cannot represent e2m1 levels: do not quantise-bake an already-MXFP4 checkpoint to NF4 or int4 (docs/solutions/native-mxfp4-moe-inference.md)",
     "gemv_mxfp4_b32 re-streams weights per row: it is a decode lever for a handful of rows; batched rows use the grouped GEMM or the consumer's NF4 path",
     "No ROCm/XPU",
     "The claims here are fidelity and provenance results from single runs per card (a rented H200 pod for serving, an L40S and an A2000 for training, the K3 oracle on CPU); the MXFP4 GEMM has no speed census of its own and gemv_mxfp4_b32 is inside no registered claim"
@@ -1291,7 +1292,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
     "Split-K on the int4-b32 GEMV is planned from (N, K) alone on every part: the row-count term (R >= 16, gated by SPLITK_R_TERM_MAX_SMS) is off since K30 read it OFF on a rented NVIDIA L4 (claim gnf4.kernel.k30-splitk-r-term.l4.2026-10-05), so the plan no longer depends on the SM count and two cards plan the same sk for the same call",
     "Whether int4 experts pass a quality gate is the consumer's per-family question (experts4bit-qlora docs/STATUS.md): small-active-parameter models fail it with round-to-nearest packing",
     "The single-stream decode anchor (claim gnf4.serve.decode-anchor-5090) is a consumer-measured anchor of the serving class on a knob-off basis, not a measurement of this lane, and is not cited here as its evidence",
-    "K16: int4_smallm.gemm_int4_b32_smallm is a small-M single-projection GEMM -- in-register int4 dequant, per-block scaling inside the tile, bf16 tensor-core MMA over fat K chunks, split-K fused into the launch (kernel/PREREG-k16-smallm-int4-gemm.md). Measured on the RTX 5090 class at M=16 (claim gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19): it beats this package's bf16 dequant path on every attention shape and meets the pre-registered Marlin bar; the single-scale control (P4) was not tested and the model-level step saving (P5) is pending. Nothing in this package routes to it; the consumer's route is opt-in (experts4bit-qlora E4B_ATTN_INT4_SMALLM=1)",
+    "K16: int4_smallm.gemm_int4_b32_smallm is a small-M single-projection GEMM -- in-register int4 dequant, per-block scaling inside the tile, bf16 tensor-core MMA over fat K chunks, split-K fused into the launch (kernel/PREREG-k16-smallm-int4-gemm.md). Measured on the RTX 5090 class at M=16 (claim gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19): it beats this package's bf16 dequant path on every attention shape and meets the pre-registered Marlin bar; the single-scale control (P4) was not tested; P5 holds in the consumer (claim gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19), and the consumer's route is its default (auto) from experts4bit-qlora 0.36.2",
     "K18: int4_b32.gemv_int4_b32_grouped tiles the call's rows expert-major in-register (histogram, cumsum, per-expert rank -- no sort, no host sync, capture-legal) so each program loads one expert's weight slice once for up to GROUPED_MT_DEFAULT=4 of its rows; it is torch.equal to gemv_int4_b32(..., fused_reduce=False). Measured on the RTX 5090 (claim gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22): exact, and SLOWER than gemv_int4_b32 both on the recorded Qwen3-30B-A3B B=16 routing and at the small row counts, so it is not a lever and ships dormant as the evidence; use gemv_int4_b32. Nothing in this package or the consumer routes to it. The wrapper refuses E > GROUPED_E_MAX=4095 (the tiling's shared-memory histogram)"
    ],
    "status": "measured-private"
@@ -1922,7 +1923,7 @@ was wrong.
 
 - **`sm_120` is no longer "parked".** The README's roadmap once said
   three cloud provisioning failures parked Blackwell work (that line is
-  gone; the README's *What was retired* section records it). That was true
+  gone; this page and the retired claim `gnf4.retired.sm120-parked` record it). That was true
   in July; since 0.15.0 the RTX 5090 has been the *primary* serving
   target — the M=1 config retune, the sm_120 census, the decode anchor,
   the M3 defaults, the int4 lanes and the paged attention were all
@@ -1932,7 +1933,7 @@ was wrong.
   the proxy it did run is 1.33× slower than the real thing — so the
   comparison was against a weaker opponent than the label implied. The
   head-to-head (1.70× / 2.79×) replaces it. The old number is kept in
-  the README with that caveat attached, not rescaled
+  the register as superseded, with that caveat attached, not rescaled
   (`gnf4.kernel.comparators-v6-execution-class`, superseded by
   `gnf4.kernel.h2h-unsloth`).
 - **Split-K on the NF4 dot-pad decode GEMV is refuted** (K7: flat at
@@ -2017,8 +2018,10 @@ was wrong.
 - **K33 read (2026-10-07, RTX 5090): the bandwidth-targeted NF4 decode GEMV (`GNF4_GEMV_BW=1`, `prmt32`) runs
   Qwen3-30B-A3B's single-row expert projections at 0.341× the served dot-pad route** over all 48 layers (2.818 →
   0.961 ms; gate_up 0.332, down 0.357), at 0.74 / 0.63 of the copy floor, `prmt32` bitwise the exact tree decode.
-  Granite and OLMoE read 0.22–0.27× their scalar GEMV. LEVER: experts4bit-qlora reads it served next (P116), and the
-  switch stays opt-in until then. `kernel/RESULTS-k33-nf4-decode-gemv-bw.md`; register row
+  Granite and OLMoE read 0.22–0.27× their scalar GEMV. Those figures are with K33's swept per-shape plans
+  (`GNF4_GEMV_BW_PLAN`) and `GNF4_PDL=0`: the shipped default plan read about 0.37× on the Qwen3 pair in the same sweep,
+  and PDL, on by default for these 8-row calls, made Qwen3's down projection 1.17× slower. LEVER: experts4bit-qlora
+  reads it served next (P116), and the switch stays opt-in until then. `kernel/RESULTS-k33-nf4-decode-gemv-bw.md`; register row
   `gnf4.kernel.k33-nf4-decode-gemv-bw.5090.2026-10-07`.
 - **A fixed fraction-of-waterfall is retired as a law** (two 0.77
   readings were a two-host coincidence).
@@ -2228,7 +2231,7 @@ their contract (one token per group, `T` in the hundreds), which keeps
 pure torch and index in int64. The straddling regression is
 `kernel/test_expert_offset_boundary.py`: for each kernel carrier except the
 gathers and the `fp8_kv` appenders (those are covered on CPU only, by the
-interpreter suite below: #386), the experts (or
+interpreter suite below: #386) and the opt-in `_gemv_nf4_bw` (below), the experts (or
 pool rows) whose base offsets sit just below and just above 2^31 are compared
 with the pure-torch reference, every above-boundary case in its own process
 (an illegal access poisons the CUDA context). `kernel/test_offsets_2gib.py`
@@ -2280,7 +2283,11 @@ Two things that make such a test vacuous if missed, both learned by writing one:
   the byte geometry and therefore do not straddle their own boundary** -- the
   0.30.1 note, which counts the wide-load and dot-pad forms among the routes
   its boundary file samples above 2^31, holds for the scalar, split-K and vec
-  routes only. Both routes' own
+  routes only. The opt-in bandwidth-targeted route (`_gemv_nf4_bw`,
+  `GNF4_GEMV_BW=1`) is word-addressed the same way and promotes the expert id
+  to int64 before any stride product, but **no boundary test has an arm for it
+  yet**: it is not observed past its 2^31-word boundary. The wide and dot-pad
+  routes' own
   boundary is covered on a GPU by `kernel/test_offset_boundary_words_gpu.py`:
   a real 16 GiB buffer puts the target expert past 2^31 words with a decoy at
   the wrapped address. Lane B374 observed it on an RTX 5090 on 2026-09-23,
@@ -2311,7 +2318,8 @@ device, interpreter mode — and 0 never refuses). Rules by kernel:
 | fp8 paged decode, packed fp8 (`_fp8_paged_decode_packed_f8`) | `(stages-1) * (2*BT*H_kv*D + BT*H_kv*D/k_groups + BT*H_kv*4)` | `fp8_paged_attn.packed_unsupported`: above the limit, the split fp8 kernel serves the call with one `RuntimeWarning` per geometry; the model reproduces the one measured overflow (148 480 B at D=256, 8 kv heads) and admits every packed geometry the suite runs on a 101 376 B card; the launch keeps its overflow catch for what the model misses |
 | fp8 paged decode, packed f32 | no calibrated model | an overflow at the launch falls back to the split f32 kernel the same way |
 | fp8 paged decode, split (f32 and fp8) | `KTILE * D` per K and V | an overflow at the launch is raised as `UnsupportedShapeError` naming the geometry, Triton's required bytes and the limit (reduce `ktile` or `num_stages`) |
-| MXFP4 M-tile / GEMV, int4-b32 GEMV / M-tile, NF4 decode GEMVs | fixed tiles (`BLOCK_K` 32 or 64, `BLOCK_N` ≤ 128) | no runtime dimension scales the tile; every configuration fits a 64 KB LDS |
+| MXFP4 M-tile / GEMV, int4-b32 GEMV / M-tile, NF4 scalar / wide / dot-pad decode GEMVs | fixed tiles (`BLOCK_K` 32 or 64, `BLOCK_N` ≤ 128) | no runtime dimension scales the tile; every configuration fits a 64 KB LDS |
+| NF4 bandwidth-targeted decode GEMV (`_gemv_nf4_bw`, opt-in) | a `[BLOCK_N, KC/64, 8]` int32 tile per K-step; `BLOCK_N` and `KC` come from the plan (`GNF4_GEMV_BW_PLAN` / `bw_config`; default 16 x 256) | `_bw_check_plan` checks only that they are powers of two: there is no feasibility check before launch, so an oversized caller plan fails at the launch |
 | int4-b32 grouped GEMV (`_gemv_int4_b32_grouped`, K18) | the expert-id histogram, `next_pow2(E + 1)` int32 bins, beside the served GEMV's fixed tile (`int4_b32.GROUPED_MT_DEFAULT` = 4 rows per program) | `gemv_int4_b32_grouped` refuses `E > int4_b32.GROUPED_E_MAX` (4095: a 16 KiB histogram, so every admitted configuration fits a 64 KB LDS) with `UnsupportedShapeError` before the launch; the refusal names `gemv_int4_b32`, which serves any `E` |
 
 `UnsupportedShapeError` is a `ValueError` carrying `kernel`, `shape`,

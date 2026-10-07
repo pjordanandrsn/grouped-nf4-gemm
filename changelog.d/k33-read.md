@@ -4,7 +4,8 @@ Register: `gnf4.kernel.k33-nf4-decode-gemv-bw.5090.2026-10-07`; `kernel/RESULTS-
 - **The reading** (`k33-5090-1`). The run covered every layer at each family's served shape: 8 rows, the top-8 experts,
   one CUDA graph per projection.
   - On Qwen3's pair, `GNF4_GEMV_BW=1` (`prmt32`) takes 0.961 ms against dot-pad's 2.818 (gate_up 0.332, down 0.357),
-    at 0.74 / 0.63 of the copy floor.
+    at 0.74 / 0.63 of the copy floor. This is with K33's swept per-shape plans and `GNF4_PDL=0`; the default plan
+    read about 0.37× on the pair, and PDL (on by default for 8-row calls) made the down projection 1.17× slower.
   - `prmt32` is bitwise the exact tree decode, and every decode meets the tolerance contract.
   - Granite and OLMoE read 0.22–0.27× their scalar GEMV.
 - **The predictions.** Numerics, the faster decode, the plan shape (BLOCK_N 16, split-K 1), the family ratios, the

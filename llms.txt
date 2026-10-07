@@ -8,7 +8,7 @@ Read `docs/STATUS.md` before quoting a position and `docs/claims.json` before qu
 
 ## Start here
 
-- [README](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/README.md): the problem, the mechanism, install, the CPU quickstart, the entry-point table, what is measured and what was retired
+- [README](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/README.md): install, a one-minute GPU example, the entry-point table, what is measured and where it loses
 - [Solutions index](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/SOLUTIONS.md): one page per ordinary problem — symptoms, cause, install, smallest example, verification, limits, evidence
 - [Capabilities (machine-readable)](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/capabilities.json): entry points, layouts, environments, limitations and claim IDs per capability; schema in [capabilities.schema.json](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/capabilities.schema.json)
 - [Status](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/STATUS.md): the current position, including the three limits where the fused path loses

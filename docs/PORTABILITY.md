@@ -15,6 +15,7 @@ this is the pre-port hazard list. Tier language (R3): every non-CUDA row is
 | K4 | **SMEM / LDS ceiling** | BLOCK_K=128 (GROUPS=2) already dies on sm_86 (181 KB) | LDS typically 64 KB (CDNA/RDNA) — the M-tile 128×128 config may not fit | SLM budget differs | tile configs are per-backend; the SMEM-overflow failure mode is expected on tighter-LDS parts. |
 | K5 | **bf16 epilogue / `tl.bfloat16`** | native | native (CDNA/RDNA3+) | native (recent) | low risk; confirm on older RDNA. |
 | K6 | **`_sm_count` device API** | `torch.cuda.get_device_properties().multi_processor_count` | ROCm torch aliases `.cuda` (works); CU count returned | needs `torch.xpu` | **fixed in CI** to be CPU/XPU-safe; `backends/` centralizes detection. |
+| K7 | **inline PTX** (`tl.inline_asm_elementwise`): `_gemv_nf4_bw`'s `prmt32` codebook decode (`prmt` / `lop3`, opt-in `GNF4_GEMV_BW`) and the PDL preamble (`griddepcontrol.wait` / `.launch_dependents`) | `prmt32` on any compiled NVIDIA target; `griddepcontrol` sm_90+ | no PTX | no PTX | fenced in code: `nf4_grouped._bw_decode` takes the exact select tree off NVIDIA CUDA (ROCm, XPU, the interpreter) and refuses a forced `prmt32` there; `int4_b32.pdl_active` is False off NVIDIA CUDA, on ROCm, under the interpreter and below sm_90. A port needs its own exact decode only for speed, never for correctness. |
 
 ## Dependency status (P1.3 — verified 2026-07-15, cited; ranges where fluid)
 

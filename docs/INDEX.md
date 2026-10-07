@@ -8,7 +8,7 @@ of the 2026-08-15 protocols is in
 [`kernel/ATTESTATION-TIMELINE-2026-08-15.md`](../kernel/ATTESTATION-TIMELINE-2026-08-15.md).
 
 Start here: [`STATUS.md`](STATUS.md) → [`claims.json`](claims.json) →
-the README's confirmatory section for how the kernel numbers were made.
+the confirmatory results (`kernel/RESULTS-v*-confirmatory.md`) for how the kernel numbers were made.
 
 ## Current — read these
 

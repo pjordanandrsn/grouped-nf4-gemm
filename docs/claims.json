@@ -71,7 +71,10 @@
    "supersedes": [
     "gnf4.kernel.comparators-v6-execution-class"
    ],
-   "notes": "Forward pass only; the training-axis leg is exploratory and licenses no claim. The model-level, training-axis end-to-end head-to-head is registered in experts4bit-qlora as e4b.train.h2h.unsloth.qwen3.5090.2026-09-05 (2026-09-05, one RTX 5090, Qwen3-30B-A3B: experts4bit-qlora 1.522 s/step vs Unsloth 2.151, ratio 1.413; held-out loss comparable at N=60; at N=200 Unsloth's held-out loss is lower, 0.2713 vs 0.2881). That is a different level and regime, so it does not supersede this kernel-level claim. measured_on is the receipt's publication commit (2026-08-12; the receipt states no run date, and amendment 2 of the protocol was registered 2026-08-12T23:20Z)."
+   "notes": "Forward pass only; the training-axis leg is exploratory and licenses no claim. The model-level, training-axis end-to-end head-to-head is registered in experts4bit-qlora as e4b.train.h2h.unsloth.qwen3.5090.2026-09-05 (2026-09-05, one RTX 5090, Qwen3-30B-A3B: experts4bit-qlora 1.522 s/step vs Unsloth 2.151, ratio 1.413; held-out loss comparable at N=60; at N=200 Unsloth's held-out loss is lower, 0.2713 vs 0.2881). That is a different level and regime, so it does not supersede this kernel-level claim. measured_on is the receipt's publication commit (2026-08-12; the receipt states no run date, and amendment 2 of the protocol was registered 2026-08-12T23:20Z).",
+   "quoted_in": [
+    "README.md#what-is-measured"
+   ]
   },
   {
    "id": "gnf4.kernel.comparators-v6-execution-class",
@@ -123,7 +126,10 @@
    "evidence": [
     "bench/phase1/results/dequant_forward/RESULTS-e2e-training.md"
    ],
-   "notes": "Baseline is e4b's own per-expert loop, not CUDA-graphed; peak VRAM does not improve. Random token ids understate the kernel by ~1.6x (4.50/2.75, 4.75/2.81); benchmark on real text."
+   "notes": "Baseline is e4b's own per-expert loop, not CUDA-graphed; peak VRAM does not improve. Random token ids understate the kernel by ~1.6x (4.50/2.75, 4.75/2.81); benchmark on real text.",
+   "quoted_in": [
+    "README.md#what-is-measured"
+   ]
   },
   {
    "id": "gnf4.kernel.dgrad",
@@ -165,7 +171,6 @@
     }
    ],
    "quoted_in": [
-    "README.md#what-is-measured",
     "docs/STATUS.md#what-it-does-today"
    ],
    "notes": "EVIDENCE: the receipt is experts4bit-qlora's bench/dgrad-gate/ (RESULTS-dgrad-gate.md's 48-layer table and gate_48L_qwen30b_a6000.json): cross-repository entries, resolved when scripts/check_claims_register.py is given --sibling. This repository's 0.7.1 release entry records the same gate run from the published wheels. Added 2026-10-05 as the rented speed headline in place of gnf4.kernel.dgrad's A2000 step time (maintainer decision 1 on #475; docs/audits/a2000-timing-2026-10-05.md section 2). measured_on is the receipt's own date. One draw per arm on one pod. The same gate's 16-layer OLMoE run (a rented RTX A5000) read 1.99x with dgrad and 1.54x without, and its 20-step real-data trajectory gate on the A6000 read 2.87x with dgrad (traj_20step_alpaca_a6000.json)."
@@ -189,7 +194,6 @@
    ],
    "quoted_in": [
     "docs/STATUS.md",
-    "README.md",
     "docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md",
     "CHANGELOG.md#0301--2026-09-05"
    ],
@@ -597,7 +601,10 @@
     "docs/mxfp4/PREREG-mxfp4-train.md",
     "docs/provenance/gptoss20b_expert_bytes.md"
    ],
-   "notes": "measured_on is the receipt's first commit (2026-07-20); the training receipts carry wall-clock offsets, not a calendar date, and the pre-registration records the operator GO on 2026-07-19."
+   "notes": "measured_on is the receipt's first commit (2026-07-20); the training receipts carry wall-clock offsets, not a calendar date, and the pre-registration records the operator GO on 2026-07-19.",
+   "quoted_in": [
+    "README.md#what-is-measured"
+   ]
   },
   {
    "id": "gnf4.k3.oracle-exact",
@@ -1026,7 +1033,6 @@
     "kernel/receipts-k20/5090/tests_compiled.log"
    ],
    "quoted_in": [
-    "README.md",
     "docs/STATUS.md"
    ],
    "notes": "Lane k20-5090-1 cost $0.0615 (estimate $0.5625); receipts in adertha-receipts. Mechanism not profiled: the plan grid does not separate load size, loop overhead and register footprint; every top-ten plan has KC 256. Two plans (BLOCK_N 256 x KC 256, 4 stages) did not compile (shared memory)."
