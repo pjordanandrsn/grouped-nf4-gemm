@@ -1,6 +1,6 @@
 # K33 — does the bandwidth-targeted NF4 decode GEMV (`GNF4_GEMV_BW=1`) run the single-row expert projections near the streaming ceiling, faster than the served route? Every layer of Qwen3-30B-A3B, Granite-3.1-3b-a800m and OLMoE-1B-7B in CUDA graphs, on one RTX 5090 (registered 2026-10-07, before any 5090 run)
 
-Lane number claimed by `prereg/k33` (pushed PREREG_CLAIM_TIME). Issue: experts4bit-qlora#1313 (single-stream decode on
+Lane number claimed by `prereg/k33` (pushed 2026-10-07T17:42:12Z). Issue: experts4bit-qlora#1313 (single-stream decode on
 the default NF4 server). The kernel and this bench: #500.
 
 ## Why now
