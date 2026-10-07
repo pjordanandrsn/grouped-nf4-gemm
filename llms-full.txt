@@ -38,7 +38,7 @@ macOS and Windows are not exercised by CI. ROCm and XPU are port targets.
 
 **New in 0.43.0 (opt-in):** `GNF4_GEMV_BW=1`, a bandwidth-targeted NF4 single-row decode GEMV. On an RTX 5090 it runs
 Qwen3-30B-A3B's expert gate_up + down at 0.341× the served route, bitwise the exact decode (K33,
-[`kernel/RESULTS-k33-nf4-decode-gemv-bw.md`](kernel/RESULTS-k33-nf4-decode-gemv-bw.md)). It stays opt-in until
+[`kernel/RESULTS-k33-nf4-decode-gemv-bw.md`](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/kernel/RESULTS-k33-nf4-decode-gemv-bw.md)). It stays opt-in until
 experts4bit-qlora's served read (P116).
 
 **Since 0.42.0:** bucketed padding of the LoRA update is on by default (`auto`) for calls with at least 16,384
