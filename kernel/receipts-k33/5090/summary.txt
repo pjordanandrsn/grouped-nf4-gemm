@@ -1,0 +1,16 @@
+KNOBS gnf4=5a60c37dbd0756040052b603c9b0ee680f06d444 gpu_class=5090 min_disk_gb=20
+CUDA_PROBE ok
+gnf4 0.42.0 @5a60c37dbd0756040052b603c9b0ee680f06d444
+torch 2.8.0+cu128
+triton 3.4.0
+cc (12, 0)
+sm_count 170
+k33_bench self-test OK (14 cases)
+premise GNF4_GEMV_BW contract compiled rc=0: 27 passed in 15.02s
+K33 qwen3/gate_up plan (16, 1024, 4, 1) median ms {"incumbent": 1.8261, "incumbent2": 1.8259, "scalar": 1.7618, "bw_tree": 0.7886, "bw_prmt32": 0.6068, "bw_pdl": 0.5949, "int4": 0.6579} floor 0.4486 numerics {"bitwise": true, "err": {"bw_tree": 0.0024803976994007826, "bw_prmt32": 0.0024803976994007826, "scalar": 0.0024803976994007826}, "tolerance": true}
+K33 qwen3/down plan (16, 256, 4, 1) median ms {"incumbent": 0.9921, "incumbent2": 0.9925, "scalar": 1.9229, "bw_tree": 0.3719, "bw_prmt32": 0.354, "bw_pdl": 0.4154, "int4": 0.3808} floor 0.2243 numerics {"bitwise": true, "err": {"bw_tree": 0.0027944138273596764, "bw_prmt32": 0.0027944138273596764, "scalar": 0.0027944138273596764}, "tolerance": true}
+K33 granite/gate_up plan (16, 512, 8, 1) median ms {"incumbent": 1.0992, "incumbent2": 1.0995, "scalar": 1.0994, "bw_tree": 0.2848, "bw_prmt32": 0.2452, "bw_pdl": 0.2517, "int4": 0.274} floor 0.1495 numerics {"bitwise": true, "err": {"bw_tree": 0.002509558107703924, "bw_prmt32": 0.002509558107703924, "scalar": 0.002509558107703924}, "tolerance": true}
+K33 granite/down plan (16, 256, 8, 1) median ms {"incumbent": 0.5443, "incumbent2": 0.5442, "scalar": 0.5442, "bw_tree": 0.1546, "bw_prmt32": 0.1401, "bw_pdl": 0.1384, "int4": 0.1707} floor 0.0748 numerics {"bitwise": true, "err": {"bw_tree": 0.0024416318628937006, "bw_prmt32": 0.0024416318628937006, "scalar": 0.0024416318628937006}, "tolerance": true}
+K33 olmoe/gate_up plan (16, 1024, 4, 1) median ms {"incumbent": 1.0807, "incumbent2": 1.0807, "scalar": 1.0809, "bw_tree": 0.3249, "bw_prmt32": 0.2436, "bw_pdl": 0.2417, "int4": 0.2678} floor 0.1994 numerics {"bitwise": true, "err": {"bw_tree": 0.0025351971853524446, "bw_prmt32": 0.0025351971853524446, "scalar": 0.0025351971853524446}, "tolerance": true}
+K33 olmoe/down plan (16, 256, 4, 1) median ms {"incumbent": 0.5373, "incumbent2": 0.5369, "scalar": 0.5372, "bw_tree": 0.1562, "bw_prmt32": 0.1473, "bw_pdl": 0.1724, "int4": 0.1519} floor 0.0997 numerics {"bitwise": true, "err": {"bw_tree": 0.003249518573284149, "bw_prmt32": 0.003249518573284149, "scalar": 0.003249518573284149}, "tolerance": true}
+K33_VERDICT LEVER: bw=bw_prmt32: gate_up x0.332, down x0.357, pair x0.341 of the incumbent; floor/bw 0.74 / 0.63; instrument 0.9999 / 1.0004 -- next: the served lane (experts4bit-qlora P116)

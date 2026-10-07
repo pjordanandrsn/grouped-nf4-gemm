@@ -351,6 +351,12 @@ was wrong.
   1.0404× as fast with one request and 1.0000× with 16; uncapped, 1.0401× and 0.9787×. Register row
   `e4b.serve.p113.gnf4-pdl-capped.qwen3-int4.5090.2026-10-04` (experts4bit-qlora). `GNF4_PDL=0` turns it off,
   `GNF4_PDL_MAX_ROWS=0` removes the cap.
+- **K33 read (2026-10-07, RTX 5090): the bandwidth-targeted NF4 decode GEMV (`GNF4_GEMV_BW=1`, `prmt32`) runs
+  Qwen3-30B-A3B's single-row expert projections at 0.341× the served dot-pad route** over all 48 layers (2.818 →
+  0.961 ms; gate_up 0.332, down 0.357), at 0.74 / 0.63 of the copy floor, `prmt32` bitwise the exact tree decode.
+  Granite and OLMoE read 0.22–0.27× their scalar GEMV. LEVER: experts4bit-qlora reads it served next (P116), and the
+  switch stays opt-in until then. `kernel/RESULTS-k33-nf4-decode-gemv-bw.md`; register row
+  `gnf4.kernel.k33-nf4-decode-gemv-bw.5090.2026-10-07`.
 - **A fixed fraction-of-waterfall is retired as a law** (two 0.77
   readings were a two-host coincidence).
 - **The cold-engine "free floor" premise is refuted** on its target box:

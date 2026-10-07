@@ -1147,6 +1147,29 @@
     "docs/STATUS.md"
    ],
    "notes": "Lane k32-a4000-1 cost $0.016, teardown proven; receipt in adertha-receipts (aafc263b). Gates before timing: 138 compiled GEMV/reduce/plan tests, every swept sk within the fp32 reorder class of sk = 1, the rule self-test 8/8, the installed _plan cross-checked on all 48 cells at 48 SMs. Registered consequence: none -- the lane could not change the default (K30 OFF, KEEP needs both; #482 plans N-only on every part). Registered expectation OFF held, but for a different reason than predicted: the large R = 64-128 cells that decided the L4 are wins here, and the losses are at R = 16. Post hoc and not claimed: by R the ratio is 1.0272 / 0.9680 / 0.9535 / 0.9144 at R = 16 / 32 / 64 / 128, the opposite pattern to the L4's (gnf4.kernel.k30-splitk-r-term.l4.2026-10-05)."
+  },
+  {
+   "id": "gnf4.kernel.k33-nf4-decode-gemv-bw.5090.2026-10-07",
+   "area": "kernel",
+   "claim": "K33 (pre-registered 2026-10-07, #501): on the RTX 5090, the bandwidth-targeted NF4 single-row decode GEMV (GNF4_GEMV_BW=1, _gemv_nf4_bw with the prmt32 byte-permute codebook decode, #500) runs Qwen3-30B-A3B's expert projections over all 48 layers (8 rows, top-8 experts, one CUDA graph per projection) at 0.341x the served route on the pair (2.8182 -> 0.9607 ms; gate_up 0.332, down 0.357 of dot-pad), at 0.74 / 0.63 of the measured copy floor, with prmt32 bitwise the exact select-tree decode and the tolerance contract held on every projection; LEVER by the registered rule (bars: <= 0.77 per projection, <= 0.667 on the pair, floor/bw >= 0.45). Granite-3.1-3b-a800m and OLMoE-1B-7B read 0.22-0.27x their scalar GEMV. Kernel level only; not a served speed.",
+   "value": 0.341,
+   "unit": "bw_prmt32 / incumbent (dot-pad) on Qwen3-30B-A3B's gate_up + down pair, medians of 200 CUDA-graph replays over 48 layers",
+   "status": "measured",
+   "hardware": "RTX 5090 (sm_120, 170 SMs, driver 595.91.07, 600 W), torch 2.8.0+cu128 / triton 3.4.0, rented Vast verified host (instance 54693772, machine 151831, AMD Ryzen Threadripper PRO 7965WX)",
+   "conditions": "grouped-nf4-gemm 5a60c37 (0.42.0 + #500 + #501), runner experts4bit-qlora 598c0013 (bench/k33/); 16 synthetic NF4 experts per layer (stores beyond L2), 8 activation rows; plans selected on 40 rounds then timed afresh over 200 rounds, order reversed each round; premise kernel/test_nf4_gemv_bw.py compiled on the card, 27 passed; copy floor 1,515 GB/s",
+   "measured_on": "2026-10-07",
+   "evidence": [
+    "kernel/RESULTS-k33-nf4-decode-gemv-bw.md",
+    "kernel/PREREG-k33-nf4-decode-gemv-bw.md",
+    "kernel/k33_bench.py",
+    "kernel/receipts-k33/5090/k33.json",
+    "kernel/receipts-k33/5090/summary.txt",
+    "kernel/receipts-k33/5090/SHA256SUMS"
+   ],
+   "quoted_in": [
+    "docs/STATUS.md"
+   ],
+   "notes": "Lane k33-5090-1 cost $0.037, teardown proven; receipt in adertha-receipts (ffe99352). Predictions held for numerics, prmt32 as the faster decode, the plan shape (BLOCK_N 16, split-K 1), Granite/OLMoE <= 0.50, the instrument (0.9999 / 1.0004) and the verdict; missed toward faster for the Qwen3 per-launch times and ratios (Q2, Q3); missed for the int4-b32 comparator (int4 / bw 1.03-1.22, predicted 0.75-1.0) and PDL (1.17x slower on Qwen3's and OLMoE's down). Registered consequence: GNF4_GEMV_BW stays opt-in until experts4bit-qlora's served lane P116 reads it."
   }
  ]
 }
