@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "grouped-nf4-gemm"
 version = "0.42.0"
-description = "Triton kernels for 4-bit MoE inference: grouped NF4/MXFP4 GEMM, INT4 GEMV, FP8 paged attention, and CPU/NVMe expert streaming."
+description = "4-bit GPU kernels that compute directly on packed Mixture-of-Experts weights, for training and inference."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
