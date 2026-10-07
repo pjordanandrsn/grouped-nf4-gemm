@@ -2014,6 +2014,12 @@ was wrong.
   1.0404× as fast with one request and 1.0000× with 16; uncapped, 1.0401× and 0.9787×. Register row
   `e4b.serve.p113.gnf4-pdl-capped.qwen3-int4.5090.2026-10-04` (experts4bit-qlora). `GNF4_PDL=0` turns it off,
   `GNF4_PDL_MAX_ROWS=0` removes the cap.
+- **K33 read (2026-10-07, RTX 5090): the bandwidth-targeted NF4 decode GEMV (`GNF4_GEMV_BW=1`, `prmt32`) runs
+  Qwen3-30B-A3B's single-row expert projections at 0.341× the served dot-pad route** over all 48 layers (2.818 →
+  0.961 ms; gate_up 0.332, down 0.357), at 0.74 / 0.63 of the copy floor, `prmt32` bitwise the exact tree decode.
+  Granite and OLMoE read 0.22–0.27× their scalar GEMV. LEVER: experts4bit-qlora reads it served next (P116), and the
+  switch stays opt-in until then. `kernel/RESULTS-k33-nf4-decode-gemv-bw.md`; register row
+  `gnf4.kernel.k33-nf4-decode-gemv-bw.5090.2026-10-07`.
 - **A fixed fraction-of-waterfall is retired as a law** (two 0.77
   readings were a two-host coincidence).
 - **The cold-engine "free floor" premise is refuted** on its target box:
@@ -2682,6 +2688,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - gnf4.kernel.k29-pinned-charge-cgroup-v2.5090.2026-10-04 [measured]: K29 (pre-registered 2026-10-04, #458): on a rented RTX 5090 container under cgroup v2, a pinned host request (torch.empty(N, pin_memory=True)) is charged its next power of two. Over 18 rows (9 sizes, 340 MB to 4 GiB, x2), charged / pow2ceil(N) = 1.0048-1.0103 (median 1.0054), and a pageable byte costs 1.0021 (R2 1.0). CONFIRMED by the registered rule ([0.97, 1.06]): the power-of-two pinned-tier model (pinned_request_cost / capacity_for_bytes, #457) holds on v2 as on v1 (r 1.0043-1.005, kernel/receipts-71/).
 - gnf4.kernel.k30-splitk-r-term.l4.2026-10-05 [measured]: K30 (pre-registered 2026-10-05, #478, Amendments 1-2): on one rented NVIDIA L4 (58 SMs), int4_b32._plan's split-K R term does not earn its default -- over the 24 cells at R >= 16 of the 48-cell sk_sweep.py grid (qwen3_moe / granitemoe / olmoe gate_up + down, R = 16..128, CUDA-graph replay, the served two-launch path with reduce_partials at every sk), the R-aware pick's summed time is 1.0101x the N-only pick's (pass 1 1.0100, pass 2 1.0101) and its worst cell 1.1781x (qwen3_moe gate_up at R = 128, sk 1 against sk 16), so the registered rule (KEEP iff <= 0.97 and <= 1.02) reads OFF. It wins 20 of the 24 cells and loses the three largest gate_up cells, where it collapses the split to sk 1. Kernel level only; the term is off e4b's default server path since P88.
 - gnf4.kernel.k32-splitk-r-term.a4000.2026-10-05 [measured]: K32 (pre-registered 2026-10-05, #484): on one rented RTX A4000 (48 SMs, sm_86), K30's instrument and rule read int4_b32._plan's split-K R term OFF by its worst cell -- over the 24 cells at R >= 16 of the 48-cell sk_sweep.py grid (the served two-launch path, CUDA-graph replay, two passes) the R-aware pick's summed time is 0.9396x the N-only pick's (pass 1 0.9393, pass 2 0.9399), inside KEEP's S <= 0.97, but its worst cell is 1.0965x (olmoe down at R = 16), outside KEEP's W <= 1.02. It wins 18 of 24 cells; five of its six losses are at R = 16. With K30's L4 OFF, the R term's OFF stands on both <=64-SM architectures read (sm_89 and sm_86). Kernel level only.
+- gnf4.kernel.k33-nf4-decode-gemv-bw.5090.2026-10-07 [measured]: K33 (pre-registered 2026-10-07, #501): on the RTX 5090, the bandwidth-targeted NF4 single-row decode GEMV (GNF4_GEMV_BW=1, _gemv_nf4_bw with the prmt32 byte-permute codebook decode, #500) runs Qwen3-30B-A3B's expert projections over all 48 layers (8 rows, top-8 experts, one CUDA graph per projection) at 0.341x the served route on the pair (2.8182 -> 0.9607 ms; gate_up 0.332, down 0.357 of dot-pad), at 0.74 / 0.63 of the measured copy floor, with prmt32 bitwise the exact select-tree decode and the tolerance contract held on every projection; LEVER by the registered rule (bars: <= 0.77 per projection, <= 0.667 on the pair, floor/bw >= 0.45). Granite-3.1-3b-a800m and OLMoE-1B-7B read 0.22-0.27x their scalar GEMV. Kernel level only; not a served speed.
 
 Open items (no evidence either way):
 
@@ -2692,4 +2699,4 @@ Projections (arithmetic, not runs):
 
 - gnf4.projection.multiarch [projected]: PROJECTED (stamped pre-silicon): the pure-waterfall gen5 row is falsified; the revised gen4 band 2.4-3.0 tok/s is confirmed (L40S 2.60-2.61); the revised gen5 band 4.0-5.0 missed narrowly (H100 PCIe 3.924); unified-memory rows are ceilings only (17-22 tok/s on 128 GB boxes). NF4-vs-bf16 is a 3.56x byte reduction, not 4x.
 
-(48 active claims listed, 2 open, 1 projected; retired and superseded claims are omitted on purpose.)
+(49 active claims listed, 2 open, 1 projected; retired and superseded claims are omitted on purpose.)
