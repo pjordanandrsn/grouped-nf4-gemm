@@ -44,7 +44,7 @@ _PAD_BYTES_LIMIT = 2 * 2 ** 30   # `auto` pads unless the padded block would exc
 # well as, `padded`); each such call also writes `LORA_PAD_WASTE`'s `last_rows_single` (the one block's `G * widest`),
 # `last_rows_bucketed` (the buckets' total padded rows) and `last_buckets`. Nothing else writes those three keys.
 LORA_PATH_STATS = {"loop": 0, "padded": 0, "grouped_mm": 0, "padded_bucketed": 0}
-#: Bucketed calls that took the compact node (``NF4_QLORA_COMPACT_BUCKETS=1``, :class:`_CompactBucketedDelta`), a subset of
+#: Bucketed calls that took the compact node (the default; ``NF4_QLORA_COMPACT_BUCKETS=0`` off, :class:`_CompactBucketedDelta`), a subset of
 #: ``LORA_PATH_STATS["padded_bucketed"]``.
 COMPACT_BUCKETS_STATS = {"calls": 0}
 # Which backward served each frozen-GEMM dgrad: the single-launch kernel, the grouped_mm route, the dense route, or the
@@ -666,7 +666,7 @@ def _lora_delta_bucketed(a_cat, lora_A, lora_B, eid, flat, buckets, unique, scal
     padded rows zero either way), but the ``bmm``s run at other shapes, so a BLAS that picks its kernel, or splits a
     reduction, by shape can round differently. Equal to rounding, not promised bit for bit.
     """
-    if _compact_buckets_enabled() and not any(len(b) > 2 for b in buckets):   # NF4_QLORA_COMPACT_BUCKETS=1 (not the ladder's plans)
+    if _compact_buckets_enabled() and not any(len(b) > 2 for b in buckets):   # the compact node (default; =0 off; not the ladder's plans)
         COMPACT_BUCKETS_STATS["calls"] += 1
         return _scaled(_CompactBucketedDelta.apply(a_cat, lora_A, lora_B, eid, flat, tuple(buckets), unique), scaling)
     if unique:
@@ -706,10 +706,13 @@ def _lora_delta_bucketed_ladder(a_cat, A, B, flat, buckets, scaling):
 
 
 def _compact_buckets_enabled() -> bool:
-    """Off unless ``NF4_QLORA_COMPACT_BUCKETS=1``: the bucketed delta through :class:`_CompactBucketedDelta` (the same bytes,
-    forward and gradients; a fraction of the memory held between a layer's forward and its backward). Independent of
-    ``NF4_QLORA_COMPACT_DELTA``, which governs the single block only, so a bucketed A/B never moves the single-block path."""
-    return os.environ.get("NF4_QLORA_COMPACT_BUCKETS", "0").strip() == "1"
+    """On unless ``NF4_QLORA_COMPACT_BUCKETS=0``: the bucketed delta through :class:`_CompactBucketedDelta` (the same bytes,
+    forward and gradients; a fraction of the memory held between a layer's forward and its backward). The default since
+    experts4bit-qlora TC1 amendment 66 (Qwen3-30B-A3B, packed 4,096-token rows, one RTX 5090, torch 2.12): the matched arm's
+    training-phase peak fell 0.654 GB and both arms stepped faster (0.972 matched, 0.977 shipped) with less device time per step
+    (0.973 / 0.978), held-out unchanged. ``=0`` restores the autograd body exactly. Independent of ``NF4_QLORA_COMPACT_DELTA``,
+    which governs the single block only; the single block and the ladder's plans never take this node."""
+    return os.environ.get("NF4_QLORA_COMPACT_BUCKETS", "").strip() != "0"
 
 
 class _CompactBucketedDelta(torch.autograd.Function):

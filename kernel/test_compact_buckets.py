@@ -1,4 +1,5 @@
-"""NF4_QLORA_COMPACT_BUCKETS=1: the bucketed lean padded delta as one autograd node (``_CompactBucketedDelta``).
+"""NF4_QLORA_COMPACT_BUCKETS (the default since experts4bit-qlora TC1 amendment 66; ``0`` off): the bucketed lean padded delta as one
+autograd node (``_CompactBucketedDelta``).
 
 The bar is ``torch.equal`` against the bucketed autograd body (the flag off), for the output and every gradient: the node
 issues the same forward ``bmm``s per bucket (into one preallocated output) and, in backward, the same calls ``BmmBackward0``,
@@ -102,3 +103,26 @@ def test_held_memory_falls_and_backward_peak_does_not_rise(monkeypatch, ad_dtype
           f"{peak['1'] / 2**20:.1f} MiB ({ad_dtype})")
     assert held["1"] < held["0"] / 2, held
     assert peak["1"] <= peak["0"], peak
+
+
+@pytest.mark.parametrize("dev", DEVICES)
+def test_unset_is_on_and_zero_is_the_autograd_body(monkeypatch, dev):
+    """The default: with the variable unset the node runs; ``0`` restores the autograd body, the same bytes."""
+    sizes, eids = [40, 3, 0, 9, 3, 17, 1], [2, 5, 0, 2, 5, 3, 2]
+    inputs = _inputs(dev, sizes, eids, torch.bfloat16, torch.float32)
+    monkeypatch.setenv("NF4_QLORA_LORA_PATH", "padded")
+    monkeypatch.setenv("NF4_QLORA_PAD_BUCKETS", "1")
+    res, calls = {}, {}
+    for flag in (None, "0"):
+        if flag is None:
+            monkeypatch.delenv("NF4_QLORA_COMPACT_BUCKETS", raising=False)
+        else:
+            monkeypatch.setenv("NF4_QLORA_COMPACT_BUCKETS", flag)
+        _fresh()
+        n0 = nf4_qlora.COMPACT_BUCKETS_STATS["calls"]
+        res[flag] = _run(lora_delta_grouped, inputs, sizes, eids, 1.0)
+        calls[flag] = nf4_qlora.COMPACT_BUCKETS_STATS["calls"] - n0
+    assert calls == {None: 1, "0": 0}, calls
+    for name, r, x in zip(("out", "grad a", "grad A", "grad B"), res["0"], res[None]):
+        assert torch.equal(r, x), name
+
