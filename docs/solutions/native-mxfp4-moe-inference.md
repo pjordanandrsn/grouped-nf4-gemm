@@ -90,7 +90,7 @@ The CPU block completes: the packed shapes are the gpt-oss tensor shapes and the
 ## Limitations
 
 - CUDA + Triton only for the kernels; no ROCm or XPU ([`PORTABILITY.md`](../PORTABILITY.md)). `mxfp4_grouped` binds triton through `_triton_shim`, so the pure-torch surface (`mxfp4_pack_ref`, the `mxfp4_loader` hashing, the relocation arena bake/verify) imports and runs without triton; the Triton kernels need a CUDA GPU; macOS and Windows are not exercised by CI.
-- Do not quantize-bake a checkpoint that is already MXFP4 ([README](../../README.md)); relocation keeps the bytes, re-quantizing to NF4 costs a decode per read and breaks provenance.
+- Do not quantize-bake a checkpoint that is already MXFP4: a uniform int4 grid cannot represent e2m1 levels; relocation keeps the bytes, re-quantizing to NF4 costs a decode per read and breaks provenance.
 - The e8m0 `0xFF` byte decodes as transformers' oracle does (ldexp, no NaN reservation); real checkpoints do not contain it.
 - The reference decode agrees with two independent implementations (transformers' gpt-oss path; compressed-tensors for K3). Agreement rules out a convention mismatch, not a shared misreading of the OCP spec ([`K3-PROVENANCE-CHAIN.md`](../K3-PROVENANCE-CHAIN.md)).
 - `gemv_mxfp4_b32` has a correctness gate in the tree but no entry in [`claims.json`](../claims.json): a capability without a published measurement. The MXFP4 GEMM has no separate speed census; the NF4 page's decode-speed limits apply structurally.

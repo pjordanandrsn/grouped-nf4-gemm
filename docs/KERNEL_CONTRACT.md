@@ -69,7 +69,7 @@ their contract (one token per group, `T` in the hundreds), which keeps
 pure torch and index in int64. The straddling regression is
 `kernel/test_expert_offset_boundary.py`: for each kernel carrier except the
 gathers and the `fp8_kv` appenders (those are covered on CPU only, by the
-interpreter suite below: #386), the experts (or
+interpreter suite below: #386) and the opt-in `_gemv_nf4_bw` (below), the experts (or
 pool rows) whose base offsets sit just below and just above 2^31 are compared
 with the pure-torch reference, every above-boundary case in its own process
 (an illegal access poisons the CUDA context). `kernel/test_offsets_2gib.py`
@@ -121,7 +121,11 @@ Two things that make such a test vacuous if missed, both learned by writing one:
   the byte geometry and therefore do not straddle their own boundary** -- the
   0.30.1 note, which counts the wide-load and dot-pad forms among the routes
   its boundary file samples above 2^31, holds for the scalar, split-K and vec
-  routes only. Both routes' own
+  routes only. The opt-in bandwidth-targeted route (`_gemv_nf4_bw`,
+  `GNF4_GEMV_BW=1`) is word-addressed the same way and promotes the expert id
+  to int64 before any stride product, but **no boundary test has an arm for it
+  yet**: it is not observed past its 2^31-word boundary. The wide and dot-pad
+  routes' own
   boundary is covered on a GPU by `kernel/test_offset_boundary_words_gpu.py`:
   a real 16 GiB buffer puts the target expert past 2^31 words with a decoy at
   the wrapped address. Lane B374 observed it on an RTX 5090 on 2026-09-23,
@@ -152,7 +156,8 @@ device, interpreter mode — and 0 never refuses). Rules by kernel:
 | fp8 paged decode, packed fp8 (`_fp8_paged_decode_packed_f8`) | `(stages-1) * (2*BT*H_kv*D + BT*H_kv*D/k_groups + BT*H_kv*4)` | `fp8_paged_attn.packed_unsupported`: above the limit, the split fp8 kernel serves the call with one `RuntimeWarning` per geometry; the model reproduces the one measured overflow (148 480 B at D=256, 8 kv heads) and admits every packed geometry the suite runs on a 101 376 B card; the launch keeps its overflow catch for what the model misses |
 | fp8 paged decode, packed f32 | no calibrated model | an overflow at the launch falls back to the split f32 kernel the same way |
 | fp8 paged decode, split (f32 and fp8) | `KTILE * D` per K and V | an overflow at the launch is raised as `UnsupportedShapeError` naming the geometry, Triton's required bytes and the limit (reduce `ktile` or `num_stages`) |
-| MXFP4 M-tile / GEMV, int4-b32 GEMV / M-tile, NF4 decode GEMVs | fixed tiles (`BLOCK_K` 32 or 64, `BLOCK_N` ≤ 128) | no runtime dimension scales the tile; every configuration fits a 64 KB LDS |
+| MXFP4 M-tile / GEMV, int4-b32 GEMV / M-tile, NF4 scalar / wide / dot-pad decode GEMVs | fixed tiles (`BLOCK_K` 32 or 64, `BLOCK_N` ≤ 128) | no runtime dimension scales the tile; every configuration fits a 64 KB LDS |
+| NF4 bandwidth-targeted decode GEMV (`_gemv_nf4_bw`, opt-in) | a `[BLOCK_N, KC/64, 8]` int32 tile per K-step; `BLOCK_N` and `KC` come from the plan (`GNF4_GEMV_BW_PLAN` / `bw_config`; default 16 x 256) | `_bw_check_plan` checks only that they are powers of two: there is no feasibility check before launch, so an oversized caller plan fails at the launch |
 | int4-b32 grouped GEMV (`_gemv_int4_b32_grouped`, K18) | the expert-id histogram, `next_pow2(E + 1)` int32 bins, beside the served GEMV's fixed tile (`int4_b32.GROUPED_MT_DEFAULT` = 4 rows per program) | `gemv_int4_b32_grouped` refuses `E > int4_b32.GROUPED_E_MAX` (4095: a 16 KiB histogram, so every admitted configuration fits a 64 KB LDS) with `UnsupportedShapeError` before the launch; the refusal names `gemv_int4_b32`, which serves any `E` |
 
 `UnsupportedShapeError` is a `ValueError` carrying `kernel`, `shape`,

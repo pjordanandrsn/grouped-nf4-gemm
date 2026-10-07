@@ -182,12 +182,13 @@ _ALLOW_UNVERIFIED_V5 = os.environ.get("GNF4_ALLOW_UNVERIFIED_V5") == "1"
 # K33 (kernel/PREREG-k33-nf4-decode-gemv-bw.md): the bandwidth-targeted NF4 decode GEMV, opt-in.
 # ---------------------------------------------------------------------------
 
-#: Where ``GNF4_GEMV_BW=auto`` engages: exact (N, K) shapes on >= 160-SM parts. Empty until lane K33 reads, so ``auto``
-#: changes nothing today; the read fills it under its registered consequence.
+#: Where ``GNF4_GEMV_BW=auto`` engages: exact (N, K) shapes on >= 160-SM parts. Empty until experts4bit-qlora's served
+#: lane P116 reads the route (K33 read it at kernel level), so ``auto`` changes nothing today.
 _BW_SHAPES: frozenset = frozenset()
 
 #: (BLOCK_N, KC, num_warps, split_k): 16 output rows x 256 columns (4 absmax blocks, 32 words) per program and K-step,
-#: 4 warps, no split. A registered GUESS until K33's plan sweep (``GNF4_GEMV_BW_PLAN`` overrides it per shape).
+#: 4 warps, no split. K33's sweep selected (16, 1024, 4, 1) for Qwen3's gate_up and this plan for its down
+#: projection; ``GNF4_GEMV_BW_PLAN`` overrides it per shape.
 _BW_PLAN_DEFAULT = (16, 256, 4, 1)
 
 _BW_DECODES = {"tree": 0, "prmt32": 2}
@@ -198,7 +199,7 @@ def _bw() -> str:
 
     * ``0`` (the default; also unset or empty): off -- the dot-pad / scalar routes as before;
     * ``1``: every single-row decode call, on every device (the interpreter included);
-    * ``auto``: only at ``_BW_SHAPES`` on >= 160-SM parts -- empty until lane K33 reads.
+    * ``auto``: only at ``_BW_SHAPES`` on >= 160-SM parts -- empty until the served lane P116 reads it.
 
     Anything else is refused rather than read as off (the ``GNF4_GEMV_DOTPAD`` rule)."""
     v = (os.environ.get("GNF4_GEMV_BW") or "").strip().lower() or "0"
@@ -1769,7 +1770,9 @@ def gemm_4bit_grouped(
     per-group token counts (all > 0), ``expert_ids [G]`` int32/list. Returns
     ``[T, N]`` bf16 in the same group order. ``decode_config`` overrides the
     decode path's (BLOCK_N, num_warps); ``split_k`` overrides the decode
-    split-K factor (None = plan, 1 = off); ``prefill_config`` overrides the
+    split-K factor (None = plan, 1 = off); ``bw_config`` overrides the ``GNF4_GEMV_BW`` route's plan
+    (BLOCK_N, KC, num_warps, split_k), and when that route engages ``decode_config`` and ``split_k`` are not
+    used; ``prefill_config`` overrides the
     M-tile path's (BLOCK_N, num_warps, num_stages) — benchmark/ablation
     support only. ``prefill_variant``: None = auto (register-LUT mainloop
     when triton has ``tl.gather``, else the v5 loop), 0 = force v5 loop,

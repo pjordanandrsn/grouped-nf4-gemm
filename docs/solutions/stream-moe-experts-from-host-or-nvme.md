@@ -115,7 +115,7 @@ The CPU block bakes, verifies the full chain (source range hash, manifest, arena
 - Expert prefetch is closed, negative, over four registered arcs; the recommended copy path is the GPU-side gather, not speculation (claim `gnf4.flagship.prefetch-closed-negative`).
 - Per-token time from host RAM is additive and per box, `t ≈ c_box + bytes/link`; a fixed fraction-of-waterfall is not the law ([`STATUS.md`](../STATUS.md)).
 - `Mxfp4NvmeResidency` is not CUDA-graph capturable: a miss is a host-side disk read.
-- Do not quantize-bake a checkpoint that already ships MXFP4 ([README](../../README.md)); relocate it.
+- Do not quantize-bake a checkpoint that already ships MXFP4 ([why](native-mxfp4-moe-inference.md)); relocate it.
 - The cold-engine premise (bitsandbytes' CPU dequant as a free decode arm) is refuted on a box without AVX-512 (claim `gnf4.cold-engine.phase0-premise-refuted`).
 - Arena staging (#60) is open and listed in [`STATUS.md`](../STATUS.md). The pinned-row factor (#71) is closed: since 0.38.0, `capacity_for_bytes` models the power-of-two rounding, measured on cgroup v1 and v2 (`gnf4.kernel.k29-pinned-charge-cgroup-v2.5090.2026-10-04`). No ROCm or XPU.
 

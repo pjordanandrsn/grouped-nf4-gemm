@@ -259,7 +259,7 @@ was wrong.
 
 - **`sm_120` is no longer "parked".** The README's roadmap once said
   three cloud provisioning failures parked Blackwell work (that line is
-  gone; the README's *What was retired* section records it). That was true
+  gone; this page and the retired claim `gnf4.retired.sm120-parked` record it). That was true
   in July; since 0.15.0 the RTX 5090 has been the *primary* serving
   target — the M=1 config retune, the sm_120 census, the decode anchor,
   the M3 defaults, the int4 lanes and the paged attention were all
@@ -269,7 +269,7 @@ was wrong.
   the proxy it did run is 1.33× slower than the real thing — so the
   comparison was against a weaker opponent than the label implied. The
   head-to-head (1.70× / 2.79×) replaces it. The old number is kept in
-  the README with that caveat attached, not rescaled
+  the register as superseded, with that caveat attached, not rescaled
   (`gnf4.kernel.comparators-v6-execution-class`, superseded by
   `gnf4.kernel.h2h-unsloth`).
 - **Split-K on the NF4 dot-pad decode GEMV is refuted** (K7: flat at
@@ -354,8 +354,10 @@ was wrong.
 - **K33 read (2026-10-07, RTX 5090): the bandwidth-targeted NF4 decode GEMV (`GNF4_GEMV_BW=1`, `prmt32`) runs
   Qwen3-30B-A3B's single-row expert projections at 0.341× the served dot-pad route** over all 48 layers (2.818 →
   0.961 ms; gate_up 0.332, down 0.357), at 0.74 / 0.63 of the copy floor, `prmt32` bitwise the exact tree decode.
-  Granite and OLMoE read 0.22–0.27× their scalar GEMV. LEVER: experts4bit-qlora reads it served next (P116), and the
-  switch stays opt-in until then. `kernel/RESULTS-k33-nf4-decode-gemv-bw.md`; register row
+  Granite and OLMoE read 0.22–0.27× their scalar GEMV. Those figures are with K33's swept per-shape plans
+  (`GNF4_GEMV_BW_PLAN`) and `GNF4_PDL=0`: the shipped default plan read about 0.37× on the Qwen3 pair in the same sweep,
+  and PDL, on by default for these 8-row calls, made Qwen3's down projection 1.17× slower. LEVER: experts4bit-qlora
+  reads it served next (P116), and the switch stays opt-in until then. `kernel/RESULTS-k33-nf4-decode-gemv-bw.md`; register row
   `gnf4.kernel.k33-nf4-decode-gemv-bw.5090.2026-10-07`.
 - **A fixed fraction-of-waterfall is retired as a law** (two 0.77
   readings were a two-host coincidence).
