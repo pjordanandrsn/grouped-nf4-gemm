@@ -2499,7 +2499,7 @@ shipping is not publishing.
 
 ```bash
 pip install -e . pytest numpy                      # CPU torch + triton (Linux) run the interpreter suites
-cd kernel && TRITON_INTERPRET=1 python -m pytest test_interp_contract.py test_mxfp4_interp.py test_mxfp4_gemv_b32.py -q   # three of the eight _INTERP_FILES members (kernel/conftest.py), no compiled-path file
+cd kernel && TRITON_INTERPRET=1 python -m pytest test_interp_contract.py test_mxfp4_interp.py test_mxfp4_gemv_b32.py -q   # three of the _INTERP_FILES members (kernel/conftest.py), no compiled-path file
 cd kernel && TRITON_INTERPRET=1 python -m pytest test_int4_b32.py -q             # a compiled-path file: its own process (why: below)
 cd kernel && python -m pytest test_packaging_covers_kernel.py test_check_readme_links.py -q
 python examples/dequant_tax.py                     # prints the CPU note without a GPU; ~1 min on one GPU
@@ -2520,7 +2520,7 @@ python scripts/check_shared_tooling.py --sibling ../experts4bit-qlora   # the sh
 
 The two interpreter commands stay separate on purpose: `kernel/conftest.py` raises
 `pytest.UsageError` when a CUDA device is present and an `_INTERP_FILES` member
-(one of the eight files `kernel/conftest.py` lists, such as `test_interp_contract.py`) is
+(one of the files `kernel/conftest.py` lists, such as `test_interp_contract.py`) is
 collected in the same process as a compiled-path file such as `test_int4_b32.py`, because
 `TRITON_INTERPRET` latches process-wide at triton's first import; CI's CPU-only runner
 never trips that guard, a GPU box does. An interpreter-mode file
