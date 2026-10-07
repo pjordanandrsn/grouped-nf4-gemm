@@ -44,6 +44,9 @@ _PAD_BYTES_LIMIT = 2 * 2 ** 30   # `auto` pads unless the padded block would exc
 # well as, `padded`); each such call also writes `LORA_PAD_WASTE`'s `last_rows_single` (the one block's `G * widest`),
 # `last_rows_bucketed` (the buckets' total padded rows) and `last_buckets`. Nothing else writes those three keys.
 LORA_PATH_STATS = {"loop": 0, "padded": 0, "grouped_mm": 0, "padded_bucketed": 0}
+#: Bucketed calls that took the compact node (``NF4_QLORA_COMPACT_BUCKETS=1``, :class:`_CompactBucketedDelta`), a subset of
+#: ``LORA_PATH_STATS["padded_bucketed"]``.
+COMPACT_BUCKETS_STATS = {"calls": 0}
 # Which backward served each frozen-GEMM dgrad: the single-launch kernel, the grouped_mm route, the dense route, or the
 # per-expert decode loop -- with the loop's reason (`dgrad_eligible`'s, offload-staged storage, or dgrad_kernel=False). The loop is
 # exact and slow; it used to be taken silently, so a run asking for the kernel could not tell it had not had it.
@@ -663,6 +666,9 @@ def _lora_delta_bucketed(a_cat, lora_A, lora_B, eid, flat, buckets, unique, scal
     padded rows zero either way), but the ``bmm``s run at other shapes, so a BLAS that picks its kernel, or splits a
     reduction, by shape can round differently. Equal to rounding, not promised bit for bit.
     """
+    if _compact_buckets_enabled() and not any(len(b) > 2 for b in buckets):   # NF4_QLORA_COMPACT_BUCKETS=1 (not the ladder's plans)
+        COMPACT_BUCKETS_STATS["calls"] += 1
+        return _scaled(_CompactBucketedDelta.apply(a_cat, lora_A, lora_B, eid, flat, tuple(buckets), unique), scaling)
     if unique:
         A, B = _GatherRows.apply(lora_A, eid), _GatherRows.apply(lora_B, eid)
     else:
@@ -697,6 +703,116 @@ def _lora_delta_bucketed_ladder(a_cat, A, B, flat, buckets, scaling):
         outs.append(torch.bmm(torch.bmm(xb.view(gp, w, -1), Ab.transpose(1, 2)), Bb.transpose(1, 2)).view(gp * w, -1))
     d = outs[0] if len(outs) == 1 else torch.cat(outs)
     return _scaled(_GatherRows.apply(d, flat), scaling)
+
+
+def _compact_buckets_enabled() -> bool:
+    """Off unless ``NF4_QLORA_COMPACT_BUCKETS=1``: the bucketed delta through :class:`_CompactBucketedDelta` (the same bytes,
+    forward and gradients; a fraction of the memory held between a layer's forward and its backward). Independent of
+    ``NF4_QLORA_COMPACT_DELTA``, which governs the single block only, so a bucketed A/B never moves the single-block path."""
+    return os.environ.get("NF4_QLORA_COMPACT_BUCKETS", "0").strip() == "1"
+
+
+class _CompactBucketedDelta(torch.autograd.Function):
+    """``_lora_delta_bucketed``'s body as ONE autograd node: the same forward arithmetic and the same gradient bytes, with
+    far less held between a layer's forward and its backward.
+
+    The autograd body keeps, per projection, the zero-filled padded block ``x`` ``[sum(G_b * W_b), K]`` (each bucket's
+    first ``bmm`` saves its slice) and the adapters'-dtype copy of ``a_cat`` (``index_copy_``'s backward keeps its
+    source), and its forward builds every bucket's output before one ``cat``. On Qwen3-30B-A3B's packed 4,096-token rows
+    with fp32 adapters, those sites (``nf4_qlora.py`` 672, 673 and 679) held about 1.70 GB at the training peak
+    (experts4bit-qlora TC1 amendment 65). This node:
+    - writes each bucket's two ``bmm``s into one preallocated output (``out=``, no list, no ``cat``) and returns the real
+      rows by ``index_select``, as ``_GatherRows`` does;
+    - saves only ``a_cat`` (an alias of the caller's tensor), the adapters, ``eid``, ``flat`` and the first ``bmm``s'
+      ``[P, r]`` output;
+    - in backward, scatters the incoming gradient as ``_GatherRows`` does, rebuilds ``x`` with the same fill and
+      ``index_copy_``, and issues per bucket the calls ``BmmBackward0`` would on the same operand layouts, freeing each
+      buffer at its last use.
+    Every gradient is therefore the same bytes as the autograd body's (``kernel/test_compact_buckets.py``). The adapters'
+    gradients are scattered as ``_GatherRows``'s backward (unique ids) or accumulated as advanced indexing's (repeated ids).
+    """
+
+    @staticmethod
+    def forward(ctx, a_cat, lora_A, lora_B, eid, flat, buckets, unique):
+        if unique:
+            A, B = lora_A.index_select(0, eid), lora_B.index_select(0, eid)
+        else:
+            A, B = lora_A[eid], lora_B[eid]
+        P = sum(g * w for g, w in buckets)
+        R, N = A.shape[1], B.shape[1]
+        x = torch.zeros(P, a_cat.shape[1], dtype=A.dtype, device=a_cat.device)
+        x.index_copy_(0, flat, a_cat.to(A.dtype))
+        h = torch.empty(P, R, dtype=A.dtype, device=a_cat.device)
+        d = torch.empty(P, N, dtype=A.dtype, device=a_cat.device)
+        so = sg = 0
+        for g, w in buckets:
+            hb = h[so:so + g * w].view(g, w, R)
+            torch.bmm(x[so:so + g * w].view(g, w, -1), A[sg:sg + g].transpose(1, 2), out=hb)
+            torch.bmm(hb, B[sg:sg + g].transpose(1, 2), out=d[so:so + g * w].view(g, w, N))
+            so, sg = so + g * w, sg + g
+        del x, A, B
+        ctx.save_for_backward(a_cat, lora_A, lora_B, eid, flat, h)
+        ctx.buckets, ctx.unique = buckets, unique
+        return d.index_select(0, flat)
+
+    @staticmethod
+    def backward(ctx, g):
+        a_cat, lora_A, lora_B, eid, flat, h = ctx.saved_tensors
+        buckets, unique = ctx.buckets, ctx.unique
+        if unique:
+            A, B = lora_A.index_select(0, eid), lora_B.index_select(0, eid)
+        else:
+            A, B = lora_A[eid], lora_B[eid]
+        P, R, N = h.shape[0], h.shape[1], B.shape[1]
+        gd = g.new_zeros((P,) + tuple(g.shape[1:]))                       # _GatherRows' backward: a scatter
+        gd.index_copy_(0, flat, g)
+        gh = torch.empty_like(h)
+        gBt = []
+        so = sg = 0
+        for gb, w in buckets:                                              # BmmBackward0 of d_b = h_b @ B_b^T
+            gdb = gd[so:so + gb * w].view(gb, w, N)
+            torch.bmm(gdb, B[sg:sg + gb], out=gh[so:so + gb * w].view(gb, w, R))
+            gBt.append(h[so:so + gb * w].view(gb, w, R).transpose(1, 2).bmm(gdb))
+            so, sg = so + gb * w, sg + gb
+        del gd, B
+        x = torch.zeros(P, a_cat.shape[1], dtype=A.dtype, device=a_cat.device)
+        x.index_copy_(0, flat, a_cat.to(A.dtype))
+        gx = torch.empty_like(x)
+        gAt = []
+        so = sg = 0
+        for gb, w in buckets:                                              # BmmBackward0 of h_b = x_b @ A_b^T
+            ghb = gh[so:so + gb * w].view(gb, w, R)
+            torch.bmm(ghb, A[sg:sg + gb], out=gx[so:so + gb * w].view(gb, w, -1))
+            gAt.append(x[so:so + gb * w].view(gb, w, -1).transpose(1, 2).bmm(ghb))
+            so, sg = so + gb * w, sg + gb
+        del x, gh, A
+        grad_a = None
+        if ctx.needs_input_grad[0]:
+            grad_a = gx.index_select(0, flat)                              # index_copy_'s backward for its source
+            del gx
+            if grad_a.dtype != a_cat.dtype:
+                grad_a = grad_a.to(a_cat.dtype)                            # the .to(A.dtype)'s backward
+        else:
+            del gx
+        gA = gB = None
+        if ctx.needs_input_grad[1]:
+            gAt_all = gAt[0] if len(gAt) == 1 else torch.cat(gAt)          # the split's backward
+            gA = torch.zeros_like(lora_A)
+            if unique:
+                gA.index_copy_(0, eid, gAt_all.transpose(1, 2))
+            else:
+                gA.index_put_((eid,), gAt_all.transpose(1, 2), accumulate=True)
+            del gAt_all
+        del gAt
+        if ctx.needs_input_grad[2]:
+            gBt_all = gBt[0] if len(gBt) == 1 else torch.cat(gBt)
+            gB = torch.zeros_like(lora_B)
+            if unique:
+                gB.index_copy_(0, eid, gBt_all.transpose(1, 2))
+            else:
+                gB.index_put_((eid,), gBt_all.transpose(1, 2), accumulate=True)
+        del gBt
+        return grad_a, gA, gB, None, None, None, None
 
 
 def _compact_delta_enabled() -> bool:
