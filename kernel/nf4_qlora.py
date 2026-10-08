@@ -139,8 +139,8 @@ def _pad_ladder_enabled() -> bool:
 
 
 def _single_ladder_enabled(adapter_dtype=None) -> bool:
-    """Off unless ``NF4_QLORA_SINGLE_LADDER=1``, or ``=auto`` with fp32 adapters: put the SINGLE padded block's group count and
-    width on ``_ladder_up``'s rungs,
+    """``auto`` by default (unset): with fp32 adapters, put the SINGLE padded block's group count and width on ``_ladder_up``'s
+    rungs (``1``: always; ``0``: never),
     as ``NF4_QLORA_PAD_BUCKETS_LADDER=1`` does for each bucket. The single block is what every call below the bucket gate takes
     (``NF4_QLORA_PAD_BUCKETS=auto``), so this is the ladder for short rows: at TC1's field recipe (experts4bit-qlora TC1
     amendment 69, Qwen3-30B-A3B, one RTX 5090, torch 2.12) the padded delta's ``aten::bmm`` made about 3,076 calls a step at
@@ -156,8 +156,10 @@ def _single_ladder_enabled(adapter_dtype=None) -> bool:
     cuBLAS's fp32 batched product's. At TC1's field recipe on a host-bound RTX 5090 box (experts4bit-qlora TC1 amendment 70), the
     fp32-adapter arm's ``aten::bmm`` took about 305 us of CPU self time per call and the ladder cut it to about 24 us. That arm
     stepped 0.797 of its time. The bf16-adapter arm's took about 28 us with or without the ladder, and that arm stepped 1.015, paying
-    the padding's 3 % of device time for nothing. Any value other than ``1`` and ``auto`` is off."""
-    v = os.environ.get("NF4_QLORA_SINGLE_LADDER", "0").strip().lower()
+    the padding's 3 % of device time for nothing. ``auto`` is the default since experts4bit-qlora TC1 amendment 72: on a
+    GPU-bound box (tc1-5090-141) the fp32-adapter arm stepped 1.031 of its time, within the registered 1.05, and the bf16 arm
+    1.002. Any value other than ``1``, ``auto`` and unset is off."""
+    v = os.environ.get("NF4_QLORA_SINGLE_LADDER", "auto").strip().lower() or "auto"
     if v == "auto":
         return adapter_dtype == torch.float32
     return v == "1"
