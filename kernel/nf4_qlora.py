@@ -138,8 +138,9 @@ def _pad_ladder_enabled() -> bool:
     return os.environ.get("NF4_QLORA_PAD_BUCKETS_LADDER", "0").strip() == "1"
 
 
-def _single_ladder_enabled() -> bool:
-    """Off unless ``NF4_QLORA_SINGLE_LADDER=1``: put the SINGLE padded block's group count and width on ``_ladder_up``'s rungs,
+def _single_ladder_enabled(adapter_dtype=None) -> bool:
+    """Off unless ``NF4_QLORA_SINGLE_LADDER=1``, or ``=auto`` with fp32 adapters: put the SINGLE padded block's group count and
+    width on ``_ladder_up``'s rungs,
     as ``NF4_QLORA_PAD_BUCKETS_LADDER=1`` does for each bucket. The single block is what every call below the bucket gate takes
     (``NF4_QLORA_PAD_BUCKETS=auto``), so this is the ladder for short rows: at TC1's field recipe (experts4bit-qlora TC1
     amendment 69, Qwen3-30B-A3B, one RTX 5090, torch 2.12) the padded delta's ``aten::bmm`` made about 3,076 calls a step at
@@ -149,8 +150,17 @@ def _single_ladder_enabled() -> bool:
     never reads them, so every real row gets the same arithmetic; the ``bmm``s run at other shapes, so the values are equal to
     rounding, not promised bit for bit. The padded block holds at most ``1.25 * 1.25`` times the single block's rows. It applies
     to the lean single block only: not under ``NF4_QLORA_LEAN_DELTA=0`` or ``NF4_QLORA_COMPACT_DELTA=1`` (whose bodies it does
-    not touch), and not to bucketed calls (``NF4_QLORA_PAD_BUCKETS_LADDER`` governs those). ``SINGLE_LADDER_STATS`` counts it."""
-    return os.environ.get("NF4_QLORA_SINGLE_LADDER", "0").strip() == "1"
+    not touch), and not to bucketed calls (``NF4_QLORA_PAD_BUCKETS_LADDER`` governs those). ``SINGLE_LADDER_STATS`` counts it.
+
+    ``auto`` engages only when the adapters (and so the padded block and its ``bmm``s) are fp32. The per-new-shape host cost is
+    cuBLAS's fp32 batched product's. At TC1's field recipe on a host-bound RTX 5090 box (experts4bit-qlora TC1 amendment 70), the
+    fp32-adapter arm's ``aten::bmm`` took about 305 us of CPU self time per call and the ladder cut it to about 24 us. That arm
+    stepped 0.797 of its time. The bf16-adapter arm's took about 28 us with or without the ladder, and that arm stepped 1.015, paying
+    the padding's 3 % of device time for nothing. Any value other than ``1`` and ``auto`` is off."""
+    v = os.environ.get("NF4_QLORA_SINGLE_LADDER", "0").strip().lower()
+    if v == "auto":
+        return adapter_dtype == torch.float32
+    return v == "1"
 
 
 #: ``NF4_QLORA_SINGLE_LADDER=1``'s calls (``calls``) and the padded rows it ran against the single block's (``rows_laddered``,
@@ -519,7 +529,7 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
     host_ids = None if (torch.is_tensor(expert_ids) and expert_ids.is_cuda) else [int(expert_ids[g]) for g in nz]
     # NF4_QLORA_SINGLE_LADDER=1: the block's width on a rung (the plan's `flat` is built at that width) and, in the body, its
     # group count too. Lean single block only (not the previous body, not the compact node).
-    ladder = _single_ladder_enabled() and _lean_delta_enabled() and not _compact_delta_enabled()
+    ladder = _single_ladder_enabled(lora_A.dtype) and _lean_delta_enabled() and not _compact_delta_enabled()
     if ladder:
         widest = _ladder_up(widest)
     # GNF4_HOST_REUSE (on by default; =0 turns it off): the gate_up and down deltas of one MoE layer pass share their grouping, so the

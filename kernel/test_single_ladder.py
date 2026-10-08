@@ -104,3 +104,32 @@ def test_ladder_plan_memo_is_keyed_apart(monkeypatch):
     _run(lora_delta_grouped, inputs, sizes, eids, 1.0)
     (k1,) = nf4_qlora._PLAN_MEMO
     assert k0[-1] != "single-ladder" and k1[-1] == "single-ladder"
+
+
+# --- NF4_QLORA_SINGLE_LADDER=auto: the ladder exactly when the adapters are fp32 ---
+
+@pytest.mark.parametrize("dev", DEVICES)
+@pytest.mark.parametrize("act_dtype,ad_dtype", DTYPES)
+def test_auto_engages_on_fp32_adapters_only(monkeypatch, dev, act_dtype, ad_dtype):
+    """``auto`` takes the ladder, op for op and bit for bit as ``1``, when the adapters are fp32, and is the single block, op for op
+    and bit for bit as ``0``, otherwise."""
+    sizes, eids = CASES[4]
+    inputs = _inputs(dev, sizes, eids, act_dtype, ad_dtype)
+    want = "1" if ad_dtype == torch.float32 else "0"
+    seen = {}
+    for flag in ("auto", want):
+        with _OpLog() as log:
+            res, n = _single(monkeypatch, inputs, sizes, eids, flag)
+        seen[flag] = (log.ops, res, n)
+    assert seen["auto"][2] == (1 if want == "1" else 0)
+    assert seen["auto"][0] == seen[want][0]
+    for name, x, y in zip(("out", "d_a", "d_A", "d_B"), seen["auto"][1], seen[want][1]):
+        assert torch.equal(x, y), name
+
+
+def test_other_values_are_off(monkeypatch):
+    sizes, eids = CASES[1]
+    inputs = _inputs("cpu", sizes, eids, torch.float32, torch.float32)
+    for flag in ("", "on", "true", "2"):
+        _, n = _single(monkeypatch, inputs, sizes, eids, flag)
+        assert n == 0, flag
