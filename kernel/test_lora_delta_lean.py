@@ -20,6 +20,14 @@ CUDA = torch.cuda.is_available()
 DEVICES = ["cpu"] + (["cuda"] if CUDA else [])
 
 
+@pytest.fixture(autouse=True)
+def _single_block_without_its_ladder(monkeypatch):
+    """These tests hold other paths to the single block bit for bit. The single-block ladder (``NF4_QLORA_SINGLE_LADDER``,
+    ``auto`` by default: engaged on fp32 adapters) changes the products' shapes, so it is off here; test_single_ladder.py
+    holds it to the single block to rounding."""
+    monkeypatch.setenv("NF4_QLORA_SINGLE_LADDER", "0")
+
+
 def _legacy_padded(a_cat, lora_A, lora_B, sizes, expert_ids, scaling):
     """The padded path as it stood before the trim (gnf4 133ad9d), host-list eids."""
     nz = [g for g in range(len(sizes)) if int(sizes[g]) > 0]

@@ -1733,12 +1733,12 @@ it has never measured less accurate than dequantise-to-bf16-then-GEMM in any reg
 - **The grouped-LoRA delta** pads by default. Calls of at least 16,384 routed rows are bucketed (0.42.0) and run as one
   compact autograd node (0.43.0); shorter calls, TC1's field recipe among them, keep the single padded block. Read on
   Qwen3-30B-A3B and one RTX 5090 under torch 2.12 and 2.8 (`e4b.train.pad-buckets.torch28.qwen3.5090.2026-10-06`).
-- **The single-block ladder is opt-in.** `NF4_QLORA_SINGLE_LADDER=1` (#513) puts the single block on ladder rungs so
-  cuBLAS stops paying a new-shape host cost on nearly every call: 0.797 of the step with fp32 adapters on a host-bound
-  box, 1.015 with bf16 adapters (`e4b.train.single-ladder.field.5090.2026-10-08`). The value `auto` (#514, unreleased)
-  takes the ladder exactly when the adapters are fp32. On a second host it engaged only there and held its mechanism, but
-  the step time went unread on a loaded host (`e4b.train.single-ladder-auto.field.5090.2026-10-08`). It stays opt-in
-  until e4b's TC1 amendment 72 reads it on a third.
+- **The single-block ladder is on by default for fp32 adapters.** `NF4_QLORA_SINGLE_LADDER` (#513, #514) puts the single
+  block on ladder rungs so cuBLAS stops paying a new-shape host cost on nearly every call. Unset is `auto`: the ladder
+  exactly when the adapters are fp32. With fp32 adapters it stepped 0.797 of the time on a host-bound box and 1.031 on a
+  GPU-bound one, within the registered 1.05 (`e4b.train.single-ladder.field.5090.2026-10-08`,
+  `e4b.train.single-ladder-auto.gpu-bound.5090.2026-10-08`). bf16 adapters, e4b's default, are untouched (1.002). `0`
+  turns it off; `1` takes it for any adapter dtype.
 - **The training GEMM route** (`GNF4_TRAIN_GEMM=auto`) is grouped_mm on sm_90, dense off sm_90 for calls with at most
   16 present experts, and the fused kernels everywhere else.
 

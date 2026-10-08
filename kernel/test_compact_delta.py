@@ -14,6 +14,14 @@ from nf4_qlora import lora_delta_grouped
 
 CUDA = torch.cuda.is_available()
 DEVICES = ["cpu"] + (["cuda"] if CUDA else [])
+
+
+@pytest.fixture(autouse=True)
+def _single_block_without_its_ladder(monkeypatch):
+    """These tests hold other paths to the single block bit for bit. The single-block ladder (``NF4_QLORA_SINGLE_LADDER``,
+    ``auto`` by default: engaged on fp32 adapters) changes the products' shapes, so it is off here; test_single_ladder.py
+    holds it to the single block to rounding."""
+    monkeypatch.setenv("NF4_QLORA_SINGLE_LADDER", "0")
 CASES = [
     ([3, 3, 3, 3], [0, 1, 2, 3]),
     ([5, 0, 1, 7], [2, 0, 3, 1]),
