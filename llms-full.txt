@@ -1736,7 +1736,9 @@ it has never measured less accurate than dequantise-to-bf16-then-GEMM in any reg
 - **The single-block ladder is opt-in.** `NF4_QLORA_SINGLE_LADDER=1` (#513) puts the single block on ladder rungs so
   cuBLAS stops paying a new-shape host cost on nearly every call: 0.797 of the step with fp32 adapters on a host-bound
   box, 1.015 with bf16 adapters (`e4b.train.single-ladder.field.5090.2026-10-08`). The value `auto` (#514, unreleased)
-  takes the ladder exactly when the adapters are fp32.
+  takes the ladder exactly when the adapters are fp32. On a second host it engaged only there and held its mechanism, but
+  the step time went unread on a loaded host (`e4b.train.single-ladder-auto.field.5090.2026-10-08`). It stays opt-in
+  until e4b's TC1 amendment 72 reads it on a third.
 - **The training GEMM route** (`GNF4_TRAIN_GEMM=auto`) is grouped_mm on sm_90, dense off sm_90 for calls with at most
   16 present experts, and the fused kernels everywhere else.
 
