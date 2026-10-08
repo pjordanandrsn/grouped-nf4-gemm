@@ -1,7 +1,8 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
 """Small-M int4-b32 GEMM for the attention projections (lane K16, PREREG-k16-smallm-int4-gemm.md).
 
-``y[M, N] = x[M, K] @ dequant(packed[N, K//2], scales[N, K//32]).T`` for ``M <= 16``, ONE launch.
+``y[M, N] = x[M, K] @ dequant(packed[N, K//2], scales[N, K//32]).T`` for ``M <= 64``, ONE launch: a 16-row M tile
+up to 16 rows (K16's launch), a 32- or 64-row tile above (e4b#846: a batched decode step's attention projections).
 
 Why a second int4 GEMM exists beside ``int4_b32._gemm_int4_b32_grouped`` (K14): that kernel does exact
 integer MMA with ONE ``tl.dot`` per 32-wide k-block, because its per-(row, k-block) fp32 scale product
@@ -24,6 +25,17 @@ from _triton_shim import triton, tl
 
 BLOCK = 32          # the int4-b32 scale block, as int4_pack_ref.BLOCK
 _SUPPORTED_KC = (256, 128, 64, 32)
+SMALLM_ROWS_MAX = 64             # the most rows one launch serves (BLOCK_M 64); more is the grouped M-tile kernel's
+_SUPPORTED_BLOCK_M = (16, 32, 64)
+
+
+def smallm_block_m(M: int) -> int:
+    """The M tile ``gemm_int4_b32_smallm`` launches for ``M`` rows: 16 up to 16 rows -- K16's launch, unchanged, so
+    those outputs are bit for bit what they were -- then 32 up to 32 rows and 64 up to 64. Refuses more."""
+    if M > SMALLM_ROWS_MAX:
+        raise ValueError(f"gemm_int4_b32_smallm serves M <= {SMALLM_ROWS_MAX} rows (got {M}); "
+                         "the grouped M-tile kernel serves more")
+    return 16 if M <= 16 else (32 if M <= 32 else 64)
 
 
 @triton.jit
@@ -100,8 +112,9 @@ def plan_smallm(N: int, K: int, *, block_n: int = 64, kc: int = 128, sk: int = 4
 
 
 def smallm_workspace(N: int, *, block_m: int = 16, block_n: int = 64, sk: int = 4, device="cuda"):
-    """Preallocated (part, cnt) so the launch is capture-legal: ``part [SK, 16, N] fp32``, ``cnt [cdiv(N, BN)] int32``
-    zeroed once; the kernel leaves ``cnt`` zeroed after every launch."""
+    """Preallocated (part, cnt) so the launch is capture-legal: ``part [SK, block_m, N] fp32``, ``cnt [cdiv(N, BN)]
+    int32`` zeroed once; the kernel leaves ``cnt`` zeroed after every launch. A workspace built for a block_m serves
+    every launch with that block_m or a smaller one (the kernel reads it as a flat ``[SK, BLOCK_M, N]``)."""
     part = torch.empty(sk, block_m, N, dtype=torch.float32, device=device)
     cnt = torch.zeros(triton.cdiv(N, block_n), dtype=torch.int32, device=device)
     return part, cnt
@@ -114,9 +127,13 @@ def _interpreting() -> bool:
 
 def gemm_int4_b32_smallm(x: torch.Tensor, packed: torch.Tensor, scales: torch.Tensor, *,
                          block_n: int = 64, kc: int = 128, sk: int = 4, warps: int = 4, stages: int = 2,
-                         workspace=None, dot_bf16: bool | None = None) -> torch.Tensor:
-    """``x [M, K]`` (bf16/fp16/fp32; M <= 16), ``packed [N, K//2] uint8``, ``scales [N, K//32]`` (fp16/bf16/fp32)
+                         workspace=None, dot_bf16: bool | None = None, block_m: int | None = None) -> torch.Tensor:
+    """``x [M, K]`` (bf16/fp16/fp32; M <= 64), ``packed [N, K//2] uint8``, ``scales [N, K//32]`` (fp16/bf16/fp32)
     in the int4-b32 layout (``int4_pack_ref.pack_int4_b32``). Returns ``[M, N]`` bf16. One launch.
+
+    ``block_m``: the M tile. ``None`` (the default) is :func:`smallm_block_m` -- 16 up to 16 rows, exactly K16's
+    launch, then 32 or 64. An explicit 16, 32 or 64 must hold all ``M`` rows. Every tile walks the same K chunks in
+    the same split order, and the outputs keep K16's one-bf16-ulp contract (bits across tiles are not promised).
 
     ``dot_bf16``: the MMA operands are bf16 (the shipped tensor-core arithmetic; also what the dequant-then-GEMM
     path rounds to). Under ``TRITON_INTERPRET=1`` it defaults to False -- the interpreter has no bf16 dot (numpy),
@@ -125,16 +142,19 @@ def gemm_int4_b32_smallm(x: torch.Tensor, packed: torch.Tensor, scales: torch.Te
     caller's flag, and a test that wants bf16 under the interpreter gets the interpreter's failure, not a fallback."""
     M, K = x.shape
     N, kh = packed.shape
-    if M > 16:
-        raise ValueError(f"gemm_int4_b32_smallm serves M <= 16 rows (got {M}); the grouped M-tile kernel serves more")
+    if block_m is None:
+        block_m = smallm_block_m(M)
+    elif block_m not in _SUPPORTED_BLOCK_M or block_m < M:
+        raise ValueError(f"block_m={block_m} cannot hold M={M} rows (supported {_SUPPORTED_BLOCK_M}, at least M)")
     if kh * 2 != K or tuple(scales.shape) != (N, K // 32):
         raise ValueError(f"layout mismatch: x K={K}, packed {tuple(packed.shape)}, scales {tuple(scales.shape)}")
     block_n, kc, sk = plan_smallm(N, K, block_n=block_n, kc=kc, sk=sk)
     if workspace is None:
-        part, cnt = smallm_workspace(N, block_n=block_n, sk=sk, device=x.device)
+        part, cnt = smallm_workspace(N, block_m=block_m, block_n=block_n, sk=sk, device=x.device)
     else:
         part, cnt = workspace
-        if part.shape[0] < sk or part.shape[2] != N or cnt.numel() < triton.cdiv(N, block_n):
+        if (part.shape[0] < sk or part.shape[-1] != N or part.numel() < sk * block_m * N
+                or not part.is_contiguous() or cnt.numel() < triton.cdiv(N, block_n)):
             raise ValueError("workspace does not fit this plan")
     if dot_bf16 is None:
         dot_bf16 = not _interpreting()
@@ -142,7 +162,7 @@ def gemm_int4_b32_smallm(x: torch.Tensor, packed: torch.Tensor, scales: torch.Te
     xc = x.contiguous()
     _gemm_int4_b32_smallm[(triton.cdiv(N, block_n), sk)](
         xc, packed, scales, part, cnt, out, M, N, K=K,
-        BLOCK_M=16, BLOCK_N=block_n, KC=kc, SK=sk, DOT_BF16=bool(dot_bf16), num_warps=warps, num_stages=stages)
+        BLOCK_M=block_m, BLOCK_N=block_n, KC=kc, SK=sk, DOT_BF16=bool(dot_bf16), num_warps=warps, num_stages=stages)
     return out
 
 
