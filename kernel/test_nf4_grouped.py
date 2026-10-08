@@ -138,6 +138,7 @@ class TestCensusShapes:
         # a >= 160-SM part; everywhere else both values run the same
         # scalar kernel, which is cheap duplication rather than a lie
         monkeypatch.setenv("GNF4_GEMV_DOTPAD", "1" if dotpad else "0")
+        monkeypatch.setenv("GNF4_GEMV_BW", "0")   # P116 made the bandwidth route the default at qwen_gu/qwen_dn
         B, A, packed, states = make_stack(E, N, K)
         a, sizes, ids = groups_for(E, k, m, K)
         out = gemm_4bit_grouped(a, B, A, sizes, ids)

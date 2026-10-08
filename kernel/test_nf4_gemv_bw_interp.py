@@ -243,8 +243,8 @@ def test_the_result_never_depends_on_the_row_count(monkeypatch):
 
 # -------------------------------------------------------------- switches --
 
-def test_off_by_default_leaves_the_other_routes(monkeypatch):
-    monkeypatch.delenv("GNF4_GEMV_BW", raising=False)
+def test_off_leaves_the_other_routes(monkeypatch):
+    monkeypatch.setenv("GNF4_GEMV_BW", "0")
     assert nf4_grouped._bw() == "0"
     nf4_grouped.reset_dispatch_counts()
     B, A = make_stack(2, 32, 128, seed=0)
@@ -253,10 +253,18 @@ def test_off_by_default_leaves_the_other_routes(monkeypatch):
     assert tally["bw_tree"] == tally["bw_prmt32"] == 0 and tally["scalar"] + tally["scalar_splitk"] == 1, tally
 
 
-def test_auto_engages_nowhere_until_k33_reads(monkeypatch):
-    monkeypatch.setenv("GNF4_GEMV_BW", "auto")
-    assert nf4_grouped._BW_SHAPES == frozenset()
+def test_unset_reads_auto_and_engages_nowhere_off_a_large_part(monkeypatch):
+    """The default is ``auto`` (P116 read DEFAULT_ON), but only at Qwen3's two shapes on >= 160-SM parts: the CPU's
+    nominal count is 64, so the interpreter suites keep their routes."""
+    monkeypatch.delenv("GNF4_GEMV_BW", raising=False)
+    assert nf4_grouped._bw() == "auto"
+    assert nf4_grouped._BW_SHAPES == frozenset({(1536, 2048), (2048, 768)})
     assert not nf4_grouped._bw_engages(1536, 2048, "cpu")
+    nf4_grouped.reset_dispatch_counts()
+    B, A = make_stack(2, 32, 128, seed=0)
+    gemm_4bit_grouped(torch.randn(2, 128, dtype=torch.bfloat16), B, A, [1, 1], torch.tensor([0, 1], dtype=torch.int32))
+    tally = nf4_grouped.dispatch_counts()
+    assert tally["bw_tree"] == tally["bw_prmt32"] == 0 and tally["scalar"] + tally["scalar_splitk"] == 1, tally
 
 
 @pytest.mark.parametrize("bad", ["true", "on", "2"])
@@ -275,8 +283,28 @@ def test_an_invalid_plan_is_refused(monkeypatch, plan):
 def test_the_plan_override_is_read_per_shape(monkeypatch):
     monkeypatch.setenv("GNF4_GEMV_BW_PLAN", "32,256=32,128,2,2;1536,2048=16,512,8,1")
     assert nf4_grouped._bw_plan(32, 256) == (32, 128, 2, 2)
-    assert nf4_grouped._bw_plan(1536, 2048) == (16, 512, 8, 1)
-    assert nf4_grouped._bw_plan(2048, 768) == nf4_grouped._BW_PLAN_DEFAULT
+    assert nf4_grouped._bw_plan(1536, 2048) == (16, 512, 8, 1)              # the override beats the table
+    assert nf4_grouped._bw_plan(2048, 768) == nf4_grouped._BW_PLANS[(2048, 768)]
+    assert nf4_grouped._bw_plan(96, 128) == nf4_grouped._BW_PLAN_DEFAULT    # neither listed nor overridden
+
+
+def test_the_plan_table_is_k33s_selection(monkeypatch):
+    """K33's selected plan per family shape (kernel/receipts-k33/5090/k33.json), read with no override."""
+    monkeypatch.delenv("GNF4_GEMV_BW_PLAN", raising=False)
+    import json
+    import pathlib
+    want = {(1536, 2048): (16, 1024, 4, 1), (2048, 768): (16, 256, 4, 1), (1024, 1536): (16, 512, 8, 1),
+            (1536, 512): (16, 256, 8, 1), (2048, 2048): (16, 1024, 4, 1), (2048, 1024): (16, 256, 4, 1)}
+    assert nf4_grouped._BW_PLANS == want
+    for (n, k), plan in want.items():
+        assert nf4_grouped._bw_plan(n, k) == plan
+    rec = pathlib.Path(__file__).resolve().parent / "receipts-k33" / "5090" / "k33.json"
+    if rec.exists():
+        sel = json.loads(rec.read_text())["plan"]
+        fam = {"qwen3": ((1536, 2048), (2048, 768)), "granite": ((1024, 1536), (1536, 512)),
+               "olmoe": ((2048, 2048), (2048, 1024))}
+        for f, (gu, dn) in fam.items():
+            assert want[gu] == tuple(sel[f"{f}/gate_up"]) and want[dn] == tuple(sel[f"{f}/down"]), f
 
 
 def test_prmt32_under_the_interpreter_is_refused_not_downgraded(monkeypatch):

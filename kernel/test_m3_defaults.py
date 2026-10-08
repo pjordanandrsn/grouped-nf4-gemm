@@ -110,6 +110,40 @@ def test_a_typo_still_raises(monkeypatch):
         fpa._compute_default(_Q(), 128, 1, 1)
 
 
+# ---- the bandwidth decode GEMV (GNF4_GEMV_BW, K33 / experts4bit-qlora P116) ------------------------------------
+# P116 read DEFAULT_ON on an RTX 5090 at Qwen3-30B-A3B's two shapes. The three properties the flip has to have:
+#   1. unset env -> the bandwidth route WHERE IT WAS READ (those shapes, >= 160 SMs)
+#   2. unset env -> the old route everywhere else, silently (other shapes, smaller parts)
+#   3. an explicit request is never downgraded: 1 engages everywhere, 0 nowhere
+
+QWEN3 = ((1536, 2048), (2048, 768))
+
+
+@pytest.mark.parametrize("nk", QWEN3)
+def test_bw_unset_engages_where_it_was_read(monkeypatch, nk):
+    monkeypatch.delenv("GNF4_GEMV_BW", raising=False)
+    monkeypatch.setattr(nf4_grouped, "_sm_count", lambda d: 170)
+    assert nf4_grouped._bw_engages(*nk, "cuda")
+
+
+@pytest.mark.parametrize("nk,sms", [((1536, 2048), 132), ((2048, 768), 26), ((1024, 1536), 170), ((2048, 2048), 188),
+                                    ((96, 128), 170)])
+def test_bw_unset_keeps_the_old_route_everywhere_else(monkeypatch, nk, sms):
+    monkeypatch.delenv("GNF4_GEMV_BW", raising=False)
+    monkeypatch.setattr(nf4_grouped, "_sm_count", lambda d: sms)
+    assert not nf4_grouped._bw_engages(*nk, "cuda")
+
+
+@pytest.mark.parametrize("nk,sms", [((1536, 2048), 26), ((1024, 1536), 170), ((96, 128), 64)])
+def test_bw_explicit_requests_are_never_downgraded(monkeypatch, nk, sms):
+    monkeypatch.setattr(nf4_grouped, "_sm_count", lambda d: sms)
+    monkeypatch.setenv("GNF4_GEMV_BW", "1")
+    assert nf4_grouped._bw_engages(*nk, "cuda")
+    monkeypatch.setenv("GNF4_GEMV_BW", "0")
+    for n, k in QWEN3:
+        assert not nf4_grouped._bw_engages(n, k, "cuda")
+
+
 # ---- dot-pad ---------------------------------------------------------
 
 def test_dotpad_defaults_ON(monkeypatch):

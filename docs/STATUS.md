@@ -359,6 +359,11 @@ was wrong.
   and PDL, on by default for these 8-row calls, made Qwen3's down projection 1.17× slower. LEVER: experts4bit-qlora
   reads it served next (P116), and the switch stays opt-in until then. `kernel/RESULTS-k33-nf4-decode-gemv-bw.md`; register row
   `gnf4.kernel.k33-nf4-decode-gemv-bw.5090.2026-10-07`.
+- **`GNF4_GEMV_BW=auto` by default at Qwen3-30B-A3B's two shapes on >= 160-SM parts (2026-10-08).** experts4bit-qlora's
+  served lane P116 read DEFAULT_ON on an RTX 5090: on the default `serve_paged` server, one request decoded 1.2417× as
+  fast (step 10.22 → 8.22 ms) and 16 requests were unchanged, within P110's teacher-forced quality bar
+  (experts4bit-qlora#1336). `_BW_SHAPES` names those two shapes and `_BW_PLANS` carries K33's selected plans. Other
+  shapes and smaller parts keep dot-pad or the scalar GEMV; `GNF4_GEMV_BW=0` turns it off, `1` forces it everywhere.
 - **A fixed fraction-of-waterfall is retired as a law** (two 0.77
   readings were a two-host coincidence).
 - **The cold-engine "free floor" premise is refuted** on its target box:

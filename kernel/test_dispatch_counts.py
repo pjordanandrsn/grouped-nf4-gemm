@@ -66,6 +66,7 @@ def test_knob_off_dispatches_the_certified_scalar_path(monkeypatch):
     # pass by inheriting a default that has since moved, which is the
     # same trap the accuracy suite hit.
     monkeypatch.setenv("GNF4_GEMV_DOTPAD", "0")
+    monkeypatch.setenv("GNF4_GEMV_BW", "0")              # P116: unset now means the bandwidth route at this shape
     monkeypatch.setattr(nf4_grouped, "_sm_count", lambda d: 200)
     nf4_grouped.reset_dispatch_counts()
     _call(torch.device("cuda"))
@@ -82,6 +83,7 @@ def test_the_NEW_DEFAULT_dispatches_dot_pad_when_the_guard_allows(monkeypatch):
     is only real if the kernel actually changes.
     """
     monkeypatch.delenv("GNF4_GEMV_DOTPAD", raising=False)
+    monkeypatch.setenv("GNF4_GEMV_BW", "0")              # dot-pad's own default, behind the bandwidth route
     monkeypatch.setattr(nf4_grouped, "_sm_count", lambda d: 200)
     nf4_grouped.reset_dispatch_counts()
     _call(torch.device("cuda"))
@@ -91,8 +93,37 @@ def test_the_NEW_DEFAULT_dispatches_dot_pad_when_the_guard_allows(monkeypatch):
 
 
 @needs_cuda
+def test_the_P116_DEFAULT_dispatches_the_bandwidth_route_when_the_guard_allows(monkeypatch):
+    """Unset GNF4_GEMV_BW is ``auto`` (P116 DEFAULT_ON): at Qwen3's gate_up shape on a >= 160-SM part the call goes
+    to ``bw_prmt32`` and nothing else -- asserted at the dispatch layer, so the flip is only real if the kernel moved."""
+    monkeypatch.delenv("GNF4_GEMV_BW", raising=False)
+    monkeypatch.delenv("GNF4_GEMV_DOTPAD", raising=False)
+    monkeypatch.delenv("GNF4_GEMV_BW_DECODE", raising=False)
+    monkeypatch.setattr(nf4_grouped, "_sm_count", lambda d: 200)
+    nf4_grouped.reset_dispatch_counts()
+    _call(torch.device("cuda"))
+    c = nf4_grouped.dispatch_counts()
+    assert c["bw_prmt32"] > 0 and c["bw_tree"] == 0, c
+    assert c["dotpad"] + c["dotpad_splitk"] + c["scalar"] + c["scalar_splitk"] == 0, c
+
+
+@needs_cuda
+def test_the_P116_DEFAULT_keeps_the_old_route_below_the_guard(monkeypatch):
+    """The same call on a 26-SM part: ``auto`` does not engage, and dot-pad's own guard sends it to the scalar GEMV."""
+    monkeypatch.delenv("GNF4_GEMV_BW", raising=False)
+    monkeypatch.delenv("GNF4_GEMV_DOTPAD", raising=False)
+    monkeypatch.setattr(nf4_grouped, "_sm_count", lambda d: 26)
+    nf4_grouped.reset_dispatch_counts()
+    _call(torch.device("cuda"))
+    c = nf4_grouped.dispatch_counts()
+    assert c["bw_prmt32"] + c["bw_tree"] == 0, c
+    assert c["scalar"] + c["scalar_splitk"] > 0, c
+
+
+@needs_cuda
 def test_knob_on_above_the_sm_guard_dispatches_dot_pad(monkeypatch):
     monkeypatch.setenv("GNF4_GEMV_DOTPAD", "1")
+    monkeypatch.setenv("GNF4_GEMV_BW", "0")
     monkeypatch.setattr(nf4_grouped, "_sm_count", lambda d: 200)
     nf4_grouped.reset_dispatch_counts()
     _call(torch.device("cuda"))

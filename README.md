@@ -52,7 +52,7 @@ On CPU it explains which GPU measurement is unavailable.
 | Task | API or guide |
 | :--- | :--- |
 | Grouped NF4 forward and backward | `nf4_grouped.gemm_4bit_grouped`, `dgrad_4bit_grouped` |
-| NF4 single-row decode, bandwidth route (opt-in) | `GNF4_GEMV_BW=1` with `gemm_4bit_grouped`; [NF4 guide](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md) |
+| NF4 single-row decode, bandwidth route (default at Qwen3-30B-A3B's shapes on >= 160-SM parts) | `GNF4_GEMV_BW` (`auto`; `1` everywhere, `0` off) with `gemm_4bit_grouped`; [NF4 guide](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md) |
 | Native MXFP4 expert math | `mxfp4_grouped.gemm_mxfp4_grouped` |
 | INT4 decode | [INT4 guide](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/int4-decode-gemv.md) |
 | FP8 paged attention | [Attention guide](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/fp8-paged-attention-for-moe-serving.md) |

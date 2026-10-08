@@ -110,7 +110,8 @@ def _nf4_stack(N, K):
 def test_nf4_dotpad_rows_are_their_own_single_token_call(monkeypatch, N, K, T):
     import nf4_grouped as NG
     assert (N, K) in NG._DOTPAD_CONFIGS, "the dot-pad kernel no longer registers this census shape"
-    monkeypatch.delenv("GNF4_GEMV_DOTPAD", raising=False)          # the shipped default: on
+    monkeypatch.delenv("GNF4_GEMV_DOTPAD", raising=False)          # dot-pad's own default: on
+    monkeypatch.setenv("GNF4_GEMV_BW", "0")                        # behind the bandwidth route (P116's default here)
     monkeypatch.delenv("GNF4_GEMV_SPLITK", raising=False)          # dot-pad split-K is opt-in; not this route
     monkeypatch.setattr(NG, "_sm_count", lambda device: BIG_PART_SMS)
     B, A = _nf4_stack(N, K)
