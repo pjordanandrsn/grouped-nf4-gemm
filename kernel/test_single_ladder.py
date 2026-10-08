@@ -48,16 +48,20 @@ def test_ladder_matches_the_single_block(monkeypatch, dev, sizes, eids, act_dtyp
 
 
 @pytest.mark.parametrize("sizes,eids", CASES[:3])
-def test_unset_and_zero_are_the_single_block_op_for_op(monkeypatch, sizes, eids):
-    inputs = _inputs("cpu", sizes, eids, torch.bfloat16, torch.float32)
+@pytest.mark.parametrize("ad_dtype", (torch.float32, torch.bfloat16))
+def test_unset_is_auto_op_for_op_and_zero_is_the_single_block(monkeypatch, sizes, eids, ad_dtype):
+    """Unset is ``auto`` (the default since experts4bit-qlora TC1 amendment 72), op for op and bit for bit: the ladder on fp32
+    adapters, the single block on bf16 ones. ``0`` is the single block on both."""
+    inputs = _inputs("cpu", sizes, eids, torch.bfloat16, ad_dtype)
     seen = {}
-    for flag in (None, "0", "1"):
+    for flag in (None, "auto", "0"):
         with _OpLog() as log:
             res, n = _single(monkeypatch, inputs, sizes, eids, flag)
         seen[flag] = (log.ops, res, n)
-    assert seen[None][2] == seen["0"][2] == 0 and seen["1"][2] == 1
-    assert seen[None][0] == seen["0"][0]
-    for name, x, y in zip(("out", "d_a", "d_A", "d_B"), seen[None][1], seen["0"][1]):
+    want = 1 if ad_dtype == torch.float32 else 0
+    assert seen[None][2] == seen["auto"][2] == want and seen["0"][2] == 0
+    assert seen[None][0] == seen["auto"][0]
+    for name, x, y in zip(("out", "d_a", "d_A", "d_B"), seen[None][1], seen["auto"][1]):
         assert torch.equal(x, y), name
 
 
@@ -127,9 +131,11 @@ def test_auto_engages_on_fp32_adapters_only(monkeypatch, dev, act_dtype, ad_dtyp
         assert torch.equal(x, y), name
 
 
-def test_other_values_are_off(monkeypatch):
+def test_other_values_are_off_and_empty_is_unset(monkeypatch):
     sizes, eids = CASES[1]
     inputs = _inputs("cpu", sizes, eids, torch.float32, torch.float32)
-    for flag in ("", "on", "true", "2"):
+    for flag in ("on", "true", "2"):
         _, n = _single(monkeypatch, inputs, sizes, eids, flag)
         assert n == 0, flag
+    _, n = _single(monkeypatch, inputs, sizes, eids, "")
+    assert n == 1, "empty is unset, so auto: fp32 adapters take the ladder"
