@@ -47,7 +47,7 @@ _INTERP_FILES = {"test_interp_contract.py", "test_mxfp4_interp.py",
                  "test_mxfp4_grouped_smallm_interp.py",
                  "test_nf4_grouped_smallm_interp.py",
                  "test_nf4_decoded_interp.py", "test_nf4_gemv_bw_interp.py",
-                 "test_tile_table_cumsum_interp.py"}
+                 "test_tile_table_cumsum_interp.py", "test_tile_table_cumsum_chunked_interp.py"}
 
 
 def _device_present():
