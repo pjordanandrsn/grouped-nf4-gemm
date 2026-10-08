@@ -39,7 +39,7 @@ the confirmatory results (`kernel/RESULTS-v*-confirmatory.md`) for how the kerne
 
 | doc | what it is |
 |---|---|
-| [`STATUS.md`](STATUS.md) | what the kernel does today, its three limits, what was retired, what is open |
+| [`STATUS.md`](STATUS.md) | the current position: what the kernel does today, its three limits, the defaults and the reads behind them, what was retired, what is open |
 | [`claims.json`](claims.json) / [`claims-schema.md`](claims-schema.md) | machine-readable register of every claim, with status and evidence path |
 | [`KERNEL_CONTRACT.md`](KERNEL_CONTRACT.md) | "Layouts at a glance" for every shipped format, the int64-offset and shared-memory boundaries every kernel states, and the Gate-0 NF4 design record (its op signature is the design; the shipped one is `nf4_grouped.gemm_4bit_grouped`'s docstring) (note: it schedules sm_120 as "Phase 4"; sm_120 shipped in 0.15.0 and is the primary serving target; its "storage-only asterisk" is the Gate-0 framing — the version-aware bitsandbytes boundary, 0.50.0 packed 2-D inference upstream with the grouped routed-MoE GEMM a separate contract, is on [`solutions/nf4-grouped-gemm-without-bf16-materialization.md`](solutions/nf4-grouped-gemm-without-bf16-materialization.md)) |
 | [`TOLERANCE_CONTRACT.md`](TOLERANCE_CONTRACT.md) | the registered fidelity bound and test spec |
@@ -52,6 +52,7 @@ the confirmatory results (`kernel/RESULTS-v*-confirmatory.md`) for how the kerne
 
 | doc | what it graded |
 |---|---|
+| [`STATUS-RECORD.md`](STATUS-RECORD.md) | the dated narrative behind `STATUS.md` to 0.43.0 (2026-10-08): every superseded reading with its reason. Frozen and not appended to (unanchored); `STATUS.md` is the position. |
 | [`mxfp4/PREREG-mxfp4-serve.md`](mxfp4/PREREG-mxfp4-serve.md) · anchored → [`RESULTS-mxfp4-serve.md`](mxfp4/RESULTS-mxfp4-serve.md) · anchored | native-MXFP4 serving of gpt-oss-120b: ppl 26.72 vs 26.75; P1 missed as stamped (a calibration error in the stamp, per its own receipt) |
 | [`mxfp4/PREREG-mxfp4-train.md`](mxfp4/PREREG-mxfp4-train.md) · anchored → [`RESULTS-mxfp4-train.md`](mxfp4/RESULTS-mxfp4-train.md) · anchored | 120b QLoRA at 9.82 GB peak, 144/144 hashes identical |
 | [`mxfp4/PHASE0-seam-map.md`](mxfp4/PHASE0-seam-map.md) | the MXFP4 seam map; three STOP items carried into Phase 1 (all resolved; see the note at its end) |

@@ -32,7 +32,7 @@ in both repositories and validated by `scripts/check_system_manifest.py`.
 | `kernel/` | the shipped flat modules (`pyproject.toml` `py-modules`) with their tests (`kernel/test_*.py`) beside them; `_triton_shim` binds triton or a stand-in |
 | `gnf4_native/` | the compile-at-first-use CPU kernels (the hybrid CPU path) |
 | `examples/dequant_tax.py` | the one-minute on-your-own-GPU demonstration; CI runs it on CPU and asserts the CPU note |
-| `docs/` | `STATUS.md`, `claims.json` + `claims-schema.md`, `capabilities.json`, `system-manifest.json`, `change-impact.json`, `KERNEL_CONTRACT.md`, `TOLERANCE_CONTRACT.md`, `PORTABILITY.md`, `SOLUTIONS.md` + `solutions/`, `INDEX.md` (which documents are current, which are anchored), results and pre-registrations |
+| `docs/` | `STATUS.md` (+ `STATUS-RECORD.md`, its frozen dated narrative), `claims.json` + `claims-schema.md`, `capabilities.json`, `system-manifest.json`, `change-impact.json`, `KERNEL_CONTRACT.md`, `TOLERANCE_CONTRACT.md`, `PORTABILITY.md`, `SOLUTIONS.md` + `solutions/`, `INDEX.md` (which documents are current, which are anchored), results and pre-registrations |
 | `bench/`, `projections/`, `router_probe/` | receipts, the projection model and its anchor gate |
 | `scripts/` | the CPU-only contract checks of section 6, the README link checker, the wheel smoke |
 
@@ -42,7 +42,10 @@ in both repositories and validated by `scripts/check_system_manifest.py`.
   [`docs/claims.json`](docs/claims.json), not CHANGELOG prose or a README
   sentence; prose quotes the claim ID and its status.
 - **STATUS.md wins for position** ([`docs/STATUS.md`](docs/STATUS.md)),
-  including the three limits where the fused path loses.
+  including the three limits where the fused path loses. When a position
+  moves, replace its entry: the new position in a few lines with its claim ID,
+  the detail in the lane's RESULTS file. `docs/STATUS-RECORD.md` is the frozen
+  dated narrative to 0.43.0 and is not appended to.
 - **Historical and anchored records are never rewritten.** A document with a
   sibling `.ots` file (`find . -name '*.ots'`) or an `ots-attestation-footer` marker
   is never edited in place; corrections go in a sibling file ([`docs/INDEX.md`](docs/INDEX.md)
@@ -151,7 +154,8 @@ a diff is missing, and CI runs it on every pull request. Classes:
   docstring, contract, README table, capabilities entry points, the affected
   solution page, a `changelog.d/` fragment (FAIL; it stands in for `CHANGELOG.md`), the consumer-side change.
 - **measured-result**: receipt → claim entry → `docs/STATUS.md` (FAIL without
-  it; `--allow-claims-only` downgrades) → prose quoting the ID.
+  it; `--allow-claims-only` downgrades; replace the moved entry, never append to
+  `STATUS-RECORD.md`) → prose quoting the ID.
 - **dependency-floor**: a version bump needs `CHANGELOG.md` (FAIL); a
   torch/triton/numpy floor needs the pyproject comment, README install note and
   capabilities environments; a consumer floor is a new `compatibility` record
