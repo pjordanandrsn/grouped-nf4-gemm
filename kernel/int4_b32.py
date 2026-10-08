@@ -693,7 +693,7 @@ def _tile_table_r1(eids_ptr, row0_ptr, rows_ptr, grp_ptr, order_ptr,
                    E: tl.constexpr, EB: tl.constexpr, TB: tl.constexpr,
                    BM: tl.constexpr, MAXT: tl.constexpr,
                    TBB: tl.constexpr = 1, SELF_ZERO: tl.constexpr = False,
-                   SIDS: tl.constexpr = False):
+                   SIDS: tl.constexpr = False, RANK_CUMSUM: tl.constexpr = False):
     """ONE launch builds the whole expert-major tile table for decode
     shapes: counts, exclusive row offsets, a STABLE counting-sort order,
     and the (row0, rows, grp) tile slots -- the work the chained
@@ -712,7 +712,16 @@ def _tile_table_r1(eids_ptr, row0_ptr, rows_ptr, grp_ptr, order_ptr,
     pre-zero fills go; live lanes cover exactly ``[0, total)`` (tiles are
     contiguous per expert), so no address is written twice. ``SIDS``
     also stores the expert-major sorted ids (``ids[order]``, the caller's
-    index_select). With both off this is the kernel as it was."""
+    index_select). With both off this is the kernel as it was.
+
+    ``RANK_CUMSUM`` (opt-in, ``rank="cumsum"`` on the wrapper; e4b#846's
+    64-row decode step routes 512 rows) computes the same stable rank as a
+    running count instead of the pairwise compare: the cumulative sum of
+    ``hits`` along the row axis counts each expert's rows up to and including
+    row ``r``, so ``rank[r]`` is that count at ``r``'s own expert, minus one.
+    ``[EB, RB]`` lanes instead of ``[RB, RB]``, so ``R`` up to 1024 fits the
+    one program. Ties keep input order exactly as before; the integers are
+    the pairwise kernel's (``test_tile_table_cumsum_interp.py``)."""
     r = tl.arange(0, RB)
     rmask = r < R
     e = tl.load(eids_ptr + r, mask=rmask, other=E).to(tl.int32)
@@ -724,8 +733,12 @@ def _tile_table_r1(eids_ptr, row0_ptr, rows_ptr, grp_ptr, order_ptr,
     tl.store(counts_ptr + ee, counts.to(tl.int64), mask=emask)
     row_off = tl.cumsum(counts, axis=0) - counts         # exclusive
     # stable rank: earlier rows with the same expert id
-    same = (e[:, None] == e[None, :]) & (r[None, :] < r[:, None])
-    rank = tl.sum(same.to(tl.int32), axis=1)             # [RB]
+    if RANK_CUMSUM:
+        run = tl.cumsum(hits.to(tl.int32), axis=1)        # [EB, RB] rows of e up to r
+        rank = tl.sum(tl.where(hits, run, 0), axis=0) - 1  # [RB]
+    else:
+        same = (e[:, None] == e[None, :]) & (r[None, :] < r[:, None])
+        rank = tl.sum(same.to(tl.int32), axis=1)             # [RB]
     dst = tl.sum(tl.where(hits, row_off[:, None], 0), axis=0) + rank
     tl.store(order_ptr + dst, r.to(tl.int64), mask=rmask)
     if SIDS:
@@ -764,7 +777,7 @@ def _tile_table_r1(eids_ptr, row0_ptr, rows_ptr, grp_ptr, order_ptr,
 def build_group_tiles_fused(expert_ids, n_experts: int, block_m: int,
                             tiles_budget: int | None = None, *,
                             lean: bool = False, sorted_ids: bool = False,
-                            warps: int = 4):
+                            warps: int = 4, rank: str = "pairwise"):
     """Drop-in for ``nf4_grouped.build_group_tiles_device`` on DECODE
     shapes (R <= 256): same five outputs, same dtypes, same tile-slot
     semantics (padding slots rows=0), one kernel launch. Raises on
@@ -778,10 +791,19 @@ def build_group_tiles_fused(expert_ids, n_experts: int, block_m: int,
     ``sorted_ids=True`` appends a sixth output, ``expert_ids[order]`` at
     the ids' dtype, so the caller's index_select goes too. The tables are
     the same integers either way (``test_lean_tile_table_is_identical``).
-    ``warps`` is the launch's warp count (default 4, as before)."""
+    ``warps`` is the launch's warp count (default 4, as before).
+
+    ``rank`` (opt-in, e4b#846): ``"pairwise"`` (the default, as before)
+    ranks rows by the O(R^2) compare and takes R <= 256; ``"cumsum"`` ranks
+    them by a running count over the expert-hit matrix (the same integers)
+    and takes R <= 1024, so a 64-row decode step at top-k 8 (512 routed rows)
+    keeps the one-launch table instead of the chained builder."""
+    if rank not in ("pairwise", "cumsum"):
+        raise ValueError(f"rank={rank!r}: expected 'pairwise' or 'cumsum'")
     r = expert_ids.numel()
-    if r > 256:
-        raise ValueError(f"fused tile builder is decode-only (R <= 256); "
+    cap = 1024 if rank == "cumsum" else 256
+    if r > cap:
+        raise ValueError(f"fused tile builder is decode-only (R <= {cap} with rank={rank!r}); "
                          f"got R={r} -- use the chained builder")
     if r == 0:
         # empty routing: no launch (tl.arange(0, 0) is invalid) -- the
@@ -815,7 +837,8 @@ def build_group_tiles_fused(expert_ids, n_experts: int, block_m: int,
         EB=triton.next_power_of_2(n_experts), TB=tiles_budget,
         BM=block_m, MAXT=triton.next_power_of_2(maxt),
         TBB=triton.next_power_of_2(tiles_budget) if lean else 1,
-        SELF_ZERO=bool(lean), SIDS=bool(sorted_ids), num_warps=warps)
+        SELF_ZERO=bool(lean), SIDS=bool(sorted_ids),
+        RANK_CUMSUM=(rank == "cumsum"), num_warps=warps)
     if sorted_ids:
         return row0, rows, grp, order, counts, sids
     return row0, rows, grp, order, counts
