@@ -138,6 +138,26 @@ def _pad_ladder_enabled() -> bool:
     return os.environ.get("NF4_QLORA_PAD_BUCKETS_LADDER", "0").strip() == "1"
 
 
+def _single_ladder_enabled() -> bool:
+    """Off unless ``NF4_QLORA_SINGLE_LADDER=1``: put the SINGLE padded block's group count and width on ``_ladder_up``'s rungs,
+    as ``NF4_QLORA_PAD_BUCKETS_LADDER=1`` does for each bucket. The single block is what every call below the bucket gate takes
+    (``NF4_QLORA_PAD_BUCKETS=auto``), so this is the ladder for short rows: at TC1's field recipe (experts4bit-qlora TC1
+    amendment 69, Qwen3-30B-A3B, one RTX 5090, torch 2.12) the padded delta's ``aten::bmm`` made about 3,076 calls a step at
+    about 172 us of CPU self time each, above its 120 us of device time, on a step whose GPU was busy for 0.49 of its time.
+
+    The ``G' - G`` padded groups take zero adapters (``F.pad``, whose backward drops their slots) and zero rows, and ``flat``
+    never reads them, so every real row gets the same arithmetic; the ``bmm``s run at other shapes, so the values are equal to
+    rounding, not promised bit for bit. The padded block holds at most ``1.25 * 1.25`` times the single block's rows. It applies
+    to the lean single block only: not under ``NF4_QLORA_LEAN_DELTA=0`` or ``NF4_QLORA_COMPACT_DELTA=1`` (whose bodies it does
+    not touch), and not to bucketed calls (``NF4_QLORA_PAD_BUCKETS_LADDER`` governs those). ``SINGLE_LADDER_STATS`` counts it."""
+    return os.environ.get("NF4_QLORA_SINGLE_LADDER", "0").strip() == "1"
+
+
+#: ``NF4_QLORA_SINGLE_LADDER=1``'s calls (``calls``) and the padded rows it ran against the single block's (``rows_laddered``,
+#: ``rows_single``), for a receipt.
+SINGLE_LADDER_STATS = {"calls": 0, "rows_laddered": 0, "rows_single": 0}
+
+
 def _ladder_up(n: int) -> int:
     """The smallest rung >= ``n``: every integer up to 4, then four rungs per octave (``{4, 5, 6, 7} * 2**k``), so a rung is at
     most 25 % above ``n`` (``n <= _ladder_up(n) < 1.25 * n`` for ``n > 4``): ``n`` from 1 to 65,535 lands on 60 rungs."""
@@ -471,6 +491,7 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
     waste = len(rows) * widest / total
     pad_bytes = len(rows) * widest * (a_cat.shape[1] + lora_B.shape[1]) * a_cat.element_size()
     LORA_PAD_WASTE["last"], LORA_PAD_WASTE["last_bytes"] = waste, pad_bytes
+    LORA_PAD_WASTE["last_widest"] = widest
     # The padded block is allocated in the ADAPTER dtype (fp32 on a matched-init arm), so the bytes it really takes can be twice
     # `pad_bytes`, which sizes it at the activations' itemsize. Recorded, not acted on: the route rule is unchanged until a full
     # step reads what accounting it should use.
@@ -496,6 +517,11 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
     dev = a_cat.device
     from nf4_grouped import to_device_i32, _host_reuse_enabled, _stream_key, HOST_REUSE_STATS
     host_ids = None if (torch.is_tensor(expert_ids) and expert_ids.is_cuda) else [int(expert_ids[g]) for g in nz]
+    # NF4_QLORA_SINGLE_LADDER=1: the block's width on a rung (the plan's `flat` is built at that width) and, in the body, its
+    # group count too. Lean single block only (not the previous body, not the compact node).
+    ladder = _single_ladder_enabled() and _lean_delta_enabled() and not _compact_delta_enabled()
+    if ladder:
+        widest = _ladder_up(widest)
     # GNF4_HOST_REUSE (on by default; =0 turns it off): the gate_up and down deltas of one MoE layer pass share their grouping, so the
     # down call reuses the gate_up call's device plan (`eid`, `flat`) instead of re-uploading the ids and
     # rebuilding the flat index -- about ten launches and one transfer per pass, values identical (the key is the
@@ -504,11 +530,13 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
     pkey = None
     if (host_ids is not None and _lean_delta_enabled() and dev.type == "cuda" and _host_reuse_enabled()
             and not torch.cuda.is_current_stream_capturing()):
-        pkey = (tuple(rows), tuple(host_ids), _stream_key(dev))
+        pkey = (tuple(rows), tuple(host_ids), _stream_key(dev)) + (("single-ladder",) if ladder else ())
         plan = _PLAN_MEMO.get(pkey)
         if plan is not None:
             HOST_REUSE_STATS["plan_hits"] += 1
             eid, flat, unique = plan
+            if ladder:
+                return _lora_delta_padded_ladder(a_cat, lora_A, lora_B, eid, flat, len(rows), widest, unique, scaling)
             return _lora_delta_padded(a_cat, lora_A, lora_B, eid, flat, len(rows), widest, unique, scaling)
     if host_ids is None:
         # Select the surviving groups ON DEVICE. One index_select, no round trip.
@@ -555,6 +583,8 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
         _PLAN_MEMO.clear()                 # one entry: only the gate_up -> down twin repeats
         _PLAN_MEMO[pkey] = (eid, flat, unique)
         HOST_REUSE_STATS["plan_misses"] += 1
+    if ladder:
+        return _lora_delta_padded_ladder(a_cat, lora_A, lora_B, eid, flat, G, widest, unique, scaling)
     return _lora_delta_padded(a_cat, lora_A, lora_B, eid, flat, G, widest, unique, scaling)
 
 
@@ -589,6 +619,28 @@ def _lora_delta_padded(a_cat, lora_A, lora_B, eid, flat, G, widest, unique, scal
     # output: no zero fill, no slice copy. `scaling` lands on the gathered
     # rows, not the padded block, and not at all when it is 1 -- both exact.
     return _scaled(_GatherRows.apply(d.view(G * widest, -1), flat), scaling)
+
+
+def _lora_delta_padded_ladder(a_cat, lora_A, lora_B, eid, flat, G, width, unique, scaling):
+    """``NF4_QLORA_SINGLE_LADDER=1``: the lean single block at ``[G', width, K]``, ``width`` already on a rung (the plan's ``flat``
+    was built at it) and ``G' = _ladder_up(G)``. The gathered adapters are zero-padded from ``G`` to ``G'`` groups (``F.pad``: its
+    backward drops the padded slots' gradient), the block's padded groups hold zero rows, and ``flat`` never reads them, so every
+    real row gets the single block's arithmetic at a shape that repeats from call to call."""
+    import torch.nn.functional as F
+    Gp = _ladder_up(G)
+    SINGLE_LADDER_STATS["calls"] += 1
+    SINGLE_LADDER_STATS["rows_laddered"] += Gp * width
+    SINGLE_LADDER_STATS["rows_single"] += G * int(LORA_PAD_WASTE.get("last_widest") or width)
+    if unique:
+        A, B = _GatherRows.apply(lora_A, eid), _GatherRows.apply(lora_B, eid)
+    else:
+        A, B = lora_A[eid], lora_B[eid]                # [G, r, K], [G, N, r]
+    if Gp > G:
+        A, B = F.pad(A, (0, 0, 0, 0, 0, Gp - G)), F.pad(B, (0, 0, 0, 0, 0, Gp - G))
+    x = torch.zeros(Gp * width, a_cat.shape[1], dtype=A.dtype, device=a_cat.device)
+    x.index_copy_(0, flat, a_cat.to(A.dtype))
+    d = torch.bmm(torch.bmm(x.view(Gp, width, -1), A.transpose(1, 2)), B.transpose(1, 2))
+    return _scaled(_GatherRows.apply(d.view(Gp * width, -1), flat), scaling)
 
 
 def _lora_delta_grouped_bucketed(a_cat, lora_A, lora_B, rows, nz, expert_ids, widest, scaling):
