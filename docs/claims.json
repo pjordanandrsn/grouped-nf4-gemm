@@ -732,7 +732,7 @@
     "CHANGELOG.md#0310--2026-09-18--batched-int4-decode-plans-split-k-from-the-row-count-two-pre-registered-kernel-lanes-reported-k14-refuted-k15-comparator"
    ],
    "quoted_in": [
-    "docs/STATUS.md",
+    "docs/STATUS-RECORD.md",
     "CHANGELOG.md#0310--2026-09-18--batched-int4-decode-plans-split-k-from-the-row-count-two-pre-registered-kernel-lanes-reported-k14-refuted-k15-comparator"
    ],
    "notes": "Engines as shipped, across different torch/CUDA builds in different processes, as the pre-registration said; adopting Marlin itself (a GPTQ repack, a dependency, a quality gate) is not established here. k_proj / v_proj are unmeasured: MarlinWorkspace was sized N//64 x 16 = 128 for N=512, below the 170-SM count the kernel requires (fixed in #363; the lane ran out of budget before a box used it). Relative error 0.0000-0.0005 against Marlin's own dequantised reference. Cost $1.1253 against a $1.00 lane ceiling -- over by $0.13, closed rather than extended; four of the six rentals were host draws that failed."
