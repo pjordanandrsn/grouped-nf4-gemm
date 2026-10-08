@@ -11,3 +11,8 @@ the one-launch table at 256 rows (experts4bit-qlora lane P119).
 `torch.argsort(expert_ids, stable=True)` bit for bit, all five tables (and the lean variant's six) equal the chained
 builder's, and at R <= 256 the cumsum and pairwise kernels agree (`kernel/test_tile_table_cumsum_interp.py`, R from 1 to
 1024, uniform, skewed and single-expert routing). The default stays `rank="pairwise"` with its 256 cap.
+
+**Measured since: correct but slower at 128 experts.** experts4bit-qlora's P120 read the opt-in on Qwen3-30B-A3B int4
+(512 routed rows, 128 experts, RTX 5090): the 64-row decode step took 1.44x as long, because the one-program table costs
+about 10.4 ms a step at that size, against 1.4 ms for the chained builder. Tokens were identical. The default stays
+`pairwise`. (`e4b.serve.p120.wide-tiles.qwen3-int4.5090.2026-10-08`)
