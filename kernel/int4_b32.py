@@ -693,7 +693,8 @@ def _tile_table_r1(eids_ptr, row0_ptr, rows_ptr, grp_ptr, order_ptr,
                    E: tl.constexpr, EB: tl.constexpr, TB: tl.constexpr,
                    BM: tl.constexpr, MAXT: tl.constexpr,
                    TBB: tl.constexpr = 1, SELF_ZERO: tl.constexpr = False,
-                   SIDS: tl.constexpr = False, RANK_CUMSUM: tl.constexpr = False):
+                   SIDS: tl.constexpr = False, RANK_CUMSUM: tl.constexpr = False,
+                   RCHUNK: tl.constexpr = 0):
     """ONE launch builds the whole expert-major tile table for decode
     shapes: counts, exclusive row offsets, a STABLE counting-sort order,
     and the (row0, rows, grp) tile slots -- the work the chained
@@ -721,28 +722,62 @@ def _tile_table_r1(eids_ptr, row0_ptr, rows_ptr, grp_ptr, order_ptr,
     row ``r``, so ``rank[r]`` is that count at ``r``'s own expert, minus one.
     ``[EB, RB]`` lanes instead of ``[RB, RB]``, so ``R`` up to 1024 fits the
     one program. Ties keep input order exactly as before; the integers are
-    the pairwise kernel's (``test_tile_table_cumsum_interp.py``)."""
-    r = tl.arange(0, RB)
-    rmask = r < R
-    e = tl.load(eids_ptr + r, mask=rmask, other=E).to(tl.int32)
-    # per-expert counts (sentinel E lands in no bin)
+    the pairwise kernel's (``test_tile_table_cumsum_interp.py``).
+
+    ``RCHUNK`` (with ``RANK_CUMSUM``; the wrapper's ``rchunk``) walks the rows
+    in chunks of ``RCHUNK``: one pass sums each expert's hits into ``counts``,
+    a second ranks each chunk's rows by the chunk's running count plus a
+    per-expert ``carry`` of the rows before it. No tile is larger than
+    ``[EB, RCHUNK]``: the whole ``[EB, RB]`` hit matrix, its running count and
+    the rank select did not fit one program's registers at ``E = 128,
+    R = 512`` (e4b#846 P120: 218 us a launch, against 40 us at ``E = 40``).
+    The same integers (``test_tile_table_cumsum_chunked_interp.py``)."""
     ee = tl.arange(0, EB)
     emask = ee < E
-    hits = (e[None, :] == ee[:, None]) & rmask[None, :]
-    counts = tl.sum(hits.to(tl.int32), axis=1)          # [EB]
-    tl.store(counts_ptr + ee, counts.to(tl.int64), mask=emask)
-    row_off = tl.cumsum(counts, axis=0) - counts         # exclusive
-    # stable rank: earlier rows with the same expert id
-    if RANK_CUMSUM:
-        run = tl.cumsum(hits.to(tl.int32), axis=1)        # [EB, RB] rows of e up to r
-        rank = tl.sum(tl.where(hits, run, 0), axis=0) - 1  # [RB]
+    if RANK_CUMSUM and RCHUNK > 0:
+        counts = tl.zeros([EB], dtype=tl.int32)
+        for c0 in range(0, RB, RCHUNK):
+            rc = c0 + tl.arange(0, RCHUNK)
+            mc = rc < R
+            ec = tl.load(eids_ptr + rc, mask=mc, other=E).to(tl.int32)
+            hc = (ec[None, :] == ee[:, None]) & mc[None, :]
+            counts += tl.sum(hc.to(tl.int32), axis=1)
+        tl.store(counts_ptr + ee, counts.to(tl.int64), mask=emask)
+        row_off = tl.cumsum(counts, axis=0) - counts     # exclusive
+        carry = tl.zeros([EB], dtype=tl.int32)            # rows of e before the chunk
+        for c0 in range(0, RB, RCHUNK):
+            rc = c0 + tl.arange(0, RCHUNK)
+            mc = rc < R
+            ec = tl.load(eids_ptr + rc, mask=mc, other=E).to(tl.int32)
+            hc = (ec[None, :] == ee[:, None]) & mc[None, :]
+            hi = hc.to(tl.int32)
+            run = tl.cumsum(hi, axis=1) + carry[:, None]  # rows of e up to r
+            rank = tl.sum(tl.where(hc, run, 0), axis=0) - 1
+            dst = tl.sum(tl.where(hc, row_off[:, None], 0), axis=0) + rank
+            tl.store(order_ptr + dst, rc.to(tl.int64), mask=mc)
+            if SIDS:
+                tl.store(sids_ptr + dst, ec.to(sids_ptr.dtype.element_ty), mask=mc)
+            carry += tl.sum(hi, axis=1)
     else:
-        same = (e[:, None] == e[None, :]) & (r[None, :] < r[:, None])
-        rank = tl.sum(same.to(tl.int32), axis=1)             # [RB]
-    dst = tl.sum(tl.where(hits, row_off[:, None], 0), axis=0) + rank
-    tl.store(order_ptr + dst, r.to(tl.int64), mask=rmask)
-    if SIDS:
-        tl.store(sids_ptr + dst, e.to(sids_ptr.dtype.element_ty), mask=rmask)
+        r = tl.arange(0, RB)
+        rmask = r < R
+        e = tl.load(eids_ptr + r, mask=rmask, other=E).to(tl.int32)
+        # per-expert counts (sentinel E lands in no bin)
+        hits = (e[None, :] == ee[:, None]) & rmask[None, :]
+        counts = tl.sum(hits.to(tl.int32), axis=1)          # [EB]
+        tl.store(counts_ptr + ee, counts.to(tl.int64), mask=emask)
+        row_off = tl.cumsum(counts, axis=0) - counts         # exclusive
+        # stable rank: earlier rows with the same expert id
+        if RANK_CUMSUM:
+            run = tl.cumsum(hits.to(tl.int32), axis=1)        # [EB, RB] rows of e up to r
+            rank = tl.sum(tl.where(hits, run, 0), axis=0) - 1  # [RB]
+        else:
+            same = (e[:, None] == e[None, :]) & (r[None, :] < r[:, None])
+            rank = tl.sum(same.to(tl.int32), axis=1)             # [RB]
+        dst = tl.sum(tl.where(hits, row_off[:, None], 0), axis=0) + rank
+        tl.store(order_ptr + dst, r.to(tl.int64), mask=rmask)
+        if SIDS:
+            tl.store(sids_ptr + dst, e.to(sids_ptr.dtype.element_ty), mask=rmask)
     # tile slots: expert e owns tiles [tile_off[e], tile_off[e]+tpe[e])
     tpe = (counts + BM - 1) // BM
     tile_off = tl.cumsum(tpe, axis=0) - tpe
@@ -774,10 +809,24 @@ def _tile_table_r1(eids_ptr, row0_ptr, rows_ptr, grp_ptr, order_ptr,
         tl.store(grp_ptr + tb, z, mask=dead)
 
 
+#: the largest [EB, RB] tile the cumsum rank builds in one piece; above it the rows go in chunks (``_cumsum_rchunk``)
+CUMSUM_TILE_ELEMS = 8192
+
+
+def _cumsum_rchunk(n_experts: int, r: int) -> int:
+    """The row chunk the cumsum rank uses: 0 (the whole ``[EB, RB]`` tile at once) while ``EB * RB`` fits
+    ``CUMSUM_TILE_ELEMS``, else the largest power of two >= 16 that keeps ``EB * RCHUNK`` within it."""
+    eb, rb = triton.next_power_of_2(n_experts), triton.next_power_of_2(r)
+    if eb * rb <= CUMSUM_TILE_ELEMS:
+        return 0
+    return min(rb, max(16, CUMSUM_TILE_ELEMS // eb))
+
+
 def build_group_tiles_fused(expert_ids, n_experts: int, block_m: int,
                             tiles_budget: int | None = None, *,
                             lean: bool = False, sorted_ids: bool = False,
-                            warps: int = 4, rank: str = "pairwise"):
+                            warps: int = 4, rank: str = "pairwise",
+                            rchunk: int | None = None):
     """Drop-in for ``nf4_grouped.build_group_tiles_device`` on DECODE
     shapes (R <= 256): same five outputs, same dtypes, same tile-slot
     semantics (padding slots rows=0), one kernel launch. Raises on
@@ -797,9 +846,19 @@ def build_group_tiles_fused(expert_ids, n_experts: int, block_m: int,
     ranks rows by the O(R^2) compare and takes R <= 256; ``"cumsum"`` ranks
     them by a running count over the expert-hit matrix (the same integers)
     and takes R <= 1024, so a 64-row decode step at top-k 8 (512 routed rows)
-    keeps the one-launch table instead of the chained builder."""
+    keeps the one-launch table instead of the chained builder.
+
+    ``rchunk`` (cumsum only): ``None`` (the default) chunks the rows when the
+    whole hit matrix would exceed ``CUMSUM_TILE_ELEMS`` (``_cumsum_rchunk``:
+    64 rows at 128 experts); ``0`` builds it in one piece, as before; a power
+    of two >= 16 forces that chunk. The same integers every way."""
     if rank not in ("pairwise", "cumsum"):
         raise ValueError(f"rank={rank!r}: expected 'pairwise' or 'cumsum'")
+    if rchunk is not None and rchunk != 0:
+        if rank != "cumsum":
+            raise ValueError(f"rchunk={rchunk} chunks the cumsum rank; rank={rank!r} has none")
+        if rchunk < 16 or rchunk & (rchunk - 1):
+            raise ValueError(f"rchunk={rchunk}: expected 0, None or a power of two >= 16")
     r = expert_ids.numel()
     cap = 1024 if rank == "cumsum" else 256
     if r > cap:
@@ -831,6 +890,12 @@ def build_group_tiles_fused(expert_ids, n_experts: int, block_m: int,
     ids = expert_ids.reshape(-1).contiguous() if lean else expert_ids.to(torch.int32)
     sids = torch.empty(r, dtype=expert_ids.dtype, device=dev) if sorted_ids else order
     maxt = -(-r // block_m) + 1
+    if rank != "cumsum":
+        rch = 0
+    elif rchunk is None:
+        rch = _cumsum_rchunk(n_experts, r)
+    else:
+        rch = min(rchunk, triton.next_power_of_2(r)) if rchunk else 0
     _tile_table_r1[(1,)](
         ids, row0, rows, grp, order, counts, sids,
         R=r, RB=triton.next_power_of_2(r), E=n_experts,
@@ -838,7 +903,7 @@ def build_group_tiles_fused(expert_ids, n_experts: int, block_m: int,
         BM=block_m, MAXT=triton.next_power_of_2(maxt),
         TBB=triton.next_power_of_2(tiles_budget) if lean else 1,
         SELF_ZERO=bool(lean), SIDS=bool(sorted_ids),
-        RANK_CUMSUM=(rank == "cumsum"), num_warps=warps)
+        RANK_CUMSUM=(rank == "cumsum"), RCHUNK=rch, num_warps=warps)
     if sorted_ids:
         return row0, rows, grp, order, counts, sids
     return row0, rows, grp, order, counts
