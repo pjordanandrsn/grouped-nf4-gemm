@@ -182,14 +182,23 @@ _ALLOW_UNVERIFIED_V5 = os.environ.get("GNF4_ALLOW_UNVERIFIED_V5") == "1"
 # K33 (kernel/PREREG-k33-nf4-decode-gemv-bw.md): the bandwidth-targeted NF4 decode GEMV, opt-in.
 # ---------------------------------------------------------------------------
 
-#: Where ``GNF4_GEMV_BW=auto`` engages: exact (N, K) shapes on >= 160-SM parts. Empty until experts4bit-qlora's served
-#: lane P116 reads the route (K33 read it at kernel level), so ``auto`` changes nothing today.
-_BW_SHAPES: frozenset = frozenset()
+#: Where ``GNF4_GEMV_BW=auto`` (the default) engages: exact (N, K) shapes on >= 160-SM parts. Qwen3-30B-A3B's gate_up
+#: and down projections, the shapes experts4bit-qlora's served lane P116 read DEFAULT_ON on an RTX 5090: one request
+#: decoded 1.2417x as fast, 16 unchanged, within P110's quality bar (register row
+#: ``e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07``; K33 read the kernel at 0.341x dot-pad). Other shapes keep their
+#: route until a served lane reads them.
+_BW_SHAPES: frozenset = frozenset({(1536, 2048), (2048, 768)})
 
 #: (BLOCK_N, KC, num_warps, split_k): 16 output rows x 256 columns (4 absmax blocks, 32 words) per program and K-step,
-#: 4 warps, no split. K33's sweep selected (16, 1024, 4, 1) for Qwen3's gate_up and this plan for its down
-#: projection; ``GNF4_GEMV_BW_PLAN`` overrides it per shape.
+#: 4 warps, no split -- the plan for a shape :data:`_BW_PLANS` does not list.
 _BW_PLAN_DEFAULT = (16, 256, 4, 1)
+
+#: K33's selected plan per (N, K) on an RTX 5090 (``kernel/receipts-k33/5090/k33.json``): Qwen3-30B-A3B gate_up / down,
+#: Granite-3.1-3b-a800m gate_up / down, OLMoE-1B-7B gate_up / down. P116 served Qwen3's two at these plans.
+#: ``GNF4_GEMV_BW_PLAN`` still overrides a shape.
+_BW_PLANS = {(1536, 2048): (16, 1024, 4, 1), (2048, 768): (16, 256, 4, 1),
+             (1024, 1536): (16, 512, 8, 1), (1536, 512): (16, 256, 8, 1),
+             (2048, 2048): (16, 1024, 4, 1), (2048, 1024): (16, 256, 4, 1)}
 
 _BW_DECODES = {"tree": 0, "prmt32": 2}
 
@@ -197,12 +206,13 @@ _BW_DECODES = {"tree": 0, "prmt32": 2}
 def _bw() -> str:
     """``GNF4_GEMV_BW``: route single-row decode calls through :func:`_gemv_nf4_bw`.
 
-    * ``0`` (the default; also unset or empty): off -- the dot-pad / scalar routes as before;
+    * ``auto`` (the default; also unset or empty): at :data:`_BW_SHAPES` on >= 160-SM parts, where experts4bit-qlora's
+      served lane P116 read it DEFAULT_ON; every other call keeps its route (dot-pad, the scalar GEMV);
     * ``1``: every single-row decode call, on every device (the interpreter included);
-    * ``auto``: only at ``_BW_SHAPES`` on >= 160-SM parts -- empty until the served lane P116 reads it.
+    * ``0``: off -- the dot-pad / scalar routes everywhere.
 
     Anything else is refused rather than read as off (the ``GNF4_GEMV_DOTPAD`` rule)."""
-    v = (os.environ.get("GNF4_GEMV_BW") or "").strip().lower() or "0"
+    v = (os.environ.get("GNF4_GEMV_BW") or "").strip().lower() or "auto"
     if v not in ("0", "1", "auto"):
         raise ValueError(f"GNF4_GEMV_BW={os.environ.get('GNF4_GEMV_BW')!r}: expected '0', '1' or 'auto'")
     return v
@@ -216,8 +226,8 @@ def _bw_engages(N: int, K: int, device) -> bool:
 
 
 def _bw_plan(N: int, K: int) -> tuple:
-    """(BLOCK_N, KC, num_warps, split_k) for one (N, K). ``GNF4_GEMV_BW_PLAN="1536,2048=16,256,4,1;2048,768=..."``
-    overrides it per shape (the ``GNF4_DECODE_PLAN`` pattern); a shape not listed takes :data:`_BW_PLAN_DEFAULT`."""
+    """(BLOCK_N, KC, num_warps, split_k) for one (N, K): ``GNF4_GEMV_BW_PLAN="1536,2048=16,256,4,1;2048,768=..."`` first
+    (the ``GNF4_DECODE_PLAN`` pattern), then K33's table :data:`_BW_PLANS`, then :data:`_BW_PLAN_DEFAULT`."""
     env = os.environ.get("GNF4_GEMV_BW_PLAN")
     if env:
         for entry in env.split(";"):
@@ -226,7 +236,7 @@ def _bw_plan(N: int, K: int) -> tuple:
             if int(n_s) == N and int(k_s) == K:
                 bn, kc, w, sk = (int(x) for x in cfg.split(","))
                 return bn, kc, w, sk
-    return _BW_PLAN_DEFAULT
+    return _BW_PLANS.get((N, K), _BW_PLAN_DEFAULT)
 
 
 def _bw_check_plan(plan: tuple) -> None:

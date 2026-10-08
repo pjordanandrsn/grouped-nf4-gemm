@@ -137,9 +137,10 @@ def _nf4_check_expert(B, A, N, K, e, tag, *, dotpad_shape=False):
     def decode(label, **kw):
         env = kw.pop("env", {})
         saved = {k: os.environ.get(k) for k in ("GNF4_GEMV_WIDE_LOADS", "GNF4_GEMV_VEC_LOADS",
-                                                "GNF4_GEMV_DOTPAD", "GNF4_GEMV_SPLITK")}
+                                                "GNF4_GEMV_DOTPAD", "GNF4_GEMV_SPLITK", "GNF4_GEMV_BW")}
         for k in saved:
             os.environ.pop(k, None)
+        os.environ["GNF4_GEMV_BW"] = "0"      # these arms read dot-pad / the scalar GEMV, behind P116's default
         os.environ.update(env)
         try:
             before = NG.dispatch_counts()

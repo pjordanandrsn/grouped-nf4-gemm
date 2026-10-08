@@ -149,7 +149,8 @@ def test_dotpad_past_the_word_boundary(monkeypatch, split_k, label):
     if (1536, 2048) not in NG._DOTPAD_CONFIGS or NG._sm_count(torch.device(DEV)) < 160:
         pytest.skip("dot-pad engages only at its census shapes on >= 160-SM parts; this device has "
                     f"{NG._sm_count(torch.device(DEV))} SMs")
-    monkeypatch.delenv("GNF4_GEMV_DOTPAD", raising=False)                  # the shipped default: on
+    monkeypatch.delenv("GNF4_GEMV_DOTPAD", raising=False)                  # dot-pad's own default: on
+    monkeypatch.setenv("GNF4_GEMV_BW", "0")                                # behind the bandwidth route (P116's default)
     monkeypatch.delenv("GNF4_GEMV_SPLITK", raising=False)
     NG, B, A, eid, a, want, decoy, _buf = _case(1536, 2048, 1536 * 1024, seed=37)
     before = NG.dispatch_counts()
