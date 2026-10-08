@@ -36,11 +36,10 @@ GPU kernels need **Linux, an NVIDIA sm_80+ GPU, torch ≥ 2.8 and Triton ≥ 3.4
 CI tests Python 3.11. CPU pack/decode and provenance tools work without CUDA;
 macOS and Windows are not exercised by CI. ROCm and XPU are port targets.
 
-**New in 0.42.0:** bucketed padding of the LoRA update is on by default (`auto`) for calls with at least 16,384
-routed rows, such as packed 4,096-token training rows; smaller calls keep the single padded block.
-Measured in experts4bit-qlora's packed-row training under torch 2.12 and torch 2.8: under 2.8 it steps 0.983× the single
-block with a 4.24 GB lower peak.
-`NF4_QLORA_PAD_BUCKETS=0` restores the single block.
+**New in 0.43.0:** two defaults, each read in experts4bit-qlora on Qwen3-30B-A3B and one RTX 5090. On GPUs with at least
+160 SMs, single-request decode at Qwen3-30B-A3B's expert shapes uses the bandwidth-targeted GEMV: 1.24× as fast at one
+request (`GNF4_GEMV_BW=0` turns it off). Bucketed LoRA-delta calls run as one compact autograd node with the same bytes:
+0.65 GB less training memory on packed rows, and slightly faster steps (`NF4_QLORA_COMPACT_BUCKETS=0` turns it off).
 [Release notes](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/CHANGELOG.md)
 
 ## Try it on your GPU
@@ -1664,7 +1663,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
 
 # Status — what this kernel does, what changed, what is open
 
-**As of 2026-10-06, `grouped-nf4-gemm` version 0.42.0.** One page. The README argues; this
+**As of 2026-10-08, `grouped-nf4-gemm` version 0.43.0.** One page. The README argues; this
 page states. The positions here name their entries in
 [`docs/claims.json`](claims.json), which carry the evidence paths; a line
 without a claim ID records an issue closure, a correction still outstanding
