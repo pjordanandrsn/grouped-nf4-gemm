@@ -64,6 +64,7 @@ _DELIBERATELY_UNPACKAGED: dict[str, str] = {
     "k27_bench": "K27 K25-tree precision bench (PREREG-k27), campaign instrument, not library API",
     "k28_bench": "K28 GNF4_PDL decode-chain bench (PREREG-k28), campaign instrument, not library API",
     "k33_bench": "K33 NF4 decode GEMV bandwidth bench (PREREG-k33), campaign instrument, not library API",
+    "k34_bench": "K34 K16 32/64-row tile plan census on the 5090 (PREREG-k34), campaign instrument, not library API",
     "k15_marlin_bench": "K15 Marlin comparator bench; runs in a vLLM venv, not ours,\n                        and imports vllm -- never a dependency of this package",
     # The certified anchor: a campaign constant that harnesses read so
     # an uncertified literal cannot gate rentals again. Downstream
