@@ -36,10 +36,10 @@ GPU kernels need **Linux, an NVIDIA sm_80+ GPU, torch ≥ 2.8 and Triton ≥ 3.4
 CI tests Python 3.11. CPU pack/decode and provenance tools work without CUDA;
 macOS and Windows are not exercised by CI. ROCm and XPU are port targets.
 
-**New in 0.44.0:** training with fp32 adapters takes the single-block ladder by default: 0.797 of the step on a
-host-bound box, 1.031 on a GPU-bound one, held-out unchanged (`NF4_QLORA_SINGLE_LADDER=0` turns it off; bf16 adapters never
-take it). The one-launch tile table builds in row chunks, which made experts4bit-qlora's 64-row decode step 4.3 % faster,
-and the small-M int4 GEMM serves up to 64 rows.
+**New in 0.45.0:** four opt-in kernel options for a top-k MoE decode, each bitwise the launches it replaces: int64 expert
+ids and in-place token rows for `gemm_4bit_grouped`, bf16 routing weights from `router_epilogue`, one-launch q/k norm
+and rotary (`rope_norm_qk`), and the residual add in `combine_rows`. The cumsum tile table can split over several
+programs (`programs=P`). No default changes.
 [Release notes](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/CHANGELOG.md)
 
 ## Try it on your GPU
