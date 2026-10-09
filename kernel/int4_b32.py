@@ -1253,20 +1253,10 @@ def scaled_resid_add_rows(x: torch.Tensor, resid: torch.Tensor, scale: float):
 
 # ------------------------------------ fused q/k RMSNorm + rotary ------
 @triton.jit
-def _rope_norm_heads(x_ptr, w_ptr, cos_ptr, sin_ptr, out_ptr,
-                     HEADS: tl.constexpr, D: tl.constexpr,
-                     DB: tl.constexpr, EPS: tl.constexpr, PDL: tl.constexpr = False):
-    """Per-head RMSNorm followed by rotate-half rotary, one launch for
-    all heads of one projection: replaces the norm launch plus the
-    ~6-kernel ``apply_rotary_pos_emb`` chain (cat, neg, two muls, add,
-    dtype glue). Grid (rows, heads); each program pulls one [D] head
-    vector plus the shared [D] weight and this row's [D] cos/sin --
-    ~2 KB, occupancy-safe. rotate_half convention: halves split at
-    D/2, ``y = xn * cos + [-xn2, xn1] * sin`` where xn is the NORMED
-    vector (norm precedes rotary upstream), fp32 math, bf16 store."""
-    _pdl_enter(PDL)
-    r = tl.program_id(0)
-    h = tl.program_id(1)
+def _rope_norm_head(x_ptr, w_ptr, cos_ptr, sin_ptr, out_ptr, r, h,
+                    HEADS: tl.constexpr, D: tl.constexpr, DB: tl.constexpr, EPS: tl.constexpr):
+    """One head of one row: the arithmetic both ``_rope_norm_heads`` and
+    ``_rope_norm_qk`` run, from one source so the two cannot drift."""
     offs = tl.arange(0, DB)
     m = offs < D
     base = (r * HEADS + h) * D
@@ -1288,6 +1278,41 @@ def _rope_norm_heads(x_ptr, w_ptr, cos_ptr, sin_ptr, out_ptr,
              mask=m)
 
 
+@triton.jit
+def _rope_norm_heads(x_ptr, w_ptr, cos_ptr, sin_ptr, out_ptr,
+                     HEADS: tl.constexpr, D: tl.constexpr,
+                     DB: tl.constexpr, EPS: tl.constexpr, PDL: tl.constexpr = False):
+    """Per-head RMSNorm followed by rotate-half rotary, one launch for
+    all heads of one projection: replaces the norm launch plus the
+    ~6-kernel ``apply_rotary_pos_emb`` chain (cat, neg, two muls, add,
+    dtype glue). Grid (rows, heads); each program pulls one [D] head
+    vector plus the shared [D] weight and this row's [D] cos/sin --
+    ~2 KB, occupancy-safe. rotate_half convention: halves split at
+    D/2, ``y = xn * cos + [-xn2, xn1] * sin`` where xn is the NORMED
+    vector (norm precedes rotary upstream), fp32 math, bf16 store."""
+    _pdl_enter(PDL)
+    _rope_norm_head(x_ptr, w_ptr, cos_ptr, sin_ptr, out_ptr, tl.program_id(0), tl.program_id(1),
+                    HEADS, D, DB, EPS)
+
+
+@triton.jit
+def _rope_norm_qk(q_ptr, k_ptr, qw_ptr, kw_ptr, cos_ptr, sin_ptr, qo_ptr, ko_ptr,
+                  HQ: tl.constexpr, HK: tl.constexpr, D: tl.constexpr, DB: tl.constexpr,
+                  EPS_Q: tl.constexpr, EPS_K: tl.constexpr, PDL: tl.constexpr = False):
+    """``_rope_norm_heads`` for the query AND the key projection in one
+    launch: grid (rows, HQ + HK), the first HQ programs of a row take q's
+    heads and q's norm weight, the rest k's. Each head runs the same
+    ``_rope_norm_head`` as the two-launch form, so the outputs are bitwise
+    its outputs; one launch fewer per attention layer."""
+    _pdl_enter(PDL)
+    r = tl.program_id(0)
+    h = tl.program_id(1)
+    if h < HQ:
+        _rope_norm_head(q_ptr, qw_ptr, cos_ptr, sin_ptr, qo_ptr, r, h, HQ, D, DB, EPS_Q)
+    else:
+        _rope_norm_head(k_ptr, kw_ptr, cos_ptr, sin_ptr, ko_ptr, r, h - HQ, HK, D, DB, EPS_K)
+
+
 def rope_norm_heads(x: torch.Tensor, weight: torch.Tensor,
                     cos: torch.Tensor, sin: torch.Tensor, eps: float):
     """``x [R, HEADS, D]`` -> per-head RMSNorm (``weight [D]``) then
@@ -1301,6 +1326,26 @@ def rope_norm_heads(x: torch.Tensor, weight: torch.Tensor,
         sin.contiguous(), out, HEADS=HEADS, D=D,
         DB=triton.next_power_of_2(D), EPS=eps, num_warps=4, **_pdl_kw(x.device, R))
     return out
+
+
+def rope_norm_qk(q: torch.Tensor, k: torch.Tensor, q_weight: torch.Tensor, k_weight: torch.Tensor,
+                 cos: torch.Tensor, sin: torch.Tensor, q_eps: float, k_eps: float):
+    """``rope_norm_heads(q, q_weight, cos, sin, q_eps)`` and
+    ``rope_norm_heads(k, k_weight, cos, sin, k_eps)`` in one launch:
+    ``q [R, HQ, D]`` and ``k [R, HK, D]`` share the rows, the head width
+    and this row's ``cos/sin [R, D]``. Returns ``(q_out, k_out)``, bf16,
+    bitwise the two calls' outputs."""
+    R, HQ, D = q.shape
+    if k.dim() != 3 or k.shape[0] != R or k.shape[2] != D:
+        raise ValueError(f"rope_norm_qk: k must be [R={R}, HK, D={D}], got {tuple(k.shape)}")
+    HK = k.shape[1]
+    qo = torch.empty(R, HQ, D, dtype=torch.bfloat16, device=q.device)
+    ko = torch.empty(R, HK, D, dtype=torch.bfloat16, device=q.device)
+    _rope_norm_qk[(R, HQ + HK)](
+        q.contiguous(), k.contiguous(), q_weight.contiguous(), k_weight.contiguous(), cos.contiguous(),
+        sin.contiguous(), qo, ko, HQ=HQ, HK=HK, D=D, DB=triton.next_power_of_2(D), EPS_Q=q_eps, EPS_K=k_eps,
+        num_warps=4, **_pdl_kw(q.device, R))
+    return qo, ko
 
 
 # ------------------------------------------ rotary only (no head norm) --

@@ -651,6 +651,41 @@ def test_router_epilogue_select_on_logits_matches_gpt_oss_and_granite(E, K, with
     assert torch.allclose(w.sum(-1), torch.ones(13, device=dev), atol=1e-5)
 
 
+@pytest.mark.parametrize("R", [1, 16])
+@pytest.mark.parametrize("HQ,HK,D", [(32, 4, 128), (16, 2, 64), (8, 8, 96)])
+def test_rope_norm_qk_is_bitwise_the_two_launches(R, HQ, HK, D):
+    """One launch for q's and k's heads: bitwise ``rope_norm_heads`` on each, with distinct norm weights and eps, so a
+    head given the other projection's weight, eps or input would show (k's rows are small enough, mean square ~1e-6,
+    that its eps moves the result by more than a bf16 step). Holds under the interpreter too: both forms run the same
+    ``_rope_norm_head``."""
+    pytest.importorskip("triton")
+    from int4_b32 import rope_norm_heads, rope_norm_qk
+    dev = _gpu()
+    torch.manual_seed(59)
+    q = torch.randn(R, HQ, D).to(dev, torch.bfloat16)
+    k = (torch.randn(R, HK, D) * 1e-3).to(dev, torch.bfloat16)
+    qw = (torch.rand(D) + 0.5).to(dev, torch.bfloat16)
+    kw = (torch.rand(D) + 0.5).to(dev, torch.bfloat16)
+    ang = torch.randn(R, D // 2) * 3
+    cos = torch.cat([ang.cos(), ang.cos()], -1).to(dev, torch.bfloat16)
+    sin = torch.cat([ang.sin(), ang.sin()], -1).to(dev, torch.bfloat16)
+    qo, ko = rope_norm_qk(q, k, qw, kw, cos, sin, 1e-6, 1e-5)
+    assert torch.equal(qo, rope_norm_heads(q, qw, cos, sin, 1e-6))
+    assert torch.equal(ko, rope_norm_heads(k, kw, cos, sin, 1e-5))
+
+
+def test_rope_norm_qk_checks_k():
+    pytest.importorskip("triton")
+    from int4_b32 import rope_norm_qk
+    dev = _gpu()
+    q = torch.zeros(2, 4, 64).to(dev, torch.bfloat16)
+    w = torch.ones(64).to(dev, torch.bfloat16)
+    cs = torch.ones(2, 64).to(dev, torch.bfloat16)
+    for bad in (torch.zeros(1, 2, 64), torch.zeros(2, 2, 32), torch.zeros(2, 64)):
+        with pytest.raises(ValueError, match="rope_norm_qk"):
+            rope_norm_qk(q, bad.to(dev, torch.bfloat16), w, w, cs, cs, 1e-6, 1e-6)
+
+
 def test_router_epilogue_bias_shape_is_checked():
     pytest.importorskip("triton")
     from int4_b32 import router_epilogue
