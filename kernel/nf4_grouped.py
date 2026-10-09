@@ -1113,7 +1113,7 @@ def _gemv_nf4_bw(a_ptr, b_ptr, amax_ptr, out_ptr, lut_ptr, tbl_ptr, eids_ptr,
                  K, N, T, KBLOCKS_PER_SPLIT,
                  stride_be, stride_bn, stride_ae, stride_an,
                  BLOCK_N: tl.constexpr, KC: tl.constexpr, DECODE: tl.constexpr,
-                 SPLITK: tl.constexpr, PDL: tl.constexpr = False):
+                 SPLITK: tl.constexpr, GATHER_DIV: tl.constexpr = 1, PDL: tl.constexpr = False):
     """K33: the single-row NF4 decode GEMV, aimed at the streaming ceiling (kernel/PREREG-k33-nf4-decode-gemv-bw.md).
 
     Program (g, n-tile, k-split) computes ``out[g, n]`` for BLOCK_N rows of expert ``eids[g]`` over its K span. Per
@@ -1128,7 +1128,9 @@ def _gemv_nf4_bw(a_ptr, b_ptr, amax_ptr, out_ptr, lut_ptr, tbl_ptr, eids_ptr,
     differs from the scalar GEMV's, so the two are NOT bitwise equal (the tolerance contract applies); the two decodes
     are bitwise equal to each other, the result never depends on T, and a one-hot activation reads ``dequant_ref``
     exactly. ``SPLITK`` stores fp32 partials ``ws[(k_split * T + g) * N + n]`` (host-reduced in split order, as the
-    scalar split-K path does); otherwise one bf16 store. b_ptr is the int32 VIEW of the packed weights."""
+    scalar split-K path does); otherwise one bf16 store. b_ptr is the int32 VIEW of the packed weights. ``GATHER_DIV``
+    (default 1): row g's activation is row ``g // GATHER_DIV`` of ``a_ptr`` -- the token rows a top-k MoE expands to
+    (token, slot) rows, read where they are rather than copied ``GATHER_DIV`` times (experts4bit-qlora#1313, P127)."""
     _pdl_enter_nf4(PDL)
     g = tl.program_id(0)
     pid_n = tl.program_id(1)
@@ -1141,7 +1143,7 @@ def _gemv_nf4_bw(a_ptr, b_ptr, amax_ptr, out_ptr, lut_ptr, tbl_ptr, eids_ptr,
     w8 = tl.arange(0, 8)
     b_base = b_ptr + eid * stride_be + offs_n[:, None, None] * stride_bn
     am_base = amax_ptr + eid * stride_ae + offs_n[:, None] * stride_an
-    a_base = a_ptr + g * K
+    a_base = a_ptr + (g // GATHER_DIV) * K
     KB = K // 64
     if SPLITK:
         kb_lo = pid_k * KBLOCKS_PER_SPLIT
@@ -1216,9 +1218,10 @@ def _gemv_nf4_bw(a_ptr, b_ptr, amax_ptr, out_ptr, lut_ptr, tbl_ptr, eids_ptr,
         tl.store(out_ptr + g * N + offs_n, acc.to(tl.bfloat16), mask=n_mask)
 
 
-def _gemv_nf4_bw_launch(a_cat, B, absmax, eids, out, N, K, T, dev, bw_config=None):
+def _gemv_nf4_bw_launch(a_cat, B, absmax, eids, out, N, K, T, dev, bw_config=None, gather_div=1):
     """Launch :func:`_gemv_nf4_bw` for one single-row decode call; returns ``out``. ``bw_config`` (BLOCK_N, KC,
-    num_warps, split_k) overrides :func:`_bw_plan` (harness sweeps)."""
+    num_warps, split_k) overrides :func:`_bw_plan` (harness sweeps). ``gather_div``: ``a_cat`` holds T // gather_div
+    token rows and row g reads token g // gather_div."""
     plan = tuple(bw_config) if bw_config is not None else _bw_plan(N, K)
     _bw_check_plan(plan)
     bn, kc, warps, sk = plan
@@ -1231,7 +1234,8 @@ def _gemv_nf4_bw_launch(a_cat, B, absmax, eids, out, N, K, T, dev, bw_config=Non
         pdl = _pdl_kw(dev, T)
     except ImportError:
         pdl = {}
-    common = dict(BLOCK_N=bn, KC=kc, DECODE=_BW_DECODES[decode], num_warps=warps, num_stages=2, **pdl)
+    common = dict(BLOCK_N=bn, KC=kc, DECODE=_BW_DECODES[decode], GATHER_DIV=int(gather_div), num_warps=warps,
+                  num_stages=2, **pdl)
     _DISPATCH_COUNTS["bw_" + decode] += 1
     if sk > 1:
         span = -(-kb // sk)
@@ -1782,6 +1786,7 @@ def gemm_4bit_grouped(
     prefill_variant: int | None = None,
     prefill_groups: int = 1,
     bw_config: tuple | None = None,
+    gather_div: int = 1,
 ):
     """Single-launch grouped NF4 GEMM. ``a_cat [T,K]`` bf16/fp16 in group-sorted
     order, ``B [E,N,K//2]`` uint8, ``absmax [E,N,K//64]`` fp32, ``sizes`` the
@@ -1811,9 +1816,21 @@ def gemm_4bit_grouped(
     ``e`` its expert id). Refuses a
     CPU tensor with an error that names ``dequant_ref``. Needs a CUDA GPU (sm_80+) and Triton
     (Linux). See ``docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md``.
+
+    ``gather_div`` (default 1; the singleton decode only, every group one row): ``a_cat`` holds TOKEN rows and row
+    ``r`` of the call reads token ``r // gather_div`` -- a top-k MoE's (token, slot) rows, token-major, without the
+    caller's ``index_select`` expanding them. The bandwidth GEMV reads the token rows where they are; the other
+    single-row routes make that expansion here, so every route's output is bitwise the expanded call's
+    (experts4bit-qlora#1313, lane P127).
     """
     E, N, _ = B.shape
+    gd = int(gather_div)
+    if gd < 1:
+        raise ValueError(f"gather_div must be >= 1, got {gather_div}")
+    if gd > 1 and max(sizes) != 1:
+        raise ValueError("gather_div serves the singleton decode (every group one row) only")
     T, K = a_cat.shape
+    T *= gd
     assert sum(sizes) == T, (sum(sizes), T)
     dev = a_cat.device
     # CUDA-only in real use; TRITON_INTERPRET=1 runs the kernel on CPU tensors
@@ -1852,7 +1869,10 @@ def gemm_4bit_grouped(
         # K33 opt-in (GNF4_GEMV_BW): the bandwidth-targeted single-row GEMV, ahead of dot-pad when it engages;
         # off (the default) leaves every route below exactly as it was.
         if _bw_engages(N, K, dev):
-            return _gemv_nf4_bw_launch(a_cat, B, absmax, eids, out, N, K, T, dev, bw_config)
+            return _gemv_nf4_bw_launch(a_cat, B, absmax, eids, out, N, K, T, dev, bw_config, gather_div=gd)
+        if gd > 1:
+            # the other single-row routes read one row per program: make the (token, slot) rows the caller skipped
+            a_cat = a_cat.repeat_interleave(gd, dim=0)
         # K4: under wide loads the kernels address B in uint32 WORDS, so
         # the wrapper hands them the int32 view and word strides (legal:
         # K/2 % 4 == 0 whenever K % 8 == 0, which BLOCKSIZE enforces)

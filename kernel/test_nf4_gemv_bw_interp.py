@@ -314,3 +314,32 @@ def test_prmt32_under_the_interpreter_is_refused_not_downgraded(monkeypatch):
     monkeypatch.setenv("GNF4_GEMV_BW_DECODE", "lut")
     with pytest.raises(ValueError, match="GNF4_GEMV_BW_DECODE"):
         nf4_grouped._bw_decode("cpu")
+
+
+# --------------------------------------------- gather_div: the token rows read where they are (P127, item b2) --
+@pytest.mark.parametrize("plan", [(16, 256, 4, 1), (16, 128, 2, 2)])
+@pytest.mark.parametrize("bw", ["1", "0"])
+def test_gather_div_is_bitwise_the_expanded_rows(monkeypatch, plan, bw):
+    """``gather_div=k`` on the token rows is bitwise the call on their (token, slot) expansion, at the bandwidth GEMV
+    (one pass and split-K, reading the token rows in the kernel) and the scalar route (expanded in the wrapper). The
+    token rows head a larger buffer whose other rows hold other values, so a route that ignored ``gather_div`` (and
+    read row g, not g // k) would read wrong values in bounds rather than fault."""
+    monkeypatch.setenv("GNF4_GEMV_BW", bw)
+    monkeypatch.setenv("GNF4_GEMV_DOTPAD", "0")
+    N, K, k = 48, 256, 4
+    B, A = make_stack(5, N, K, seed=11)
+    tokens = torch.randn(8, K, dtype=torch.bfloat16)[:2]
+    ids = torch.tensor([4, 0, 2, 1, 3, 3, 0, 2], dtype=torch.int32)
+    rows = tokens.index_select(0, torch.arange(8) // k)
+    kw = {"bw_config": plan} if bw == "1" else {}
+    want = gemm_4bit_grouped(rows, B, A, [1] * 8, ids, **kw)
+    got = gemm_4bit_grouped(tokens, B, A, [1] * 8, ids, gather_div=k, **kw)
+    assert got.shape == (8, N) and torch.equal(got, want)
+
+
+def test_gather_div_is_refused_off_the_singleton_decode():
+    B, A = make_stack(2, 48, 256, seed=12)
+    with pytest.raises(ValueError, match="singleton decode"):
+        gemm_4bit_grouped(torch.randn(2, 256, dtype=torch.bfloat16), B, A, [2, 2], [0, 1], gather_div=2)
+    with pytest.raises(ValueError, match="gather_div must be"):
+        gemm_4bit_grouped(torch.randn(2, 256, dtype=torch.bfloat16), B, A, [1, 1], [0, 1], gather_div=0)
