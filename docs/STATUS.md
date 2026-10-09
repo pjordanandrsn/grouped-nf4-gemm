@@ -1,6 +1,6 @@
 # Status — what this kernel does, what changed, what is open
 
-**As of 2026-10-08, `grouped-nf4-gemm` version 0.43.0.** This page states the current position in each area, with
+**As of 2026-10-09, `grouped-nf4-gemm` version 0.44.0.** This page states the current position in each area, with
 the claim id behind each number; [`docs/claims.json`](claims.json) holds every claim's full text and evidence. The
 dated narrative behind these positions, with the readings they replaced and why, is
 [`STATUS-RECORD.md`](STATUS-RECORD.md).
@@ -126,6 +126,7 @@ Each default moved after a registered read; most reads are experts4bit-qlora's, 
 | lean padded LoRA delta | grouped-LoRA delta | `NF4_QLORA_LEAN_DELTA=0` | `e4b.train.lora-delta-lean.qwen3.5090.2026-10-03` |
 | bucketed padding at ≥ 16,384 routed rows (`auto`) | grouped-LoRA delta | `NF4_QLORA_PAD_BUCKETS=0` | `e4b.train.pad-buckets.auto.default-decision.5090.2026-10-06` |
 | bucketed calls as one compact autograd node | grouped-LoRA delta | `NF4_QLORA_COMPACT_BUCKETS=0` | `e4b.train.compact-buckets.packed-4k.5090.2026-10-07` |
+| the single-block ladder for fp32 adapters (`auto`, since 0.44.0) | grouped-LoRA delta | `NF4_QLORA_SINGLE_LADDER=0` (`1` for any dtype) | `e4b.train.single-ladder.field.5090.2026-10-08`, `e4b.train.single-ladder-auto.gpu-bound.5090.2026-10-08` |
 
 ---
 
@@ -153,8 +154,8 @@ often met:
 ## What is open
 
 - **#60:** arena staging blocks ~30% of a training step; the next layer's rows are prefetchable (`gnf4.open.issues`).
-- **The single-block ladder's `auto`:** experts4bit-qlora's TC1 amendment 71 is registered to read it and has not. If
-  its P215, P216 and P219 hold, `auto` becomes the default.
+- **The chunked tile table** is read at 128 experts × 512 rows only (P122); larger tables stay opt-in in experts4bit-qlora.
+- **The small-M int4 GEMM's 32- and 64-row tiles** are correct (one bf16 ulp) but unread for speed; experts4bit-qlora's P124 reads them.
 - **The bandwidth GEMV** is unread on other families, other cards and beside experts4bit-qlora's fused B=1 stack.
 - **The cold cost model:** why two gen 4 x16 hosts read different `link_eff` is unmeasured, and `cold_dest="deadline"`
   still omits the hybrid tier's mixed-layer dispatch term.

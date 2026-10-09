@@ -4,6 +4,136 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
+## 0.44.0 — 2026-10-09 — the single-block ladder for fp32 adapters by default, a chunked one-launch tile table, and the small-M int4 GEMM up to 64 rows
+
+**0.44.0.** One default changes and two kernels widen, each read in experts4bit-qlora on Qwen3-30B-A3B and one RTX 5090:
+- **The single-block ladder for fp32 adapters, by default.** Training with fp32 adapters steps 0.797 of the time on a
+  host-bound box and 1.031 on a GPU-bound one (registered bound 1.05), held-out unchanged. bf16 adapters, experts4bit-qlora's
+  default, never take it. `NF4_QLORA_SINGLE_LADDER=0` turns it off.
+- **A chunked one-launch tile table.** `build_group_tiles_fused(rank="cumsum")` now builds above 8,192 table elements in
+  row chunks. With it, experts4bit-qlora's 64-row decode step is 4.3 % faster (P122), and its `E4B_INT4_WIDE_TILES=auto`
+  default takes it once this release is installed.
+- **The small-M int4 GEMM up to 64 rows** (`block_m`). Nothing here routes to it; experts4bit-qlora's opt-in
+  `E4B_ATTN_INT4_WIDE` does. Up to 16 rows it is 0.43.0's launch, bit for bit.
+
+Upgrade if you train with fp32 adapters or serve Qwen3-30B-A3B int4 batches. experts4bit-qlora's `[fast]` floor stays at
+0.30.0; a fresh install resolves this release.
+
+### `NF4_QLORA_SINGLE_LADDER` defaults to `auto` (behaviour change for fp32 adapters)
+
+- **What changed.** Unset (or empty) now means `auto`: the single padded block runs on the ladder's rungs exactly when the
+  adapters are fp32. `0` turns it off; `1` takes it for any adapter dtype; other values are off, as before.
+- **Why.** experts4bit-qlora TC1 amendments 70–72 read it at TC1's field recipe on Qwen3-30B-A3B and one RTX 5090. With
+  fp32 adapters it stepped 0.797 of the time on a host-bound box and 1.031 on a GPU-bound one, within the registered 1.05;
+  held-out loss was unchanged. bf16 adapters (e4b's default) are untouched (1.002), so `auto` never engages for them.
+- **Who is affected.** Training with fp32 adapters on the lean single block: the batched products run at padded shapes,
+  so values match the single block to rounding, not bit for bit. The way back is `NF4_QLORA_SINGLE_LADDER=0`.
+- **Tests.** `kernel/test_single_ladder.py` pins unset == `auto` op for op on both dtypes, and empty as unset. The compact,
+  lean and pad-bucket bit-identity tests set it to `0`, since they hold other paths to the single block.
+
+### `NF4_QLORA_SINGLE_LADDER=1`: the single padded block's group count and width on the ladder's rungs
+
+Every call below the bucket gate (`NF4_QLORA_PAD_BUCKETS=auto`) takes the single padded block. Its two `bmm`s run at
+`[G, widest, K]`, and the router makes nearly every `(G, widest)` new, so cuBLAS pays its per-shape host cost on nearly every
+call. At TC1's field recipe on one RTX 5090 (experts4bit-qlora TC1 amendment 69, Qwen3-30B-A3B, torch 2.12), the padded
+delta's `aten::bmm` ran about 3,076 calls a step at about 172 us of CPU self time each, above its 120 us of device time. The
+step's GPU was busy for 0.49 of it.
+
+With `NF4_QLORA_SINGLE_LADDER=1` the block runs at `[_ladder_up(G), _ladder_up(widest), K]`. The `NF4_QLORA_PAD_BUCKETS_LADDER`
+rungs are four per octave, so a rung is at most 25 % above its value and the block holds at most 1.5625× the single block's rows.
+The padded groups take zero adapters (`F.pad`) and zero rows, and the output gather never reads them. Every real row gets the
+same arithmetic at a repeating shape: values and gradients equal the single block's to rounding (`kernel/test_single_ladder.py`,
+CPU and CUDA, unique and repeated ids, three dtype pairs). Over 40 Zipf(1) top-8 routings of 512 tokens, the 24 distinct
+shapes become 1.
+
+Scope:
+- lean single block only: not `NF4_QLORA_LEAN_DELTA=0`'s body, not `NF4_QLORA_COMPACT_DELTA=1`'s node, not bucketed calls;
+- its plans sit under their own memo key;
+- `SINGLE_LADDER_STATS` counts calls and laddered rows.
+
+`0` is the single block op for op. Unset is `auto` since this release (above).
+
+### `NF4_QLORA_SINGLE_LADDER=auto`: the single-block ladder exactly when the adapters are fp32
+
+experts4bit-qlora TC1 amendment 70 read `NF4_QLORA_SINGLE_LADDER=1` at TC1's field recipe on a host-bound RTX 5090 box. Its
+fp32-adapter arm stepped **0.797** of its time: `aten::bmm`'s CPU self time per call fell from 305 µs to 24.5 µs, for 4.1 % more
+device time and 0.33 GB more peak. Its bf16-adapter arm stepped **1.015**: that `bmm` already took about 28 µs a call, so the
+padding's 3.2 % of device time bought nothing. The per-new-shape host cost is cuBLAS's fp32 batched product's.
+
+`auto` takes the ladder when the adapters, and so the padded block, are fp32, and is the single block op for op otherwise
+(`kernel/test_single_ladder.py`). TC1 amendment 71 held its mechanism on a second host but read no step time there (the host was
+loaded); amendment 72 read it on a third (above), so `auto` is now the default.
+
+### `build_group_tiles_fused(..., rank="cumsum")`: the one-launch tile table above 256 routed rows (opt-in)
+
+The one-launch expert-major tile table (`_tile_table_r1`, lane K23's builder) ranked rows by an O(R^2) pairwise compare,
+so it took at most 256 routed rows, and anything wider fell back to the chained builder (`nf4_grouped.build_group_tiles_device`:
+argsort, scatter, cumsum, searchsorted and index_select, about 16 launches a layer). On experts4bit-qlora's 64-row decode
+step (512 routed rows at top-k 8) that chained table costs 2.87 ms of a 15.64 ms step on an RTX 5090, against 0.93 ms for
+the one-launch table at 256 rows (experts4bit-qlora lane P119).
+
+`rank="cumsum"` ranks each row by a running count of its expert's rows along the hit matrix the kernel already builds
+([E, R] lanes instead of [R, R]), so one program takes R up to 1024. The integers are the same: the permutation equals
+`torch.argsort(expert_ids, stable=True)` bit for bit, all five tables (and the lean variant's six) equal the chained
+builder's, and at R <= 256 the cumsum and pairwise kernels agree (`kernel/test_tile_table_cumsum_interp.py`, R from 1 to
+1024, uniform, skewed and single-expert routing). The default stays `rank="pairwise"` with its 256 cap.
+
+**Measured since: correct but slower at 128 experts.** experts4bit-qlora's P120 read the opt-in on Qwen3-30B-A3B int4
+(512 routed rows, 128 experts, RTX 5090): the 64-row decode step took 1.44x as long, because the one-program table costs
+about 10.4 ms a step at that size, against 1.4 ms for the chained builder. Tokens were identical. The default stays
+`pairwise`. (`e4b.serve.p120.wide-tiles.qwen3-int4.5090.2026-10-08`)
+
+### `build_group_tiles_fused(..., rank="cumsum")` walks the rows in chunks above 8,192 table elements (`rchunk`)
+
+The cumsum rank (#515) built its whole [E, R] hit matrix, the running count and the rank select in one program. At 128
+experts and 512 routed rows that is 65,536 lanes per tensor. On an RTX 5090 the launch took 218 µs, against 40 µs at 40
+experts, and experts4bit-qlora's 64-row decode step got 1.44× slower with it (lane P120).
+
+`_tile_table_r1` now takes `RCHUNK`. The rows go in chunks: one pass sums each expert's hits, a second ranks each chunk's
+rows by its running count plus a per-expert carry of the rows before it. No tile exceeds [E, RCHUNK].
+
+The wrapper's `rchunk=None` (the default) chunks once `next_pow2(E) × next_pow2(R)` exceeds `CUMSUM_TILE_ELEMS` (8,192),
+which is 64-row chunks at 128 experts. `rchunk=0` keeps one piece, and a power of two ≥ 16 forces that chunk.
+
+The integers are the same every way:
+- the permutation equals `torch.argsort(expert_ids, stable=True)`;
+- the five tables equal the chained builder's and the one-piece cumsum's;
+- the lean variant's six outputs equal the default's.
+
+`kernel/test_tile_table_cumsum_chunked_interp.py` covers 1 to 1,024 rows at 40, 128 and 256 experts, with chunks of 16,
+64 and automatic, under uniform, skewed and single-expert routing. experts4bit-qlora's P122 then read it DEFAULT_ON: the 64-row
+decode step 4.3 % faster, tokens identical (`e4b.serve.p122.wide-tiles-chunked.qwen3-int4.5090.2026-10-08`), and its
+`E4B_INT4_WIDE_TILES` now defaults to `auto` for tables up to 128 × 512 when this release is installed.
+
+### `gemm_int4_b32_smallm` serves up to 64 rows: a 32- or 64-row M tile above 16 (`block_m`; e4b#846)
+
+The K16 small-M int4 GEMM refused more than 16 rows, so experts4bit-qlora's attention projections fall back to a cached
+bf16 copy and cuBLAS once a batched decode step passes 16 rows. On Qwen3-30B-A3B's 64-row step that copy is 1.81 GB a
+step, against 510 MB on the int4 grid it is dequantised from.
+
+The kernel was already generic in its M tile, so only the wrapper changes:
+- `block_m=None` (the default) launches a 16-row tile up to 16 rows, a 32-row tile up to 32 and a 64-row tile up to
+  64 (`smallm_block_m`). More than 64 rows is still refused.
+- Up to 16 rows the launch is K16's exactly: the same grid, tile, plan, warps and stages, and the same bits as 0.43.0.
+  A test records the launch and compares outputs with `torch.equal`, compiled on a GPU as well as in the interpreter.
+- An explicit `block_m` (16, 32 or 64) must hold every row. A workspace built for a tile serves that tile and every
+  smaller one.
+
+Above 16 rows the outputs keep K16's contract: within one bf16 ulp of the dequant-then-GEMM reference, deterministic
+for a config, and within one ulp across split-K and across tiles. Nothing in this package routes to it on its own. Its
+speed is experts4bit-qlora's to read (lane P124).
+
+### `docs/STATUS.md` states the current position; the dated narrative moves to `docs/STATUS-RECORD.md` (docs only)
+
+- `docs/STATUS.md` is cut from about 4,970 words to about 1,900. It states the position in each area with its claim id and
+  evidence link, a table of the defaults with their way back and the read behind each, a short list of what changed, and
+  what is open, including the single-block ladder's `auto` and the TC1 amendment 71 read that decides it.
+- The old text moves verbatim to `docs/STATUS-RECORD.md`, frozen at 0.43.0. The one register row whose `quoted_in` named
+  `docs/STATUS.md` for text that now lives only in the record (`gnf4.kernel.k15-marlin-comparator.5090.2026-09-11`)
+  points at the record.
+- `AGENTS.md`: a moved position replaces its STATUS entry, and the detail goes to the lane's RESULTS file.
+  `docs/INDEX.md` lists the record. No number, claim status or default changes.
+
 ## 0.43.0 — 2026-10-08 — faster single-request NF4 decode on 160+ SM GPUs and a lighter bucketed LoRA delta, both by default
 
 **0.43.0.** Two defaults change, each licensed by a registered read in experts4bit-qlora on Qwen3-30B-A3B and one RTX 5090:
