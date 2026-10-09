@@ -4,7 +4,7 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
-## 0.44.0 — 2026-10-08 — the single-block ladder for fp32 adapters by default, a chunked one-launch tile table, and the small-M int4 GEMM up to 64 rows
+## 0.44.0 — 2026-10-09 — the single-block ladder for fp32 adapters by default, a chunked one-launch tile table, and the small-M int4 GEMM up to 64 rows
 
 **0.44.0.** One default changes and two kernels widen, each read in experts4bit-qlora on Qwen3-30B-A3B and one RTX 5090:
 - **The single-block ladder for fp32 adapters, by default.** Training with fp32 adapters steps 0.797 of the time on a

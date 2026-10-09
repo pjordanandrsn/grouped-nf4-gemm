@@ -1,6 +1,6 @@
 # Status — what this kernel does, what changed, what is open
 
-**As of 2026-10-08, `grouped-nf4-gemm` version 0.44.0.** This page states the current position in each area, with
+**As of 2026-10-09, `grouped-nf4-gemm` version 0.44.0.** This page states the current position in each area, with
 the claim id behind each number; [`docs/claims.json`](claims.json) holds every claim's full text and evidence. The
 dated narrative behind these positions, with the readings they replaced and why, is
 [`STATUS-RECORD.md`](STATUS-RECORD.md).
