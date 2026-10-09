@@ -813,6 +813,93 @@ def _tile_table_r1(eids_ptr, row0_ptr, rows_ptr, grp_ptr, order_ptr,
 CUMSUM_TILE_ELEMS = 8192
 
 
+@triton.jit
+def _tile_table_cumsum_mp(eids_ptr, row0_ptr, rows_ptr, grp_ptr, order_ptr,
+                          counts_ptr, sids_ptr, owners_ptr, R: tl.constexpr, RB: tl.constexpr,
+                          E: tl.constexpr, HB: tl.constexpr, EBP: tl.constexpr, TB: tl.constexpr,
+                          BM: tl.constexpr, MAXT: tl.constexpr, RCHUNK: tl.constexpr,
+                          TBB: tl.constexpr = 1, SELF_ZERO: tl.constexpr = False,
+                          SIDS: tl.constexpr = False, HIST: tl.constexpr = True,
+                          OWNERS: tl.constexpr = False):
+    """``_tile_table_r1``'s cumsum rank over ``programs`` programs (e4b#846): the same tables, the work split by expert.
+
+    Program ``p`` owns experts ``[p * EBP, (p + 1) * EBP)`` (clipped to ``E``; a program past ``E`` owns none). Every
+    program first takes the counts of ALL experts -- ``tl.histogram`` over the ids with the masked rows' sentinel ``E``
+    in a bin of its own (``HIST``), or the ``[HB, RCHUNK]`` counting pass -- so each knows its experts' row and tile
+    offsets without talking to the others. It then ranks only its own experts' rows (``[EBP, RCHUNK]`` chunks with the
+    per-expert carry, as ``RCHUNK`` does in one program) and writes their ``order``/``sids`` entries, their counts and
+    their tile slots. A row's expert has exactly one owner, so no address is written by two programs; program 0 zeroes
+    the padding slots (``SELF_ZERO``). ``OWNERS`` (tests only) adds 1 to ``owners[r]`` for every row a program writes,
+    so the suite can see each row written exactly once."""
+    pid = tl.program_id(0)
+    hb = tl.arange(0, HB)
+    if HIST:
+        r = tl.arange(0, RB)
+        e = tl.load(eids_ptr + r, mask=r < R, other=E).to(tl.int32)
+        counts_all = tl.histogram(e, HB)                          # the sentinel E lands in bin E
+    else:
+        counts_all = tl.zeros([HB], dtype=tl.int32)
+        for c0 in range(0, RB, RCHUNK):
+            rc = c0 + tl.arange(0, RCHUNK)
+            mc = rc < R
+            ec = tl.load(eids_ptr + rc, mask=mc, other=E).to(tl.int32)
+            counts_all += tl.sum(((ec[None, :] == hb[:, None]) & mc[None, :]).to(tl.int32), axis=1)
+    counts_all = tl.where(hb < E, counts_all, 0)
+    row_off_all = tl.cumsum(counts_all, axis=0) - counts_all     # exclusive, every expert
+    tpe_all = (counts_all + BM - 1) // BM
+    tile_off_all = tl.cumsum(tpe_all, axis=0) - tpe_all
+    ee = pid * EBP + tl.arange(0, EBP)                             # this program's experts
+    emask = ee < E
+    sel = hb[None, :] == ee[:, None]                               # [EBP, HB]: pick this program's slice
+    counts = tl.sum(tl.where(sel, counts_all[None, :], 0), axis=1)
+    row_off = tl.sum(tl.where(sel, row_off_all[None, :], 0), axis=1)
+    tile_off = tl.sum(tl.where(sel, tile_off_all[None, :], 0), axis=1)
+    tl.store(counts_ptr + ee, counts.to(tl.int64), mask=emask)
+    carry = tl.zeros([EBP], dtype=tl.int32)
+    for c0 in range(0, RB, RCHUNK):
+        rc = c0 + tl.arange(0, RCHUNK)
+        mc = rc < R
+        ec = tl.load(eids_ptr + rc, mask=mc, other=E).to(tl.int32)
+        hc = (ec[None, :] == ee[:, None]) & mc[None, :] & emask[:, None]
+        hi = hc.to(tl.int32)
+        run = tl.cumsum(hi, axis=1) + carry[:, None]
+        rank = tl.sum(tl.where(hc, run, 0), axis=0) - 1
+        own = tl.sum(hi, axis=0) > 0                                # this program owns the row's expert
+        dst = tl.sum(tl.where(hc, row_off[:, None], 0), axis=0) + rank
+        tl.store(order_ptr + dst, rc.to(tl.int64), mask=mc & own)
+        if SIDS:
+            tl.store(sids_ptr + dst, ec.to(sids_ptr.dtype.element_ty), mask=mc & own)
+        if OWNERS:
+            tl.atomic_add(owners_ptr + rc, own.to(tl.int32), mask=mc)
+        carry += tl.sum(hi, axis=1)
+    tpe = (counts + BM - 1) // BM
+    ti = tl.arange(0, MAXT)
+    live = (ti[None, :] < tpe[:, None]) & emask[:, None]
+    slot = tl.where(live, tile_off[:, None] + ti[None, :], 0)
+    rows_v = tl.minimum(counts[:, None] - ti[None, :] * BM, BM)
+    row0_v = row_off[:, None] + ti[None, :] * BM
+    grp_v = tl.broadcast_to(ee[:, None], (EBP, MAXT))
+    lf = tl.reshape(live, (EBP * MAXT,))
+    sf = tl.reshape(slot, (EBP * MAXT,))
+    tl.store(rows_ptr + sf, tl.reshape(rows_v.to(tl.int32), (EBP * MAXT,)), mask=lf)
+    tl.store(row0_ptr + sf, tl.reshape(row0_v.to(tl.int32), (EBP * MAXT,)), mask=lf)
+    tl.store(grp_ptr + sf, tl.reshape(grp_v.to(tl.int32), (EBP * MAXT,)), mask=lf)
+    if SELF_ZERO:
+        if pid == 0:
+            tb = tl.arange(0, TBB)
+            dead = (tb >= tl.sum(tpe_all, axis=0)) & (tb < TB)
+            z = tl.zeros([TBB], dtype=tl.int32)
+            tl.store(rows_ptr + tb, z, mask=dead)
+            tl.store(row0_ptr + tb, z, mask=dead)
+            tl.store(grp_ptr + tb, z, mask=dead)
+
+
+def _programs_slice(n_experts: int, programs: int) -> int:
+    """Experts per program for ``build_group_tiles_fused(..., programs=P)``: the next power of two >= ceil(E / P), so
+    the slices ``[p * EBP, (p + 1) * EBP)`` cover ``[0, E)`` with no overlap (a program past ``E`` owns none)."""
+    return triton.next_power_of_2(-(-int(n_experts) // int(programs)))
+
+
 def _cumsum_rchunk(n_experts: int, r: int) -> int:
     """The row chunk the cumsum rank uses: 0 (the whole ``[EB, RB]`` tile at once) while ``EB * RB`` fits
     ``CUMSUM_TILE_ELEMS``, else the largest power of two >= 16 that keeps ``EB * RCHUNK`` within it."""
@@ -826,7 +913,8 @@ def build_group_tiles_fused(expert_ids, n_experts: int, block_m: int,
                             tiles_budget: int | None = None, *,
                             lean: bool = False, sorted_ids: bool = False,
                             warps: int = 4, rank: str = "pairwise",
-                            rchunk: int | None = None):
+                            rchunk: int | None = None, programs: int | None = None,
+                            _hist: bool = True, _owners=None):
     """Drop-in for ``nf4_grouped.build_group_tiles_device`` on DECODE
     shapes (R <= 256): same five outputs, same dtypes, same tile-slot
     semantics (padding slots rows=0), one kernel launch. Raises on
@@ -851,9 +939,20 @@ def build_group_tiles_fused(expert_ids, n_experts: int, block_m: int,
     ``rchunk`` (cumsum only): ``None`` (the default) chunks the rows when the
     whole hit matrix would exceed ``CUMSUM_TILE_ELEMS`` (``_cumsum_rchunk``:
     64 rows at 128 experts); ``0`` builds it in one piece, as before; a power
-    of two >= 16 forces that chunk. The same integers every way."""
+    of two >= 16 forces that chunk. The same integers every way.
+
+    ``programs`` (cumsum only; opt-in, e4b#846): ``None`` or ``1`` (the default) is the one-program kernel above,
+    launched exactly as before. ``P > 1`` splits the experts over ``P`` programs (``_tile_table_cumsum_mp``): each takes
+    every expert's count with one histogram of the ids, then ranks and writes only its own experts' rows, so the
+    ``[EB, RB]`` rank work divides by ``P``. The same integers at every ``P``
+    (``test_tile_table_programs_interp.py``). ``_hist=False`` takes the counts with the counting pass instead of
+    ``tl.histogram``; ``_owners`` (tests) is an int32 ``[R]`` tensor the kernel adds 1 to for every row it writes."""
     if rank not in ("pairwise", "cumsum"):
         raise ValueError(f"rank={rank!r}: expected 'pairwise' or 'cumsum'")
+    if programs is not None and (int(programs) < 1 or int(programs) != programs):
+        raise ValueError(f"programs={programs!r}: expected None or an integer >= 1")
+    if programs is not None and programs > 1 and rank != "cumsum":
+        raise ValueError(f"programs={programs} splits the cumsum rank; rank={rank!r} has no split")
     if rchunk is not None and rchunk != 0:
         if rank != "cumsum":
             raise ValueError(f"rchunk={rchunk} chunks the cumsum rank; rank={rank!r} has none")
@@ -896,14 +995,29 @@ def build_group_tiles_fused(expert_ids, n_experts: int, block_m: int,
         rch = _cumsum_rchunk(n_experts, r)
     else:
         rch = min(rchunk, triton.next_power_of_2(r)) if rchunk else 0
-    _tile_table_r1[(1,)](
-        ids, row0, rows, grp, order, counts, sids,
-        R=r, RB=triton.next_power_of_2(r), E=n_experts,
-        EB=triton.next_power_of_2(n_experts), TB=tiles_budget,
-        BM=block_m, MAXT=triton.next_power_of_2(maxt),
-        TBB=triton.next_power_of_2(tiles_budget) if lean else 1,
-        SELF_ZERO=bool(lean), SIDS=bool(sorted_ids),
-        RANK_CUMSUM=(rank == "cumsum"), RCHUNK=rch, num_warps=warps)
+    if programs is not None and programs > 1:
+        ebp = _programs_slice(n_experts, programs)
+        rb = triton.next_power_of_2(r)
+        hb = triton.next_power_of_2(n_experts + 1)
+        own = _owners if _owners is not None else order
+        tile = ebp if _hist else max(ebp, hb)          # the widest [rows-of-experts, RCHUNK] tile a pass builds
+        _tile_table_cumsum_mp[(int(programs),)](
+            ids, row0, rows, grp, order, counts, sids, own,
+            R=r, RB=rb, E=n_experts, HB=hb, EBP=ebp, TB=tiles_budget,
+            BM=block_m, MAXT=triton.next_power_of_2(maxt),
+            RCHUNK=min(rb, max(16, CUMSUM_TILE_ELEMS // tile)),
+            TBB=triton.next_power_of_2(tiles_budget) if lean else 1,
+            SELF_ZERO=bool(lean), SIDS=bool(sorted_ids), HIST=bool(_hist),
+            OWNERS=_owners is not None, num_warps=warps)
+    else:
+        _tile_table_r1[(1,)](
+            ids, row0, rows, grp, order, counts, sids,
+            R=r, RB=triton.next_power_of_2(r), E=n_experts,
+            EB=triton.next_power_of_2(n_experts), TB=tiles_budget,
+            BM=block_m, MAXT=triton.next_power_of_2(maxt),
+            TBB=triton.next_power_of_2(tiles_budget) if lean else 1,
+            SELF_ZERO=bool(lean), SIDS=bool(sorted_ids),
+            RANK_CUMSUM=(rank == "cumsum"), RCHUNK=rch, num_warps=warps)
     if sorted_ids:
         return row0, rows, grp, order, counts, sids
     return row0, rows, grp, order, counts
