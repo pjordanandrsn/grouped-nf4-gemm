@@ -1,0 +1,5 @@
+K34 qkv/32 best [64, 128, 4, 4, 2] median ms {"shipped": 0.3808, "shipped2": 0.3805, "best": 0.3813, "bf16": 0.7349} floor 0.1871
+K34 qkv/64 best [64, 128, 4, 4, 2] median ms {"shipped": 0.6661, "shipped2": 0.6661, "best": 0.6692, "bf16": 0.8054} floor 0.1871
+K34 o/32 best [32, 128, 8, 8, 2] median ms {"shipped": 0.4315, "shipped2": 0.4306, "best": 0.4244, "bf16": 0.643} floor 0.1497
+K34 o/64 best [32, 256, 4, 4, 2] median ms {"shipped": 0.7293, "shipped2": 0.7289, "best": 0.5791, "bf16": 1.0753} floor 0.1497
+K34_VERDICT NONE: best / shipped qkv/32 x1.001 ([64, 128, 4, 4, 2]), o/32 x0.984 ([32, 128, 8, 8, 2]), qkv/64 x1.005 ([64, 128, 4, 4, 2]), o/64 x0.794 ([32, 256, 4, 4, 2]) -- the shipped plan stays
