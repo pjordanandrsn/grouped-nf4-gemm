@@ -24,7 +24,7 @@ The packers, reference implementations, and byte-level checks ship alongside the
 It installs this package through the [experts4bit-qlora runtime](https://github.com/pjordanandrsn/experts4bit-qlora).
 Use grouped-nf4-gemm directly to build or tune a kernel integration.
 
-[Install](#install) · [Results](#what-is-measured) · [Kernel API](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/KERNEL_CONTRACT.md) · [Task guides](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/SOLUTIONS.md)
+[Install](#install) · [Results](#what-is-measured) · [Kernel API](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/KERNEL_CONTRACT.md) · [Task guides](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/SOLUTIONS.md) · [Hugging Face](https://huggingface.co/spaces/pjordanandrsn/research)
 
 ## Install
 
