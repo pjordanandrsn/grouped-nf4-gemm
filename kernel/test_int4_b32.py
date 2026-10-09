@@ -686,6 +686,37 @@ def test_rope_norm_qk_checks_k():
             rope_norm_qk(q, bad.to(dev, torch.bfloat16), w, w, cs, cs, 1e-6, 1e-6)
 
 
+@pytest.mark.parametrize("T", [1, 16])
+@pytest.mark.parametrize("k,H", [(8, 2048), (4, 2880), (8, 100)])
+def test_combine_rows_residual_is_bitwise_the_bf16_add(T, k, H):
+    """``residual=``: the layer's residual add in the combine's epilogue is bitwise torch's bf16 add of the combine's
+    output and the residual (round the combine, widen both, one fp32 add, round to nearest even), including at a
+    width that is not a multiple of the block. Silicon only: the interpreter's bf16 cast does not round to nearest."""
+    pytest.importorskip("triton")
+    from int4_b32 import combine_rows
+    if os.environ.get("TRITON_INTERPRET") == "1":
+        pytest.skip("bitwise reading needs silicon: the interpreter's bf16 cast differs")
+    dev = _gpu()
+    torch.manual_seed(53)
+    for scale in (1.0, 64.0):
+        dn = torch.randn(T * k, H, device=dev, dtype=torch.bfloat16)
+        w = torch.softmax(torch.randn(T, k, device=dev), dim=-1).to(torch.bfloat16).reshape(-1)
+        res = (torch.randn(T, H, device=dev) * scale).to(torch.bfloat16)
+        plain = combine_rows(dn, w, k)
+        assert torch.equal(combine_rows(dn, w, k, residual=res), plain + res)
+
+
+def test_combine_rows_residual_is_checked():
+    pytest.importorskip("triton")
+    from int4_b32 import combine_rows
+    dev = _gpu()
+    dn = torch.randn(8, 64).to(dev, torch.bfloat16)
+    w = torch.full((8,), 0.125).to(dev, torch.bfloat16)
+    for bad in (torch.zeros(2, 64), torch.zeros(1, 64, dtype=torch.float16), torch.zeros(1, 32)):
+        with pytest.raises(ValueError, match="combine residual"):
+            combine_rows(dn, w, 8, residual=bad.to(dev) if bad.dtype != torch.float32 else bad.to(dev, torch.bfloat16))
+
+
 def test_router_epilogue_bias_shape_is_checked():
     pytest.importorskip("triton")
     from int4_b32 import router_epilogue
