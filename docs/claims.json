@@ -1185,7 +1185,7 @@
    "unit": "best / shipped K16 plan at the o projection (2048 x 4096), 64-row tile, medians of 200 CUDA-graph replays over 48 layers",
    "status": "measured",
    "hardware": "RTX 5090 (sm_120, 170 SMs, driver 595.91.07, 575 W), torch 2.8.0+cu128 / triton 3.4.0, rented Vast verified host (instance 55038608, machine 153193, AMD Ryzen 9 9950X)",
-   "conditions": "grouped-nf4-gemm e21a712 (0.44.0 + #524 + #525), runner experts4bit-qlora 058f98eb (v0.51.0, bench/k34/); per-layer synthetic int4-b32 stores (48 layers, beyond L2), one workspace sized for 64 rows; every plan within one bf16 ulp of the fp32 dequant reference at layer 0 (none refused); plans selected on 40 rounds then the arms timed afresh over 200 rounds, order reversed each round; instrument shipped2/shipped 0.998-1.000; premise kernel/test_int4_smallm_interp.py compiled on the card, 25 passed; copy floor 1,513 GB/s",
+   "conditions": "grouped-nf4-gemm e21a712 (0.44.0 + #524 + #525), runner experts4bit-qlora 058f98eb (v0.51.0, bench/k34/); per-layer synthetic int4-b32 stores (48 layers, beyond L2), one workspace sized for 64 rows; every tested layer-0 plan passed max absolute error <= 2^-7 times the max absolute fp32 reference output (sanity gate; none refused); plans selected on 40 rounds then the arms timed afresh over 200 rounds, order reversed each round; instrument shipped2/shipped 0.998-1.000; premise kernel/test_int4_smallm_interp.py compiled on the card, 25 passed; copy floor 1,513 GB/s",
    "measured_on": "2026-10-09",
    "evidence": [
     "kernel/RESULTS-k34-k16-wide-plan-census.md",
