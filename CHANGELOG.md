@@ -14,12 +14,15 @@ the launches it replaces; an opt-in multi-program tile table; and two reads with
   `combine_rows(residual=)` adds the decoder layer's residual in the combine. Silicon tests pin each one bitwise to the
   calls it replaces. Their speed is P127's to read.
 - **A multi-program tile table.** `build_group_tiles_fused(rank="cumsum", programs=P)` splits the cumsum table over `P`
-  programs, with the same integers at every `P`. `programs=1`, the default, is the old launch.
+  programs, with the same integers at every `P`. `programs=1`, the default, is the old launch. experts4bit-qlora's P126
+  read 4 programs at about 15.5 % lower captured 64-row decode-step time on Qwen3-30B-A3B int4 (RTX 5090), every token
+  identical; its `E4B_INT4_TILE_PROGRAMS=auto` default takes it once this release is installed.
 - **Two reads.** K34 (RTX 5090) keeps the shipped small-M int4 plans. Nearby-token expert reuse is measured in bytes on
   the committed routing traces (experts4bit-qlora#1469).
 - **Docs.** The README opens with a chart built from the claims register.
 
-Upgrade to call the new options. Nothing else changes.
+Upgrade for the tile table under experts4bit-qlora's int4 serving, or to call the new options. experts4bit-qlora's
+`[fast]` floor stays at 0.30.0; a fresh install resolves this release.
 
 ### Docs: a first-screen chart generated from the claims register
 

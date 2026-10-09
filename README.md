@@ -39,7 +39,8 @@ macOS and Windows are not exercised by CI. ROCm and XPU are port targets.
 **New in 0.45.0:** four opt-in kernel options for a top-k MoE decode, each bitwise the launches it replaces: int64 expert
 ids and in-place token rows for `gemm_4bit_grouped`, bf16 routing weights from `router_epilogue`, one-launch q/k norm
 and rotary (`rope_norm_qk`), and the residual add in `combine_rows`. The cumsum tile table can split over several
-programs (`programs=P`). No default changes.
+programs (`programs=P`); experts4bit-qlora's P126 read 4 programs at about 15.5 % lower captured 64-row decode-step time
+on Qwen3-30B-A3B int4. No default changes.
 [Release notes](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/CHANGELOG.md)
 
 ## Try it on your GPU
