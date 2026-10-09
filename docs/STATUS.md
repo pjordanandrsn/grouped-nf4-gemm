@@ -1,6 +1,6 @@
 # Status — what this kernel does, what changed, what is open
 
-**As of 2026-10-09, `grouped-nf4-gemm` version 0.44.0.** This page states the current position in each area, with
+**As of 2026-10-09, `grouped-nf4-gemm` version 0.45.0.** This page states the current position in each area, with
 the claim id behind each number; [`docs/claims.json`](claims.json) holds every claim's full text and evidence. The
 dated narrative behind these positions, with the readings they replaced and why, is
 [`STATUS-RECORD.md`](STATUS-RECORD.md).
@@ -159,6 +159,9 @@ often met:
 
 - **#60:** arena staging blocks ~30% of a training step; the next layer's rows are prefetchable (`gnf4.open.issues`).
 - **The chunked tile table** is read at 128 experts × 512 rows only (P122); larger tables stay opt-in in experts4bit-qlora.
+- **The P127 decode options** (0.45.0) are bitwise-tested but unread for speed; experts4bit-qlora's P127 reads them.
+- **The multi-program tile table** is read at 4 programs on Qwen3-30B-A3B int4 only
+  (`e4b.serve.p126.tile-programs.qwen3-int4.5090.2026-10-09`); 8 programs was not licensed.
 - **A per-shape plan for the small-M GEMM** (BLOCK_N chosen so the grid fills the card) is unread served; K34 put it at
   0.794× for one cell, about 1 % of the step.
 - **The bandwidth GEMV** is unread on other families, other cards and beside experts4bit-qlora's fused B=1 stack.

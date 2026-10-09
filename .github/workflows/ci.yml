@@ -284,6 +284,8 @@ jobs:
         run: python scripts/check_discovery_contract.py --bm25 --bm25-min-top1 33
       - name: llms bundle is current
         run: python scripts/build_llms_bundle.py --check
+      - name: README chart is current (generated from docs/claims.json)
+        run: python scripts/build_readme_chart.py --check
       - name: solution-page code blocks parse (python) and every local link resolves
         run: python scripts/check_docs_examples.py --root .
       - name: shared tooling present (the scripts both repositories carry as one file; this repository is their upstream, and the runtime repository's CI checks its copies are byte-identical to this main)

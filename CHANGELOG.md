@@ -4,6 +4,154 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
+## 0.45.0 — 2026-10-09 — opt-in bitwise decode options, a multi-program tile table, and two reads
+
+**0.45.0.** Four opt-in kernel options for experts4bit-qlora's decode, plus int64 expert ids passed uncast, each bitwise
+the launches it replaces; an opt-in multi-program tile table; and two reads with no code change. No default changes.
+- **Decode options (experts4bit-qlora#1313, lane P127).** `gemm_4bit_grouped` takes int64 expert ids uncast and, with
+  `gather_div=`, reads the singleton decode's token rows in place. `router_epilogue(weights_dtype=)` stores the routing
+  weights in bf16 or fp16. `rope_norm_qk` runs the query's and the key's norm and rotary in one launch.
+  `combine_rows(residual=)` adds the decoder layer's residual in the combine. Silicon tests pin each one bitwise to the
+  calls it replaces. Their speed is P127's to read.
+- **A multi-program tile table.** `build_group_tiles_fused(rank="cumsum", programs=P)` splits the cumsum table over `P`
+  programs, with the same integers at every `P`. `programs=1`, the default, is the old launch. experts4bit-qlora's P126
+  read 4 programs at about 15.5 % lower captured 64-row decode-step time on Qwen3-30B-A3B int4 (RTX 5090), every token
+  identical; its `E4B_INT4_TILE_PROGRAMS=auto` default takes it once this release is installed.
+- **Two reads.** K34 (RTX 5090) keeps the shipped small-M int4 plans. Nearby-token expert reuse is measured in bytes on
+  the committed routing traces (experts4bit-qlora#1469).
+- **Docs.** The README opens with a chart built from the claims register.
+
+Upgrade for the tile table under experts4bit-qlora's int4 serving, or to call the new options. experts4bit-qlora's
+`[fast]` floor stays at 0.30.0; a fresh install resolves this release.
+
+### Docs: a first-screen chart generated from the claims register
+
+The README opens with one chart: decode against Unsloth's MoE kernel with weights stored in 4-bit (RTX 4090 and H100),
+Unsloth's win at H100 prefill with weights resident in bf16 on the same chart, and OLMoE training against this project's
+per-expert loop in its own panel. `scripts/build_readme_chart.py` reads every figure from `docs/claims.json`, and a CI
+step fails when the committed chart is stale. A collapsed block under the results states what the receipts recorded
+(GPU, torch, driver) and what they did not (clock locking, ECC, Triton version). No code changes.
+
+### Nearby-token expert reuse in bytes, on the committed routing traces (experts4bit-qlora#1469); no code change
+
+`bench/cold-engine/routing-trace/RESULTS-1469-locality-bytes.md`; harness `locality_1469.py`; receipt
+`locality-1469.json`. It is in sample, on the 12 committed decode traces of OLMoE-1B-7B, Granite-3.0-3B-A800M and
+Qwen1.5-MoE-A2.7B. No box and no GPU.
+- **Nearby tokens share experts, but only a cache of most of the arena keeps them.** Churn between consecutive tokens
+  is 45–90% of a layer's top-k, and a 16-token window touches 28–36 experts per layer. A cache holding exactly a
+  window's experts needs 63–85% of the arena. At that capacity, Belady's optimum moves 8–20× fewer rows per token than
+  flushing at the window boundary.
+- **So under exact routing, nearby-token reuse is a capacity question.** A persistent, frequency-led cache already
+  captures it, which is R4's finding, now in bytes.
+- **Bytes and link floors per decoded token,** against measured PCIe (RTX A2000, RTX 5090) and NAS NVMe throughput,
+  for no reuse, the shipped cache, LRU and Belady.
+- **Slice-granular exact caching moves the same bytes** and changes only how capacity packs.
+- **loggetta's offload cost model gets no locality input now.** Training offload moves the whole slab, and serving
+  predicts no transfer time.
+
+### `combine_rows(..., residual=)` adds the decoder layer's residual in the combine's epilogue (experts4bit-qlora#1313)
+
+- **What.** `int4_b32.combine_rows` takes an optional `residual` (bf16, `[T, H]`). It rounds the combine to bf16,
+  widens both, adds them in fp32 and rounds to nearest even, which is how torch adds two bf16 tensors. Without
+  `residual` nothing changes.
+- **Why.** experts4bit-qlora's decoder layer adds the MoE output to its residual in a separate launch each layer. With
+  `residual=` the combine does it. This is lane P127's Phase 2 (item c), the layer-local form.
+- **Bitwise.** The result is bitwise `combine_rows(dn, w, k) + residual`. A silicon test checks this at 1 and 16 rows,
+  three widths (one not a multiple of the block) and two residual scales. The interpreter skips it, because its bf16
+  cast does not round to nearest. A second test checks the residual's shape and dtype.
+
+### `gemm_4bit_grouped(..., gather_div=)`: the singleton decode reads the token rows where they are (experts4bit-qlora#1313)
+
+- **What.** With `gather_div=k`, `a_cat` holds token rows and row `r` of the call reads token `r // k`. These are a
+  top-k MoE's (token, slot) rows, token-major. The option serves the singleton decode only (every group one row) and is
+  refused elsewhere.
+- **Bandwidth GEMV.** `_gemv_nf4_bw` takes a `GATHER_DIV` constexpr and reads the token rows in place, in one pass and
+  in split-K.
+- **Other single-row routes.** They make the expansion in the wrapper.
+- **Why.** experts4bit-qlora copies each decode token's row k times (an `index_select`) before the gate_up GEMV. Under
+  the bandwidth GEMV that copy's launch goes. This is lane P127's Phase 2 (item b2).
+- **Bitwise.** Every route's output is bitwise the expanded call's:
+  - under the interpreter: the bandwidth GEMV (one pass and split-K) and the scalar route;
+  - on the card: both decodes, one pass and split-K, at Qwen3's gate_up and down shapes.
+
+### `gemm_4bit_grouped` takes int64 expert ids as they are (experts4bit-qlora#1313)
+
+- **What.** A CUDA `expert_ids` tensor in `nf4_grouped.EXPERT_ID_DTYPES` (int32 or int64) reaches the kernels
+  uncast. Any other dtype, and a host list or CPU tensor, is converted as before. `dgrad_4bit_grouped` is
+  unchanged.
+- **Why.** torch's top-k indices are int64, so a caller handing them over paid a cast launch on every call.
+  experts4bit-qlora's NF4 route makes two calls per MoE layer. This is lane P127's Phase 2 (item a1).
+- **Why it is value-identical.** Every grouped NF4 kernel already loads its id and widens it to int64 before any
+  stride product. That covers the bandwidth GEMV, dot-pad and its split-K, the scalar decode and the M-tile. A
+  silicon test checks that int64 ids give bitwise int32's output at each route, and that the bandwidth route is
+  handed the caller's tensor itself. `Prebound` keys on dtype, so int64 ids get their own specialization.
+
+### `rope_norm_qk`: the query's and the key's per-head norm and rotary in one launch (experts4bit-qlora#1313)
+
+- **What.** `int4_b32.rope_norm_qk(q, k, q_weight, k_weight, cos, sin, q_eps, k_eps)` is `rope_norm_heads` on q and on k
+  in one launch. The grid is (rows, HQ + HK), and each head takes its own projection's input, weight and eps.
+- **Why.** experts4bit-qlora's attention fold calls `rope_norm_heads` twice per layer. This is lane P127's Phase 2
+  (item d).
+- **Bitwise.** Both forms run one `@triton.jit` helper, `_rope_norm_head`, which holds the arithmetic
+  `_rope_norm_heads` ran inline, statement for statement. A test checks the outputs are bitwise the two calls', at 1
+  and 16 rows and three head layouts, with distinct weights and eps; it holds under the interpreter too.
+  `test_pdl`'s kernel list and launch count include the new kernel.
+
+### K34 read (RTX 5090): NONE — the shipped K16 plan stays at the 32- and 64-row tiles; one cell (`o`, 64 rows) runs at 0.794× with BLOCK_N 32, about 1 % of the served step
+
+Register: `gnf4.kernel.k34-k16-wide-plan-census.5090.2026-10-09`; `kernel/RESULTS-k34-k16-wide-plan-census.md`.
+- **The reading** (`k34-5090-2`, exploratory). 48 plans of `gemm_int4_b32_smallm` were timed at Qwen3-30B-A3B's fused
+  `qkv` (5120 × 2048) and `o` (2048 × 4096) projections, 48 layers in CUDA graphs, at the 32- and 64-row tiles.
+  - At `qkv` the shipped plan (64, 128, 4, 4, 2) is the fastest of 48 at both tiles.
+  - At `o`, 64 rows, BLOCK_N 32 with KC 256 reads 0.794×. The shipped plan launches 128 programs on 170 SMs there, so the
+    gain is mostly grid fill.
+  - Every tested layer-0 plan passed max absolute error ≤ 2^-7 times the max absolute fp32 reference output (sanity
+    gate), and the instrument read 0.998–1.000.
+- **The predictions.** The instrument held. The 64-row gain held for `o` and missed for `qkv`. The guessed winner shape
+  (8 warps, a smaller split-K) and the predicted CANDIDATE missed.
+- **What follows (registered).** Nothing moves. `o`/64's cell is about 1 % of the served 64-row step, so it gets no
+  confirmatory read on its own; a per-shape plan in `plan_smallm` would ride with a larger lever.
+- **Cost:** $0.074.
+
+### `router_epilogue(..., weights_dtype=)` stores the routing weights in the caller's dtype (experts4bit-qlora#1313)
+
+- **What.** `int4_b32.router_epilogue` takes `weights_dtype` (fp32, bf16 or fp16; default fp32, unchanged). The
+  kernel computes the weights in fp32 as before and rounds them on the store, to nearest even.
+- **Why.** transformers' Qwen3-MoE router returns its weights in the model's dtype, so experts4bit-qlora casts the
+  kernel's fp32 weights to bf16 in a separate launch each layer. With `weights_dtype=torch.bfloat16` the store does
+  it. This is lane P127's Phase 2 (item b1).
+- **Bitwise.** The stored weights are bitwise torch's `.to(weights_dtype)` of the fp32 weights, and `first` and the
+  indices are unchanged. A silicon test checks this at 1 and 16 rows, in both selection modes, for bf16 and fp16.
+  The interpreter skips it, because its bf16 cast does not round to nearest.
+
+### `build_group_tiles_fused(..., rank="cumsum", programs=P)` splits the cumsum tile table over P programs (opt-in; e4b#846)
+
+The chunked cumsum table (#519) still runs as one program. At 128 experts and 512 routed rows it walks every row twice in
+`[128, 64]` chunks: e4b's P122 read it at 2.51 ms of a 64-row decode step, 52 µs a launch over 48 layers, still 1.75×
+the chained builder's named kernels.
+
+`_tile_table_cumsum_mp` gives each of `P` programs a slice of the experts. Each program:
+- takes every expert's count from one `tl.histogram` of the ids, with the masked rows' sentinel in a bin of its own, so
+  it knows every expert's row and tile offsets without talking to the others;
+- ranks and writes only its own experts' rows, in `[EB/P, RCHUNK]` chunks with the per-expert carry.
+
+A row's expert has exactly one owner, so no address is written twice. Program 0 zeroes the padding slots when `lean`.
+
+`programs=None` or `1` (the default) is the one-program kernel, launched exactly as before. `programs > 1` needs
+`rank="cumsum"`.
+
+The integers are the same at every `P`:
+- the five tables, and the lean variant's six, equal `programs=1`'s, the chained builder's, and the pairwise rank's
+  where it applies;
+- `order` equals `torch.argsort(expert_ids, stable=True)`;
+- every row is written by exactly one program, counted by the kernel's test-only `OWNERS` flag. This holds with more
+  programs than experts and with `P` not dividing the padded expert axis.
+
+`kernel/test_tile_table_programs_interp.py` covers 40, 128 and 256 experts, 1 to 1,024 rows and `P` = 2, 3, 8 and 64,
+under uniform, skewed and single-expert routing, with both the histogram and the counting pass (202 cases). It passed
+under the interpreter and compiled on an RTX A2000 with triton 3.4 (correctness only). The speed is experts4bit-qlora's
+to read. This targets the grouped-nf4-gemm release after 0.44.0.
+
 ## 0.44.0 — 2026-10-09 — the single-block ladder for fp32 adapters by default, a chunked one-launch tile table, and the small-M int4 GEMM up to 64 rows
 
 **0.44.0.** One default changes and two kernels widen, each read in experts4bit-qlora on Qwen3-30B-A3B and one RTX 5090:

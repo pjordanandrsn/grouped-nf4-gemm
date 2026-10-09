@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="380" viewBox="0 0 840 380" role="img" aria-labelledby="t" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif">
+<title id="t">grouped-nf4-gemm against Unsloth's MoE kernel: decode 2.79x faster on RTX 4090 and 1.70x on H100 with weights stored in 4-bit; Unsloth faster by 2.6-5.3x at H100 prefill with weights resident in bf16. OLMoE QLoRA on real prose, against this project's per-expert loop: 4.50x on RTX 4090, 4.75x on H100.</title>
+<style>
+  .bg{fill:#fcfcfb} .t1{fill:#0b0b0b} .t2{fill:#52514e} .t3{fill:#6f6e69}
+  .fast{fill:#2a78d6} .slow{fill:#e34948} .range{opacity:.5}
+  .grid{stroke:#e6e5e1;stroke-width:1} .base{stroke:#8a8984;stroke-width:1.5}
+  @media (prefers-color-scheme: dark){
+    .bg{fill:#1a1a19} .t1{fill:#ffffff} .t2{fill:#c3c2b7} .t3{fill:#9d9c94}
+    .fast{fill:#3987e5} .slow{fill:#e66767} .grid{stroke:#33332f} .base{stroke:#7a7973}
+  }
+</style>
+<rect class="bg" width="840" height="380" rx="8"/>
+<text x="24.0" y="30.0" class="t1" text-anchor="start" font-size="16" font-weight="700">grouped-nf4-gemm against Unsloth's MoE kernel</text>
+<text x="24.0" y="50.0" class="t3" text-anchor="start" font-size="12" font-weight="400">Same pod and process. Log scale; 1× is equal speed.</text>
+<rect class="fast" x="24" y="62" width="12" height="12" rx="3"/>
+<text x="42.0" y="73.0" class="t2" text-anchor="start" font-size="12" font-weight="400">grouped-nf4-gemm faster</text>
+<rect class="slow" x="214" y="62" width="12" height="12" rx="3"/>
+<text x="232.0" y="73.0" class="t2" text-anchor="start" font-size="12" font-weight="400">Unsloth faster</text>
+<line class="grid" x1="518.0" x2="518.0" y1="90" y2="190"/>
+<text x="518.0" y="206.0" class="t3" text-anchor="middle" font-size="11" font-weight="400">1×</text>
+<line class="grid" x1="594.0" x2="594.0" y1="90" y2="190"/>
+<text x="594.0" y="206.0" class="t3" text-anchor="middle" font-size="11" font-weight="400">2×</text>
+<line class="grid" x1="670.0" x2="670.0" y1="90" y2="190"/>
+<text x="670.0" y="206.0" class="t3" text-anchor="middle" font-size="11" font-weight="400">4×</text>
+<line class="grid" x1="746.0" x2="746.0" y1="90" y2="190"/>
+<text x="746.0" y="206.0" class="t3" text-anchor="middle" font-size="11" font-weight="400">8×</text>
+<line class="grid" x1="442.0" x2="442.0" y1="90" y2="190"/>
+<text x="442.0" y="206.0" class="t3" text-anchor="middle" font-size="11" font-weight="400">2×</text>
+<line class="grid" x1="366.0" x2="366.0" y1="90" y2="190"/>
+<text x="366.0" y="206.0" class="t3" text-anchor="middle" font-size="11" font-weight="400">4×</text>
+<line class="grid" x1="290.0" x2="290.0" y1="90" y2="190"/>
+<text x="290.0" y="206.0" class="t3" text-anchor="middle" font-size="11" font-weight="400">8×</text>
+<line class="base" x1="518.0" x2="518.0" y1="86" y2="190"/>
+<text x="250.0" y="108.0" class="t2" text-anchor="end" font-size="12" font-weight="400">RTX 4090 · decode, weights stored in 4-bit</text>
+<path class="fast" d="M518.0,96 H626.5 Q630.5,96 630.5,100 V108 Q630.5,112 626.5,112 H518.0 Z"/>
+<text x="636.5" y="108.0" class="t1" text-anchor="start" font-size="12" font-weight="700">2.79×</text>
+<text x="250.0" y="142.0" class="t2" text-anchor="end" font-size="12" font-weight="400">H100 · decode, weights stored in 4-bit</text>
+<path class="fast" d="M518.0,130 H572.2 Q576.2,130 576.2,134 V142 Q576.2,146 572.2,146 H518.0 Z"/>
+<text x="582.2" y="142.0" class="t1" text-anchor="start" font-size="12" font-weight="700">1.70×</text>
+<text x="250.0" y="176.0" class="t2" text-anchor="end" font-size="12" font-weight="400">H100 · prefill, weights resident in bf16</text>
+<path class="slow range" d="M518.0,164 H339.1 Q335.1,164 335.1,168 V176 Q335.1,180 339.1,180 H518.0 Z"/>
+<path class="slow" d="M518.0,164 H417.2 Q413.2,164 413.2,168 V176 Q413.2,180 417.2,180 H518.0 Z"/>
+<text x="329.1" y="176.0" class="t1" text-anchor="end" font-size="12" font-weight="700">2.6–5.3×</text>
+<text x="24.0" y="236.0" class="t1" text-anchor="start" font-size="13" font-weight="700">OLMoE QLoRA on real prose, against this project's per-expert loop (a different baseline)</text>
+<line class="grid" x1="518.0" x2="518.0" y1="244" y2="310"/>
+<text x="518.0" y="326.0" class="t3" text-anchor="middle" font-size="11" font-weight="400">1×</text>
+<line class="grid" x1="594.0" x2="594.0" y1="244" y2="310"/>
+<text x="594.0" y="326.0" class="t3" text-anchor="middle" font-size="11" font-weight="400">2×</text>
+<line class="grid" x1="670.0" x2="670.0" y1="244" y2="310"/>
+<text x="670.0" y="326.0" class="t3" text-anchor="middle" font-size="11" font-weight="400">4×</text>
+<line class="grid" x1="746.0" x2="746.0" y1="244" y2="310"/>
+<text x="746.0" y="326.0" class="t3" text-anchor="middle" font-size="11" font-weight="400">8×</text>
+<line class="base" x1="518.0" x2="518.0" y1="240" y2="310"/>
+<text x="250.0" y="262.0" class="t2" text-anchor="end" font-size="12" font-weight="400">RTX 4090 · end-to-end training step</text>
+<path class="fast" d="M518.0,250 H678.9 Q682.9,250 682.9,254 V262 Q682.9,266 678.9,266 H518.0 Z"/>
+<text x="688.9" y="262.0" class="t1" text-anchor="start" font-size="12" font-weight="700">4.50×</text>
+<text x="250.0" y="296.0" class="t2" text-anchor="end" font-size="12" font-weight="400">H100 · end-to-end training step</text>
+<path class="fast" d="M518.0,284 H684.8 Q688.8,284 688.8,288 V296 Q688.8,300 684.8,300 H518.0 Z"/>
+<text x="694.8" y="296.0" class="t1" text-anchor="start" font-size="12" font-weight="700">4.75×</text>
+<text x="24.0" y="368.0" class="t3" text-anchor="start" font-size="11" font-weight="400">From docs/claims.json: gnf4.kernel.h2h-unsloth, gnf4.kernel.e2e-training-real-prose.</text>
+</svg>
