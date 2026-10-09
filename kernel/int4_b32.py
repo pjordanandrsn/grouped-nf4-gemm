@@ -1086,8 +1086,8 @@ def swiglu_rows(gu: torch.Tensor):
 
 # ------------------------------------------ top-k weighted combine --
 @triton.jit
-def _combine_rows(dn_ptr, w_ptr, out_ptr, K: tl.constexpr, H,
-                  BLOCK: tl.constexpr, PDL: tl.constexpr = False):
+def _combine_rows(dn_ptr, w_ptr, out_ptr, res_ptr, K: tl.constexpr, H,
+                  BLOCK: tl.constexpr, HAS_RES: tl.constexpr = False, PDL: tl.constexpr = False):
     """``out[t, :] = bf16(sum_j fp32(dn[t*K + j, :]) * w[t*K + j])`` --
     the MoE combine (weight, sum over the top-k, cast) in one launch. The
     torch chain it replaces was four dispatches per layer (to_copy,
@@ -1103,10 +1103,16 @@ def _combine_rows(dn_ptr, w_ptr, out_ptr, K: tl.constexpr, H,
         w = tl.load(w_ptr + t * K + j).to(tl.float32)
         acc += tl.load(dn_ptr + (t * K + j) * H + offs, mask=m,
                        other=0.0).to(tl.float32) * w
-    tl.store(out_ptr + t * H + offs, acc.to(tl.bfloat16), mask=m)
+    y = acc.to(tl.bfloat16)
+    if HAS_RES:
+        # the decoder layer's residual add as torch does it on two bf16 tensors: the combine rounded to bf16 first,
+        # then both widened, one fp32 add, rounded to nearest even
+        r = tl.load(res_ptr + t * H + offs, mask=m, other=0.0).to(tl.float32)
+        y = (y.to(tl.float32) + r).to(tl.bfloat16)
+    tl.store(out_ptr + t * H + offs, y, mask=m)
 
 
-def combine_rows(dn: torch.Tensor, w: torch.Tensor, k: int):
+def combine_rows(dn: torch.Tensor, w: torch.Tensor, k: int, *, residual: torch.Tensor | None = None):
     """``dn [T*k, H]`` (bf16 expert outputs, token-major, k slots per
     token) and ``w [T*k]`` (routing weights) -> ``[T, H]`` bf16, one
     launch. Summation is fp32 in slot order with the multiply-add
@@ -1117,14 +1123,24 @@ def combine_rows(dn: torch.Tensor, w: torch.Tensor, k: int):
     within the error of a correct fp32 sum in some order, then the bf16
     cast (kernel/RESULTS-b393-combine-reduce-bitwise.md; 144 of 144
     census cases on an RTX 5090). Its output was bit-identical on an RTX
-    A2000 (sm_86) and an RTX 5090 (sm_120) at those cases."""
+    A2000 (sm_86) and an RTX 5090 (sm_120) at those cases.
+
+    ``residual [T, H]`` (bf16, optional): the decoder layer's residual add
+    in the same launch, ``bf16(fp32(combine) + fp32(residual))`` with the
+    combine rounded to bf16 first, which is how torch adds two bf16 tensors.
+    The result is bitwise ``combine_rows(dn, w, k) + residual``, one launch
+    fewer per layer (experts4bit-qlora#1313, lane P127's Phase 2)."""
     TK, H = dn.shape
     T = TK // k
+    has_res = residual is not None
+    if has_res and (tuple(residual.shape) != (T, H) or residual.dtype != torch.bfloat16):
+        raise ValueError(f"combine residual must be bf16 [T={T}, H={H}], got {residual.dtype} "
+                         f"{tuple(residual.shape)}")
     out = torch.empty(T, H, dtype=torch.bfloat16, device=dn.device)
     block = min(1024, triton.next_power_of_2(H))
     _combine_rows[(T, triton.cdiv(H, block))](
-        dn.contiguous(), w.contiguous(), out, K=k, H=H, BLOCK=block,
-        num_warps=4, **_pdl_kw(dn.device, T))
+        dn.contiguous(), w.contiguous(), out, residual.contiguous() if has_res else out, K=k, H=H,
+        BLOCK=block, HAS_RES=has_res, num_warps=4, **_pdl_kw(dn.device, T))
     return out
 
 
