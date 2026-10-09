@@ -1761,6 +1761,14 @@ def _block_m_cost(sizes, d: float) -> int:
     return min(cands, key=lambda c: (c[1] * (d + c[0]), -c[0]))[0]
 
 
+# The expert-id dtypes the grouped NF4 kernels read as they are: every one loads its id and widens it to int64
+# before any stride product (docs/KERNEL_CONTRACT.md, Boundaries), so an int64 CUDA tensor rides through
+# gemm_4bit_grouped uncast -- a caller holding torch's int64 top-k indices skips a cast launch per call
+# (experts4bit-qlora#1313, lane P127). Any other dtype is cast to int32, as before. Callers may read this tuple to
+# decide whether to cast.
+EXPERT_ID_DTYPES = (torch.int32, torch.int64)
+
+
 def gemm_4bit_grouped(
     a_cat,
     B,
@@ -1777,7 +1785,8 @@ def gemm_4bit_grouped(
 ):
     """Single-launch grouped NF4 GEMM. ``a_cat [T,K]`` bf16/fp16 in group-sorted
     order, ``B [E,N,K//2]`` uint8, ``absmax [E,N,K//64]`` fp32, ``sizes`` the
-    per-group token counts (all > 0), ``expert_ids [G]`` int32/list. Returns
+    per-group token counts (all > 0), ``expert_ids [G]`` int32/int64/list (a CUDA tensor in
+    ``EXPERT_ID_DTYPES`` is used as it is). Returns
     ``[T, N]`` bf16 in the same group order. ``decode_config`` overrides the
     decode path's (BLOCK_N, num_warps); ``split_k`` overrides the decode
     split-K factor (None = plan, 1 = off); ``bw_config`` overrides the ``GNF4_GEMV_BW`` route's plan
@@ -1826,7 +1835,9 @@ def gemm_4bit_grouped(
         expert_ids
         if torch.is_tensor(expert_ids) and expert_ids.is_cuda
         else to_device_i32((expert_ids,), dev)[0]
-    ).to(torch.int32)
+    )
+    if eids.dtype not in EXPERT_ID_DTYPES:
+        eids = eids.to(torch.int32)
     out = torch.empty(T, N, dtype=torch.bfloat16, device=dev)
     if max(sizes) == 1:
         # decode: every group is one token; the reduction path skips the M-tile.
