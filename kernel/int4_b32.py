@@ -1407,13 +1407,19 @@ def _router_epilogue(logit_ptr, bias_ptr, prob_ptr, wout_ptr, iout_ptr,
         vals = ev / tl.sum(ev, axis=0)
     elif NORM:
         vals = vals / tl.sum(tl.where(kmask, vals, 0.0), axis=0)
-    tl.store(wout_ptr + r * K + kk, vals, mask=kmask)
+    # the weights buffer's own dtype: fp32 by default (a no-op), or the caller's bf16/fp16 with the default
+    # round-to-nearest-even store, bitwise torch's ``.to`` of the fp32 weights
+    tl.store(wout_ptr + r * K + kk, vals.to(wout_ptr.dtype.element_ty), mask=kmask)
     tl.store(iout_ptr + r * K + kk, idxs.to(tl.int64), mask=kmask)
+
+
+_ROUTER_WEIGHT_DTYPES = (torch.float32, torch.bfloat16, torch.float16)
 
 
 def router_epilogue(logits: torch.Tensor, k: int, norm: bool, *,
                     select_on_logits: bool = False,
-                    bias: torch.Tensor | None = None):
+                    bias: torch.Tensor | None = None,
+                    weights_dtype: torch.dtype = torch.float32):
     """``logits [R, E]`` -> ``(first [R, E] fp32, weights [R, k] fp32,
     indices [R, k] int64)``.
 
@@ -1425,10 +1431,20 @@ def router_epilogue(logits: torch.Tensor, k: int, norm: bool, *,
     ON THE LOGITS (plus ``bias`` when the router carries one), then a
     softmax over the k selected logits; ``first`` is the (biased) logits,
     which is what those modules return. ``norm`` is ignored in this mode
-    (the k-softmax already sums to one)."""
+    (the k-softmax already sums to one).
+
+    ``weights_dtype`` (fp32, bf16 or fp16; default fp32): the dtype the
+    weights are stored in. The kernel computes them in fp32 either way and
+    rounds on the store to nearest even, so the result is bitwise the fp32
+    weights' torch ``.to(weights_dtype)``. It saves that cast's launch for a
+    caller whose router returns its weights in the model's dtype
+    (transformers' Qwen3-MoE router does; experts4bit-qlora#1313, lane
+    P127)."""
+    if weights_dtype not in _ROUTER_WEIGHT_DTYPES:
+        raise ValueError(f"router weights_dtype must be one of {_ROUTER_WEIGHT_DTYPES}, got {weights_dtype}")
     R, E = logits.shape
     first = torch.empty(R, E, dtype=torch.float32, device=logits.device)
-    w = torch.empty(R, k, dtype=torch.float32, device=logits.device)
+    w = torch.empty(R, k, dtype=weights_dtype, device=logits.device)
     idx = torch.empty(R, k, dtype=torch.int64, device=logits.device)
     has_bias = bias is not None
     if has_bias and tuple(bias.shape) != (E,):
