@@ -31,7 +31,7 @@ import int4_b32 as m  # noqa: E402
 SRC = pathlib.Path(m.__file__).read_text()
 KERNELS = ("_quant_x_rows", "_gemv_int4_b32", "_reduce_partials", "_quant_x_rows_gathered", "_swiglu_rows",
            "_combine_rows", "_rmsnorm_rows", "_rmsnorm_resid_rows", "_scaled_resid_add_rows", "_rope_norm_heads",
-           "_rope_heads", "_router_epilogue")
+           "_rope_heads", "_router_epilogue", "_rope_norm_qk")
 INTERP = os.environ.get("TRITON_INTERPRET", "0") == "1"
 CUDA = torch.cuda.is_available() and not INTERP and not torch.version.hip
 CC = torch.cuda.get_device_capability() if CUDA else (0, 0)
@@ -196,7 +196,7 @@ def test_every_launch_takes_the_switch_and_nothing_else_names_it():
         call = ast.parse(star[0], mode="eval").body
         assert len(call.args) == 2 and not call.keywords, f"{name}: every launch passes its device and its rows ({star[0]})"
         assert "PDL" not in kws and "launch_pdl" not in kws, (name, kws)
-    assert len(launches) == 13 and SRC.count("**_pdl_kw(") == 13
+    assert len(launches) == 14 and SRC.count("**_pdl_kw(") == 14
 
 
 # ------------------------------------------------------------------------------- 3. on is bitwise off, on the card --
