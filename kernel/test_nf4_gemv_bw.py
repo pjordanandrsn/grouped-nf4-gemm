@@ -156,3 +156,22 @@ def test_pdl_on_is_bitwise_pdl_off(monkeypatch):
     monkeypatch.delenv("GNF4_PDL")
     int4_b32.pdl_refresh()
     assert torch.equal(outs[0], outs[1])
+
+
+@needs_cuda
+@pytest.mark.parametrize("decode", ["tree", "prmt32"])
+@pytest.mark.parametrize("plan", [None, (16, 256, 4, 2)])
+@pytest.mark.parametrize("N,K", FAMILY_SHAPES[:2])
+def test_gather_div_is_bitwise_the_expanded_rows_on_the_card(monkeypatch, decode, plan, N, K):
+    """``gather_div=8`` on the token rows is bitwise the call on their (token, slot) expansion, compiled, at Qwen3's
+    gate_up and down shapes, both decodes, one pass and split-K (experts4bit-qlora#1313, P127 item b2). The token
+    rows head a larger buffer, so a kernel reading row g rather than g // 8 reads wrong values in bounds."""
+    B, A = _stack(N, K, E=8, seed=13)
+    tokens = torch.randn(16, K, device=DEV, dtype=torch.bfloat16)[:2]
+    ids = [7, 0, 3, 5, 1, 1, 6, 2, 4, 0, 2, 7, 5, 3, 6, 1]
+    rows = tokens.index_select(0, torch.arange(16, device=DEV) // 8)
+    want = _run(monkeypatch, B, A, rows, ids, decode=decode, plan=plan)
+    got = gemm_4bit_grouped(tokens, B, A, [1] * 16, torch.tensor(ids, dtype=torch.int32, device=DEV), bw_config=plan,
+                            gather_div=8)
+    torch.cuda.synchronize()
+    assert torch.equal(got, want)
