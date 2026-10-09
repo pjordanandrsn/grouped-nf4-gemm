@@ -1176,6 +1176,29 @@
     "docs/STATUS.md"
    ],
    "notes": "Lane k33-5090-1 cost $0.037, teardown proven; receipt in adertha-receipts (ffe99352). Predictions held for numerics, prmt32 as the faster decode, the plan shape (BLOCK_N 16, split-K 1), Granite/OLMoE <= 0.50, the instrument (0.9999 / 1.0004) and the verdict; missed toward faster for the Qwen3 per-launch times and ratios (Q2, Q3); missed for the int4-b32 comparator (int4 / bw 1.03-1.22, predicted 0.75-1.0) and PDL (1.17x slower on Qwen3's and OLMoE's down). Registered consequence: GNF4_GEMV_BW stays opt-in until experts4bit-qlora's served lane P116 reads it."
+  },
+  {
+   "id": "gnf4.kernel.k34-k16-wide-plan-census.5090.2026-10-09",
+   "area": "kernel",
+   "claim": "K34 (pre-registered 2026-10-09, #525; exploratory): on the RTX 5090, a census of 48 K16 plans (BLOCK_N x KC x split-K x warps) for gemm_int4_b32_smallm's 32- and 64-row tiles (#522) at Qwen3-30B-A3B's fused qkv (5120 x 2048) and o (2048 x 4096) projections over 48 layers keeps the shipped plan (64, 128, 4, 4, 2): it is the fastest of 48 at qkv at both tiles (best/shipped 1.001 and 1.005), and the one faster cell is o at 64 rows, 0.794x with BLOCK_N 32, KC 256, split-K 4, 4 warps (0.7293 -> 0.5791 ms per 48 launches), read as grid fill (the shipped plan launches 128 programs on 170 SMs there); o at 32 rows 0.984x. NONE by the registered rule (CANDIDATE needs <= 0.90 on both projections of a tile); exploratory, so it licenses nothing. The shipped plan costs 0.52 / 0.83 (qkv) and 0.67 / 0.68 (o) of cuBLAS on the cached bf16 copy at 32 / 64 rows.",
+   "value": 0.794,
+   "unit": "best / shipped K16 plan at the o projection (2048 x 4096), 64-row tile, medians of 200 CUDA-graph replays over 48 layers",
+   "status": "measured",
+   "hardware": "RTX 5090 (sm_120, 170 SMs, driver 595.91.07, 575 W), torch 2.8.0+cu128 / triton 3.4.0, rented Vast verified host (instance 55038608, machine 153193, AMD Ryzen 9 9950X)",
+   "conditions": "grouped-nf4-gemm e21a712 (0.44.0 + #524 + #525), runner experts4bit-qlora 058f98eb (v0.51.0, bench/k34/); per-layer synthetic int4-b32 stores (48 layers, beyond L2), one workspace sized for 64 rows; every plan within one bf16 ulp of the fp32 dequant reference at layer 0 (none refused); plans selected on 40 rounds then the arms timed afresh over 200 rounds, order reversed each round; instrument shipped2/shipped 0.998-1.000; premise kernel/test_int4_smallm_interp.py compiled on the card, 25 passed; copy floor 1,513 GB/s",
+   "measured_on": "2026-10-09",
+   "evidence": [
+    "kernel/RESULTS-k34-k16-wide-plan-census.md",
+    "kernel/PREREG-k34-k16-wide-plan-census.md",
+    "kernel/k34_bench.py",
+    "kernel/receipts-k34/5090/k34.json",
+    "kernel/receipts-k34/5090/summary.txt",
+    "kernel/receipts-k34/5090/SHA256SUMS"
+   ],
+   "quoted_in": [
+    "docs/STATUS.md"
+   ],
+   "notes": "Lane k34-5090-2 cost $0.074, teardown proven (k34-5090-1 was refused before any rental, $0). Predictions: the instrument held; a 10-25 % gain at 64 rows held for o (20.6 %) and missed for qkv; the guessed winner shape (8 warps, smaller split-K) missed; the predicted CANDIDATE at 64 rows missed (NONE). SELECT medians at qkv read 14-18 % below the re-timed medians (o agrees within 0.2 %); the verdict uses the re-timed medians only. Registered consequence: the shipped plan stays; o/64's cell is about 1 % of the served 64-row step, so no confirmatory read on its own."
   }
  ]
 }

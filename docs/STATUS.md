@@ -58,6 +58,10 @@ it has never measured less accurate than dequantise-to-bf16-then-GEMM in any reg
   (`gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19`); K19's grouped small-M GEMM at 0.736× the served GEMV route at
   B=16 (`gnf4.kernel.k20-k19-plan-sweep.5090.2026-10-01`). NF4's K25 decodes with an exact select tree
   (`gnf4.kernel.k26-nf4-decode-ablation.5090.2026-10-01`).
+- **K16's 32- and 64-row tiles** (#522) serve experts4bit-qlora's attention projections of 17–64 rows by default since
+  its P124 read. K34's census of 48 plans kept the shipped plan: it is the fastest at `qkv`. The one faster cell, `o` at
+  64 rows (0.794× with BLOCK_N 32, a grid-fill effect), is about 1 % of the served step and licenses nothing
+  (`gnf4.kernel.k34-k16-wide-plan-census.5090.2026-10-09`; [results](../kernel/RESULTS-k34-k16-wide-plan-census.md)).
 - **Row-count invariance.** A token decoded alone and inside a 16-, 17- or 160-token call gets the same bits from
   `gemv_int4_b32`, the NF4 dot-pad GEMV and `combine_rows` (`gnf4.kernel.int4-gemv-row-invariant.5090.2026-09-24`,
   `gnf4.kernel.nf4-dotpad-gemv-row-invariant.5090.2026-09-24`, `gnf4.kernel.combine-rows-row-invariant.5090.2026-09-24`);
@@ -155,7 +159,8 @@ often met:
 
 - **#60:** arena staging blocks ~30% of a training step; the next layer's rows are prefetchable (`gnf4.open.issues`).
 - **The chunked tile table** is read at 128 experts × 512 rows only (P122); larger tables stay opt-in in experts4bit-qlora.
-- **The small-M int4 GEMM's 32- and 64-row tiles** are correct (one bf16 ulp) but unread for speed; experts4bit-qlora's P124 reads them.
+- **A per-shape plan for the small-M GEMM** (BLOCK_N chosen so the grid fills the card) is unread served; K34 put it at
+  0.794× for one cell, about 1 % of the step.
 - **The bandwidth GEMV** is unread on other families, other cards and beside experts4bit-qlora's fused B=1 stack.
 - **The cold cost model:** why two gen 4 x16 hosts read different `link_eff` is unmeasured, and `cold_dest="deadline"`
   still omits the hybrid tier's mixed-layer dispatch term.
