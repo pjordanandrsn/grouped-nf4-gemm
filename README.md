@@ -23,8 +23,8 @@ Use grouped-nf4-gemm directly to build or tune a kernel integration.
 
 ![grouped-nf4-gemm against Unsloth's MoE kernel: faster decode with weights stored in 4-bit on RTX 4090 and H100; Unsloth faster at H100 prefill with weights resident in bf16. OLMoE QLoRA on real prose against this project's per-expert loop.](https://raw.githubusercontent.com/pjordanandrsn/grouped-nf4-gemm/main/docs/assets/speed-vs-unsloth-rtx4090-h100.svg)
 
-Kernel comparisons, one pod each. The receipts record the GPU, torch and (for the Unsloth comparison) the NVIDIA driver;
-clock locking, ECC state and the Triton version were not recorded. [How these were measured](#what-is-measured).
+Measured on one RTX 4090 and one H100. The receipts record the GPU, torch and (for the Unsloth comparison) the NVIDIA
+driver; clock locking, ECC state and the Triton version were not recorded. [How these were measured](#what-is-measured).
 
 ## Install
 
@@ -142,7 +142,7 @@ CI checks the values against [claims.json](https://github.com/pjordanandrsn/grou
 <details>
 <summary>How these were measured</summary>
 
-- **Unsloth comparison:** same pod and process. The receipts record the GPU and compute capability, torch 2.8.0+cu128, the
+- **Unsloth comparison:** same pod and process, three repetitions per GPU. The receipts record the GPU and compute capability, torch 2.8.0+cu128, the
   NVIDIA driver (570.195.03 on the RTX 4090, 580.159.03 on the H100), bitsandbytes 0.50.0, Unsloth 2026.8.15, and whether
   Unsloth's TMA path was available (no on the RTX 4090, yes on the H100). [Receipts](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/bench/phase1/results/unsloth_h2h/)
 - **OLMoE training:** the receipts record the GPU, compute capability, VRAM, torch 2.8.0+cu128 and experts4bit-qlora
