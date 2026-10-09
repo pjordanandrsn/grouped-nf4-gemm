@@ -27,10 +27,10 @@ GPU kernels need **Linux, an NVIDIA sm_80+ GPU, torch ≥ 2.8 and Triton ≥ 3.4
 CI tests Python 3.11. CPU pack/decode and provenance tools work without CUDA;
 macOS and Windows are not exercised by CI. ROCm and XPU are port targets.
 
-**New in 0.43.0:** two defaults, each read in experts4bit-qlora on Qwen3-30B-A3B and one RTX 5090. On GPUs with at least
-160 SMs, single-request decode at Qwen3-30B-A3B's expert shapes uses the bandwidth-targeted GEMV: 1.24× as fast at one
-request (`GNF4_GEMV_BW=0` turns it off). Bucketed LoRA-delta calls run as one compact autograd node with the same bytes:
-0.65 GB less training memory on packed rows, and slightly faster steps (`NF4_QLORA_COMPACT_BUCKETS=0` turns it off).
+**New in 0.44.0:** training with fp32 adapters takes the single-block ladder by default: 0.797 of the step on a
+host-bound box, 1.031 on a GPU-bound one, held-out unchanged (`NF4_QLORA_SINGLE_LADDER=0` turns it off; bf16 adapters never
+take it). The one-launch tile table builds in row chunks, which made experts4bit-qlora's 64-row decode step 4.3 % faster,
+and the small-M int4 GEMM serves up to 64 rows.
 [Release notes](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/CHANGELOG.md)
 
 ## Try it on your GPU
