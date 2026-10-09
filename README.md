@@ -21,6 +21,11 @@ Use grouped-nf4-gemm directly to build or tune a kernel integration.
 
 [Install](#install) · [Results](#what-is-measured) · [Kernel API](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/KERNEL_CONTRACT.md) · [Task guides](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/SOLUTIONS.md) · [Hugging Face](https://huggingface.co/spaces/pjordanandrsn/research)
 
+![grouped-nf4-gemm against Unsloth's MoE kernel: faster decode with weights stored in 4-bit on RTX 4090 and H100; Unsloth faster at H100 prefill with weights resident in bf16. OLMoE QLoRA on real prose against this project's per-expert loop.](https://raw.githubusercontent.com/pjordanandrsn/grouped-nf4-gemm/main/docs/assets/speed-vs-unsloth-rtx4090-h100.svg)
+
+Kernel comparisons, one pod each. The receipts record the GPU, torch and (for the Unsloth comparison) the NVIDIA driver;
+clock locking, ECC state and the Triton version were not recorded. [How these were measured](#what-is-measured).
+
 ## Install
 
 ```bash
@@ -133,6 +138,21 @@ CI checks the values against [claims.json](https://github.com/pjordanandrsn/grou
 [OLMoE training](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/bench/phase1/results/dequant_forward/RESULTS-e2e-training.md) ·
 [Unsloth kernel comparison](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/kernel/RESULTS-unsloth-head-to-head.md) ·
 [120B experiment](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/mxfp4/RESULTS-mxfp4-train.md)
+
+<details>
+<summary>How these were measured</summary>
+
+- **Unsloth comparison:** same pod and process. The receipts record the GPU and compute capability, torch 2.8.0+cu128, the
+  NVIDIA driver (570.195.03 on the RTX 4090, 580.159.03 on the H100), bitsandbytes 0.50.0, Unsloth 2026.8.15, and whether
+  Unsloth's TMA path was available (no on the RTX 4090, yes on the H100). [Receipts](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/bench/phase1/results/unsloth_h2h/)
+- **OLMoE training:** the receipts record the GPU, compute capability, VRAM, torch 2.8.0+cu128 and experts4bit-qlora
+  0.17.5 from published wheels; the grouped-nf4-gemm version was not recorded. [Receipts](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/bench/phase1/results/dequant_forward/leg-e2e/)
+- **Not recorded in either:** clock locking, ECC state, the Triton version.
+- **Analytic ceiling, not a measurement:** at the design stage, batch-1 decode was estimated memory-bound with a ceiling of
+  about 8.1× over the two-pass dequant path ([phase 1 notes](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/bench/phase1/README.md)).
+- **The chart** is generated from `docs/claims.json` by `scripts/build_readme_chart.py`; CI fails when it is stale.
+
+</details>
 
 The first comparator is this project's per-expert dequantize-to-bf16 loop, without CUDA graphs.
 The Unsloth row is a kernel comparison, not end-to-end training. The 120B row is an experiment

@@ -30,6 +30,11 @@ Use grouped-nf4-gemm directly to build or tune a kernel integration.
 
 [Install](#install) · [Results](#what-is-measured) · [Kernel API](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/KERNEL_CONTRACT.md) · [Task guides](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/SOLUTIONS.md) · [Hugging Face](https://huggingface.co/spaces/pjordanandrsn/research)
 
+![grouped-nf4-gemm against Unsloth's MoE kernel: faster decode with weights stored in 4-bit on RTX 4090 and H100; Unsloth faster at H100 prefill with weights resident in bf16. OLMoE QLoRA on real prose against this project's per-expert loop.](https://raw.githubusercontent.com/pjordanandrsn/grouped-nf4-gemm/main/docs/assets/speed-vs-unsloth-rtx4090-h100.svg)
+
+Kernel comparisons, one pod each. The receipts record the GPU, torch and (for the Unsloth comparison) the NVIDIA driver;
+clock locking, ECC state and the Triton version were not recorded. [How these were measured](#what-is-measured).
+
 ## Install
 
 ```bash
