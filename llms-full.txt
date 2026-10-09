@@ -1445,7 +1445,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
     "fused top-k combine for MoE decode",
     "split-K reduce and bf16 cast in one launch"
    ],
-   "solution": "int4_b32 carries the decode glue: rmsnorm_rows, rmsnorm_resid_rows, scaled_resid_add_rows, rope_norm_heads, rope_heads, router_epilogue (softmax-then-top-k, or top-k on logits with an optional bias), swiglu_rows, combine_rows and reduce_partials; each has an in-tree parity test against a torch reference. On sm_90+ NVIDIA cards these kernels, the int4 decode GEMV and the activation quantise launch with programmatic dependent launch by default, for launches of at most 8 activation rows (GNF4_PDL, GNF4_PDL_MAX_ROWS; GNF4_PDL=0 turns it off): each waits for its predecessor before touching memory, so outputs are bitwise those with it off (kernel/test_pdl.py).",
+   "solution": "int4_b32 carries the decode glue: rmsnorm_rows, rmsnorm_resid_rows, scaled_resid_add_rows, rope_norm_heads, rope_norm_qk (the query's and the key's in one launch), rope_heads, router_epilogue (softmax-then-top-k, or top-k on logits with an optional bias), swiglu_rows, combine_rows and reduce_partials; each has an in-tree parity test against a torch reference. On sm_90+ NVIDIA cards these kernels, the int4 decode GEMV and the activation quantise launch with programmatic dependent launch by default, for launches of at most 8 activation rows (GNF4_PDL, GNF4_PDL_MAX_ROWS; GNF4_PDL=0 turns it off): each waits for its predecessor before touching memory, so outputs are bitwise those with it off (kernel/test_pdl.py).",
    "modes": [
     "serving",
     "inference"
@@ -1484,6 +1484,7 @@ Register: [`claims.json`](../claims.json). Confirmed: claim `gnf4.mxfp4.train-9.
     "int4_b32:rmsnorm_resid_rows",
     "int4_b32:scaled_resid_add_rows",
     "int4_b32:rope_norm_heads",
+    "int4_b32:rope_norm_qk",
     "int4_b32:rope_heads",
     "int4_b32:router_epilogue",
     "int4_b32:swiglu_rows",
