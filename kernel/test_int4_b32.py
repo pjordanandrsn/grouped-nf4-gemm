@@ -660,6 +660,37 @@ def test_router_epilogue_bias_shape_is_checked():
         router_epilogue(logits, 2, False, select_on_logits=True, bias=torch.zeros(8).to(dev))
 
 
+@pytest.mark.parametrize("R", [1, 16])
+@pytest.mark.parametrize("E,K,norm,sel", [(128, 8, True, False), (128, 8, False, False), (100, 6, True, False),
+                                          (32, 4, False, True), (64, 8, False, True)])
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
+def test_router_epilogue_weights_dtype_is_bitwise_the_cast(R, E, K, norm, sel, dtype):
+    """``weights_dtype``: the kernel rounds the fp32 weights on the store, to nearest even, so the stored weights are
+    bitwise torch's ``.to(dtype)`` of the default call's, and ``first`` and the indices are untouched. Silicon only: the
+    interpreter's bf16 cast does not round to nearest."""
+    pytest.importorskip("triton")
+    from int4_b32 import router_epilogue
+    if os.environ.get("TRITON_INTERPRET") == "1":
+        pytest.skip("bitwise reading needs silicon: the interpreter's bf16 cast differs")
+    dev = _gpu()
+    torch.manual_seed(47)
+    for scale in (1.0, 4.0):
+        logits = (torch.randn(R, E) * scale).to(dev, torch.bfloat16)
+        first, w, idx = router_epilogue(logits, K, norm, select_on_logits=sel)
+        first_d, w_d, idx_d = router_epilogue(logits, K, norm, select_on_logits=sel, weights_dtype=dtype)
+        assert w.dtype == torch.float32 and w_d.dtype == dtype
+        assert torch.equal(w_d, w.to(dtype)), "bitwise the round-to-nearest-even cast"
+        assert torch.equal(first_d, first) and torch.equal(idx_d, idx)
+
+
+def test_router_epilogue_weights_dtype_is_checked():
+    pytest.importorskip("triton")
+    from int4_b32 import router_epilogue
+    dev = _gpu()
+    with pytest.raises(ValueError, match="weights_dtype"):
+        router_epilogue(torch.randn(2, 16).to(dev), 2, True, weights_dtype=torch.int32)
+
+
 
 # ---------------------------------------------------- split-K planning --
 # _plan is pure arithmetic (no device, no triton kernels), so these run
