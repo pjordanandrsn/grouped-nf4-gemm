@@ -6,7 +6,8 @@ Register: `gnf4.kernel.k34-k16-wide-plan-census.5090.2026-10-09`; `kernel/RESULT
   - At `qkv` the shipped plan (64, 128, 4, 4, 2) is the fastest of 48 at both tiles.
   - At `o`, 64 rows, BLOCK_N 32 with KC 256 reads 0.794×. The shipped plan launches 128 programs on 170 SMs there, so the
     gain is mostly grid fill.
-  - Every plan sat within one bf16 ulp of the fp32 reference, and the instrument read 0.998–1.000.
+  - Every tested layer-0 plan passed max absolute error ≤ 2^-7 times the max absolute fp32 reference output (sanity
+    gate), and the instrument read 0.998–1.000.
 - **The predictions.** The instrument held. The 64-row gain held for `o` and missed for `qkv`. The guessed winner shape
   (8 warps, a smaller split-K) and the predicted CANDIDATE missed.
 - **What follows (registered).** Nothing moves. `o`/64's cell is about 1 % of the served 64-row step, so it gets no
