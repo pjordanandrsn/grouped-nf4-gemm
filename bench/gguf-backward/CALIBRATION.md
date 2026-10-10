@@ -71,6 +71,20 @@ which must equal the reference decode bit for bit. Rounded scales change 16-25% 
 every type, and 15-26% on every released tensor whose scales are not already bf16-exact, so the
 probe catches them every time, on synthetic and released bytes alike (`test_kquant_backward.py`).
 
+## Model level (`kernel/test_kquant_gradcheck.py`)
+
+A tiny 2-layer model has a norm, a LoRA-adapted square projection, a gated FFN and a LoRA-adapted down projection, all
+over frozen k-quant bytes.
+- **The bf16 path against an fp64 model:** its input and adapter gradients sit 2e-3 to 1.7e-2 away (Q4_K, Q5_K, Q6_K,
+  Q8_0), measured before the tests were written. A backward off by 0.1% falls inside that spread, so there is **no
+  statistical model-level bar**.
+- **The checks are exact instead:**
+  - `torch.autograd.gradcheck` runs the same Function code with `compute_dtype=torch.float64`;
+  - the bf16 path's gradients must equal, bit for bit, those of the same model over the dense bf16 weight.
+- **Fast-mode gradcheck is not enough.** It passed a backward that used Wᵀ for the square projection; the full
+  Jacobian (slow mode) caught it. Slow mode is therefore required, run w.r.t. one input token to keep it to seconds.
+  Gradcheck catches a backward scaled by 1.001, a zeroed one and the transposed one.
+
 ## What this settles
 
 - **The bars are registered as designed:** e_test ≤ min(2 · e_ctrl, 1e-2), a live control, and the adjoint identity
