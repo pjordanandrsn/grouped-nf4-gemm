@@ -330,7 +330,9 @@ def test_fused_tile_table_empty_routing():
 
 @pytest.mark.parametrize("shape,H", [((1, 2048), 2048),
                                      ((32, 128), 128),
-                                     ((1, 5, 96), 96)])
+                                     ((1, 5, 96), 96),
+                                     # a prefill: 512 rows, as e4b's E4B_FUSE_PREFILL_GLUE=1 calls it
+                                     ((1, 512, 2048), 2048)])
 def test_rmsnorm_rows_matches_reference(shape, H):
     """Upstream RMSNorm semantics: fp32 mean-square, rsqrt, weight
     multiply, bf16 cast -- within one output rounding of the fp32
@@ -362,7 +364,8 @@ def _bf16_ulp(t):
 
 
 @pytest.mark.parametrize("scale", [1.0, 0.22])
-@pytest.mark.parametrize("shape,H", [((1, 2048), 2048), ((16, 2048), 2048)])
+@pytest.mark.parametrize("shape,H", [((1, 2048), 2048), ((16, 2048), 2048),
+                                     ((512, 2048), 2048)])     # a prefill (e4b's E4B_FUSE_PREFILL_GLUE=1)
 def test_rmsnorm_resid_rows_matches_reference(shape, H, scale):
     """Fused residual-add + RMSNorm: the add must round once to bf16
     exactly as the upstream bf16 ``+`` (operands exact in fp32, one
@@ -464,7 +467,8 @@ def test_scaled_resid_add_rows_matches_reference(shape, H, scale):
             "reference is indistinguishable from the single-rounding add on this draw"
 
 
-@pytest.mark.parametrize("R,HEADS,D", [(1, 32, 128), (16, 4, 128)])
+@pytest.mark.parametrize("R,HEADS,D", [(1, 32, 128), (16, 4, 128),
+                                       (128, 32, 128), (512, 4, 128)])  # prefill rows: 4,096 q head rows; 512 k
 def test_rope_norm_heads_matches_reference(R, HEADS, D):
     """Fused per-head RMSNorm + rotate-half rotary against the exact
     upstream chain (norm in fp32 -> bf16, then q*cos + rotate_half(q)
@@ -651,7 +655,7 @@ def test_router_epilogue_select_on_logits_matches_gpt_oss_and_granite(E, K, with
     assert torch.allclose(w.sum(-1), torch.ones(13, device=dev), atol=1e-5)
 
 
-@pytest.mark.parametrize("R", [1, 16])
+@pytest.mark.parametrize("R", [1, 16, 128])                 # 128: a prefill (e4b's E4B_FUSE_PREFILL_GLUE=1)
 @pytest.mark.parametrize("HQ,HK,D", [(32, 4, 128), (16, 2, 64), (8, 8, 96)])
 def test_rope_norm_qk_is_bitwise_the_two_launches(R, HQ, HK, D):
     """One launch for q's and k's heads: bitwise ``rope_norm_heads`` on each, with distinct norm weights and eps, so a
