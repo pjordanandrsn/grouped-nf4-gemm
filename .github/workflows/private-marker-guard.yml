@@ -58,6 +58,7 @@ jobs:
           staged for release in ~/e4b-outbox
           latency captures in ~/gnf4-lat
           provider credentials under ~/.runpod/config.toml
+          receipt stored at adertha://grouped-nf4-gemm%23538/receipts/run-1
           aftermath rails
           coordination operation
           do not solicit
