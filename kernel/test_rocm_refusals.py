@@ -79,11 +79,19 @@ def test_fused_kv_append_refuses_on_rocm_before_launching(rocm, which):
     assert "quantize_kv_fp8" in str(err.value)
 
 
-def test_fused_kv_append_control_nvidia_reaches_the_availability_boundary(nvidia):
-    """Same valid call under an NVIDIA build: no vendor refusal, it stops at the CPU-tensor boundary as before."""
+@pytest.mark.parametrize("which", ["t1", "bt1"])
+def test_fused_kv_append_control_nvidia_reaches_the_availability_boundary(nvidia, which):
+    """The same valid calls under an NVIDIA build: no vendor refusal; each stops at the CPU-tensor boundary as before."""
+    H, D = 4, 128
+    pool = torch.zeros(4096, dtype=torch.uint8)
     with pytest.raises(RuntimeError, match="needs triton and CUDA") as err:
-        fp8_kv.fp8_kv_append_t1(torch.zeros(4, 128), torch.zeros(4096, dtype=torch.uint8),
-                                torch.zeros(2, dtype=torch.int32), torch.zeros(1, dtype=torch.int32), 2048, 1024, 8, 1)
+        if which == "t1":
+            fp8_kv.fp8_kv_append_t1(torch.zeros(H, D), pool, torch.zeros(2, dtype=torch.int32),
+                                    torch.zeros(1, dtype=torch.int32), 2048, 1024, 8, 1)
+        else:
+            fp8_kv.fp8_kv_append_bt1(torch.zeros(1, H, D), pool, torch.zeros(1, 2, dtype=torch.int32),
+                                     torch.zeros(1, dtype=torch.int32), torch.zeros(1, dtype=torch.int32),
+                                     2048, 1024, 8, 1)
     assert "AMD" not in str(err.value)
 
 
