@@ -51,7 +51,9 @@ per tensor (M ∈ {1, 17, 128}):
 
 - **Cost:** it costs a median 2.1-2.9x the floor on Q2_K, Q4_K and Q5_K, and as little as 1.3x on some draws. Q3_K,
   Q6_K and Q8_0 stay within the bound.
-- **Detection by the error bar:** the per-case bar catches it in most draws, but not every time.
+- **Detection by the error bar:** the per-case bar catches it in most draws, but not every time. Over the 60 draws its
+  cost spans 1.3x to 2.9x the floor, against a bound of 2x. An earlier 6-case check (M ∈ {17, 128} x 3 seeds) put every
+  case above the bound; that was the sample, not a guarantee.
 - **Synthetic blocks hide it:** there it costs only 1.2-1.4x. In released blocks the two terms of
   w = d · sc · q − dmin · m largely cancel, which amplifies a scale error.
   - In a released Q4_K expert, ‖d · sc · q‖ is 2.35x ‖w‖ and ‖dmin · m‖ is 2.14x.
@@ -59,7 +61,8 @@ per tensor (M ∈ {1, 17, 128}):
 - **Not universal:** two released Q6_K attention tensors carry scales that are already exact in bf16, so rounding
   changes nothing there.
 
-So the constraint is pinned by a **decode probe**, not by the error bar. With dY = I, the backward returns W itself,
+A statistical bar that catches a fault most of the time is not a pin. So the constraint is pinned by a **decode
+probe**, not by the error bar, and any training path that refuses a kernel for rounding the scales keys on this probe. With dY = I, the backward returns W itself,
 which must equal the reference decode bit for bit. Rounded scales change 16-25% of the weights on synthetic blocks of
 every type, and 15-26% on every released tensor whose scales are not already bf16-exact, so the
 probe catches them every time, on synthetic and released bytes alike (`test_kquant_backward.py`).
