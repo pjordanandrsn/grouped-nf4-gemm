@@ -47,7 +47,29 @@ from __future__ import annotations
 import functools
 import os
 
-__all__ = ["HAS_TRITON", "UnsupportedShapeError", "device_shared_mem_limit", "prebind", "prebind_requested", "tl", "triton"]
+__all__ = ["HAS_TRITON", "UnsupportedShapeError", "device_shared_mem_limit", "prebind", "prebind_requested",
+           "prebind_unsupported", "rocm_refusal", "rocm_version", "tl", "triton"]
+
+
+def rocm_version() -> str | None:
+    """``torch.version.hip`` when this torch is a ROCm build (an AMD GPU behind ``torch.cuda``), else ``None``."""
+    import torch
+    return getattr(torch.version, "hip", None) or None
+
+
+def rocm_refusal(what: str) -> str | None:
+    """Why ``what`` is refused on an AMD GPU, or ``None`` on any other torch build.
+
+    Every gate that reads a compute capability asks this FIRST. A ROCm build of torch answers
+    ``torch.cuda.get_device_capability`` with gfx numbers (MI300X / gfx942 is ``(9, 4)``), so a rule written for sm
+    numbers, such as ``>= (8, 9)`` for fp8, passes on parts whose fp8 is FNUZ (gfx942) or absent (RDNA3). No AMD card
+    has run this package's suites, so the NVIDIA-only paths refuse in words there instead of guessing.
+    """
+    hip = rocm_version()
+    if not hip:
+        return None
+    return (f"AMD GPU (ROCm {hip}): {what} is not yet supported on AMD; no AMD card has run the suites, and ROCm's "
+            "compute capability is a gfx number, not an sm number")
 
 _NO_TRITON = (
     "triton is not installed, so this fused kernel cannot run. triton is a "
@@ -97,6 +119,11 @@ _CPU_PATH = {
         "x.float() @ nf4_grouped.dequant_ref(packed[e], absmax[e], N, K).to(torch.bfloat16).float().T "
         "per group (the forward; grad_out @ that weight for the dgrad) -- the route's dequant kernel is "
         "bit-equal to dequant_ref rounded to bfloat16 (test_nf4_route), and torch._grouped_mm has no CPU path.",
+    "fp8_kv":
+        "For a CPU-checkable result over the same KV bytes, use quantize_kv_fp8(x, group) and write the "
+        "values and fp32 scales into the paged row layout -- the eager path test_fp8_kv_append pins the "
+        "fused append against byte for byte. fp8_kv takes only rocm_refusal from this shim; it imports "
+        "triton itself and refuses a launch without it before reaching this message.",
     "int4_b32":
         "For a CPU-checkable result over the same int4-b32 bytes, use "
         "(xq.float() * xs.repeat_interleave(32, dim=1)) @ "
@@ -276,9 +303,18 @@ def _triton_version():
         return None
 
 
+def prebind_unsupported() -> str | None:
+    """Why the prebound launch path cannot be used with this torch, or ``None``. It was read against the CUDA launcher only
+    (:data:`PREBIND_TRITON` names Triton releases, not backends), so a ROCm build keeps Triton's own launcher."""
+    return rocm_refusal("the prebound Triton launch path (read against the CUDA launcher only)")
+
+
 def prebind(fn, force: bool = False):
-    """``fn`` wrapped in :class:`Prebound` unless ``GNF4_TRITON_PREBIND=0`` (``force`` wraps regardless), when this Triton is supported; else ``fn``."""
+    """``fn`` wrapped in :class:`Prebound` unless ``GNF4_TRITON_PREBIND=0`` (``force`` wraps regardless), when this Triton is supported
+    and this is not a ROCm build (:func:`prebind_unsupported`, which ``force`` does not override); else ``fn``."""
     if not (force or prebind_requested()) or not HAS_TRITON or _triton_version() not in PREBIND_TRITON:
+        return fn
+    if prebind_unsupported():
         return fn
     from triton.runtime.jit import JITFunction
     if not isinstance(fn, JITFunction) or not all(hasattr(fn, a) for a in ("params", "used_global_vals", "pre_run_hooks")):

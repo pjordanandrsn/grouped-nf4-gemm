@@ -23,7 +23,7 @@ import os
 
 import torch
 
-from _triton_shim import prebind, prebind_requested, tl, triton
+from _triton_shim import prebind, prebind_requested, rocm_version, tl, triton
 from nf4_grouped import BLOCKSIZE, _host_reuse_enabled, _lists_of_ints_shape, _lut, _raw_stream_key, _ValueMemo, to_device_i32
 
 #: GNF4_TRITON_PREBIND (on by default, =0 off, read at import): the dequant kernel launches without Triton's per-call argument binding, the device
@@ -53,7 +53,7 @@ ROUTES = ("auto", "fused", "grouped_mm", "dense", "decoded")
 DECODED_MAX_BYTES_DEFAULT = 256 * 2**20
 
 
-def route_for(capability, *, has_grouped_mm: bool, requested: str = "auto", n_groups=None) -> tuple:
+def route_for(capability, *, has_grouped_mm: bool, requested: str = "auto", n_groups=None, vendor: str | None = None) -> tuple:
     """The training route for a device, decided from facts about it rather than from a live device: ``(route, reason)``.
 
     The same decision :func:`train_gemm_route` makes, as a pure function, so it can be answered before CUDA is initialised, for a
@@ -64,6 +64,11 @@ def route_for(capability, *, has_grouped_mm: bool, requested: str = "auto", n_gr
     ``"dense"`` or ``"decoded"``, or ``None`` when no route of this module can train there (below :data:`MIN_CAPABILITY`, an
     explicit ``grouped_mm`` the device cannot run, or no CUDA device): ``reason`` then says why, in the words the launch-time
     refusal would use. ``decoded`` is opt-in only: ``auto`` never answers it.
+
+    ``vendor`` is ``"nvidia"`` or ``"amd"``; ``None`` (the default) means the vendor of the running torch build. On AMD
+    ``capability`` is a gfx number, not an sm number (gfx90a reports ``(9, 0)``), so ``auto`` never takes the
+    ``grouped_mm`` route from it and an explicit ``grouped_mm`` is refused in words: ``torch._grouped_mm``'s kernel is
+    for sm_90, and no AMD card has run these suites.
     """
     requested = str(requested).strip().lower()
     if requested not in ROUTES:
@@ -80,8 +85,17 @@ def route_for(capability, *, has_grouped_mm: bool, requested: str = "auto", n_gr
         return "dense", "GNF4_TRAIN_GEMM=dense: per-expert dequant + torch.mm"
     if requested == "decoded":
         return "decoded", "GNF4_TRAIN_GEMM=decoded: dequant_groups + one grouped bf16 GEMM launch per chunk of groups (opt-in)"
-    grouped_ok = has_grouped_mm and cap == GROUPED_MM_CAPABILITY
+    if vendor is None:
+        vendor = "amd" if rocm_version() else "nvidia"
+    if vendor not in ("nvidia", "amd"):
+        raise ValueError(f"vendor must be 'nvidia', 'amd' or None, got {vendor!r}")
+    amd = vendor == "amd"
+    grouped_ok = has_grouped_mm and cap == GROUPED_MM_CAPABILITY and not amd
     if requested == "grouped_mm":
+        if amd:
+            return None, ("GNF4_TRAIN_GEMM=grouped_mm: AMD GPU: torch._grouped_mm's route is for compute capability 9.0 "
+                          "(sm_90), and an AMD capability is a gfx number; not yet supported on AMD, no AMD card has run "
+                          "the suites")
         if not has_grouped_mm:
             return None, "GNF4_TRAIN_GEMM=grouped_mm needs torch._grouped_mm (torch >= 2.8); this torch has none"
         if not grouped_ok:
@@ -90,7 +104,8 @@ def route_for(capability, *, has_grouped_mm: bool, requested: str = "auto", n_gr
         return "grouped_mm", "GNF4_TRAIN_GEMM=grouped_mm"
     if grouped_ok:
         return "grouped_mm", "auto: compute capability 9.0 with torch._grouped_mm"
-    why = (f"auto: compute capability {cap[0]}.{cap[1]} is not 9.0" if has_grouped_mm
+    why = ("auto: AMD GPU, whose capability is a gfx number: torch._grouped_mm is not selected from it" if amd
+           else f"auto: compute capability {cap[0]}.{cap[1]} is not 9.0" if has_grouped_mm
            else "auto: this torch has no torch._grouped_mm")
     if n_groups is not None and 0 < int(n_groups) <= DENSE_AUTO_MAX_GROUPS:
         return "dense", f"{why}; {int(n_groups)} present groups <= {DENSE_AUTO_MAX_GROUPS} take the dense route"
