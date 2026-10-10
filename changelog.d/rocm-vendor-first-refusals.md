@@ -12,8 +12,8 @@ asks the vendor first (`_triton_shim.rocm_refusal`, keyed on `torch.version.hip`
 - The prebound launch path (`_triton_shim.prebind`, `GNF4_TRITON_PREBIND`) stays off on ROCm even when forced: it was
   read against the CUDA launcher only. `prebind_unsupported()` says why.
 - `nf4_route.route_for` takes `vendor` (`"nvidia"`, `"amd"`, or `None` for the running torch's). On AMD, `auto` never
-  selects `torch._grouped_mm` from a capability tuple, and an explicit `grouped_mm` is refused in words; a route the
-  caller names otherwise is used as given.
+  selects `torch._grouped_mm` from a capability tuple, an explicit `grouped_mm` is refused in words, the sm_80
+  floor is not applied to an AMD tuple, and a route the caller names otherwise is used as given.
 
 NVIDIA behaviour is unchanged. `kernel/test_rocm_refusals.py` (CPU, mocked ROCm) pairs each refusal with the same
 call under an NVIDIA build at the same tuple, and runs in the CPU CI job.

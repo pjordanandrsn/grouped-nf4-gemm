@@ -73,10 +73,16 @@ def route_for(capability, *, has_grouped_mm: bool, requested: str = "auto", n_gr
     requested = str(requested).strip().lower()
     if requested not in ROUTES:
         raise ValueError(f"requested must be one of {ROUTES}, got {requested!r}")
+    if vendor is None:
+        vendor = "amd" if rocm_version() else "nvidia"
+    if vendor not in ("nvidia", "amd"):
+        raise ValueError(f"vendor must be 'nvidia', 'amd' or None, got {vendor!r}")
+    amd = vendor == "amd"
     if capability is None:
         return None, "no CUDA device: the NF4 training kernels are CUDA-only"
     cap = (int(capability[0]), int(capability[1]))
-    if cap < MIN_CAPABILITY:
+    # the vendor before any capability rule: MIN_CAPABILITY is an sm number, and an AMD tuple is a gfx number
+    if not amd and cap < MIN_CAPABILITY:
         return None, (f"compute capability {cap[0]}.{cap[1]} is below the documented floor "
                       f"{MIN_CAPABILITY[0]}.{MIN_CAPABILITY[1]} of the fused NF4 kernels")
     if requested == "fused":
@@ -85,11 +91,6 @@ def route_for(capability, *, has_grouped_mm: bool, requested: str = "auto", n_gr
         return "dense", "GNF4_TRAIN_GEMM=dense: per-expert dequant + torch.mm"
     if requested == "decoded":
         return "decoded", "GNF4_TRAIN_GEMM=decoded: dequant_groups + one grouped bf16 GEMM launch per chunk of groups (opt-in)"
-    if vendor is None:
-        vendor = "amd" if rocm_version() else "nvidia"
-    if vendor not in ("nvidia", "amd"):
-        raise ValueError(f"vendor must be 'nvidia', 'amd' or None, got {vendor!r}")
-    amd = vendor == "amd"
     grouped_ok = has_grouped_mm and cap == GROUPED_MM_CAPABILITY and not amd
     if requested == "grouped_mm":
         if amd:

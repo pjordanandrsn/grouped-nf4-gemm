@@ -121,6 +121,13 @@ def test_route_vendor_defaults_to_the_running_torch(rocm):
     assert nf4_route.route_for(GFX90A, has_grouped_mm=True)[0] == "grouped_mm"
 
 
+def test_route_does_not_judge_an_amd_tuple_by_the_sm_floor():
+    """Vendor before capability: (7, 5) is below the sm_80 floor as an sm number, and means nothing as a gfx number."""
+    assert nf4_route.route_for((7, 5), has_grouped_mm=True, vendor="nvidia")[0] is None
+    route, why = nf4_route.route_for((7, 5), has_grouped_mm=True, vendor="amd")
+    assert route == "fused" and "AMD" in why and "floor" not in why
+
+
 def test_route_rejects_an_unknown_vendor():
     with pytest.raises(ValueError, match="vendor"):
         nf4_route.route_for(GFX90A, has_grouped_mm=True, vendor="intel")
