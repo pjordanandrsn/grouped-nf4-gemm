@@ -864,7 +864,9 @@ def build_group_tiles_split(expert_ids, n_experts: int, big_m: int, small_m: int
     tiles pad the light experts instead. The split keeps the 16-row table's padding exactly (only an expert's last
     remainder tile is short) and puts each heavy expert's full blocks on tall tiles.
 
-    Built like :func:`build_group_tiles_device`: on device, no ``.item()``, no host round-trip, STATIC shapes. Returns
+    Built like :func:`build_group_tiles_device`: on device, no ``.item()``, no host round-trip, STATIC shapes. Both
+    tables come out of ONE stacked pass (row 0 the tall tiles, row 1 the short ones), so the build costs about the
+    launches of the one-table chained builder, not twice them. Returns
     ``((big_row0, big_rows, big_group), (small_row0, small_rows, small_group), order, counts)``. Both tables index the
     SAME ``order`` (expert-major, stable), so a kernel reading tiles from either one gathers and stores exactly the rows
     it would under the 16-row table. Big tiles always hold ``big_m`` rows; small tiles hold at most ``small_m``.
@@ -882,24 +884,25 @@ def build_group_tiles_split(expert_ids, n_experts: int, big_m: int, small_m: int
     counts.scatter_add_(0, ids, torch.ones_like(ids))
     row_off = torch.cumsum(counts, 0) - counts                  # exclusive
     nbig = counts // big_m                                      # full big tiles per expert
-    rem = counts - nbig * big_m
-    nsmall = (rem + small_m - 1) // small_m
-
-    def table(per_expert, budget, height, base, cap):
-        off = torch.cumsum(per_expert, 0) - per_expert          # exclusive
-        j = torch.arange(budget, dtype=torch.int64, device=dev)
-        e = (torch.searchsorted(off, j, right=True) - 1).clamp_(0, n_experts - 1)
-        i = j - off.index_select(0, e)
-        live = (j < off[-1] + per_expert[-1]) & (i < per_expert.index_select(0, e))
-        rows = (cap.index_select(0, e) - i * height).clamp_(0, height)
-        rows = torch.where(live, rows, torch.zeros_like(rows))
-        row0 = torch.where(live, base.index_select(0, e) + i * height, torch.zeros_like(rows))
-        grp = torch.where(live, e, torch.zeros_like(e))
-        return row0.to(torch.int32), rows.to(torch.int32), grp.to(torch.int32)
-
-    big = table(nbig, max(1, r // big_m), big_m, row_off, nbig * big_m)
-    small = table(nsmall, -(-r // small_m) + n_experts, small_m, row_off + nbig * big_m, rem)
-    return big, small, order, counts
+    in_big = nbig * big_m
+    rem = counts - in_big
+    # row 0: the tall tiles; row 1: the remainders -- one pass over both
+    per = torch.stack((nbig, (rem + (small_m - 1)) // small_m))             # [2, E] tiles per expert
+    base = torch.stack((row_off, row_off + in_big))                         # [2, E] each table's first row
+    cap = torch.stack((in_big, rem))                                        # [2, E] rows each table covers
+    hgt = small_m + (big_m - small_m) * (1 - torch.arange(2, dtype=torch.int64, device=dev)).unsqueeze(1)  # [2, 1]
+    off = torch.cumsum(per, 1) - per                                        # [2, E] exclusive tile offsets
+    budget = -(-r // small_m) + n_experts
+    j = torch.arange(budget, dtype=torch.int64, device=dev).repeat(2, 1)    # [2, budget]
+    e = (torch.searchsorted(off, j, right=True) - 1).clamp_(0, n_experts - 1)
+    i = j - off.gather(1, e)
+    live = (j < off[:, -1:] + per[:, -1:]) & (i < per.gather(1, e))
+    rows = torch.minimum((cap.gather(1, e) - i * hgt).clamp_(min=0), hgt)
+    rows = torch.where(live, rows, 0).to(torch.int32)
+    row0 = torch.where(live, base.gather(1, e) + i * hgt, 0).to(torch.int32)
+    grp = torch.where(live, e, 0).to(torch.int32)
+    nb = max(1, r // big_m)
+    return (row0[0, :nb], rows[0, :nb], grp[0, :nb]), (row0[1], rows[1], grp[1]), order, counts
 
 
 def gemm_4bit_grouped_captured(a_sorted, B, absmax, t_row0, t_rows,
