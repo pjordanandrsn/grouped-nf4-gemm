@@ -631,12 +631,222 @@
    "model": "qwen",
    "rows_per_token": 37.220703125,
    "source": "belady, 192 rows (2 steps held)"
+  },
+  {
+   "floor_ms": {
+    "nvme_nas": 308.85329454545456,
+    "pcie_5090": 49.11883720481928,
+    "pcie_a2000": 163.3358769230769
+   },
+   "mb_per_token": 1019.215872,
+   "model": "qwen3",
+   "rows_per_token": 384.0,
+   "source": "window W=1, ~384 rows"
+  },
+  {
+   "floor_ms": {
+    "nvme_nas": 127.54603636363638,
+    "pcie_5090": 20.284429879518072,
+    "pcie_a2000": 67.45223076923077
+   },
+   "mb_per_token": 420.90192,
+   "model": "qwen3",
+   "rows_per_token": 158.5791015625,
+   "source": "belady at that capacity, ~384 rows"
+  },
+  {
+   "floor_ms": {
+    "nvme_nas": 102.2744290909091,
+    "pcie_5090": 16.265330891566265,
+    "pcie_a2000": 54.087438461538454
+   },
+   "mb_per_token": 337.505616,
+   "model": "qwen3",
+   "rows_per_token": 127.15869140625,
+   "source": "window W=16, ~2479 rows"
+  },
+  {
+   "floor_ms": {
+    "nvme_nas": 12.300218181818181,
+    "pcie_5090": 1.9561792771084336,
+    "pcie_a2000": 6.504923076923077
+   },
+   "mb_per_token": 40.59072,
+   "model": "qwen3",
+   "rows_per_token": 15.29296875,
+   "source": "belady at that capacity, ~2479 rows"
+  },
+  {
+   "floor_ms": {
+    "nvme_nas": 64.54119272727273,
+    "pcie_5090": 10.264382457831326,
+    "pcie_a2000": 34.13236153846154
+   },
+   "mb_per_token": 212.985936,
+   "model": "qwen3",
+   "rows_per_token": 80.24462890625,
+   "source": "window W=32, ~2996 rows"
+  },
+  {
+   "floor_ms": {
+    "nvme_nas": 8.438923636363636,
+    "pcie_5090": 1.3420938795180724,
+    "pcie_a2000": 4.462892307692308
+   },
+   "mb_per_token": 27.848448,
+   "model": "qwen3",
+   "rows_per_token": 10.4921875,
+   "source": "belady at that capacity, ~2996 rows"
+  },
+  {
+   "floor_ms": {
+    "nvme_nas": 38.517120000000006,
+    "pcie_5090": 6.125614265060241,
+    "pcie_a2000": 20.36963076923077
+   },
+   "mb_per_token": 127.106496,
+   "model": "qwen3",
+   "rows_per_token": 47.888671875,
+   "source": "window W=64, ~3468 rows"
+  },
+  {
+   "floor_ms": {
+    "nvme_nas": 7.111898181818182,
+    "pcie_5090": 1.1310488674698795,
+    "pcie_a2000": 3.7611
+   },
+   "mb_per_token": 23.469264,
+   "model": "qwen3",
+   "rows_per_token": 8.84228515625,
+   "source": "belady at that capacity, ~3468 rows"
+  },
+  {
+   "floor_ms": {
+    "nvme_nas": 22.020218181818183,
+    "pcie_5090": 3.5020106024096385,
+    "pcie_a2000": 11.645307692307691
+   },
+   "mb_per_token": 72.66672,
+   "model": "qwen3",
+   "rows_per_token": 27.3779296875,
+   "source": "window W=128, ~3807 rows"
+  },
+  {
+   "floor_ms": {
+    "nvme_nas": 6.748232727272728,
+    "pcie_5090": 1.0732129156626506,
+    "pcie_a2000": 3.568776923076923
+   },
+   "mb_per_token": 22.269168,
+   "model": "qwen3",
+   "rows_per_token": 8.39013671875,
+   "source": "belady at that capacity, ~3807 rows"
+  },
+  {
+   "floor_ms": {
+    "nvme_nas": 189.3640581818182,
+    "pcie_5090": 30.11572973493976,
+    "pcie_a2000": 100.14445384615384
+   },
+   "mb_per_token": 624.901392,
+   "model": "qwen3",
+   "rows_per_token": 235.43798828125,
+   "source": "cache, 384 rows (1 steps held)"
+  },
+  {
+   "floor_ms": {
+    "nvme_nas": 223.7469381818182,
+    "pcie_5090": 35.58385040963856,
+    "pcie_a2000": 118.3277076923077
+   },
+   "mb_per_token": 738.364896,
+   "model": "qwen3",
+   "rows_per_token": 278.1865234375,
+   "source": "lru, 384 rows (1 steps held)"
+  },
+  {
+   "floor_ms": {
+    "nvme_nas": 127.54603636363638,
+    "pcie_5090": 20.284429879518072,
+    "pcie_a2000": 67.45223076923077
+   },
+   "mb_per_token": 420.90192,
+   "model": "qwen3",
+   "rows_per_token": 158.5791015625,
+   "source": "belady, 384 rows (1 steps held)"
+  },
+  {
+   "floor_ms": {
+    "nvme_nas": 184.64151272727275,
+    "pcie_5090": 29.364674313253012,
+    "pcie_a2000": 97.64695384615385
+   },
+   "mb_per_token": 609.316992,
+   "model": "qwen3",
+   "rows_per_token": 229.56640625,
+   "source": "cache, 576 rows (1.5 steps held)"
+  },
+  {
+   "floor_ms": {
+    "nvme_nas": 184.97376,
+    "pcie_5090": 29.417513638554215,
+    "pcie_a2000": 97.82266153846153
+   },
+   "mb_per_token": 610.413408,
+   "model": "qwen3",
+   "rows_per_token": 229.9794921875,
+   "source": "lru, 576 rows (1.5 steps held)"
+  },
+  {
+   "floor_ms": {
+    "nvme_nas": 97.48904727272729,
+    "pcie_5090": 15.504282216867471,
+    "pcie_a2000": 51.5567076923077
+   },
+   "mb_per_token": 321.713856,
+   "model": "qwen3",
+   "rows_per_token": 121.208984375,
+   "source": "belady, 576 rows (1.5 steps held)"
+  },
+  {
+   "floor_ms": {
+    "nvme_nas": 148.23216000000002,
+    "pcie_5090": 23.574271228915663,
+    "pcie_a2000": 78.39200769230769
+   },
+   "mb_per_token": 489.166128,
+   "model": "qwen3",
+   "rows_per_token": 184.29833984375,
+   "source": "cache, 768 rows (2 steps held)"
+  },
+  {
+   "floor_ms": {
+    "nvme_nas": 148.43245090909093,
+    "pcie_5090": 23.606124722891565,
+    "pcie_a2000": 78.49793076923076
+   },
+   "mb_per_token": 489.827088,
+   "model": "qwen3",
+   "rows_per_token": 184.54736328125,
+   "source": "lru, 768 rows (2 steps held)"
+  },
+  {
+   "floor_ms": {
+    "nvme_nas": 77.5656,
+    "pcie_5090": 12.335733975903613,
+    "pcie_a2000": 41.02026923076923
+   },
+   "mb_per_token": 255.96648,
+   "model": "qwen3",
+   "rows_per_token": 96.43798828125,
+   "source": "belady, 768 rows (2 steps held)"
   }
  ],
  "row_bytes": {
   "granite": 1327104,
   "olmoe": 3538944,
-  "qwen": 4866048
+  "qwen": 4866048,
+  "qwen3": 2654208
  },
  "traces": [
   {
@@ -1392,6 +1602,330 @@
      "union_mean": 55.364583333333336,
      "union_p50": 55,
      "union_p95": 59
+    }
+   }
+  },
+  {
+   "churn": 0.6051400440313112,
+   "meta": {
+    "decode": true,
+    "distinct_tokens": 47,
+    "env": {
+     "architectures": [
+      "Qwen3MoeForCausalLM"
+     ],
+     "config": "config.json:2850ddb3bf7aecad",
+     "cuda": "12.8",
+     "model_path": "/root/loc/hf/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+     "name_or_path": "/root/loc/hf/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+     "python": "3.11.13",
+     "repo_id": "Qwen/Qwen3-30B-A3B",
+     "torch": "2.8.0+cu128",
+     "transformers": "5.16.1",
+     "weight_index": "model.safetensors.index.json:df0d481ec595c55a"
+    },
+    "layers": 48,
+    "model": "Qwen/Qwen3-30B-A3B",
+    "n_experts": 128,
+    "path": "e4b NF4 host residency (#1469 item 1)",
+    "prompt": "prose",
+    "prompt_tokens": 64,
+    "steps": 512,
+    "top_k": 8,
+    "top_k_native": null,
+    "top_k_overridden": false
+   },
+   "model": "qwen3",
+   "prompt": "prose",
+   "steps": 512,
+   "windows": {
+    "1": {
+     "belady_loads_per_token": 149.80859375,
+     "capacity_rows": 384,
+     "loads_per_token": 384.0,
+     "union_max": 8,
+     "union_mean": 8.0,
+     "union_p50": 8,
+     "union_p95": 8
+    },
+    "16": {
+     "belady_loads_per_token": 13.611328125,
+     "capacity_rows": 2354,
+     "loads_per_token": 119.30859375,
+     "union_max": 71,
+     "union_mean": 39.76953125,
+     "union_p50": 39,
+     "union_p95": 53
+    },
+    "32": {
+     "belady_loads_per_token": 8.01171875,
+     "capacity_rows": 2898,
+     "loads_per_token": 76.515625,
+     "union_max": 85,
+     "union_mean": 51.010416666666664,
+     "union_p50": 50,
+     "union_p95": 66
+    },
+    "64": {
+     "belady_loads_per_token": 7.759765625,
+     "capacity_rows": 3296,
+     "loads_per_token": 45.029296875,
+     "union_max": 90,
+     "union_mean": 60.0390625,
+     "union_p50": 59,
+     "union_p95": 78
+    },
+    "128": {
+     "belady_loads_per_token": 7.759765625,
+     "capacity_rows": 3578,
+     "loads_per_token": 24.189453125,
+     "union_max": 90,
+     "union_mean": 64.50520833333333,
+     "union_p50": 64,
+     "union_p95": 84
+    }
+   }
+  },
+  {
+   "churn": 0.5961095482713633,
+   "meta": {
+    "decode": true,
+    "distinct_tokens": 146,
+    "env": {
+     "architectures": [
+      "Qwen3MoeForCausalLM"
+     ],
+     "config": "config.json:2850ddb3bf7aecad",
+     "cuda": "12.8",
+     "model_path": "/root/loc/hf/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+     "name_or_path": "/root/loc/hf/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+     "python": "3.11.13",
+     "repo_id": "Qwen/Qwen3-30B-A3B",
+     "torch": "2.8.0+cu128",
+     "transformers": "5.16.1",
+     "weight_index": "model.safetensors.index.json:df0d481ec595c55a"
+    },
+    "layers": 48,
+    "model": "Qwen/Qwen3-30B-A3B",
+    "n_experts": 128,
+    "path": "e4b NF4 host residency (#1469 item 1)",
+    "prompt": "code",
+    "prompt_tokens": 64,
+    "steps": 512,
+    "top_k": 8,
+    "top_k_native": null,
+    "top_k_overridden": false
+   },
+   "model": "qwen3",
+   "prompt": "code",
+   "steps": 512,
+   "windows": {
+    "1": {
+     "belady_loads_per_token": 155.619140625,
+     "capacity_rows": 384,
+     "loads_per_token": 384.0,
+     "union_max": 8,
+     "union_mean": 8.0,
+     "union_p50": 8,
+     "union_p95": 8
+    },
+    "16": {
+     "belady_loads_per_token": 21.45703125,
+     "capacity_rows": 2626,
+     "loads_per_token": 130.9921875,
+     "union_max": 79,
+     "union_mean": 43.6640625,
+     "union_p50": 44,
+     "union_p95": 58
+    },
+    "32": {
+     "belady_loads_per_token": 15.48046875,
+     "capacity_rows": 3297,
+     "loads_per_token": 86.390625,
+     "union_max": 96,
+     "union_mean": 57.59375,
+     "union_p50": 58,
+     "union_p95": 74
+    },
+    "64": {
+     "belady_loads_per_token": 11.958984375,
+     "capacity_rows": 3957,
+     "loads_per_token": 54.359375,
+     "union_max": 110,
+     "union_mean": 72.47916666666667,
+     "union_p50": 72,
+     "union_p95": 92
+    },
+    "128": {
+     "belady_loads_per_token": 10.150390625,
+     "capacity_rows": 4559,
+     "loads_per_token": 34.1171875,
+     "union_max": 115,
+     "union_mean": 90.97916666666667,
+     "union_p50": 93,
+     "union_p95": 108
+    }
+   }
+  },
+  {
+   "churn": 0.60376406555773,
+   "meta": {
+    "decode": true,
+    "distinct_tokens": 54,
+    "env": {
+     "architectures": [
+      "Qwen3MoeForCausalLM"
+     ],
+     "config": "config.json:2850ddb3bf7aecad",
+     "cuda": "12.8",
+     "model_path": "/root/loc/hf/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+     "name_or_path": "/root/loc/hf/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+     "python": "3.11.13",
+     "repo_id": "Qwen/Qwen3-30B-A3B",
+     "torch": "2.8.0+cu128",
+     "transformers": "5.16.1",
+     "weight_index": "model.safetensors.index.json:df0d481ec595c55a"
+    },
+    "layers": 48,
+    "model": "Qwen/Qwen3-30B-A3B",
+    "n_experts": 128,
+    "path": "e4b NF4 host residency (#1469 item 1)",
+    "prompt": "math",
+    "prompt_tokens": 64,
+    "steps": 512,
+    "top_k": 8,
+    "top_k_native": null,
+    "top_k_overridden": false
+   },
+   "model": "qwen3",
+   "prompt": "math",
+   "steps": 512,
+   "windows": {
+    "1": {
+     "belady_loads_per_token": 154.3984375,
+     "capacity_rows": 384,
+     "loads_per_token": 384.0,
+     "union_max": 8,
+     "union_mean": 8.0,
+     "union_p50": 8,
+     "union_p95": 8
+    },
+    "16": {
+     "belady_loads_per_token": 15.37890625,
+     "capacity_rows": 2378,
+     "loads_per_token": 123.4140625,
+     "union_max": 71,
+     "union_mean": 41.138020833333336,
+     "union_p50": 41,
+     "union_p95": 53
+    },
+    "32": {
+     "belady_loads_per_token": 9.58984375,
+     "capacity_rows": 2882,
+     "loads_per_token": 79.681640625,
+     "union_max": 90,
+     "union_mean": 53.12109375,
+     "union_p50": 53,
+     "union_p95": 67
+    },
+    "64": {
+     "belady_loads_per_token": 7.49609375,
+     "capacity_rows": 3316,
+     "loads_per_token": 47.6875,
+     "union_max": 103,
+     "union_mean": 63.583333333333336,
+     "union_p50": 63,
+     "union_p95": 81
+    },
+    "128": {
+     "belady_loads_per_token": 7.49609375,
+     "capacity_rows": 3526,
+     "loads_per_token": 25.83203125,
+     "union_max": 105,
+     "union_mean": 68.88541666666667,
+     "union_p50": 68,
+     "union_p95": 87
+    }
+   }
+  },
+  {
+   "churn": 0.6444369699934769,
+   "meta": {
+    "decode": true,
+    "distinct_tokens": 89,
+    "env": {
+     "architectures": [
+      "Qwen3MoeForCausalLM"
+     ],
+     "config": "config.json:2850ddb3bf7aecad",
+     "cuda": "12.8",
+     "model_path": "/root/loc/hf/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+     "name_or_path": "/root/loc/hf/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+     "python": "3.11.13",
+     "repo_id": "Qwen/Qwen3-30B-A3B",
+     "torch": "2.8.0+cu128",
+     "transformers": "5.16.1",
+     "weight_index": "model.safetensors.index.json:df0d481ec595c55a"
+    },
+    "layers": 48,
+    "model": "Qwen/Qwen3-30B-A3B",
+    "n_experts": 128,
+    "path": "e4b NF4 host residency (#1469 item 1)",
+    "prompt": "dialogue",
+    "prompt_tokens": 64,
+    "steps": 512,
+    "top_k": 8,
+    "top_k_native": null,
+    "top_k_overridden": false
+   },
+   "model": "qwen3",
+   "prompt": "dialogue",
+   "steps": 512,
+   "windows": {
+    "1": {
+     "belady_loads_per_token": 174.490234375,
+     "capacity_rows": 384,
+     "loads_per_token": 384.0,
+     "union_max": 8,
+     "union_mean": 8.0,
+     "union_p50": 8,
+     "union_p95": 8
+    },
+    "16": {
+     "belady_loads_per_token": 10.724609375,
+     "capacity_rows": 2559,
+     "loads_per_token": 134.919921875,
+     "union_max": 78,
+     "union_mean": 44.973307291666664,
+     "union_p50": 44,
+     "union_p95": 58
+    },
+    "32": {
+     "belady_loads_per_token": 8.88671875,
+     "capacity_rows": 2907,
+     "loads_per_token": 78.390625,
+     "union_max": 90,
+     "union_mean": 52.260416666666664,
+     "union_p50": 52,
+     "union_p95": 66
+    },
+    "64": {
+     "belady_loads_per_token": 8.154296875,
+     "capacity_rows": 3304,
+     "loads_per_token": 44.478515625,
+     "union_max": 96,
+     "union_mean": 59.3046875,
+     "union_p50": 59,
+     "union_p95": 76
+    },
+    "128": {
+     "belady_loads_per_token": 8.154296875,
+     "capacity_rows": 3565,
+     "loads_per_token": 25.373046875,
+     "union_max": 104,
+     "union_mean": 67.66145833333333,
+     "union_p50": 68,
+     "union_p95": 85
     }
    }
   }
