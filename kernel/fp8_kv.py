@@ -37,6 +37,8 @@ from __future__ import annotations
 
 import torch
 
+from _triton_shim import rocm_refusal
+
 E4M3_MAX = 448.0
 FP8_DTYPE = torch.float8_e4m3fn
 
@@ -312,6 +314,11 @@ def fp8_kv_append_t1(x, pool_flat_u8, tbl_row_i32, lens_scalar_i32,
         # scale stores go through an int32 view of the same bytes; a
         # misaligned scale region would corrupt neighbours silently
         raise ValueError("row/payload sizes must be 4-byte aligned")
+    why = rocm_refusal("the fused FP8 KV append (OCP e4m3 through tl.float8e4nv)")
+    if why:
+        # the vendor before the availability boundary: a ROCm torch reports CUDA-resident tensors, so the check below
+        # would let a valid call launch the OCP e4m3 store on hardware whose fp8 is FNUZ or absent
+        raise RuntimeError(f"fp8_kv_append_t1: {why}; the eager quantize_kv_fp8 append is the path to use")
     if not HAS_TRITON or not x.is_cuda:
         # after argument validation: bad args fail as bad args on every
         # platform; only a VALID call hits the availability boundary.
@@ -404,6 +411,9 @@ def fp8_kv_append_bt1(x, pool_flat_u8, tbl_i32, slot_idx_i32, lens_i32,
     if tbl_i32.dtype != torch.int32 or not tbl_i32.is_contiguous()             or tbl_i32.dim() != 2:
         raise ValueError("block table must be a contiguous int32 "
                          "[num_slots, blocks_per_seq]")
+    why = rocm_refusal("the fused FP8 KV append (OCP e4m3 through tl.float8e4nv)")
+    if why:
+        raise RuntimeError(f"fp8_kv_append_bt1: {why}; the eager quantize_kv_fp8 append is the path to use")
     if not HAS_TRITON or not x.is_cuda:
         raise RuntimeError("fp8_kv_append_bt1 needs triton and CUDA "
                            "tensors (no eager fallback here -- the "

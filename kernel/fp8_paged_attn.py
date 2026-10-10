@@ -71,7 +71,7 @@ except Exception:  # pragma: no cover
 # The typed shape refusal and the once-per-device shared-memory query are
 # shared with nf4_grouped through the shim (gnf4#324); both import without
 # triton, so this module stays importable for its pure-torch oracle.
-from _triton_shim import UnsupportedShapeError, device_shared_mem_limit  # noqa: E402,F401
+from _triton_shim import UnsupportedShapeError, device_shared_mem_limit, rocm_refusal  # noqa: E402,F401
 
 
 def paged_attn_available() -> bool:
@@ -1151,7 +1151,14 @@ def fp8_compute_unsupported(q, head_dim: int, k_groups: int,
     ``layout`` genuinely cannot be a reason to refuse fp8: the f32
     path requires ``tokens`` while fp8 accepts ``tokens`` or
     ``heads``, so anything fp8 rejects, f32 rejects too.
+
+    The VENDOR is asked first (:func:`_triton_shim.rocm_refusal`): ROCm answers the capability query with gfx numbers,
+    so the sm_89 rule below would pass on gfx942, whose fp8 is FNUZ rather than the OCP e4m3 the pool stores, and on
+    RDNA3, which has no fp8 at all. The default then selects the f32 path, whose e4m3 decode is integer arithmetic.
     """
+    why = rocm_refusal("fp8 tensor-core attention (OCP e4m3 through tl.float8e4nv)")
+    if why:
+        return why
     if v_groups != 1:
         return ("fp8 compute folds V scales into P: per-row only "
                 f"(v_groups={v_groups})")
