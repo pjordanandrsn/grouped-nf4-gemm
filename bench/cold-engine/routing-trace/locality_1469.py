@@ -42,8 +42,8 @@ from score_policies import load  # noqa: E402
 PROMPTS = ("prose", "code", "math", "dialogue")
 WINDOWS = (1, 16, 32, 64, 128)
 #: hidden size and routed-expert intermediate size, from each model's config.json on the Hub
-#: (allenai/OLMoE-1B-7B-0924, ibm-granite/granite-3.0-3b-a800m-instruct, Qwen/Qwen1.5-MoE-A2.7B)
-SHAPES = {"olmoe": (2048, 1024), "granite": (1536, 512), "qwen": (2048, 1408)}
+#: (allenai/OLMoE-1B-7B-0924, ibm-granite/granite-3.0-3b-a800m-instruct, Qwen/Qwen1.5-MoE-A2.7B, Qwen/Qwen3-30B-A3B)
+SHAPES = {"olmoe": (2048, 1024), "granite": (1536, 512), "qwen": (2048, 1408), "qwen3": (2048, 768)}
 #: measured host-to-device copy throughput (loggetta receipts' ``link_h2d_gbps``: RTX A2000 median of 10, RTX 5090
 #: median of 3) and NVMe sequential read on the owned NAS (bench/nvme/receipts, 3.30-3.47 GB/s)
 LINKS = {"pcie_a2000": 6.24, "pcie_5090": 20.75, "nvme_nas": 3.3}
