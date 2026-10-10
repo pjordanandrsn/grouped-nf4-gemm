@@ -13,6 +13,10 @@ A bar is only meaningful if it lies between the two. Everything here runs on CPU
 
 The cases cover Q8_0, Q4_K, Q5_K and Q6_K. Shapes (M, N, K) are (17, 37, 256), (128, 256, 256), (3, 129, 2816) and
 (64, 2048, 512), each with 3 seeds. The blocks are random packed bytes with finite scale fields.
+- **Magnitude:** DESIGN.md §5 meant the scales to give W about 1/√K. With random sub-scales and quants, W's std
+  is about 1x that for Q8_0 and Q2_K, but 3x, 15x, 31x and 90x for Q3_K, Q4_K, Q5_K and Q6_K.
+- **Why it does not matter here:** every error in this note is relative, so it does not depend on scale. The released
+  bytes below carry real magnitudes.
 
 | type | floor (bf16 out), max | fp32-out variant | adjoint identity, max | closest fault, min |
 |---|---|---|---|---|

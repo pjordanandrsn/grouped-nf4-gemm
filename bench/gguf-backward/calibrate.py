@@ -25,7 +25,8 @@ SHAPES = [(17, 37, 256), (128, 256, 256), (3, 129, 2816), (64, 2048, 512)]   # (
 
 
 def blocks_for(gtype, n_rows, k, seed):
-    """Random packed blocks with finite fp16 scale fields (the test_kquant_ref pattern), scaled so |W| ~ 1/sqrt(K)."""
+    """Random packed blocks with finite fp16 scale fields (the test_kquant_ref pattern). W's std is ~1-90x 1/sqrt(K)
+    depending on the type; the errors reported are relative, so they do not depend on it."""
     elems, bbytes, _ = kq.GGML_DEQUANT[gtype]
     n = n_rows * (k // elems)
     rng = np.random.default_rng(seed)

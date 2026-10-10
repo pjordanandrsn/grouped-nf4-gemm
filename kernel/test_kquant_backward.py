@@ -44,8 +44,9 @@ SHAPES = [(1, 7, 256), (17, 37, 256), (3, 129, 2816), (16, 256, 256), (128, 1, 5
 
 # -- fixtures --------------------------------------------------------------------------------------------------
 def _blocks(gtype, n_rows, k, seed, dmin_ratio=8.0):
-    """Random packed blocks (the test_kquant_ref pattern), scale fields finite and sized so |W| ~ 1/sqrt(K).
-    dmin is `dmin_ratio` x d, the profile released files ship (medians ~8 for Q4_K, ~17 for Q5_K)."""
+    """Random packed blocks (the test_kquant_ref pattern) with finite, bounded scale fields. W's magnitude varies by
+    type (its std is ~1-90x 1/sqrt(K), largest for Q6_K); every bar here is a relative error, so it does not depend
+    on it. dmin is `dmin_ratio` x d, the profile released files ship (medians ~8 for Q4_K, ~17 for Q5_K)."""
     elems, bbytes, _ = GGML_DEQUANT[gtype]
     n = n_rows * (k // elems)
     rng = np.random.default_rng(seed)
