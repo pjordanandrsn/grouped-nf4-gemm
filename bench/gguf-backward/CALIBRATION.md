@@ -1,0 +1,72 @@
+# Calibration of the GGUF backward bars, before the path under test was scored
+
+[`DESIGN.md`](DESIGN.md) fixes the oracle, the bars and the faults for dX = dY · W through a frozen k-quant weight.
+This note measures, before any path under test was scored, where those bars sit:
+- the **floor**: the error of a correct bf16 path against the fp64 oracle;
+- the **null**: the error each deliberate fault produces.
+
+A bar is only meaningful if it lies between the two. Everything here runs on CPU, with no timings. Outputs are in
+[`results-2026-10-10/`](results-2026-10-10/), produced by [`calibrate.py`](calibrate.py) (synthetic blocks) and
+[`gate_real_bytes.py`](gate_real_bytes.py) (released bytes).
+
+## Synthetic blocks (48 cases)
+
+The cases cover Q8_0, Q4_K, Q5_K and Q6_K. Shapes (M, N, K) are (17, 37, 256), (128, 256, 256), (3, 129, 2816) and
+(64, 2048, 512), each with 3 seeds. The blocks are random packed bytes with finite scale fields.
+
+| type | floor (bf16 out), max | fp32-out variant | adjoint identity, max | closest fault, min |
+|---|---|---|---|---|
+| Q8_0 | 2.41e-3 | 1.72e-3 | 3.5e-16 | 1.00 (zero dX); every mutation ≥ 1.36 |
+| Q4_K | 2.49e-3 | 1.85e-3 | 1.3e-15 | 5.4e-2 (dmin zeroed) |
+| Q5_K | 2.52e-3 | 1.89e-3 | 1.6e-15 | 2.6e-2 (dmin zeroed) |
+| Q6_K | 2.39e-3 | 1.71e-3 | 4.0e-15 | 1.00 (zero dX) |
+
+The realized bound min(2 · e_ctrl, 1e-2) is about 4-5e-3, so the closest synthetic fault sits about 5x above it. That
+fault's size depends on dmin relative to d, and these blocks set dmin = d/2. Hence the gate below.
+
+## Released bytes (the gate)
+
+Every tensor is sha256-pinned; fetch them with `scripts/fetch_gguf_fixtures.py` (the attention set) and `--ffn` (the
+expert / FFN set).
+
+- **Attention projections:** 8 tensors, Q2_K-Q6_K, from two Muse-Glimmer-30B GGUFs.
+- **Expert matrices:** Qwen3-30B-A3B (MoE) experts 0 and 77 of `ffn_{gate,up,down}_exps`, in Q3_K, Q4_K, Q5_K, Q6_K
+  and Q8_0.
+- **Dense FFN:** Muse-Glimmer-30B row prefixes, in Q2_K, Q3_K and Q8_0.
+
+The cases are M ∈ {17, 128} × 3 seeds per tensor; the transpose fault runs on the leading square block.
+
+- **Released files ship far larger mins than the synthetic blocks.** The median dmin/d is about 8 for Q4_K and about
+  17 for Q5_K, in every tensor class, against 0.5 synthetic. Zeroing dmin scores 1.42-2.14 on real bytes, not 2.6e-2.
+- **Floor:** 2.24-2.38e-3 for every type and class. The realized bound is ≤ 4.77e-3 everywhere.
+- **Faults:** each scores at least **130x** its case's bound. The smallest margin is the Q4_K / Q5_K scale-spill fault;
+  every other fault is ≥ 280x.
+- **One profile covers attention, expert and dense-FFN tensors.** Q8_0 is calibrated on released bytes: 6 expert
+  matrices and 3 FFN prefixes, every fault ≥ 298x.
+
+## Super-block scales must stay fp16/fp32 (a kernel constraint)
+
+Rounding the fp16 scales d and dmin to bf16 is a plausible kernel shortcut. On released bytes, across 60 draws of dY
+per tensor (M ∈ {1, 17, 128}):
+
+- **Cost:** it costs a median 2.1-2.9x the floor on Q2_K, Q4_K and Q5_K, and as little as 1.3x on some draws. Q3_K,
+  Q6_K and Q8_0 stay within the bound.
+- **Detection by the error bar:** the per-case bar catches it in most draws, but not every time.
+- **Synthetic blocks hide it:** there it costs only 1.2-1.4x. In released blocks the two terms of
+  w = d · sc · q − dmin · m largely cancel, which amplifies a scale error.
+  - In a released Q4_K expert, ‖d · sc · q‖ is 2.35x ‖w‖ and ‖dmin · m‖ is 2.14x.
+  - In the random blocks the min term is only 0.06x ‖w‖, so nothing cancels.
+- **Not universal:** two released Q6_K attention tensors carry scales that are already exact in bf16, so rounding
+  changes nothing there.
+
+So the constraint is pinned by a **decode probe**, not by the error bar. With dY = I, the backward returns W itself,
+which must equal the reference decode bit for bit. Rounded scales change 16-25% of the weights on synthetic blocks of
+every type, and 15-26% on every released tensor whose scales are not already bf16-exact, so the
+probe catches them every time, on synthetic and released bytes alike (`test_kquant_backward.py`).
+
+## What this settles
+
+- **The bars are registered as designed:** e_test ≤ min(2 · e_ctrl, 1e-2), a live control, and the adjoint identity
+  to 1e-12. Every fault must fail a bar or the decode probe with `AssertionError`.
+- **The calibrated types are Q8_0, Q4_K, Q5_K and Q6_K,** plus Q2_K and Q3_K on the same evidence.
+- **The i-quants stay out of scope** (DESIGN.md §5).

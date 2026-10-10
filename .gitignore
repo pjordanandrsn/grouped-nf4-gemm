@@ -4,4 +4,5 @@ dist/
 build/
 *.egg-info/
 kernel/fixtures/gguf/
+kernel/fixtures/gguf-ffn/
 *.ots.bak

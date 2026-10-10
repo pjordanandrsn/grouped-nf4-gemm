@@ -232,3 +232,37 @@ def dequantize_ggml(ggml_type: int, data: bytes | torch.Tensor,
             f"tensor offset")
     out = fn(buf.reshape(n_blocks, bbytes))
     return out.reshape(shape)
+
+
+# --- the reference backward through a frozen k-quant weight ---------------------------------------------------
+# bench/gguf-backward/DESIGN.md (sections 3-4) and CALIBRATION.md. The weight is FROZEN: there is no dW. The input
+# gradient dX = dY @ W runs on the same bf16 decode as the forward. The super-block scales (d, dmin) are applied in
+# fp32 inside dequantize_ggml, and that is a stated constraint: rounded to bf16 they cost a median 2.1-2.9x this
+# path's own error against an fp64 oracle on released Q2_K/Q4_K/Q5_K bytes. test_kquant_backward.py pins it with a
+# decode probe (dY = I returns W), which catches it every time; the per-case error bar alone catches it only mostly.
+
+class KQuantLinearRef(torch.autograd.Function):
+    """y = x @ W.T with W decoded from frozen GGUF bytes; backward returns dX only (bf16 matmul, fp32 accumulate)."""
+
+    @staticmethod
+    def forward(ctx, x, data, ggml_type, shape):
+        w = dequantize_ggml(ggml_type, data, shape).to(device=x.device, dtype=torch.bfloat16)
+        ctx.save_for_backward(data if isinstance(data, torch.Tensor) else torch.empty(0))
+        ctx.raw = None if isinstance(data, torch.Tensor) else data
+        ctx.ggml_type, ctx.shape, ctx.x_dtype = ggml_type, tuple(shape), x.dtype
+        return (x.to(torch.bfloat16).float() @ w.float().T).to(torch.bfloat16)
+
+    @staticmethod
+    def backward(ctx, dy):
+        (saved,) = ctx.saved_tensors
+        data = ctx.raw if ctx.raw is not None else saved
+        w = dequantize_ggml(ctx.ggml_type, data, ctx.shape).to(device=dy.device, dtype=torch.bfloat16)
+        dx = (dy.to(torch.bfloat16).float() @ w.float()).to(torch.bfloat16)
+        return dx.to(ctx.x_dtype), None, None, None
+
+
+def kquant_linear(x: torch.Tensor, data, ggml_type: int, shape: tuple[int, int]) -> torch.Tensor:
+    """x [..., K] -> [..., N] through the frozen GGUF weight `data` (logical torch shape [N, K])."""
+    lead = x.shape[:-1]
+    y = KQuantLinearRef.apply(x.reshape(-1, x.shape[-1]), data, ggml_type, tuple(shape))
+    return y.reshape(*lead, shape[0])
