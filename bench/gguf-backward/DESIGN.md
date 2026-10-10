@@ -64,8 +64,11 @@ tile and never materializes W; it is scored against this reference and against t
 
 ## 4. The oracle and the bars
 
-- **Oracle:** `W64 = dequantize_ggml(...)` cast to float64; X, dY drawn in bf16 and upcast to float64 (exactly
-  representable); `dX_ref = dY64 @ W64`.
+- **Oracle, decoded independently:** `W64` comes from **gguf-py's own** `dequantize` (independent code that handles
+  the K types), cast to float64, not from `dequantize_ggml`. If the oracle and the path under test shared a decoder, a
+  decode bug would move both sides together and no dX bar could see it. The link between the two decoders is the
+  existing bit-exact adjudication of `kquant_ref` against gguf-py (`kernel/test_kquant_ref.py`).
+  X and dY are drawn in bf16 and upcast to float64 (exactly representable); `dX_ref = dY64 @ W64`.
 - **Error:** e = ‖dX − dX_ref‖_F / ‖dX_ref‖_F (relative error, the same normalization as `err_vs_fp64`).
 - **Control:** e_ctrl = the error of the reference path in §3.
 - **Bars:**
@@ -79,13 +82,19 @@ tile and never materializes W; it is scored against this reference and against t
 - **LoRA wiring:** the frozen bytes carry no gradient. Adapter A/B gradients are nonzero and within 1e-2 relative of
   the same adapters over the reference path.
 - **Sensitivity:** negating one row of dY must change dX.
-- **Armed:** each mutation below must **fail** at least one bar. They run as strict expected failures, so a mutation
-  that passes is itself a failure.
-  - m1: the Q4_K/Q5_K 6-bit scale/min packing with the high-bit spill broken;
-  - m2: the Q3_K `hmask` inversion dropped;
-  - m3: Wᵀ used in the backward where N ≠ K;
-  - m4: the super-block index shifted by one row at N = 37;
-  - m5: `dmin` zeroed.
+- **Armed:** each mutation below must **fail a bar**, not crash.
+  - **Only the path under test is mutated, never the oracle.** The oracle decodes independently (above), so a decode
+    mutation in the path under test shows up as a bar failure.
+  - **They run as strict expected failures with `raises=AssertionError`**, the exception the bars raise. A plain strict
+    xfail would also count any exception (a shape error, an index error) as the expected failure, so a mutation that
+    merely crashed would pass vacuously.
+  - The mutations:
+    - m1: the Q4_K/Q5_K 6-bit scale/min packing with the high-bit spill broken;
+    - m2: the Q3_K `hmask` inversion dropped;
+    - m3: Wᵀ used in place of W in the backward, **at N == K**, where the shapes still agree and the result is silently
+      wrong. At N ≠ K the same mutation raises a shape error, which belongs at most in a separate shape-refusal test;
+    - m4: the super-block index shifted by one row at N = 37;
+    - m5: `dmin` zeroed.
 - **Calibration only:** scales rounded to bf16 before decoding. Record whether this trips the bars; it is not required to.
 
 ## 5. Fixtures
@@ -112,9 +121,9 @@ gguf-py dequantizes the K types but does not quantize them, so fixtures come fro
 
 ## 6. Arms
 
-1. **CPU, first.** The oracle, the adjoint identity, the reference path, the control and the mutations all run in fp64 or
-   bf16 on CPU (expected to take seconds per case up to 2048 × 4096; not yet measured). This arm proves the
-   harness and can join CI.
+1. **CPU, first.** The oracle (gguf-py decode), the adjoint identity, the reference path, the control and the
+   mutations all run in fp64 or bf16 on CPU (expected to take seconds per case up to 2048 × 4096; not yet
+   measured). This arm proves the harness and can join CI.
 2. **The project's RTX A2000 (sm_86).** The candidate fused dgrad kernel is scored against the same oracle and bars once
    it exists. Correctness only, no rental, no performance statement.
 
