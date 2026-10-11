@@ -854,6 +854,57 @@ def build_group_tiles_device(expert_ids, n_experts: int, block_m: int,
             grp.to(torch.int32), order, counts)
 
 
+def build_group_tiles_split(expert_ids, n_experts: int, big_m: int, small_m: int = 16):
+    """Two capture-safe tile tables for one grouping (e4b#846, opt-in): each expert's rows as
+    ``floor(c / big_m)`` FULL ``big_m``-row tiles, then the remainder in ``small_m``-row tiles.
+
+    The prefill rows of a MoE layer are bimodal on Qwen3-30B-A3B (a shape census on SC2's prompts: per 512-token
+    chunk one expert takes a median 398 of the 4,096 routed rows, the other ~90 a median 24). On one uniform 16-row
+    table the heavy expert runs as ~25 tiles, each re-reading and re-dequantising the same weight slice; uniform taller
+    tiles pad the light experts instead. The split keeps the 16-row table's padding exactly (only an expert's last
+    remainder tile is short) and puts each heavy expert's full blocks on tall tiles.
+
+    Built like :func:`build_group_tiles_device`: on device, no ``.item()``, no host round-trip, STATIC shapes. Both
+    tables come out of ONE stacked pass (row 0 the tall tiles, row 1 the short ones), so the build costs about the
+    launches of the one-table chained builder, not twice them. Returns
+    ``((big_row0, big_rows, big_group), (small_row0, small_rows, small_group), order, counts)``. Both tables index the
+    SAME ``order`` (expert-major, stable), so a kernel reading tiles from either one gathers and stores exactly the rows
+    it would under the 16-row table. Big tiles always hold ``big_m`` rows; small tiles hold at most ``small_m``.
+
+    Budgets: a big tile holds ``big_m`` real rows, so ``R // big_m`` big slots always suffice; remainders sum to at most
+    ``R`` and each expert's is below ``big_m``, so ``ceil(R / small_m) + E`` small slots suffice. Slots past the true
+    counts carry ``rows = 0`` (the kernel's zero-tile exit)."""
+    if big_m % small_m or big_m <= small_m:
+        raise ValueError(f"big_m={big_m} must be a multiple of small_m={small_m} and larger than it")
+    dev = expert_ids.device
+    r = expert_ids.numel()
+    ids = expert_ids.to(torch.int64)
+    order = torch.argsort(ids, stable=True)
+    counts = torch.zeros(n_experts, dtype=torch.int64, device=dev)
+    counts.scatter_add_(0, ids, torch.ones_like(ids))
+    row_off = torch.cumsum(counts, 0) - counts                  # exclusive
+    nbig = counts // big_m                                      # full big tiles per expert
+    in_big = nbig * big_m
+    rem = counts - in_big
+    # row 0: the tall tiles; row 1: the remainders -- one pass over both
+    per = torch.stack((nbig, (rem + (small_m - 1)) // small_m))             # [2, E] tiles per expert
+    base = torch.stack((row_off, row_off + in_big))                         # [2, E] each table's first row
+    cap = torch.stack((in_big, rem))                                        # [2, E] rows each table covers
+    hgt = small_m + (big_m - small_m) * (1 - torch.arange(2, dtype=torch.int64, device=dev)).unsqueeze(1)  # [2, 1]
+    off = torch.cumsum(per, 1) - per                                        # [2, E] exclusive tile offsets
+    budget = -(-r // small_m) + n_experts
+    j = torch.arange(budget, dtype=torch.int64, device=dev).repeat(2, 1)    # [2, budget]
+    e = (torch.searchsorted(off, j, right=True) - 1).clamp_(0, n_experts - 1)
+    i = j - off.gather(1, e)
+    live = (j < off[:, -1:] + per[:, -1:]) & (i < per.gather(1, e))
+    rows = torch.minimum((cap.gather(1, e) - i * hgt).clamp_(min=0), hgt)
+    rows = torch.where(live, rows, 0).to(torch.int32)
+    row0 = torch.where(live, base.gather(1, e) + i * hgt, 0).to(torch.int32)
+    grp = torch.where(live, e, 0).to(torch.int32)
+    nb = max(1, r // big_m)
+    return (row0[0, :nb], rows[0, :nb], grp[0, :nb]), (row0[1], rows[1], grp[1]), order, counts
+
+
 def gemm_4bit_grouped_captured(a_sorted, B, absmax, t_row0, t_rows,
                                t_group, block_m: int,
                                prefill_variant: int | None = None,

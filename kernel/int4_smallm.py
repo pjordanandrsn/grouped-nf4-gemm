@@ -246,7 +246,8 @@ def gemm_int4_b32_grouped_smallm(x: torch.Tensor, packed: torch.Tensor, scales: 
                                  order: torch.Tensor | None = None, *,
                                  block_n: int = 32, kc: int = 256, warps: int = 4, stages: int = 2,
                                  dot_bf16: bool | None = None,
-                                 scatter: torch.Tensor | None = None, gather_div: int = 1) -> torch.Tensor:
+                                 scatter: torch.Tensor | None = None, gather_div: int = 1,
+                                 block_m: int = 16, out: torch.Tensor | None = None) -> torch.Tensor:
     """K19, the grouped small-M int4-b32 GEMM: ``x [R, K]`` bf16 (unsorted when ``order`` is given, else already in
     expert-major order), ``packed [E, N, K//2]`` / ``scales [E, N, K//32]`` int4-b32 expert stacks, and the device
     tile table of ``int4_b32.build_group_tiles_fused`` (``t_row0``, ``t_rows`` <= 16, ``t_group`` = local expert ids;
@@ -255,6 +256,12 @@ def gemm_int4_b32_grouped_smallm(x: torch.Tensor, packed: torch.Tensor, scales: 
     ``scatter[i]``, exactly ``torch.empty_like(y).index_copy_(0, scatter, y)`` of the sorted result. With
     ``gather_div=k`` (lane K23, opt-in; needs ``order``) ``x`` is the ``[R // k, K]`` TOKEN rows and sorted row i reads
     token row ``order[i] // k``: the same bits as passing ``x.repeat_interleave(k, 0)``, without that copy.
+
+    ``block_m`` (opt-in, e4b#846): the M tile, 16 (the default: the launch above, unchanged), 32 or 64. Every tile of
+    the table must hold at most ``block_m`` rows; the tables of ``nf4_grouped.build_group_tiles_split`` are built for
+    it (full ``big_m`` tiles in one table, 16-row remainders in the other). ``out`` (opt-in): an existing ``[R, N]``
+    bf16 buffer to store into instead of a fresh one, so two launches over disjoint tiles of one grouping fill one
+    result (:func:`gemm_int4_b32_grouped_split`); rows no tile names are left as they were.
 
     Same contract as K16 per tile: each output row is within one bf16 ulp of ``x[src] @ dequant(packed[e]).T`` and is
     bit-identical to K16 (``gemm_int4_b32_smallm`` with ``sk=1`` and the same ``block_n``/``kc``) on that expert's
@@ -282,12 +289,43 @@ def gemm_int4_b32_grouped_smallm(x: torch.Tensor, packed: torch.Tensor, scales: 
     gather = order is not None
     if scatter is not None and scatter.numel() != R:
         raise ValueError(f"scatter has {scatter.numel()} rows, x has {R}")
-    out = torch.empty(R, N, dtype=torch.bfloat16, device=x.device)
+    if block_m not in GROUPED_BLOCK_M:
+        raise ValueError(f"block_m={block_m}: expected one of {GROUPED_BLOCK_M}")
+    if out is None:
+        out = torch.empty(R, N, dtype=torch.bfloat16, device=x.device)
+    elif tuple(out.shape) != (R, N) or out.dtype != torch.bfloat16 or out.device != x.device or not out.is_contiguous():
+        raise ValueError(f"out must be a contiguous [{R}, {N}] bf16 tensor on {x.device}, got "
+                         f"{tuple(out.shape)} {out.dtype} on {out.device}")
     extra = {} if scatter is None else {"sct_ptr": scatter, "SCATTER": True}
     if gather_div != 1:
         extra["GDIV"] = int(gather_div)
     _gemm_int4_b32_grouped_smallm[(t_row0.numel(), triton.cdiv(N, block_n))](
         x.contiguous(), order if gather else t_row0, packed, scales, t_row0, t_rows, t_group, out,
-        N, K=K, BLOCK_M=16, BLOCK_N=block_n, KC=kc, GATHER=bool(gather), DOT_BF16=bool(dot_bf16),
+        N, K=K, BLOCK_M=block_m, BLOCK_N=block_n, KC=kc, GATHER=bool(gather), DOT_BF16=bool(dot_bf16),
         num_warps=warps, num_stages=stages, **extra)
     return out
+
+
+#: The M tiles K19 launches: 16 (its default) and the taller tiles of a split table.
+GROUPED_BLOCK_M = (16, 32, 64)
+
+
+def gemm_int4_b32_grouped_split(x: torch.Tensor, packed: torch.Tensor, scales: torch.Tensor, big, small, big_m: int,
+                                order: torch.Tensor | None = None, *, scatter: torch.Tensor | None = None,
+                                gather_div: int = 1, plan_big: dict | None = None, plan_small: dict | None = None,
+                                dot_bf16: bool | None = None) -> torch.Tensor:
+    """K19 over the two tables of ``nf4_grouped.build_group_tiles_split`` (opt-in, e4b#846): the full ``big_m``-row
+    tiles in one launch at ``block_m=big_m``, then the 16-row remainders in a second launch into the same buffer.
+    ``big`` and ``small`` are ``(row0, rows, group)`` triples over ONE ``order``, so together they name every sorted
+    row exactly once and the result has K19's layout: sorted rows, or the caller's rows given ``scatter``.
+
+    Each row is computed as K19 computes it, over the whole K with the same KC chunks, so the result keeps K19's
+    contract (within one bf16 ulp of the dequant reference). Whether a row on a tall tile is the SAME bits as on a
+    16-row tile is a property of the card's codegen, not of this function: a row's reduction order does not depend on
+    the tile's other rows, but the instruction layout Triton picks can change with ``BLOCK_M`` and the arch. That is
+    read on each target (``test_k19_split_tiles_interp.py``'s compiled test), never assumed. ``plan_big`` and
+    ``plan_small`` are each launch's ``block_n`` / ``kc`` / ``warps`` / ``stages`` (K19's defaults when ``None``)."""
+    common = dict(scatter=scatter, gather_div=gather_div, dot_bf16=dot_bf16)
+    y = gemm_int4_b32_grouped_smallm(x, packed, scales, *big, order, block_m=big_m, **common, **(plan_big or {}))
+    return gemm_int4_b32_grouped_smallm(x, packed, scales, *small, order, block_m=16, out=y, **common,
+                                        **(plan_small or {}))
