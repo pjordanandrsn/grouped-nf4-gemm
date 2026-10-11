@@ -4,6 +4,124 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
+## 0.46.0 — 2026-10-11 — GGUF backward reference, an opt-in split tile table, AMD refusals
+
+**0.46.0.** A reference backward through frozen GGUF k-quant weights, an opt-in split tile table for K19's prefill
+rows, refusals in words on a ROCm build, and an AMD compile-only CI check. No default changes.
+
+### CI: an AMD compile-only check that fails on assembler errors (no GPU, no AMD support claim)
+
+A new `hip-compile` job compiles the shipped kernels for gfx942, gfx950 and gfx1100 on a CPU runner, with triton
+pinned at 3.4.0 and a copy-only stand-in for ROCm's `ld.lld` (`scripts/hip_lld_standin.sh`). The specializations come
+from the interpreter suites themselves: `scripts/hip_harvest.py` records every kernel launch they make (argument types,
+constexpr values, launch options), and `scripts/hip_compile_check.py` compiles up to eight per kernel, chosen so every
+distinct value is compiled once. A compile fails on an exception OR on any `error:` line the AMD assembler writes,
+captured at the file-descriptor level, because `triton.compile` returns normally when the assembler rejects an
+instruction (PTX inline asm, for one).
+
+Strict: an unlisted failure, a stale entry in `scripts/hip_compile_allow.json` (each entry names the refusal that keeps
+that path off AMD; today the fused FP8 KV append on gfx1100, which has no fp8), and a kernel in
+`scripts/hip_required.json` that compiled nowhere. Reporting only: shipped `@triton.jit` functions no specialization
+reached. `scripts/hip_declared.json` holds specializations of kernels the interpreter suites never launch; it starts
+empty. The check proves lowering and assembly, not numerics or that a code object loads.
+
+Not covered here: the NF4/int4 kernels still run on ROCm when called directly; the SM-count `>= 160` launch
+heuristics and the missing LDS fit-down are tuned for NVIDIA; the f32 attention's `tf32` input precision is unverified
+on HIP.
+
+### GGUF backward: model-level gradcheck
+
+- **`KQuantLinearRef` / `kquant_linear` take `compute_dtype`:** bf16 by default (unchanged); `torch.float64` runs the
+  same Function code exactly, for `torch.autograd.gradcheck`.
+- **`kernel/test_kquant_gradcheck.py`** checks a tiny 2-layer model over frozen k-quant weights for each type (Q8_0,
+  Q2_K–Q6_K):
+  - fp64 gradcheck in slow mode (fast mode passed a transposed backward at a square shape);
+  - a backward scaled by 1.001, a zeroed one and a transposed one must each fail it;
+  - the bf16 path's gradients must equal those of the dense-bf16 model bit for bit.
+
+### K19 over a split tile table: full 32- or 64-row tiles for a heavy expert, 16-row tiles for the rest (opt-in; e4b#846)
+
+On Qwen3-30B-A3B the prefill rows of a MoE layer are bimodal. A shape census on experts4bit-qlora's SC2 prompts found,
+per 512-token chunk (4,096 routed rows), one expert taking a median 398 rows and the other ~90 a median 24. On K19's one
+16-row table the heavy expert runs as ~25 tiles, and each re-reads and re-dequantises the same weight slice. Uniform
+taller tiles would pad the light experts instead: 30 % at 32 rows and 48 % at 64, against 16 % at 16.
+
+- `nf4_grouped.build_group_tiles_split(expert_ids, E, big_m)` builds two tables from one `order`:
+  - each expert's `c // big_m` full `big_m`-row tiles;
+  - its remainder in 16-row tiles.
+
+  It runs on device like `build_group_tiles_device` (no host sync, static shapes, so it is capture-legal). The padding
+  is exactly the 16-row table's. On the census, weight passes per N-block drop from 307 to 204 at `big_m=64` and 212 at
+  32.
+- `gemm_int4_b32_grouped_smallm` takes `block_m` (16, the default, then 32 or 64) and `out=`, which stores into an
+  existing buffer so two launches fill one result. `gemm_int4_b32_grouped_split` launches the full tiles, then the
+  remainders. The gather, `scatter` and `gather_div` work as on the 16-row table.
+- **Defaults are unchanged.** `block_m=16` with no `out` is K19's launch, bit for bit. Nothing in this package routes to
+  the split on its own. Its speed is experts4bit-qlora's to read, on a rented card.
+- **Numerics.** The outputs keep K19's contract: within one bf16 ulp of the dequant reference. Whether a row on a tall
+  tile is the same bits as on a 16-row tile depends on the card's codegen, so it is tested per target, not assumed.
+  Compiled on an RTX A2000 (sm_86), the split equals the 16-row table with `torch.equal` at K 768 and 2048, at
+  `big_m` 32 and 64 (correctness only, no timing).
+
+### Backward through a frozen GGUF k-quant weight: reference path, calibrated bars and released-byte fixtures
+
+- **`kquant_ref.KQuantLinearRef` / `kquant_linear`:** y = x · Wᵀ with W decoded from frozen GGUF bytes. The backward
+  returns dX = dY · W only (no weight gradient), on the same bf16 decode.
+- **`kernel/test_kquant_backward.py`** scores dX against an fp64 oracle decoded independently by gguf-py:
+  - the bar e ≤ min(2 · e_ctrl, 1e-2), a live control, the adjoint identity, and LoRA wiring;
+  - a decode probe: dY = I must return the reference decode bit for bit;
+  - five deliberate decoder faults and a transpose fault, each of which must fail a bar.
+  It runs in CI on synthetic blocks; the released-byte arm is gated on `GNF4_GGUF_FIXTURES`.
+- **`bench/gguf-backward/CALIBRATION.md`** measured the floor and each fault before the path was scored.
+  - The floor is 2.2-2.5e-3; every fault is ≥ 130x the bound on released attention, expert and FFN bytes for Q2_K-Q6_K
+    and Q8_0.
+  - Super-block scales must stay fp16/fp32. Rounded to bf16 they cost a median 2.1-2.9x the floor on Q2_K/Q4_K/Q5_K,
+    and the decode probe pins that.
+- **`scripts/fetch_gguf_fixtures.py --ffn`** fetches the expert / FFN fixtures, sha256-pinned at pinned revisions.
+  The renamed meta-models source is recorded beside its original URL; its bytes are unchanged.
+
+### On a ROCm build of torch, the capability-gated NVIDIA paths refuse in words that name AMD
+
+ROCm answers `torch.cuda.get_device_capability` with gfx numbers (MI300X / gfx942 is `(9, 4)`), which pass
+the sm-number rules these paths were written against. No AMD card has run this package's suites, so each gate now
+asks the vendor first (`_triton_shim.rocm_refusal`, keyed on `torch.version.hip`):
+
+- `fp8_paged_attn.fp8_compute_unsupported` returns an AMD reason before any other check, so the unset
+  `GNF4_ATTN_COMPUTE` default selects the f32 path, whose e4m3 decode is integer arithmetic. An explicit
+  `GNF4_ATTN_COMPUTE=fp8` reaches the same refusal.
+- `fp8_kv.fp8_kv_append_t1` / `fp8_kv_append_bt1` raise on ROCm (after argument validation), pointing at the eager
+  `quantize_kv_fp8` append.
+- The prebound launch path (`_triton_shim.prebind`, `GNF4_TRITON_PREBIND`) stays off on ROCm even when forced: it was
+  read against the CUDA launcher only. `prebind_unsupported()` says why.
+- `nf4_route.route_for` takes `vendor` (`"nvidia"`, `"amd"`, or `None` for the running torch's). On AMD, `auto` never
+  selects `torch._grouped_mm` from a capability tuple, an explicit `grouped_mm` is refused in words, the sm_80
+  floor is not applied to an AMD tuple, and a route the caller names otherwise is used as given.
+
+NVIDIA behaviour is unchanged. `kernel/test_rocm_refusals.py` (CPU, mocked ROCm) pairs each refusal with the same
+call under an NVIDIA build at the same tuple, and runs in the CPU CI job.
+
+### Design note: backward through a frozen GGUF k-quant weight (zero rental)
+
+`bench/gguf-backward/DESIGN.md` sets out how a backward pass through frozen `kquant_ref` weights (Q8_0, Q2_K–Q6_K)
+would be checked once one exists. It covers:
+- a reference autograd Function that decodes, then runs a bf16 matmul; this reference is also the bf16 control;
+- an fp64 oracle decoded independently with gguf-py, with the bars B-rel ≤ 2× the control and B-abs ≤ 1e-2;
+- the adjoint identity, LoRA-wiring checks, and five mutations applied only to the path under test, which must fail a
+  bar (`raises=AssertionError`), not crash;
+- fixtures from bounded random packed blocks and the existing real-byte files;
+- arms: CPU first, then an RTX A2000, correctness only.
+
+No package code changes. The i-quants are out of scope.
+
+### Nearby-token expert reuse, now with Qwen3-30B-A3B (experts4bit-qlora#1469)
+
+`bench/cold-engine/routing-trace` adds Qwen3-30B-A3B's four decode traces from the experts4bit-qlora#1469 item 1
+census (read in experts4bit-qlora#1555), byte for byte, as `qwen3_{prose,code,math,dialogue}.jsonl`. It adds the model's shape to `locality_1469.py`
+and its Belady/cache/LRU rows to `oracle-headroom.json`. The rows for the other models are unchanged.
+- **Results:** at W = 16 a window cache needs 2,479 rows (40% of the arena) for 127.2 rows/token; Belady at that
+  capacity is 15.3.
+- **Conclusions:** the results document's conclusions and item 3's decision stand.
+
 ## 0.45.0 — 2026-10-09 — opt-in bitwise decode options, a multi-program tile table, and two reads
 
 **0.45.0.** Four opt-in kernel options for experts4bit-qlora's decode, plus int64 expert ids passed uncast, each bitwise
