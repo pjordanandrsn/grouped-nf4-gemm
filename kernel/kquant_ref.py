@@ -242,27 +242,42 @@ def dequantize_ggml(ggml_type: int, data: bytes | torch.Tensor,
 # decode probe (dY = I returns W), which catches it every time; the per-case error bar alone catches it only mostly.
 
 class KQuantLinearRef(torch.autograd.Function):
-    """y = x @ W.T with W decoded from frozen GGUF bytes; backward returns dX only (bf16 matmul, fp32 accumulate)."""
+    """y = x @ W.T with W decoded from frozen GGUF bytes; backward returns dX only.
+
+    `compute_dtype` torch.bfloat16 (the default, the reference path): bf16 W, fp32 accumulate, bf16 out.
+    torch.float64: the exact decode in fp64, so the SAME forward and backward can be checked by
+    torch.autograd.gradcheck inside a composed model."""
 
     @staticmethod
-    def forward(ctx, x, data, ggml_type, shape):
-        w = dequantize_ggml(ggml_type, data, shape).to(device=x.device, dtype=torch.bfloat16)
+    def forward(ctx, x, data, ggml_type, shape, compute_dtype=torch.bfloat16):
         ctx.save_for_backward(data if isinstance(data, torch.Tensor) else torch.empty(0))
         ctx.raw = None if isinstance(data, torch.Tensor) else data
-        ctx.ggml_type, ctx.shape, ctx.x_dtype = ggml_type, tuple(shape), x.dtype
-        return (x.to(torch.bfloat16).float() @ w.float().T).to(torch.bfloat16)
+        ctx.ggml_type, ctx.shape, ctx.x_dtype, ctx.cd = ggml_type, tuple(shape), x.dtype, compute_dtype
+        w = _decode_for(ggml_type, data, shape, compute_dtype, x.device)
+        return _mm(x, w.T, compute_dtype)
 
     @staticmethod
     def backward(ctx, dy):
         (saved,) = ctx.saved_tensors
         data = ctx.raw if ctx.raw is not None else saved
-        w = dequantize_ggml(ctx.ggml_type, data, ctx.shape).to(device=dy.device, dtype=torch.bfloat16)
-        dx = (dy.to(torch.bfloat16).float() @ w.float()).to(torch.bfloat16)
-        return dx.to(ctx.x_dtype), None, None, None
+        w = _decode_for(ctx.ggml_type, data, ctx.shape, ctx.cd, dy.device)
+        return _mm(dy, w, ctx.cd).to(ctx.x_dtype), None, None, None, None
 
 
-def kquant_linear(x: torch.Tensor, data, ggml_type: int, shape: tuple[int, int]) -> torch.Tensor:
+def _decode_for(ggml_type, data, shape, compute_dtype, device):
+    w = dequantize_ggml(ggml_type, data, shape).to(device)
+    return w.double() if compute_dtype == torch.float64 else w.to(torch.bfloat16)
+
+
+def _mm(a, b, compute_dtype):
+    if compute_dtype == torch.float64:
+        return a.double() @ b
+    return (a.to(torch.bfloat16).float() @ b.float()).to(torch.bfloat16)
+
+
+def kquant_linear(x: torch.Tensor, data, ggml_type: int, shape: tuple[int, int],
+                  compute_dtype: torch.dtype = torch.bfloat16) -> torch.Tensor:
     """x [..., K] -> [..., N] through the frozen GGUF weight `data` (logical torch shape [N, K])."""
     lead = x.shape[:-1]
-    y = KQuantLinearRef.apply(x.reshape(-1, x.shape[-1]), data, ggml_type, tuple(shape))
+    y = KQuantLinearRef.apply(x.reshape(-1, x.shape[-1]), data, ggml_type, tuple(shape), compute_dtype)
     return y.reshape(*lead, shape[0])
