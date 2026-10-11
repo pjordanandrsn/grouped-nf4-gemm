@@ -1,0 +1,6 @@
+[
+ {"kernel": "fp8_kv._fp8_append_t1_side", "target": "gfx1100",
+  "gate": "fp8_kv.fp8_kv_append_t1 refuses on ROCm (_triton_shim.rocm_refusal, #540): RDNA3 has no fp8, so tl.float8e4nv does not lower"},
+ {"kernel": "fp8_kv._fp8_append_bt1_side", "target": "gfx1100",
+  "gate": "fp8_kv.fp8_kv_append_bt1 refuses on ROCm (_triton_shim.rocm_refusal, #540): RDNA3 has no fp8, so tl.float8e4nv does not lower"}
+]
