@@ -161,3 +161,16 @@ def test_prebind_is_refused_on_rocm_even_when_forced(monkeypatch):
     assert shim.prebind(_k, force=True) is _k
     monkeypatch.setenv("GNF4_TRITON_PREBIND", "1")
     assert shim.prebind(_k) is _k
+
+
+def test_f32_attention_precision_defaults_to_ieee_on_rocm(rocm):
+    """The split f32 kernel lowers tf32 on gfx942 only (triton 3.4.0, hip-compile); ieee lowers on every AMD target."""
+    rocm.delenv("GNF4_ATTN_F32_PRECISION", raising=False)
+    assert attn._f32_dot_precision() == "ieee"
+    rocm.setenv("GNF4_ATTN_F32_PRECISION", "tf32")
+    assert attn._f32_dot_precision() == "tf32", "an explicit value is used as given"
+
+
+def test_f32_attention_precision_control_nvidia_stays_tf32(nvidia):
+    nvidia.delenv("GNF4_ATTN_F32_PRECISION", raising=False)
+    assert attn._f32_dot_precision() == "tf32"

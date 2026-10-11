@@ -71,7 +71,7 @@ except Exception:  # pragma: no cover
 # The typed shape refusal and the once-per-device shared-memory query are
 # shared with nf4_grouped through the shim (gnf4#324); both import without
 # triton, so this module stays importable for its pure-torch oracle.
-from _triton_shim import UnsupportedShapeError, device_shared_mem_limit, rocm_refusal  # noqa: E402,F401
+from _triton_shim import UnsupportedShapeError, device_shared_mem_limit, rocm_refusal, rocm_version  # noqa: E402,F401
 
 
 def paged_attn_available() -> bool:
@@ -1001,6 +1001,13 @@ def _f32_dot_precision() -> str:
     An unrecognised value RAISES rather than falling back: a typo'd
     mode that silently ran tf32 would be recorded as an exact arm.
 
+    **On a ROCm build the unset default is ``ieee``.** Compiled for AMD with
+    triton 3.4.0 (the ``hip-compile`` CI job), the split kernel lowers
+    ``tf32`` on gfx942 only and ``tf32x3`` on none of gfx942, gfx950 and
+    gfx1100, while ``ieee`` lowers on all three. This is the path AMD reaches
+    by default, since fp8 compute is refused there, so the default must
+    compile on every AMD target. An explicit value is still used as given.
+
     **Scope: the SPLIT f32 kernel only.** The packed f32 kernel
     (``pack_heads=True``) casts q, k and v to bf16 before its dots, so
     there are no fp32 operands for ``input_precision`` to govern and this
@@ -1010,7 +1017,7 @@ def _f32_dot_precision() -> str:
     to name is the same defect as an arm that quietly runs a kernel it
     does not name, which is what gnf4#319 turned out to be.
     """
-    v = os.environ.get("GNF4_ATTN_F32_PRECISION", "tf32")
+    v = os.environ.get("GNF4_ATTN_F32_PRECISION", "ieee" if rocm_version() else "tf32")
     if v not in _F32_PRECISIONS:
         raise ValueError(
             f"GNF4_ATTN_F32_PRECISION={v!r} is not a dot precision; "
