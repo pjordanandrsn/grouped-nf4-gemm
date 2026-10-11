@@ -1,1 +1,5 @@
-[]
+[
+ "fp8_paged_attn._fp8_paged_decode_split",
+ "fp8_paged_attn._fp8_paged_decode_packed",
+ "fp8_paged_attn._fp8_combine"
+]

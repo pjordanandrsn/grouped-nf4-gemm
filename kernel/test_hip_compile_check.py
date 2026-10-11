@@ -95,3 +95,29 @@ def test_only_shipped_modules_are_compiled_and_uncovered_kernels_are_reported(tm
     assert rc == 0 and summary["excluded_not_shipped"] == ["test_something._k"] and summary["kernels"] == 1
     assert "nf4_grouped._gemm_nf4_grouped" not in summary["uncovered_jit_kernels"]
     assert "fp8_paged_attn._fp8_combine" in summary["uncovered_jit_kernels"]
+
+
+def test_a_declared_file_compiles_its_specializations_and_states_its_unreached_kernels(tmp_path, monkeypatch):
+    monkeypatch.setattr(hcc, "_kernel", lambda module, name: f"{module}.{name}")
+    monkeypatch.setattr(hcc, "_compile_capturing", lambda fn, entry, target: (True, []))
+    harvest, declared, require, report = (tmp_path / n for n in ("h.json", "d.json", "r.json", "o.json"))
+    harvest.write_text("[]")
+    unreached = {"nf4_grouped._gemv_nf4_dotpad": "engages only at >= 160 SMs"}
+    declared.write_text(json.dumps({"source": "a recorded GPU run", "unreached": unreached,
+                                    "specializations": [_entry("_fp8_combine", module="fp8_paged_attn")]}))
+    require.write_text(json.dumps(["fp8_paged_attn._fp8_combine"]))
+    rc = hcc.main([str(harvest), "--declared", str(declared), "--require", str(require), "--targets", "gfx942",
+                   "--report", str(report)])
+    summary = json.loads(report.read_text())["summary"]
+    assert rc == 0 and summary["required_missing"] == [] and summary["declared_unreached"] == unreached
+
+
+def test_slow_specializations_compile_only_when_asked(tmp_path, monkeypatch):
+    monkeypatch.setattr(hcc, "_kernel", lambda module, name: f"{module}.{name}")
+    monkeypatch.setattr(hcc, "_compile_capturing", lambda fn, entry, target: (True, []))
+    harvest, declared, report = (tmp_path / n for n in ("h.json", "d.json", "o.json"))
+    harvest.write_text("[]")
+    declared.write_text(json.dumps({"specializations": [_entry("fast")], "slow_specializations": [_entry("slow")]}))
+    base = [str(harvest), "--declared", str(declared), "--targets", "gfx942", "--report", str(report)]
+    assert hcc.main(base) == 0 and json.loads(report.read_text())["summary"]["kernels"] == 1
+    assert hcc.main(base + ["--include-slow"]) == 0 and json.loads(report.read_text())["summary"]["kernels"] == 2
