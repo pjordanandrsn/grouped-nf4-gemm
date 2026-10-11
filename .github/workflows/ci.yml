@@ -145,7 +145,7 @@ jobs:
       # These were in the tree and invoked by nothing. They need triton (which
       # this job installs) but not a device, so CPU CI can run them.
       - name: CPU-reachable suites that CI never ran
-        run: cd kernel && python -m pytest test_gptq_pack.py test_arena_moe_patch.py test_k3_oracle.py test_moonshot_gather.py test_mxfp4_arena_layout.py test_mxfp4_oracle.py test_mxfp4_provenance.py test_group_tiles_readonly.py test_mxfp4_interp.py test_mxfp4_gemv_b32.py test_mxfp4_e2m1_table.py test_mxfp4_v4.py test_triton_shim.py test_pdl.py test_rocm_refusals.py -q
+        run: cd kernel && python -m pytest test_gptq_pack.py test_arena_moe_patch.py test_k3_oracle.py test_moonshot_gather.py test_mxfp4_arena_layout.py test_mxfp4_oracle.py test_mxfp4_provenance.py test_group_tiles_readonly.py test_mxfp4_interp.py test_mxfp4_gemv_b32.py test_mxfp4_e2m1_table.py test_mxfp4_v4.py test_triton_shim.py test_pdl.py test_rocm_refusals.py test_hip_compile_check.py -q
 
       - name: hybrid CPU kernels (native build + exact-tree parity)
         # PYTHONPATH carries the repo root so gnf4_native imports from the
@@ -193,6 +193,69 @@ jobs:
 
       - name: packaging allowlist + test-wiring guard + the register/prose checkers' own tests
         run: cd kernel && python -m pytest test_packaging_covers_kernel.py test_check_readme_links.py test_check_scripts.py test_check_claims_register.py test_check_readme_claims.py test_check_shared_tooling.py test_check_capabilities_role.py test_changelog_fragments.py -q
+
+  hip-compile:
+    if: ${{ github.event_name != 'pull_request' || github.event.action == 'ready_for_review' || github.event.label.name == 'ready-to-merge' }}
+    # AMD compile-only check, CPU, no GPU and no ROCm. The interpreter suites run with a recording hook
+    # (scripts/hip_harvest.py) that writes down every kernel specialization they launch; each one, capped per kernel,
+    # is then compiled for gfx942, gfx950 and gfx1100 with triton's AMD backend and a copy-only stand-in for ROCm's
+    # ld.lld. A compile fails on an exception OR on any "error:" line the AMD assembler writes, captured at the fd
+    # level, because triton.compile returns normally when the assembler rejects an instruction. It proves lowering
+    # and assembly only: not numerics, not that the code object loads, and not AMD support. Its own job, ~20 min.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # The AMD backend's diagnostics change between triton releases, and triton 3.4.0's interpreter (the harvest)
+      # calls int() on a 1-element array, which newer NumPy refuses. So triton and NumPy are pinned as a pair, at the
+      # versions the job was measured with, and move together on purpose.
+      - name: install CPU torch + triton 3.4.0 + NumPy 2.3.2
+        run: |
+          python -m pip install --quiet --upgrade pip
+          python -m pip install --quiet torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --quiet "triton==3.4.0" "numpy==2.3.2" pytest
+          python -c "import triton, numpy; assert triton.__version__ == '3.4.0', triton.__version__; assert numpy.__version__ == '2.3.2', numpy.__version__; import triton.backends.amd.compiler"
+      - name: harvest kernel specializations from the interpreter suites
+        env:
+          TRITON_INTERPRET: "1"
+          HIP_HARVEST_OUT: ${{ runner.temp }}/hip-harvest.json
+          PYTHONPATH: ${{ github.workspace }}/scripts
+        run: |
+          cd kernel
+          for f in test_interp_contract.py test_gemv_vec_loads.py test_group_tiles_device.py \
+                   test_int4_smallm_interp.py test_int4_b32_fused_reduce_interp.py test_int4_b32_grouped_interp.py \
+                   test_int4_grouped_smallm_interp.py test_mxfp4_grouped_smallm_interp.py \
+                   test_nf4_grouped_smallm_interp.py test_nf4_decoded_interp.py test_nf4_gemv_bw_interp.py \
+                   test_tile_table_cumsum_interp.py test_tile_table_cumsum_chunked_interp.py \
+                   test_tile_table_programs_interp.py test_offset_boundary_interp.py test_shape_feasibility.py \
+                   test_mxfp4_interp.py test_mxfp4_gemv_b32.py; do
+            python -m pytest -p hip_harvest "$f" -q -p no:cacheprovider || exit 1
+          done
+          # test_int4_b32.py takes ~21 min in the interpreter; its glue-kernel tests (~5 min) reach every kernel it adds
+          python -m pytest -p hip_harvest test_int4_b32.py -q -p no:cacheprovider \
+            -k "gathered_quant or swiglu_rows or rmsnorm or scaled_resid or rope or combine_rows or router_epilogue" || exit 1
+          python -c "import json,os; d=json.load(open(os.environ['HIP_HARVEST_OUT'])); print(len(d), 'specializations of', len({(e['module'], e['name']) for e in d}), 'kernels')"
+      - name: compile for gfx942, gfx950, gfx1100 (fails on any assembler error)
+        env:
+          TRITON_HIP_LLD_PATH: ${{ github.workspace }}/scripts/hip_lld_standin.sh
+          PYTHONPATH: ${{ github.workspace }}/kernel
+        run: |
+          python scripts/hip_compile_check.py "$RUNNER_TEMP/hip-harvest.json" \
+            --declared scripts/hip_declared.json --require scripts/hip_required.json \
+            --allow scripts/hip_compile_allow.json --pyproject pyproject.toml --cap 8 \
+            --report "$RUNNER_TEMP/hip-compile-report.json"
+      - name: keep the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hip-compile-report
+          path: |
+            ${{ runner.temp }}/hip-compile-report.json
+            ${{ runner.temp }}/hip-harvest.json
+          if-no-files-found: ignore
 
   wheel-smoke:
     if: ${{ github.event_name != 'pull_request' || github.event.action == 'ready_for_review' || github.event.label.name == 'ready-to-merge' }}
