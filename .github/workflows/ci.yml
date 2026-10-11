@@ -245,7 +245,7 @@ jobs:
         run: |
           python scripts/hip_compile_check.py "$RUNNER_TEMP/hip-harvest.json" \
             --declared scripts/hip_declared.json --require scripts/hip_required.json \
-            --allow scripts/hip_compile_allow.json --pyproject pyproject.toml --cap 8 \
+            --allow scripts/hip_compile_allow.json --pyproject pyproject.toml --cap 8 --jobs 4 \
             --report "$RUNNER_TEMP/hip-compile-report.json"
       - name: keep the report
         if: always()
