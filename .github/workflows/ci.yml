@@ -23,7 +23,7 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || github.event.action == 'ready_for_review' || github.event.label.name == 'ready-to-merge' }}
     # R1: the projection model must reproduce the published flagship rows.
     # Pure stdlib — no torch/triton — so it's fast and can never bit-rot silently.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -39,7 +39,7 @@ jobs:
     # decision tree once did. This exercises the CPU path (no GPU on the runner),
     # which must print its requirements and exit 0 rather than traceback, and
     # asserts the file stays under the 150-line rail that keeps it readable.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -71,7 +71,7 @@ jobs:
     # Triton interpreter-mode (CPU) contract + fuzz suite: kernel SEMANTICS,
     # nibble order, boundary/adversarial shapes — validated with no GPU and no
     # bitsandbytes (pure-torch NF4 packer as fixture oracle).
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -202,7 +202,7 @@ jobs:
     # ld.lld. A compile fails on an exception OR on any "error:" line the AMD assembler writes, captured at the fd
     # level, because triton.compile returns normally when the assembler rejects an instruction. It proves lowering
     # and assembly only: not numerics, not that the code object loads, and not AMD support. Its own job, ~20 min.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -264,7 +264,7 @@ jobs:
     # mirror of the Install comment). Runs from /tmp so imports resolve from
     # the installed wheel, never the repo tree. Plus the link check with the
     # release tag mapped to main (the tag exists only at release time).
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -302,7 +302,7 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || github.event.action == 'ready_for_review' || github.event.label.name == 'ready-to-merge' }}
     # CPU-only, deterministic: the machine-readable contracts and the
     # packaging metadata. Nothing here imports the kernels.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
