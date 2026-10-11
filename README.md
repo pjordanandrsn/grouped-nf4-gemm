@@ -36,11 +36,9 @@ GPU kernels need **Linux, an NVIDIA sm_80+ GPU, torch ≥ 2.8 and Triton ≥ 3.4
 CI tests Python 3.11. CPU pack/decode and provenance tools work without CUDA;
 macOS and Windows are not exercised by CI. ROCm and XPU are port targets.
 
-**New in 0.45.0:** four opt-in kernel options for a top-k MoE decode, each bitwise the launches it replaces: int64 expert
-ids and in-place token rows for `gemm_4bit_grouped`, bf16 routing weights from `router_epilogue`, one-launch q/k norm
-and rotary (`rope_norm_qk`), and the residual add in `combine_rows`. The cumsum tile table can split over several
-programs (`programs=P`); experts4bit-qlora's P126 read 4 programs at about 15.5 % lower captured 64-row decode-step time
-on Qwen3-30B-A3B int4. No default changes.
+**New in 0.46.0:** a reference backward through frozen GGUF k-quant weights (dX only, scored against an fp64
+oracle, with a model-level fp64 gradcheck); an opt-in split tile table that runs a heavy expert's prefill rows on
+32- or 64-row K19 tiles; refusals that name AMD on a ROCm build; and an AMD compile-only CI check. No default changes.
 [Release notes](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/CHANGELOG.md)
 
 ## Try it on your GPU
