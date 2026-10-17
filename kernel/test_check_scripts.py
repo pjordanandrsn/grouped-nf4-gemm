@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import pathlib
 import sys
 
@@ -58,3 +59,37 @@ def test_changelog_fragments_only_where_the_repository_keeps_the_directory(tmp_p
     for name in ("1.md", "README.md", "x.txt"):
         (tmp_path / "changelog.d" / name).write_text("### t\n", encoding="utf-8")
     assert ci.changelog_fragments(tmp_path, changed) == ["changelog.d/1.md"]
+
+
+def test_lockstep_record_accepts_a_manifest_record_that_landed_first():
+    # The kernel-first lockstep (experts4bit-qlora#1692 -> #1696): the 0.55.0 [fast] floor record was synced into both
+    # manifests before the consumer's pyproject moved, so the floor move's diff does not touch the manifest.
+    ci = _load("check_change_impact")
+    manifest = json.dumps({"compatibility": [
+        {"consumer": "experts4bit-qlora", "consumer_versions": ">=0.55.0", "kernel": "grouped-nf4-gemm",
+         "floor": ">=0.43.0", "extra": "fast"},
+        {"consumer": "experts4bit-qlora", "consumer_versions": ">=0.35.0,<0.55.0", "kernel": "grouped-nf4-gemm",
+         "floor": ">=0.30.0", "extra": "fast"}]})
+    rec = ci.lockstep_record(manifest, "experts4bit-qlora", "0.55.0", ">=0.43.0")
+    assert rec is not None and rec["consumer_versions"] == ">=0.55.0"
+    assert ci.lockstep_record(manifest, "experts4bit-qlora", "0.55.0", " >= 0.43.0 ") == rec       # spacing is not a floor
+    # the real manifest carries that record too (this repository's copy is byte-identical to the consumer's)
+    assert ci.lockstep_record((ROOT / "docs" / "system-manifest.json").read_text(encoding="utf-8"),
+                              "experts4bit-qlora", "0.55.0", ">=0.43.0") is not None
+
+
+def test_lockstep_record_refuses_everything_else():
+    ci = _load("check_change_impact")
+    manifest = json.dumps({"compatibility": [
+        {"consumer": "experts4bit-qlora", "consumer_versions": ">=0.55.0", "kernel": "grouped-nf4-gemm",
+         "floor": ">=0.43.0", "extra": "fast"}]})
+    assert ci.lockstep_record(manifest, "experts4bit-qlora", "0.55.0", ">=0.44.0") is None      # floor mismatch
+    assert ci.lockstep_record(manifest, "experts4bit-qlora", "0.54.1", ">=0.43.0") is None      # range misses the version
+    assert ci.lockstep_record(json.dumps({"compatibility": []}), "experts4bit-qlora", "0.55.0", ">=0.43.0") is None
+    assert ci.lockstep_record(json.dumps({}), "experts4bit-qlora", "0.55.0", ">=0.43.0") is None  # no record at all
+    assert ci.lockstep_record(None, "experts4bit-qlora", "0.55.0", ">=0.43.0") is None           # no base manifest
+    assert ci.lockstep_record("{not json", "experts4bit-qlora", "0.55.0", ">=0.43.0") is None
+    assert ci.lockstep_record(manifest, "another-consumer", "0.55.0", ">=0.43.0") is None
+    assert ci.lockstep_record(manifest.replace('"fast"', '"train"'), "experts4bit-qlora", "0.55.0", ">=0.43.0") is None
+    assert ci.lockstep_record(manifest.replace('">=0.55.0"', '"not a range"'), "experts4bit-qlora", "0.55.0",
+                              ">=0.43.0") is None                                                # unsupported range
