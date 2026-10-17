@@ -34,8 +34,25 @@ while read -r _lref lsha _rref _rsha; do
                 ':!.github/workflows/private-marker-guard.yml' \
                 ':!scripts/hooks/pre-push' 2>/dev/null \
          | grep -v 'guard-allow' || true)
+  # "#all-of:" rules from .github/private-markers.txt: every term must match the same line.
+  while IFS= read -r rule; do
+    read -r -a terms <<< "${rule#\#all-of: }"
+    args=()
+    for t in "${terms[@]}"; do
+      [ "${#args[@]}" -eq 0 ] || args+=(--and)
+      args+=(-e "$t")
+    done
+    more=$(git grep -n -I -E -i "${args[@]}" "$lsha" \
+             -- . ':!.github/private-markers.txt' \
+                  ':!.github/workflows/private-marker-guard.yml' \
+                  ':!scripts/hooks/pre-push' 2>/dev/null \
+           | grep -v 'guard-allow' || true)
+    [ -z "$more" ] || hits="${hits}${hits:+$'\n'}${more}"
+  done < <(grep -E '^#all-of: ' .github/private-markers.txt)
   if [ -n "$hits" ]; then
-    echo "$hits" | head -20 >&2
+    # || true: under pipefail, head closing the pipe early would end the hook
+    # with SIGPIPE (141) before the refusal below is printed.
+    printf '%s\n' "$hits" | head -20 >&2 || true
     fail "private-lane markers in the tip tree (see above; 'guard-allow' to exempt a line)"
   fi
 done

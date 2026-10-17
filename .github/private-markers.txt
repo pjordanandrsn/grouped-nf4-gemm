@@ -76,3 +76,14 @@ pjordanandrsn/org-corpus
 \.adertha/
 # adertha:// URIs name artifacts in the private store; one reached e4b's tracked tree (2026-10-10).
 adertha://
+
+# --- RECEIPT STORE: the private receipt store's ledger and receipt records ----
+# The store's records are private, and none of the patterns above can see them.
+# They are matched by SHAPE, never by name: this file is public, so naming the
+# store or any private repository here would publish it.
+Append-only ledger: one JSON object per line
+"external_receipt"[[:space:]]*:
+# A ledger row is a line carrying all four keys, in any order. An "#all-of:" line
+# lists ERE terms, separated by single spaces, that must ALL match the same line
+# (git grep --and). Every other reader of this file skips it as a comment.
+#all-of: "run_id"[[:space:]]*: "date_utc"[[:space:]]*: "role"[[:space:]]*: "cost_usd"[[:space:]]*:
