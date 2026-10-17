@@ -4,6 +4,46 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
+## 0.46.1 — 2026-10-17 — ieee f32 decode on ROCm, the experts4bit-qlora 0.55 floor record
+
+**0.46.1.** A patch. On a ROCm build, the f32 decode attention path now defaults to `ieee` precision, because `tf32`
+does not compile for gfx950 or gfx1100 under triton 3.4; every other build keeps `tf32`. The AMD compile-only CI check
+now requires AMD's default attention kernels to compile. The system manifest gains a compatibility record:
+experts4bit-qlora 0.55.0 and later floor their `fast` extra at grouped-nf4-gemm 0.43.0, the release that made the
+bandwidth-targeted decode GEMV the default. NVIDIA kernels are unchanged, so the upgrade is optional there.
+
+### Changed
+
+- `docs/system-manifest.json`: a compatibility record for experts4bit-qlora 0.55.0 and later, flooring its `fast`
+  extra at grouped-nf4-gemm 0.43.0, the release that makes the bandwidth-targeted NF4 decode GEMV the default
+  (`GNF4_GEMV_BW=auto`, #509). It is experts4bit-qlora P116's registered consequence. The previous record (floor 0.30.0)
+  now covers experts4bit-qlora 0.35.0 to 0.54.x, so it still describes every released consumer. Documentation only:
+  no kernel or default changes.
+
+### On a ROCm build, the f32 decode path defaults to ieee precision (tf32 does not compile on gfx950/gfx1100 under triton 3.4)
+
+This is a default change on ROCm only. With `GNF4_ATTN_F32_PRECISION` unset, `fp8_paged_attn._f32_dot_precision` now
+returns `ieee` on a ROCm build of torch, and `tf32` everywhere else as before; an explicit value is used as given. The
+f32 split decode kernel is the attention path AMD reaches by default, since fp8 compute is refused there. Compiled for
+AMD with triton 3.4.0 (the `hip-compile` job), its dots lower `tf32` on gfx942 only, `tf32x3` on none of gfx942,
+gfx950 and gfx1100, and `ieee` on all three. `ieee` is exact and leaves the tensor cores; no AMD speed claim is made.
+
+### hip-compile: GPU-recorded specializations, and the AMD default attention kernels are required
+
+`scripts/hip_declared.json` now holds 24 specializations of four kernels the interpreter suites never launch, recorded
+at `JITFunction.run` during four GPU suites on an RTX A2000 (sm_86): the f32 decode kernels `_fp8_paged_decode_split`,
+`_fp8_paged_decode_packed` and `_fp8_combine`, and `nf4_route._dequant_groups_kernel`. Its `unreached` map names the
+launched kernels no recorded run could reach, with the reason: `_gemv_nf4_dotpad` and `_gemv_nf4_dotpad_splitk`
+engage only at >= 160 SMs, and the fp8-dot attention variants need sm_89+ and are refused on AMD.
+`scripts/hip_required.json` lists the three f32 decode kernels, AMD's default attention path: the job fails if any of
+them does not compile for gfx942, gfx950 and gfx1100. `hip_compile_check.py` accepts the declared file as an object
+and reports `declared_unreached`.
+
+The head_dim 256/512 shapes of the two f32 decode kernels sit under `slow_specializations` and compile only with
+`--include-slow`: their AMD compiles take 160-1780 s each on 4 CPUs. They compiled OK on all three targets once
+(2026-10-11, triton 3.4.0); CI compiles the D=64/128 shapes of the same kernels. The check gains `--jobs N` and the job
+compiles in 4 worker processes.
+
 ## 0.46.0 — 2026-10-11 — GGUF backward reference, an opt-in split tile table, AMD refusals
 
 **0.46.0.** A reference backward through frozen GGUF k-quant weights, an opt-in split tile table for K19's prefill
