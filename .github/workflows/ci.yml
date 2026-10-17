@@ -368,7 +368,7 @@ jobs:
           # --requires asserts the wheel's OWN declared floors (pyproject
           # dependencies), which the structural extras check does not read.
           # The consumer floor in the manifest's current record
-          # (experts4bit-qlora[fast] -> grouped-nf4-gemm>=0.30.0) is the
+          # (experts4bit-qlora[fast] -> grouped-nf4-gemm>=0.43.0) is the
           # consumer's metadata, asserted in its CI, never in this wheel.
           python scripts/check_wheel_metadata.py dist/*.whl \
             --requires 'numpy' \
