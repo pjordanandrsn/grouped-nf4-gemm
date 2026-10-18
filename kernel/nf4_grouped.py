@@ -1946,9 +1946,6 @@ def gemm_4bit_grouped(
     T *= gd
     assert sum(sizes) == T, (sum(sizes), T)
     dev = a_cat.device
-    if swiglu_in and not (max(sizes) == 1 and _bw_engages(N, K, dev)):
-        from int4_b32 import swiglu_rows         # the separate launch: the bytes the fused loads reproduce
-        a_cat, swiglu_in = swiglu_rows(a_cat), False
     # CUDA-only in real use; TRITON_INTERPRET=1 runs the kernel on CPU tensors
     # (the interpreter-contract suite), so exempt that path from the guard.
     if dev.type != "cuda" and os.environ.get("TRITON_INTERPRET") != "1":
@@ -1958,6 +1955,9 @@ def gemm_4bit_grouped(
             f"use dequant_ref(packed, absmax, N, K) — the pure-torch reference the property "
             f"suite pins the kernel against."
         )
+    if swiglu_in and not (max(sizes) == 1 and _bw_engages(N, K, dev)):
+        from int4_b32 import swiglu_rows         # the separate launch: the bytes the fused loads reproduce
+        a_cat, swiglu_in = swiglu_rows(a_cat), False
     # A CUDA tensor passes straight through; anything HOST — a list, or a CPU
     # tensor (Bugbot, PR #85: `torch.tensor([...])` with no device= used to work
     # via the per-element path and must keep working) — is converted ONCE here,
