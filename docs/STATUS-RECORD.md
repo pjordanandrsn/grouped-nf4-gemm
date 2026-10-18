@@ -367,6 +367,12 @@ was wrong.
   (0.9998), within P110's quality bar (experts4bit-qlora#1695, run `p133-4090-2`; the maintainer re-derived the verdict).
   Before it, auto left the 4090 on the scalar GEMV. `_BW_SM89_SMS` names the count and `_capability` reads the part; P133
   licenses that capability and count only, at Qwen3's two shapes. Dot-pad's gate is unchanged.
+- **`GNF4_GEMV_BW=auto` at Granite-3.1-3b-a800m's and OLMoE-1B-7B's expert shapes on >= 160-SM parts (2026-10-18).**
+  experts4bit-qlora's served lane P134 read each family LICENSED on an RTX 5090 at the shipped plans: one request decoded
+  1.3979× (Granite) and 1.5011× (OLMoE) as fast, 16 unchanged (0.9992, 0.9954), within P110's quality bar
+  (experts4bit-qlora#1697, run `p134-5090-1`; the maintainer re-derived both verdicts). `_BW_SHAPES` gains (1024, 1536),
+  (1536, 512), (2048, 2048) and (2048, 1024). The 4090 path keeps Qwen3's two only (`_BW_SM89_SHAPES`): P134 read the
+  5090 alone. It licenses shapes, not families: Granite's pair also covers the Granite-4.0-h fixture.
 - **A fixed fraction-of-waterfall is retired as a law** (two 0.77
   readings were a two-host coincidence).
 - **The cold-engine "free floor" premise is refuted** on its target box:

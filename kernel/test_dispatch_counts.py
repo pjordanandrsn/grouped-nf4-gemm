@@ -140,6 +140,47 @@ def test_on_a_real_rtx_4090_auto_engages_unmocked(monkeypatch):
     assert c["dotpad"] + c["dotpad_splitk"] + c["scalar"] + c["scalar_splitk"] == 0, c
 
 
+def _call_nk(dev, n, k):
+    B, A = make_stack(E, n, k, seed=5, device=dev)
+    a = torch.randn(T, k, dtype=torch.float32).to(torch.bfloat16).to(dev)
+    eids = torch.arange(T, dtype=torch.int32, device=dev) % E
+    return gemm_4bit_grouped(a, B, A, [1] * T, eids)
+
+
+@needs_cuda
+@pytest.mark.parametrize("nk", [(1024, 1536), (2048, 1024)])
+def test_the_P134_DEFAULT_dispatches_the_bandwidth_route_at_its_shapes(monkeypatch, nk):
+    """experts4bit-qlora P134 (LICENSED on an RTX 5090): unset GNF4_GEMV_BW on a >= 160-SM part sends Granite's gate_up and
+    OLMoE's down to ``bw_prmt32`` and nothing else, asserted at the dispatch layer."""
+    monkeypatch.delenv("GNF4_GEMV_BW", raising=False)
+    monkeypatch.delenv("GNF4_GEMV_DOTPAD", raising=False)
+    monkeypatch.delenv("GNF4_GEMV_BW_DECODE", raising=False)
+    monkeypatch.setattr(nf4_grouped, "_sm_count", lambda d: 170)
+    nf4_grouped.reset_dispatch_counts()
+    _call_nk(torch.device("cuda"), *nk)
+    c = nf4_grouped.dispatch_counts()
+    assert c["bw_prmt32"] > 0 and c["bw_tree"] == 0, c
+    assert c["dotpad"] + c["dotpad_splitk"] + c["scalar"] + c["scalar_splitk"] == 0, c
+
+
+@needs_cuda
+@pytest.mark.parametrize("nk", [(1024, 1536), (1536, 512), (2048, 2048), (2048, 1024)])
+def test_on_a_real_160_sm_part_auto_engages_p134s_shapes_unmocked(monkeypatch, nk):
+    """P134's shapes read from the device itself, nothing mocked: on a >= 160-SM card (an RTX 5090) unset GNF4_GEMV_BW
+    dispatches ``bw_prmt32`` at each. Skipped on smaller cards; the change's review runs it on a rented RTX 5090."""
+    dev = torch.device("cuda")
+    if torch.cuda.get_device_properties(dev).multi_processor_count < 160:
+        pytest.skip("needs a card with at least 160 SMs (an RTX 5090)")
+    monkeypatch.delenv("GNF4_GEMV_BW", raising=False)
+    monkeypatch.delenv("GNF4_GEMV_DOTPAD", raising=False)
+    monkeypatch.delenv("GNF4_GEMV_BW_DECODE", raising=False)
+    nf4_grouped.reset_dispatch_counts()
+    _call_nk(dev, *nk)
+    c = nf4_grouped.dispatch_counts()
+    assert c["bw_prmt32"] > 0 and c["bw_tree"] == 0, c
+    assert c["dotpad"] + c["dotpad_splitk"] + c["scalar"] + c["scalar_splitk"] == 0, c
+
+
 @needs_cuda
 def test_the_P116_DEFAULT_keeps_the_old_route_below_the_guard(monkeypatch):
     """The same call on a 26-SM part: ``auto`` does not engage, and dot-pad's own guard sends it to the scalar GEMV."""
