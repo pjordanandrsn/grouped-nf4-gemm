@@ -36,9 +36,10 @@ GPU kernels need **Linux, an NVIDIA sm_80+ GPU, torch ≥ 2.8 and Triton ≥ 3.4
 CI tests Python 3.11. CPU pack/decode and provenance tools work without CUDA;
 macOS and Windows are not exercised by CI. ROCm and XPU are port targets.
 
-**New in 0.46.1:** on a ROCm build, the f32 decode attention defaults to `ieee` precision (`tf32` does not compile
-for gfx950 or gfx1100 under triton 3.4; other builds are unchanged); the AMD compile-only CI check requires AMD's
-default attention kernels; and the system manifest records experts4bit-qlora 0.55.0's `fast` floor at 0.43.0.
+**New in 0.47.0:** `GNF4_GEMV_BW=auto` engages the bandwidth decode GEMV by default at more expert shapes: Granite-3.1-3b-a800m's
+and OLMoE-1B-7B's (experts4bit-qlora P134) and Mixtral-8x7B's (P141, a 2.41× faster one-request step on an RTX 5090) on
+parts with at least 160 SMs, and Qwen3-30B-A3B's two shapes on 128-SM sm_89 parts such as the RTX 4090 (P133). Each was
+read on the card before it became a default. `GNF4_GEMV_BW=0` turns the route off everywhere.
 [Release notes](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/CHANGELOG.md)
 
 ## Try it on your GPU
