@@ -122,7 +122,7 @@ Two things that make such a test vacuous if missed, both learned by writing one:
   0.30.1 note, which counts the wide-load and dot-pad forms among the routes
   its boundary file samples above 2^31, holds for the scalar, split-K and vec
   routes only. The bandwidth-targeted route (`_gemv_nf4_bw`, `GNF4_GEMV_BW`; the
-  default at its six licensed shapes on >= 160-SM parts and Qwen3's two on 128-SM sm_89 parts) is word-addressed the same way and promotes the expert id
+  default at its eight licensed shapes on >= 160-SM parts and Qwen3's two on 128-SM sm_89 parts) is word-addressed the same way and promotes the expert id
   to int64 before any stride product, but **no boundary test has an arm for it
   yet**: it is not observed past its 2^31-word boundary. The wide and dot-pad
   routes' own

@@ -258,7 +258,8 @@ def test_unset_reads_auto_and_engages_nowhere_off_a_large_part(monkeypatch):
     nominal count is 64, so the interpreter suites keep their routes."""
     monkeypatch.delenv("GNF4_GEMV_BW", raising=False)
     assert nf4_grouped._bw() == "auto"
-    assert nf4_grouped._BW_SHAPES == frozenset({(1536, 2048), (2048, 768), (1024, 1536), (1536, 512), (2048, 2048), (2048, 1024)})
+    assert nf4_grouped._BW_SHAPES == frozenset({(1536, 2048), (2048, 768), (1024, 1536), (1536, 512), (2048, 2048), (2048, 1024),
+                                                (28672, 4096), (4096, 14336)})
     assert not nf4_grouped._bw_engages(1536, 2048, "cpu")
     nf4_grouped.reset_dispatch_counts()
     B, A = make_stack(2, 32, 128, seed=0)
@@ -289,12 +290,14 @@ def test_the_plan_override_is_read_per_shape(monkeypatch):
 
 
 def test_the_plan_table_is_k33s_selection(monkeypatch):
-    """K33's selected plan per family shape (kernel/receipts-k33/5090/k33.json), read with no override."""
+    """The selected plan per family shape, read with no override: K33's (kernel/receipts-k33/5090/k33.json) and, for
+    Mixtral-8x7B, experts4bit-qlora P141's phase 1 (run p141-5090-2), which is not in K33's receipt."""
     monkeypatch.delenv("GNF4_GEMV_BW_PLAN", raising=False)
     import json
     import pathlib
     want = {(1536, 2048): (16, 1024, 4, 1), (2048, 768): (16, 256, 4, 1), (1024, 1536): (16, 512, 8, 1),
-            (1536, 512): (16, 256, 8, 1), (2048, 2048): (16, 1024, 4, 1), (2048, 1024): (16, 256, 4, 1)}
+            (1536, 512): (16, 256, 8, 1), (2048, 2048): (16, 1024, 4, 1), (2048, 1024): (16, 256, 4, 1),
+            (28672, 4096): (16, 1024, 4, 1), (4096, 14336): (16, 512, 4, 2)}
     assert nf4_grouped._BW_PLANS == want
     for (n, k), plan in want.items():
         assert nf4_grouped._bw_plan(n, k) == plan

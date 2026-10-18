@@ -126,14 +126,17 @@ def test_bw_unset_engages_where_it_was_read(monkeypatch, nk):
     assert nf4_grouped._bw_engages(*nk, "cuda")
 
 
-# Mixtral-8x7B's expert gate_up / down: no served lane has read them, so they stand for "every other shape" at >= 160 SMs.
-MIXTRAL = ((28672, 4096), (4096, 14336))
+# Two shapes no served lane has read: they stand for "every other shape" at >= 160 SMs.
+UNREAD = ((4096, 4096), (8192, 2048))
 # experts4bit-qlora P134 read Granite-3.1-3b-a800m's and OLMoE-1B-7B's expert shapes LICENSED on an RTX 5090 (run p134-5090-1).
 P134 = ((1024, 1536), (1536, 512), (2048, 2048), (2048, 1024))
+# experts4bit-qlora P141 read Mixtral-8x7B's expert gate_up / down LICENSED on an RTX 5090 (run p141-5090-2).
+P141 = ((28672, 4096), (4096, 14336))
 
 
-@pytest.mark.parametrize("nk,sms", [((1536, 2048), 132), ((2048, 768), 26), (MIXTRAL[0], 170), (MIXTRAL[1], 188),
-                                    ((96, 128), 170), (P134[0], 132), (P134[2], 142), (P134[3], 76)])
+@pytest.mark.parametrize("nk,sms", [((1536, 2048), 132), ((2048, 768), 26), (UNREAD[0], 170), (UNREAD[1], 188),
+                                    ((96, 128), 170), (P134[0], 132), (P134[2], 142), (P134[3], 76), (P141[0], 132),
+                                    (P141[1], 76)])
 def test_bw_unset_keeps_the_old_route_everywhere_else(monkeypatch, nk, sms):
     monkeypatch.delenv("GNF4_GEMV_BW", raising=False)
     monkeypatch.setattr(nf4_grouped, "_sm_count", lambda d: sms)
@@ -155,10 +158,27 @@ def test_the_sm89_part_engages_only_qwen3s_two_shapes():
     """P133 licensed the 128-SM sm_89 part at Qwen3's two shapes; P134's shapes were read on an RTX 5090 only."""
     assert nf4_grouped._BW_SM89_SHAPES == frozenset(QWEN3)
     assert nf4_grouped._BW_SM89_SHAPES <= nf4_grouped._BW_SHAPES
-    assert nf4_grouped._BW_SHAPES == frozenset(QWEN3) | frozenset(P134)
+    assert nf4_grouped._BW_SHAPES == frozenset(QWEN3) | frozenset(P134) | frozenset(P141)
 
 
-@pytest.mark.parametrize("nk", P134)
+@pytest.mark.parametrize("nk", P141)
+@pytest.mark.parametrize("sms", [160, 170, 188])
+def test_bw_unset_engages_at_p141s_shapes_on_160_sm_parts(monkeypatch, nk, sms):
+    """P141 licenses Mixtral-8x7B's two expert shapes under auto's >= 160-SM gate, as P134 did its own."""
+    monkeypatch.delenv("GNF4_GEMV_BW", raising=False)
+    monkeypatch.setattr(nf4_grouped, "_sm_count", lambda d: sms)
+    monkeypatch.setattr(nf4_grouped, "_capability", lambda d: (12, 0))
+    assert nf4_grouped._bw_engages(*nk, "cuda")
+
+
+def test_p141s_shapes_take_the_plans_its_served_read_ran(monkeypatch):
+    """P141's phase 1 selected these on the RTX 5090 and its served read ran them; auto must use exactly them."""
+    monkeypatch.delenv("GNF4_GEMV_BW_PLAN", raising=False)
+    assert nf4_grouped._bw_plan(*P141[0]) == (16, 1024, 4, 1)
+    assert nf4_grouped._bw_plan(*P141[1]) == (16, 512, 4, 2)
+
+
+@pytest.mark.parametrize("nk", P134 + P141)
 def test_p134s_shapes_keep_the_old_route_on_the_sm89_part(monkeypatch, nk):
     monkeypatch.delenv("GNF4_GEMV_BW", raising=False)
     monkeypatch.setattr(nf4_grouped, "_sm_count", lambda d: 128)

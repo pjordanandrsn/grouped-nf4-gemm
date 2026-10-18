@@ -182,6 +182,23 @@ def test_on_a_real_160_sm_part_auto_engages_p134s_shapes_unmocked(monkeypatch, n
 
 
 @needs_cuda
+@pytest.mark.parametrize("nk", [(28672, 4096), (4096, 14336)])
+def test_the_P141_DEFAULT_dispatches_the_bandwidth_route_at_its_shapes(monkeypatch, nk):
+    """experts4bit-qlora P141 (LICENSED on an RTX 5090): unset GNF4_GEMV_BW on a >= 160-SM part sends Mixtral-8x7B's gate_up
+    and down to ``bw_prmt32`` (with ``bw_splitk`` beside it at down's split-K plan) and to nothing else."""
+    monkeypatch.delenv("GNF4_GEMV_BW", raising=False)
+    monkeypatch.delenv("GNF4_GEMV_DOTPAD", raising=False)
+    monkeypatch.delenv("GNF4_GEMV_BW_DECODE", raising=False)
+    monkeypatch.delenv("GNF4_GEMV_BW_PLAN", raising=False)
+    monkeypatch.setattr(nf4_grouped, "_sm_count", lambda d: 170)
+    nf4_grouped.reset_dispatch_counts()
+    _call_nk(torch.device("cuda"), *nk)
+    c = nf4_grouped.dispatch_counts()
+    assert c["bw_prmt32"] > 0 and c["bw_tree"] == 0, c
+    assert c["dotpad"] + c["dotpad_splitk"] + c["scalar"] + c["scalar_splitk"] == 0, c
+
+
+@needs_cuda
 def test_the_P116_DEFAULT_keeps_the_old_route_below_the_guard(monkeypatch):
     """The same call on a 26-SM part: ``auto`` does not engage, and dot-pad's own guard sends it to the scalar GEMV."""
     monkeypatch.delenv("GNF4_GEMV_BW", raising=False)

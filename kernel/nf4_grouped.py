@@ -190,9 +190,13 @@ _ALLOW_UNVERIFIED_V5 = os.environ.get("GNF4_ALLOW_UNVERIFIED_V5") == "1"
 #:   family LICENSED (run ``p134-5090-1``, experts4bit-qlora#1697): one request 1.3979x and 1.5011x as fast, 16
 #:   unchanged (0.9992, 0.9954), within P110's quality bar. Its registration licenses shapes, not families: Granite's
 #:   pair also covers the Granite-4.0-h fixture.
+#: - Mixtral-8x7B's (28672, 4096) / (4096, 14336): P141 read LICENSED (run ``p141-5090-2``, experts4bit-qlora#1754) at
+#:   the plans its phase 1 selected on the card: one request 2.4075x as fast, 16 unchanged (0.9964), within P110's
+#:   quality bar. Shapes, not families: any model with these expert shapes takes them.
 _BW_SHAPES: frozenset = frozenset({(1536, 2048), (2048, 768),       # Qwen3-30B-A3B (P116)
                                    (1024, 1536), (1536, 512),       # Granite-3.1-3b-a800m (P134)
-                                   (2048, 2048), (2048, 1024)})     # OLMoE-1B-7B (P134)
+                                   (2048, 2048), (2048, 1024),      # OLMoE-1B-7B (P134)
+                                   (28672, 4096), (4096, 14336)})   # Mixtral-8x7B (P141)
 
 #: The one sub-160 part auto also engages on: compute capability 8.9 with exactly this many SMs (the RTX 4090), at
 #: :data:`_BW_SM89_SHAPES` only. experts4bit-qlora's served lane P133 read it LICENSED on an RTX 4090 with the shipped
@@ -205,12 +209,14 @@ _BW_SM89_SHAPES: frozenset = frozenset({(1536, 2048), (2048, 768)})
 #: 4 warps, no split -- the plan for a shape :data:`_BW_PLANS` does not list.
 _BW_PLAN_DEFAULT = (16, 256, 4, 1)
 
-#: K33's selected plan per (N, K) on an RTX 5090 (``kernel/receipts-k33/5090/k33.json``): Qwen3-30B-A3B gate_up / down,
-#: Granite-3.1-3b-a800m gate_up / down, OLMoE-1B-7B gate_up / down. P116 served Qwen3's two at these plans.
-#: ``GNF4_GEMV_BW_PLAN`` still overrides a shape.
+#: The selected plan per (N, K) on an RTX 5090. K33's (``kernel/receipts-k33/5090/k33.json``): Qwen3-30B-A3B gate_up /
+#: down, Granite-3.1-3b-a800m gate_up / down, OLMoE-1B-7B gate_up / down; P116 served Qwen3's two at these plans.
+#: Mixtral-8x7B's gate_up / down: experts4bit-qlora P141's phase 1 (K33's twelve plans, contract first, the lowest median
+#: over 40 rounds; run ``p141-5090-2``), the plans its served read ran. ``GNF4_GEMV_BW_PLAN`` still overrides a shape.
 _BW_PLANS = {(1536, 2048): (16, 1024, 4, 1), (2048, 768): (16, 256, 4, 1),
              (1024, 1536): (16, 512, 8, 1), (1536, 512): (16, 256, 8, 1),
-             (2048, 2048): (16, 1024, 4, 1), (2048, 1024): (16, 256, 4, 1)}
+             (2048, 2048): (16, 1024, 4, 1), (2048, 1024): (16, 256, 4, 1),
+             (28672, 4096): (16, 1024, 4, 1), (4096, 14336): (16, 512, 4, 2)}
 
 _BW_DECODES = {"tree": 0, "prmt32": 2}
 
@@ -219,7 +225,7 @@ def _bw() -> str:
     """``GNF4_GEMV_BW``: route single-row decode calls through :func:`_gemv_nf4_bw`.
 
     * ``auto`` (the default; also unset or empty): at :data:`_BW_SHAPES` on >= 160-SM parts, where experts4bit-qlora's
-      served lanes P116 and P134 read it, and at :data:`_BW_SM89_SHAPES` on 128-SM sm_89 parts, where P133 read it
+      served lanes P116, P134 and P141 read it, and at :data:`_BW_SM89_SHAPES` on 128-SM sm_89 parts, where P133 read it
       LICENSED; every other call keeps its route (dot-pad, the scalar GEMV);
     * ``1``: every single-row decode call, on every device (the interpreter included);
     * ``0``: off -- the dot-pad / scalar routes everywhere.
