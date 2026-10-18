@@ -134,6 +134,51 @@ def test_bw_unset_keeps_the_old_route_everywhere_else(monkeypatch, nk, sms):
     assert not nf4_grouped._bw_engages(*nk, "cuda")
 
 
+# experts4bit-qlora P133 read LICENSED on an RTX 4090 (sm_89, 128 SMs; run p133-4090-2): the one sub-160 part auto engages
+# on, at Qwen3's two shapes only. The capability is read from the device, so another 128-SM part keeps its route.
+
+@pytest.mark.parametrize("nk", QWEN3)
+def test_bw_unset_engages_on_a_128_sm_sm89_part(monkeypatch, nk):
+    monkeypatch.delenv("GNF4_GEMV_BW", raising=False)
+    monkeypatch.setattr(nf4_grouped, "_sm_count", lambda d: 128)
+    monkeypatch.setattr(nf4_grouped, "_capability", lambda d: (8, 9))
+    assert nf4_grouped._bw_engages(*nk, "cuda")
+
+
+@pytest.mark.parametrize("nk,sms,cc", [((1536, 2048), 128, (8, 6)),      # 128 SMs on another capability
+                                       ((2048, 768), 128, (12, 0)),
+                                       ((1536, 2048), 128, None),        # no NVIDIA capability: ROCm, the CPU
+                                       ((2048, 768), 76, (8, 9)),        # sm_89 with another SM count
+                                       ((1536, 2048), 142, (8, 9)),      # sm_89 above 128 and below 160
+                                       ((1024, 1536), 128, (8, 9)),      # the licensed part at Granite's shape
+                                       ((2048, 2048), 128, (8, 9))])     # ... and at OLMoE's
+def test_bw_unset_keeps_the_old_route_on_every_other_sub_160_part(monkeypatch, nk, sms, cc):
+    monkeypatch.delenv("GNF4_GEMV_BW", raising=False)
+    monkeypatch.setattr(nf4_grouped, "_sm_count", lambda d: sms)
+    monkeypatch.setattr(nf4_grouped, "_capability", lambda d: cc)
+    assert not nf4_grouped._bw_engages(*nk, "cuda")
+
+
+def test_bw_off_stays_off_on_the_licensed_sm89_part(monkeypatch):
+    monkeypatch.setattr(nf4_grouped, "_sm_count", lambda d: 128)
+    monkeypatch.setattr(nf4_grouped, "_capability", lambda d: (8, 9))
+    monkeypatch.setenv("GNF4_GEMV_BW", "0")
+    assert not any(nf4_grouped._bw_engages(n, k, "cuda") for n, k in QWEN3)
+
+
+def test_capability_is_none_off_cuda_and_on_rocm(monkeypatch):
+    """The gate reads an NVIDIA capability only: the CPU has none, and a ROCm device's gfx capability is never read as one."""
+    monkeypatch.setattr(nf4_grouped, "_CC_CACHE", {})
+    assert nf4_grouped._capability("cpu") is None
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda d=None: (8, 9))
+    monkeypatch.setattr(torch.version, "hip", "6.2.0")
+    assert nf4_grouped._capability("cuda:0") is None
+    monkeypatch.setattr(nf4_grouped, "_CC_CACHE", {})
+    monkeypatch.setattr(torch.version, "hip", None)
+    assert nf4_grouped._capability("cuda:0") == (8, 9)
+
+
 @pytest.mark.parametrize("nk,sms", [((1536, 2048), 26), ((1024, 1536), 170), ((96, 128), 64)])
 def test_bw_explicit_requests_are_never_downgraded(monkeypatch, nk, sms):
     monkeypatch.setattr(nf4_grouped, "_sm_count", lambda d: sms)
