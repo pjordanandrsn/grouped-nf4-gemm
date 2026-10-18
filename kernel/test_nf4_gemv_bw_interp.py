@@ -254,11 +254,11 @@ def test_off_leaves_the_other_routes(monkeypatch):
 
 
 def test_unset_reads_auto_and_engages_nowhere_off_a_large_part(monkeypatch):
-    """The default is ``auto`` (P116 read DEFAULT_ON), but only at Qwen3's two shapes on >= 160-SM parts: the CPU's
+    """The default is ``auto`` (P116 and P134 read it), but only at its licensed shapes on >= 160-SM parts: the CPU's
     nominal count is 64, so the interpreter suites keep their routes."""
     monkeypatch.delenv("GNF4_GEMV_BW", raising=False)
     assert nf4_grouped._bw() == "auto"
-    assert nf4_grouped._BW_SHAPES == frozenset({(1536, 2048), (2048, 768)})
+    assert nf4_grouped._BW_SHAPES == frozenset({(1536, 2048), (2048, 768), (1024, 1536), (1536, 512), (2048, 2048), (2048, 1024)})
     assert not nf4_grouped._bw_engages(1536, 2048, "cpu")
     nf4_grouped.reset_dispatch_counts()
     B, A = make_stack(2, 32, 128, seed=0)

@@ -182,18 +182,24 @@ _ALLOW_UNVERIFIED_V5 = os.environ.get("GNF4_ALLOW_UNVERIFIED_V5") == "1"
 # K33 (kernel/PREREG-k33-nf4-decode-gemv-bw.md): the bandwidth-targeted NF4 decode GEMV, opt-in.
 # ---------------------------------------------------------------------------
 
-#: Where ``GNF4_GEMV_BW=auto`` (the default) engages: exact (N, K) shapes on >= 160-SM parts, and on sm_89 parts with
-#: exactly 128 SMs (:data:`_BW_SM89_SMS`). Qwen3-30B-A3B's gate_up and down projections, the shapes experts4bit-qlora's
-#: served lane P116 read DEFAULT_ON on an RTX 5090: one request decoded 1.2417x as fast, 16 unchanged, within P110's
-#: quality bar (register row ``e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07``; K33 read the kernel at 0.341x dot-pad).
-#: Other shapes keep their route until a served lane reads them.
-_BW_SHAPES: frozenset = frozenset({(1536, 2048), (2048, 768)})
+#: Where ``GNF4_GEMV_BW=auto`` (the default) engages on >= 160-SM parts: exact (N, K) shapes, each licensed by a served
+#: read of experts4bit-qlora's on an RTX 5090. Other shapes keep their route until a served lane reads them.
+#: - Qwen3-30B-A3B's gate_up and down (1536, 2048) / (2048, 768): P116 read DEFAULT_ON, one request 1.2417x as fast, 16
+#:   unchanged, within P110's quality bar (register row ``e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07``).
+#: - Granite-3.1-3b-a800m's (1024, 1536) / (1536, 512) and OLMoE-1B-7B's (2048, 2048) / (2048, 1024): P134 read each
+#:   family LICENSED (run ``p134-5090-1``, experts4bit-qlora#1697): one request 1.3979x and 1.5011x as fast, 16
+#:   unchanged (0.9992, 0.9954), within P110's quality bar. Its registration licenses shapes, not families: Granite's
+#:   pair also covers the Granite-4.0-h fixture.
+_BW_SHAPES: frozenset = frozenset({(1536, 2048), (2048, 768),       # Qwen3-30B-A3B (P116)
+                                   (1024, 1536), (1536, 512),       # Granite-3.1-3b-a800m (P134)
+                                   (2048, 2048), (2048, 1024)})     # OLMoE-1B-7B (P134)
 
-#: The one sub-160 part auto also engages on, at :data:`_BW_SHAPES` only: compute capability 8.9 with exactly this many
-#: SMs (the RTX 4090). experts4bit-qlora's served lane P133 read it LICENSED on an RTX 4090 with the shipped plans (run
-#: ``p133-4090-2``, experts4bit-qlora#1695): one request decoded 1.5145x as fast, 16 unchanged (0.9998), within P110's
-#: quality bar. Its registration licenses this capability and SM count only: no other count, card or family.
+#: The one sub-160 part auto also engages on: compute capability 8.9 with exactly this many SMs (the RTX 4090), at
+#: :data:`_BW_SM89_SHAPES` only. experts4bit-qlora's served lane P133 read it LICENSED on an RTX 4090 with the shipped
+#: plans (run ``p133-4090-2``, experts4bit-qlora#1695): one request decoded 1.5145x as fast, 16 unchanged (0.9998), within
+#: P110's quality bar. Its registration licenses this capability and SM count, at Qwen3's two shapes, only.
 _BW_SM89_SMS = 128
+_BW_SM89_SHAPES: frozenset = frozenset({(1536, 2048), (2048, 768)})
 
 #: (BLOCK_N, KC, num_warps, split_k): 16 output rows x 256 columns (4 absmax blocks, 32 words) per program and K-step,
 #: 4 warps, no split -- the plan for a shape :data:`_BW_PLANS` does not list.
@@ -213,8 +219,8 @@ def _bw() -> str:
     """``GNF4_GEMV_BW``: route single-row decode calls through :func:`_gemv_nf4_bw`.
 
     * ``auto`` (the default; also unset or empty): at :data:`_BW_SHAPES` on >= 160-SM parts, where experts4bit-qlora's
-      served lane P116 read it DEFAULT_ON, and on 128-SM sm_89 parts, where P133 read it LICENSED; every other call keeps
-      its route (dot-pad, the scalar GEMV);
+      served lanes P116 and P134 read it, and at :data:`_BW_SM89_SHAPES` on 128-SM sm_89 parts, where P133 read it
+      LICENSED; every other call keeps its route (dot-pad, the scalar GEMV);
     * ``1``: every single-row decode call, on every device (the interpreter included);
     * ``0``: off -- the dot-pad / scalar routes everywhere.
 
@@ -232,7 +238,9 @@ def _bw_engages(N: int, K: int, device) -> bool:
     if mode != "auto" or (N, K) not in _BW_SHAPES:
         return False
     sms = _sm_count(device)
-    return sms >= 160 or (sms == _BW_SM89_SMS and _capability(device) == (8, 9))
+    if sms >= 160:
+        return True
+    return sms == _BW_SM89_SMS and (N, K) in _BW_SM89_SHAPES and _capability(device) == (8, 9)
 
 
 def _bw_plan(N: int, K: int) -> tuple:

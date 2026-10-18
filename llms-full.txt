@@ -68,7 +68,7 @@ On CPU it explains which GPU measurement is unavailable.
 | Task | API or guide |
 | :--- | :--- |
 | Grouped NF4 forward and backward | `nf4_grouped.gemm_4bit_grouped`, `dgrad_4bit_grouped` |
-| NF4 single-row decode, bandwidth route (default at Qwen3-30B-A3B's shapes on >= 160-SM parts and the RTX 4090: sm_89, 128 SMs) | `GNF4_GEMV_BW` (`auto`; `1` everywhere, `0` off) with `gemm_4bit_grouped`; [NF4 guide](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md) |
+| NF4 single-row decode, bandwidth route (default at Qwen3-30B-A3B's, Granite-3.1-3b-a800m's and OLMoE-1B-7B's expert shapes on >= 160-SM parts; Qwen3's also on the RTX 4090: sm_89, 128 SMs) | `GNF4_GEMV_BW` (`auto`; `1` everywhere, `0` off) with `gemm_4bit_grouped`; [NF4 guide](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md) |
 | Native MXFP4 expert math | `mxfp4_grouped.gemm_mxfp4_grouped` |
 | INT4 decode | [INT4 guide](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/int4-decode-gemv.md) |
 | FP8 paged attention | [Attention guide](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/fp8-paged-attention-for-moe-serving.md) |
@@ -1721,6 +1721,8 @@ it has never measured less accurate than dequantise-to-bf16-then-GEMM in any reg
   covers the same two shapes, so it now runs only with `GNF4_GEMV_BW=0`; every other shape takes the scalar GEMV.
   The one smaller part it also serves is the RTX 4090 (sm_89, 128 SMs), where experts4bit-qlora's P133 read one request 1.5145× as
   fast and 16 unchanged, within P110's quality bar (experts4bit-qlora#1695, run `p133-4090-2`); dot-pad stays off there.
+  Since P134 it also serves Granite-3.1-3b-a800m's and OLMoE-1B-7B's expert shapes on >= 160-SM parts: on an RTX 5090 one
+  request decoded 1.3979× and 1.5011× as fast, 16 unchanged, within P110's bar (experts4bit-qlora#1697, run `p134-5090-1`).
 - **The decode anchor** for Qwen3-30B-A3B on the RTX 5090 class is 7.37 ms/step ±4.2% (≈130–142 tok/s); quote the
   range, not a point (`gnf4.serve.decode-anchor-5090`).
 - **Paged attention** takes fp8 compute where fp8 can run (sm_89+) and f32 otherwise, and never downgrades an explicit
@@ -1794,7 +1796,7 @@ Each default moved after a registered read; most reads are experts4bit-qlora's, 
 |---|---|---|---|
 | fp8 compute where fp8 can run (sm_89+), f32 otherwise | paged decode attention | `GNF4_ATTN_COMPUTE=f32` | `gnf4.serve.m3-defaults-on` |
 | dot-pad NF4 GEMV at its census shapes, ≥ 160 SMs; since 0.43.0 only under `GNF4_GEMV_BW=0` (the BW GEMV takes the same shapes first) | NF4 decode | `GNF4_GEMV_DOTPAD=0` | `gnf4.serve.m3-defaults-on` |
-| bandwidth-targeted NF4 GEMV at Qwen3-30B-A3B's two shapes, ≥ 160 SMs, and on 128-SM sm_89 parts (the RTX 4090) | NF4 decode | `GNF4_GEMV_BW=0` (`1` forces it everywhere) | `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`; the RTX 4090: experts4bit-qlora P133 (#1695) |
+| bandwidth-targeted NF4 GEMV at Qwen3-30B-A3B's two shapes (≥ 160 SMs, and on 128-SM sm_89 parts: the RTX 4090) and at Granite-3.1-3b-a800m's and OLMoE-1B-7B's (≥ 160 SMs) | NF4 decode | `GNF4_GEMV_BW=0` (`1` forces it everywhere) | `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`; the RTX 4090: experts4bit-qlora P133 (#1695); Granite and OLMoE: experts4bit-qlora P134 (#1697) |
 | programmatic dependent launch, at most 8 rows | decode kernels | `GNF4_PDL=0`; `GNF4_PDL_MAX_ROWS=0` lifts the cap | `e4b.serve.p113.gnf4-pdl-capped.qwen3-int4.5090.2026-10-04` |
 | int4-b32 split-K planned from N alone on every part | `int4_b32._plan` | none (a constant, `SPLITK_R_TERM_MAX_SMS`) | `gnf4.kernel.k30-splitk-r-term.l4.2026-10-05`, `gnf4.kernel.k32-splitk-r-term.a4000.2026-10-05` |
 | grouped_mm on sm_90; dense off sm_90 at ≤ 16 present experts | training GEMMs | `GNF4_TRAIN_GEMM=fused` | `e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.route-v2`, `e4b.train.dense-route.mixtral.5090.2026-10-04` |
@@ -2003,7 +2005,7 @@ Two things that make such a test vacuous if missed, both learned by writing one:
   0.30.1 note, which counts the wide-load and dot-pad forms among the routes
   its boundary file samples above 2^31, holds for the scalar, split-K and vec
   routes only. The bandwidth-targeted route (`_gemv_nf4_bw`, `GNF4_GEMV_BW`; the
-  default at Qwen3-30B-A3B's two shapes on >= 160-SM parts and on 128-SM sm_89 parts) is word-addressed the same way and promotes the expert id
+  default at its six licensed shapes on >= 160-SM parts and Qwen3's two on 128-SM sm_89 parts) is word-addressed the same way and promotes the expert id
   to int64 before any stride product, but **no boundary test has an arm for it
   yet**: it is not observed past its 2^31-word boundary. The wide and dot-pad
   routes' own
@@ -2038,7 +2040,7 @@ device, interpreter mode — and 0 never refuses). Rules by kernel:
 | fp8 paged decode, packed f32 | no calibrated model | an overflow at the launch falls back to the split f32 kernel the same way |
 | fp8 paged decode, split (f32 and fp8) | `KTILE * D` per K and V | an overflow at the launch is raised as `UnsupportedShapeError` naming the geometry, Triton's required bytes and the limit (reduce `ktile` or `num_stages`) |
 | MXFP4 M-tile / GEMV, int4-b32 GEMV / M-tile, NF4 scalar / wide / dot-pad decode GEMVs | fixed tiles (`BLOCK_K` 32 or 64, `BLOCK_N` ≤ 128) | no runtime dimension scales the tile; every configuration fits a 64 KB LDS |
-| NF4 bandwidth-targeted decode GEMV (`_gemv_nf4_bw`, default at Qwen3's shapes on >= 160-SM parts and 128-SM sm_89 parts) | a `[BLOCK_N, KC/64, 8]` int32 tile per K-step; `BLOCK_N` and `KC` come from the plan (`GNF4_GEMV_BW_PLAN` / `bw_config`, else K33's table `_BW_PLANS`, else 16 x 256) | `_bw_check_plan` checks only that they are powers of two: there is no feasibility check before launch, so an oversized caller plan fails at the launch |
+| NF4 bandwidth-targeted decode GEMV (`_gemv_nf4_bw`, default at its licensed shapes on >= 160-SM parts; Qwen3's on 128-SM sm_89 parts) | a `[BLOCK_N, KC/64, 8]` int32 tile per K-step; `BLOCK_N` and `KC` come from the plan (`GNF4_GEMV_BW_PLAN` / `bw_config`, else K33's table `_BW_PLANS`, else 16 x 256) | `_bw_check_plan` checks only that they are powers of two: there is no feasibility check before launch, so an oversized caller plan fails at the launch |
 | int4-b32 grouped GEMV (`_gemv_int4_b32_grouped`, K18) | the expert-id histogram, `next_pow2(E + 1)` int32 bins, beside the served GEMV's fixed tile (`int4_b32.GROUPED_MT_DEFAULT` = 4 rows per program) | `gemv_int4_b32_grouped` refuses `E > int4_b32.GROUPED_E_MAX` (4095: a 16 KiB histogram, so every admitted configuration fits a 64 KB LDS) with `UnsupportedShapeError` before the launch; the refusal names `gemv_int4_b32`, which serves any `E` |
 | int4-b32 small-M GEMM (`_gemm_int4_b32_smallm`, K16) | the `[BLOCK_M, KC]` bf16 activation tile beside the `[BLOCK_N, KC]` dequantised weight tile; `BLOCK_M` is 16, 32 or 64 by row count (`int4_smallm.smallm_block_m`) | no feasibility check before launch: the largest tile the suite runs (64 rows, `BLOCK_N` 64, `KC` 256, 2 stages) compiles and passes on a 101 376 B sm_86 card (A2000); `gemm_int4_b32_smallm` refuses more than `int4_smallm.SMALLM_ROWS_MAX` (64) rows, and an explicit `block_m` that cannot hold them, with `ValueError` before the launch |
 | int4-b32 grouped small-M GEMM (`_gemm_int4_b32_grouped_smallm`, K19) | the `[BLOCK_M, KC]` bf16 activation tile beside the `[BLOCK_N, KC]` dequantised weight tile, one expert per tile; `BLOCK_M` is 16 (the default) or, over a split table (`nf4_grouped.build_group_tiles_split`), 32 or 64 for the full tiles (`int4_smallm.GROUPED_BLOCK_M`) | no feasibility check before launch: the largest tile the suite runs (64 rows, K19's default `BLOCK_N` 32, `KC` 256, 2 stages) compiles and passes on a 101 376 B sm_86 card (A2000); a `block_m` outside `GROUPED_BLOCK_M` is refused with `ValueError` before the launch, and every tile of the table must hold at most `block_m` rows (the split builder's do) |

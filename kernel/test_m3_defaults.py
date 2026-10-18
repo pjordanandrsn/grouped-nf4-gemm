@@ -126,11 +126,43 @@ def test_bw_unset_engages_where_it_was_read(monkeypatch, nk):
     assert nf4_grouped._bw_engages(*nk, "cuda")
 
 
-@pytest.mark.parametrize("nk,sms", [((1536, 2048), 132), ((2048, 768), 26), ((1024, 1536), 170), ((2048, 2048), 188),
-                                    ((96, 128), 170)])
+# Mixtral-8x7B's expert gate_up / down: no served lane has read them, so they stand for "every other shape" at >= 160 SMs.
+MIXTRAL = ((28672, 4096), (4096, 14336))
+# experts4bit-qlora P134 read Granite-3.1-3b-a800m's and OLMoE-1B-7B's expert shapes LICENSED on an RTX 5090 (run p134-5090-1).
+P134 = ((1024, 1536), (1536, 512), (2048, 2048), (2048, 1024))
+
+
+@pytest.mark.parametrize("nk,sms", [((1536, 2048), 132), ((2048, 768), 26), (MIXTRAL[0], 170), (MIXTRAL[1], 188),
+                                    ((96, 128), 170), (P134[0], 132), (P134[2], 142), (P134[3], 76)])
 def test_bw_unset_keeps_the_old_route_everywhere_else(monkeypatch, nk, sms):
     monkeypatch.delenv("GNF4_GEMV_BW", raising=False)
     monkeypatch.setattr(nf4_grouped, "_sm_count", lambda d: sms)
+    assert not nf4_grouped._bw_engages(*nk, "cuda")
+
+
+@pytest.mark.parametrize("nk", P134)
+@pytest.mark.parametrize("sms", [160, 170, 188])
+def test_bw_unset_engages_at_p134s_shapes_on_160_sm_parts(monkeypatch, nk, sms):
+    """P134 licenses Granite's and OLMoE's two shapes each under auto's >= 160-SM gate (an RTX 5090 is 170; the RTX PRO
+    6000's 188 is unmeasured, as P116's precedent allows)."""
+    monkeypatch.delenv("GNF4_GEMV_BW", raising=False)
+    monkeypatch.setattr(nf4_grouped, "_sm_count", lambda d: sms)
+    monkeypatch.setattr(nf4_grouped, "_capability", lambda d: (12, 0))
+    assert nf4_grouped._bw_engages(*nk, "cuda")
+
+
+def test_the_sm89_part_engages_only_qwen3s_two_shapes():
+    """P133 licensed the 128-SM sm_89 part at Qwen3's two shapes; P134's shapes were read on an RTX 5090 only."""
+    assert nf4_grouped._BW_SM89_SHAPES == frozenset(QWEN3)
+    assert nf4_grouped._BW_SM89_SHAPES <= nf4_grouped._BW_SHAPES
+    assert nf4_grouped._BW_SHAPES == frozenset(QWEN3) | frozenset(P134)
+
+
+@pytest.mark.parametrize("nk", P134)
+def test_p134s_shapes_keep_the_old_route_on_the_sm89_part(monkeypatch, nk):
+    monkeypatch.delenv("GNF4_GEMV_BW", raising=False)
+    monkeypatch.setattr(nf4_grouped, "_sm_count", lambda d: 128)
+    monkeypatch.setattr(nf4_grouped, "_capability", lambda d: (8, 9))
     assert not nf4_grouped._bw_engages(*nk, "cuda")
 
 
