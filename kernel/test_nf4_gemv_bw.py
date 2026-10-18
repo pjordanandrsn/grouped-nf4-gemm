@@ -212,6 +212,28 @@ def test_swiglu_in_is_bitwise_the_two_launches(monkeypatch, decode, plan, N, K):
 
 
 @needs_cuda
+@pytest.mark.parametrize("decode", ["tree", "prmt32"])
+def test_swiglu_in_reads_swiglu_rows_bytes_elementwise(monkeypatch, decode):
+    """An identity NF4 weight (code 1.0 x absmax 1.0 on the diagonal, code 0.0 elsewhere: exact) makes the down GEMV
+    return its activation, so the fused loads' ``h`` is compared with ``swiglu_rows``' element for element: 393,216
+    values per seed, three seeds. The GEMV's sums would hide a change in how the expression rounds; this does not."""
+    from int4_b32 import swiglu_rows
+    from nf4_pack_ref import quantize_pack_nf4
+    K, T = 768, 512
+    packed, absmax = quantize_pack_nf4(torch.eye(K))
+    B, A = packed[None].to(DEV), absmax[None].to(DEV)
+    assert torch.equal(dequant_ref(B[0], A[0], K, K).float(), torch.eye(K, device=DEV))      # the readback is exact
+    monkeypatch.setenv("GNF4_GEMV_BW", "1")
+    monkeypatch.setenv("GNF4_GEMV_BW_DECODE", decode)
+    for seed in (31, 32, 33):
+        gu = _gu(T, K, seed)
+        got = gemm_4bit_grouped(gu, B, A, [1] * T, torch.zeros(T, dtype=torch.int32, device=DEV),
+                                bw_config=(16, 256, 4, 1), swiglu_in=True)
+        torch.cuda.synchronize()
+        assert torch.equal(got, swiglu_rows(gu)), seed
+
+
+@needs_cuda
 @pytest.mark.parametrize("route", ["dotpad_or_scalar", "tiles"])
 def test_swiglu_in_falls_back_bitwise_off_the_bw_route(monkeypatch, route):
     """Off the bandwidth GEMV (``GNF4_GEMV_BW=0``, or groups of more than one row) the call runs ``swiglu_rows`` first:
