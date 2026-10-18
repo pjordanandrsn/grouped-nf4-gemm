@@ -373,6 +373,12 @@ was wrong.
   (experts4bit-qlora#1697, run `p134-5090-1`; the maintainer re-derived both verdicts). `_BW_SHAPES` gains (1024, 1536),
   (1536, 512), (2048, 2048) and (2048, 1024). The 4090 path keeps Qwen3's two only (`_BW_SM89_SHAPES`): P134 read the
   5090 alone. It licenses shapes, not families: Granite's pair also covers the Granite-4.0-h fixture.
+- **`GNF4_GEMV_BW=auto` at Mixtral-8x7B's expert shapes on >= 160-SM parts (2026-10-18).** experts4bit-qlora's served
+  lane P141 chose each shape's plan on an RTX 5090 by K33's rule (contract first, the lowest median of twelve plans over
+  40 rounds), then read LICENSED at those plans: one request decoded 2.4075× as fast (19.53 → 8.11 ms a step), 16
+  unchanged (0.9964), within P110's quality bar (experts4bit-qlora#1754, run `p141-5090-2`; the maintainer and two
+  reviewers re-derived the verdict). `_BW_SHAPES` gains (28672, 4096) and (4096, 14336); `_BW_PLANS` gains (16, 1024, 4,
+  1) and (16, 512, 4, 2). The 4090 path keeps Qwen3's two only.
 - **A fixed fraction-of-waterfall is retired as a law** (two 0.77
   readings were a two-host coincidence).
 - **The cold-engine "free floor" premise is refuted** on its target box:

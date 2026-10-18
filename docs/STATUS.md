@@ -50,6 +50,8 @@ it has never measured less accurate than dequantise-to-bf16-then-GEMM in any reg
   fast and 16 unchanged, within P110's quality bar (experts4bit-qlora#1695, run `p133-4090-2`); dot-pad stays off there.
   Since P134 it also serves Granite-3.1-3b-a800m's and OLMoE-1B-7B's expert shapes on >= 160-SM parts: on an RTX 5090 one
   request decoded 1.3979× and 1.5011× as fast, 16 unchanged, within P110's bar (experts4bit-qlora#1697, run `p134-5090-1`).
+  Since P141 it serves Mixtral-8x7B's too, at the plans P141's phase 1 selected on the card: one request decoded 2.4075× as
+  fast (19.53 → 8.11 ms a step), 16 unchanged (0.9964), within P110's bar (experts4bit-qlora#1754, run `p141-5090-2`).
 - **The decode anchor** for Qwen3-30B-A3B on the RTX 5090 class is 7.37 ms/step ±4.2% (≈130–142 tok/s); quote the
   range, not a point (`gnf4.serve.decode-anchor-5090`).
 - **Paged attention** takes fp8 compute where fp8 can run (sm_89+) and f32 otherwise, and never downgrades an explicit
@@ -123,7 +125,7 @@ Each default moved after a registered read; most reads are experts4bit-qlora's, 
 |---|---|---|---|
 | fp8 compute where fp8 can run (sm_89+), f32 otherwise | paged decode attention | `GNF4_ATTN_COMPUTE=f32` | `gnf4.serve.m3-defaults-on` |
 | dot-pad NF4 GEMV at its census shapes, ≥ 160 SMs; since 0.43.0 only under `GNF4_GEMV_BW=0` (the BW GEMV takes the same shapes first) | NF4 decode | `GNF4_GEMV_DOTPAD=0` | `gnf4.serve.m3-defaults-on` |
-| bandwidth-targeted NF4 GEMV at Qwen3-30B-A3B's two shapes (≥ 160 SMs, and on 128-SM sm_89 parts: the RTX 4090) and at Granite-3.1-3b-a800m's and OLMoE-1B-7B's (≥ 160 SMs) | NF4 decode | `GNF4_GEMV_BW=0` (`1` forces it everywhere) | `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`; the RTX 4090: experts4bit-qlora P133 (#1695); Granite and OLMoE: experts4bit-qlora P134 (#1697) |
+| bandwidth-targeted NF4 GEMV at Qwen3-30B-A3B's two shapes (≥ 160 SMs, and on 128-SM sm_89 parts: the RTX 4090) and at Granite-3.1-3b-a800m's, OLMoE-1B-7B's and Mixtral-8x7B's (≥ 160 SMs) | NF4 decode | `GNF4_GEMV_BW=0` (`1` forces it everywhere) | `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`; the RTX 4090: experts4bit-qlora P133 (#1695); Granite and OLMoE: experts4bit-qlora P134 (#1697); Mixtral: experts4bit-qlora P141 (#1754) |
 | programmatic dependent launch, at most 8 rows | decode kernels | `GNF4_PDL=0`; `GNF4_PDL_MAX_ROWS=0` lifts the cap | `e4b.serve.p113.gnf4-pdl-capped.qwen3-int4.5090.2026-10-04` |
 | int4-b32 split-K planned from N alone on every part | `int4_b32._plan` | none (a constant, `SPLITK_R_TERM_MAX_SMS`) | `gnf4.kernel.k30-splitk-r-term.l4.2026-10-05`, `gnf4.kernel.k32-splitk-r-term.a4000.2026-10-05` |
 | grouped_mm on sm_90; dense off sm_90 at ≤ 16 present experts | training GEMMs | `GNF4_TRAIN_GEMM=fused` | `e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.route-v2`, `e4b.train.dense-route.mixtral.5090.2026-10-04` |
