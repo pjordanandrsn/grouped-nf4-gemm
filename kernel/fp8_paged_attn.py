@@ -1272,6 +1272,49 @@ def reset_fuse_counters() -> None:
     _FUSE_COUNTERS.clear()
 
 
+def decode_split_plan(B: int, n_kv_heads: int, table_cols: int, *, block_tokens: int, ktile: int, compute: str,
+                      pack_heads: bool, sms: int, split_cap: int | None = None) -> int:
+    """The split count :func:`fp8_paged_decode_attention` plans when the caller passes no ``n_split``: a pure function
+    of the call's shape and the device's SM count, so a consumer can read the plan without a GPU (experts4bit-qlora#1313,
+    lane P143). ``table_cols`` is the block table's width; ``ktile`` the resolved K tile (64 on fp8, 32 on f32 by
+    default). ``kernel/decode_split_plan_table.json`` freezes the pre-refactor inline plan's outputs over a grid, and the
+    tests hold this function to it.
+
+    ``split_cap`` (default None, today's plan): plan ``min(split_cap, plan)`` splits, so a cap at or above the plan
+    changes nothing. A smaller split count is the same math with a different fp32 grouping in the log-sum-exp combine:
+    results agree within tolerance, not bit for bit."""
+    # f32 decode: ~8 CTAs/SM (the sweep plateau — fewer starves the
+    # serial tile loop, the B=1..8 latency pedestal; 2x more pays
+    # q reload + combine for nothing). f8dot: ~2 CTAs/SM — with the
+    # per-element decode deleted the kernel streams, longer spans
+    # pipeline fine, and extra splits only buy partial overhead
+    # (sweep winners sat at 2-4 splits at serving batches).
+    ctas_per = B if pack_heads else B * n_kv_heads
+    span = block_tokens if pack_heads else ktile
+    # fp8: ~2.2 CTAs/SM — the qualified-box surface's winners land
+    # exactly there (B=32 -> 2 splits, B=25 -> 3, the non-pow2 split
+    # that fixed B=25's wave quantization, +6.9%)
+    if compute == "fp8":
+        want = max(1, (11 * sms) // (5 * max(1, ctas_per)))
+    else:
+        want = max(1, (8 * sms) // max(1, ctas_per))
+    # capacity from the block table, NOT seq_lens.max(): the max()
+    # is a device reduction + full sync PER CALL — measured ~12 us
+    # on a ~123 us kernel (every "shipped defaults" row before this
+    # fix paid ~10% harness-visible tax, and in a real decode loop
+    # the sync also breaks pipelining). Capacity over-estimates
+    # useful splits only for sequences far shorter than their table;
+    # empty splits exit at t_lo >= t_hi and cost a combine slot.
+    cap_tokens = int(table_cols) * block_tokens
+    max_useful = max(1, (cap_tokens + span - 1) // span)
+    plan = int(min(32, want, max_useful))
+    if split_cap is None:
+        return plan
+    if int(split_cap) < 1:
+        raise ValueError(f"split_cap={split_cap!r}: a split cap is a count >= 1 (None keeps the plan)")
+    return min(int(split_cap), plan)
+
+
 def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
                                n_kv_heads: int, head_dim: int,
                                block_tokens: int = 16,
@@ -1288,8 +1331,14 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
                                window: int = 0,
                                sinks: torch.Tensor | None = None,
                                k_row_bytes: int | None = None,
-                               v_row_bytes: int | None = None):
+                               v_row_bytes: int | None = None,
+                               split_cap: int | None = None):
     """Decode attention over packed FP8 KV pool rows.
+
+    split_cap    when ``n_split`` is not given, plan ``min(split_cap,
+                 the plan)`` splits (:func:`decode_split_plan`); None
+                 (the default) keeps the plan. An explicit ``n_split``
+                 is used as given.
 
     k_row_bytes / v_row_bytes
                  the pool's row STRIDE when it is larger than this
@@ -1411,32 +1460,10 @@ def fp8_paged_decode_attention(q, k_pool, v_pool, block_table, seq_lens, *,
                                   compute)
             pack_heads = False
     if n_split is None:
-        # f32 decode: ~8 CTAs/SM (the sweep plateau — fewer starves the
-        # serial tile loop, the B=1..8 latency pedestal; 2x more pays
-        # q reload + combine for nothing). f8dot: ~2 CTAs/SM — with the
-        # per-element decode deleted the kernel streams, longer spans
-        # pipeline fine, and extra splits only buy partial overhead
-        # (sweep winners sat at 2-4 splits at serving batches).
-        sms = torch.cuda.get_device_properties(q.device).multi_processor_count
-        ctas_per = B if pack_heads else B * n_kv_heads
-        span = block_tokens if pack_heads else ktile
-        # fp8: ~2.2 CTAs/SM — the qualified-box surface's winners land
-        # exactly there (B=32 -> 2 splits, B=25 -> 3, the non-pow2 split
-        # that fixed B=25's wave quantization, +6.9%)
-        if compute == "fp8":
-            want = max(1, (11 * sms) // (5 * max(1, ctas_per)))
-        else:
-            want = max(1, (8 * sms) // max(1, ctas_per))
-        # capacity from the block table, NOT seq_lens.max(): the max()
-        # is a device reduction + full sync PER CALL — measured ~12 us
-        # on a ~123 us kernel (every "shipped defaults" row before this
-        # fix paid ~10% harness-visible tax, and in a real decode loop
-        # the sync also breaks pipelining). Capacity over-estimates
-        # useful splits only for sequences far shorter than their table;
-        # empty splits exit at t_lo >= t_hi and cost a combine slot.
-        cap_tokens = int(block_table.shape[1]) * block_tokens
-        max_useful = max(1, (cap_tokens + span - 1) // span)
-        n_split = int(min(32, want, max_useful))
+        n_split = decode_split_plan(
+            B, n_kv_heads, int(block_table.shape[1]), block_tokens=block_tokens, ktile=ktile, compute=compute,
+            pack_heads=pack_heads, sms=torch.cuda.get_device_properties(q.device).multi_processor_count,
+            split_cap=split_cap)
 
     from fp8_kv import kv_block_bytes
     k_nat = kv_block_bytes(block_tokens, n_kv_heads, head_dim) \
