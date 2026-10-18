@@ -4,6 +4,69 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
+## 0.47.0 — 2026-10-18 — the bandwidth GEMV by default at Granite, OLMoE and Mixtral shapes and on the RTX 4090
+
+### `GNF4_GEMV_BW=auto` also engages at Mixtral-8x7B's expert shapes on ≥ 160-SM parts (experts4bit-qlora P141)
+
+- experts4bit-qlora's served lane P141 read LICENSED on an RTX 5090 (experts4bit-qlora#1754, run `p141-5090-2`). Its
+  phase 1 chose each shape's plan on the card by K33's rule: every one of the twelve plans meets the contract first, then
+  the lowest median over 40 rounds wins. At those plans, on the default `serve_paged` server, one request decoded
+  2.4075× as fast (19.53 → 8.11 ms a step). Sixteen requests were unchanged (0.9964), within P110's quality bar.
+- `_BW_SHAPES` gains Mixtral's (28672, 4096) and (4096, 14336), under auto's ≥ 160-SM gate.
+- `_BW_PLANS` gains their plans, (16, 1024, 4, 1) and (16, 512, 4, 2): the plans P141's served read ran.
+- The 128-SM sm_89 path (the RTX 4090) keeps Qwen3-30B-A3B's two shapes only. Dot-pad, every other shape and every other
+  sub-160 part are unchanged. `GNF4_GEMV_BW=0` turns it off.
+- P141 licenses shapes, not families: any model with these expert shapes takes them.
+- Tests:
+  - `kernel/test_m3_defaults.py`: P141's two shapes engage at 160, 170 and 188 SMs, take exactly the plans the read ran,
+    and keep their route on sub-160 parts and on the RTX 4090; two unread shapes now stand for "every other shape" at
+    ≥ 160 SMs, in place of Mixtral's.
+  - `kernel/test_nf4_gemv_bw_interp.py`: the shape set and the plan table.
+  - `kernel/test_dispatch_counts.py`: the dispatch layer at both shapes, mocked.
+
+### `GNF4_GEMV_BW=auto` also engages at Granite-3.1-3b-a800m's and OLMoE-1B-7B's expert shapes on ≥ 160-SM parts (experts4bit-qlora P134)
+
+- experts4bit-qlora's served lane P134 read each family LICENSED on an RTX 5090 at the shipped plans (experts4bit-qlora#1697,
+  run `p134-5090-1`). On the default `serve_paged` server, one request decoded 1.3979× (Granite) and 1.5011× (OLMoE) as fast.
+  Sixteen requests were unchanged (0.9992, 0.9954), within P110's quality bar.
+- `_BW_SHAPES` gains Granite's (1024, 1536) / (1536, 512) and OLMoE's (2048, 2048) / (2048, 1024), under auto's ≥ 160-SM
+  gate. Their plans were already in `_BW_PLANS`.
+- The 128-SM sm_89 path (the RTX 4090) keeps Qwen3-30B-A3B's two shapes only (`_BW_SM89_SHAPES`): P134 read the RTX 5090
+  alone.
+- Dot-pad, every other shape and every other sub-160 part are unchanged. `GNF4_GEMV_BW=0` turns it off.
+- P134 licenses shapes, not families: Granite's pair also covers the Granite-4.0-h fixture.
+- Tests:
+  - `kernel/test_m3_defaults.py`: P134's four shapes engage at 160, 170 and 188 SMs; they keep their route on sub-160 parts
+    and on the RTX 4090; Mixtral's expert shapes stand for an unlicensed shape at ≥ 160 SMs; `_BW_SM89_SHAPES` is a
+    subset.
+  - `kernel/test_dispatch_counts.py`: the dispatch layer at two of P134's shapes, mocked, and unmocked on a real
+    ≥ 160-SM card (skipped elsewhere).
+
+### `GNF4_GEMV_BW=auto` also engages on 128-SM sm_89 parts (the RTX 4090), at Qwen3-30B-A3B's two shapes (experts4bit-qlora P133)
+
+- experts4bit-qlora's served lane P133 read LICENSED on an RTX 4090 at the shipped plans: on the default `serve_paged` server,
+  one request decoded 1.5145× as fast and 16 requests were unchanged (0.9998), within P110's quality bar
+  (experts4bit-qlora#1695, run `p133-4090-2`). Until now auto left the 4090 on the scalar GEMV.
+- `_bw_engages` now also engages where the device's compute capability is 8.9 and its SM count is exactly
+  `_BW_SM89_SMS` (128). `_capability` reads the capability: None off CUDA and on ROCm.
+- Unchanged: other sub-160 parts, other shapes, and dot-pad's gate. `GNF4_GEMV_BW=0` turns it off.
+- Tests:
+  - `kernel/test_m3_defaults.py`: the licensed part engages at both shapes; seven other sub-160 parts or shapes keep their
+    route; `0` stays off; the capability helper ignores ROCm.
+  - `kernel/test_dispatch_counts.py`: the dispatch layer on a mocked 128-SM sm_89 part, and unmocked on a real RTX 4090
+    (skipped on any other card).
+
+### Shared tooling: check_change_impact accepts a manifest record that landed first (the kernel-first lockstep)
+
+- In the runtime role's dependency-floor class, `docs/system-manifest.json` now counts as satisfied when the diff does
+  not touch it but the BASE's manifest already carries the head's record. That record is a compatibility entry for this
+  consumer, `grouped-nf4-gemm` and the `fast` extra whose `consumer_versions` contain the head's new version and whose
+  `floor` equals its new floor (`lockstep_record`). The report prints it as `landed first`.
+- This is the normal shape of a floor move: the record is synced into both repositories before the consumer's
+  pyproject moves (experts4bit-qlora#1692, then its 0.55.0 release). Any other missing manifest still FAILs.
+- `kernel/test_check_scripts.py` covers the accepted shape and each refusal: a floor mismatch, a range that misses the
+  version, no record, no base manifest, another consumer or extra, and an unsupported range.
+
 ## 0.46.1 — 2026-10-17 — ieee f32 decode on ROCm, the experts4bit-qlora 0.55 floor record
 
 **0.46.1.** A patch. On a ROCm build, the f32 decode attention path now defaults to `ieee` precision, because `tf32`
