@@ -108,6 +108,39 @@ def test_the_P116_DEFAULT_dispatches_the_bandwidth_route_when_the_guard_allows(m
 
 
 @needs_cuda
+def test_the_P133_DEFAULT_dispatches_the_bandwidth_route_on_a_128_sm_sm89_part(monkeypatch):
+    """experts4bit-qlora P133 (LICENSED on an RTX 4090): unset GNF4_GEMV_BW on a 128-SM sm_89 part sends Qwen3's gate_up to
+    ``bw_prmt32`` and nothing else, asserted at the dispatch layer."""
+    monkeypatch.delenv("GNF4_GEMV_BW", raising=False)
+    monkeypatch.delenv("GNF4_GEMV_DOTPAD", raising=False)
+    monkeypatch.delenv("GNF4_GEMV_BW_DECODE", raising=False)
+    monkeypatch.setattr(nf4_grouped, "_sm_count", lambda d: 128)
+    monkeypatch.setattr(nf4_grouped, "_capability", lambda d: (8, 9))
+    nf4_grouped.reset_dispatch_counts()
+    _call(torch.device("cuda"))
+    c = nf4_grouped.dispatch_counts()
+    assert c["bw_prmt32"] > 0 and c["bw_tree"] == 0, c
+    assert c["dotpad"] + c["dotpad_splitk"] + c["scalar"] + c["scalar_splitk"] == 0, c
+
+
+@needs_cuda
+def test_on_a_real_rtx_4090_auto_engages_unmocked(monkeypatch):
+    """The P133 gate read from the device itself, nothing mocked: on an sm_89 card with 128 SMs (an RTX 4090) unset
+    GNF4_GEMV_BW dispatches ``bw_prmt32``. Skipped on any other card; the gate's review runs it on a rented RTX 4090."""
+    dev = torch.device("cuda")
+    if torch.cuda.get_device_capability(dev) != (8, 9) or torch.cuda.get_device_properties(dev).multi_processor_count != 128:
+        pytest.skip("needs an sm_89 card with 128 SMs (an RTX 4090)")
+    monkeypatch.delenv("GNF4_GEMV_BW", raising=False)
+    monkeypatch.delenv("GNF4_GEMV_DOTPAD", raising=False)
+    monkeypatch.delenv("GNF4_GEMV_BW_DECODE", raising=False)
+    nf4_grouped.reset_dispatch_counts()
+    _call(dev)
+    c = nf4_grouped.dispatch_counts()
+    assert c["bw_prmt32"] > 0 and c["bw_tree"] == 0, c
+    assert c["dotpad"] + c["dotpad_splitk"] + c["scalar"] + c["scalar_splitk"] == 0, c
+
+
+@needs_cuda
 def test_the_P116_DEFAULT_keeps_the_old_route_below_the_guard(monkeypatch):
     """The same call on a 26-SM part: ``auto`` does not engage, and dot-pad's own guard sends it to the scalar GEMV."""
     monkeypatch.delenv("GNF4_GEMV_BW", raising=False)
