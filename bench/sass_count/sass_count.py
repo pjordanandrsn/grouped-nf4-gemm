@@ -96,6 +96,35 @@ def per_weight(loop: dict, lanes: int, weights_per_iteration: int) -> dict:
             "by_class": {c: n * scale for c, n in sorted(loop["classes"].items())}}
 
 
+#: MMA instruction shapes (m, n, k) by the opcode's shape suffix: HMMA.1688 (TF32, m16n8k8), HMMA.16816 (bf16 / fp16,
+#: m16n8k16). An MMA the guard does not know is refused rather than guessed.
+MMA_SHAPES = {"1688": (16, 8, 8), "16816": (16, 8, 16)}
+
+
+def unroll_factor(loop: dict, *, block_m: int, block_n: int, kc: int, num_warps: int) -> int:
+    """How many K iterations the picked loop body holds. One iteration of a ``block_m x block_n x kc`` tile on
+    ``num_warps`` warps issues ``(block_m/m)(block_n/n)(kc/k) / num_warps`` MMAs per warp for the shape (m, n, k).
+    ptxas can unroll the K loop, and then the body holds k times that, so dividing by one iteration's weights would
+    overstate the count k-fold without an error. Returns k >= 1, or raises on an unknown MMA shape or a count that is
+    not a whole multiple of one iteration's."""
+    mmas = {op: n for op, n in loop["opcodes"].items() if classify(op) == "mma"}
+    shapes = set()
+    for op in mmas:
+        m = re.match(r"^HMMA\.(\d+)", op)
+        if not m or m.group(1) not in MMA_SHAPES:
+            raise ValueError(f"unroll guard: unknown MMA {op!r}; known shapes {sorted(MMA_SHAPES)}")
+        shapes.add(MMA_SHAPES[m.group(1)])
+    if len(shapes) != 1:
+        raise ValueError(f"unroll guard: expected one MMA shape in the loop, got {sorted(shapes)}")
+    mm, nn, kk = shapes.pop()
+    per_iter, rem = divmod((block_m // mm) * (block_n // nn) * (kc // kk), num_warps)
+    total = sum(mmas.values())
+    if rem or per_iter < 1 or total % per_iter:
+        raise ValueError(f"unroll guard: {total} MMAs per warp in the loop is not a whole number of iterations of "
+                         f"{(block_m // mm) * (block_n // nn) * (kc // kk)} / {num_warps} warps")
+    return total // per_iter
+
+
 def jit_attrs(fn, signature: dict, values: dict, backend) -> dict:
     """The served JIT launch's specialization, as ``ASTSource`` attrs: ``tt.divisibility = 16`` on every pointer
     argument (torch allocations are 16-byte aligned) and on every int in ``values`` divisible by 16, through the
@@ -110,9 +139,13 @@ def jit_attrs(fn, signature: dict, values: dict, backend) -> dict:
 
 def compile_and_count(fn, signature: dict, constexprs: dict, values: dict, *, arch: int, num_warps: int,
                       num_stages: int, weights_per_iteration: int, out_dir: str | None = None, tag: str = "",
-                      specialize: bool = True) -> dict:
+                      specialize: bool = True, tile: tuple | None = None) -> dict:
     """Compile ``fn`` for ``sm_<arch>`` as the JIT would (``specialize=False`` only to show what is lost), count its
-    inner K loop, and return the record. Writes the SASS, PTX and cubin to ``out_dir`` when given."""
+    inner K loop, and return the record. Writes the SASS, PTX and cubin to ``out_dir`` when given.
+
+    ``tile`` = (BLOCK_M, BLOCK_N, KC) turns on the unroll guard (:func:`unroll_factor`). A loop body that holds k K
+    iterations counts against k x ``weights_per_iteration``, and k is recorded as ``unroll``. A count that is not a whole
+    number of iterations is refused."""
     import triton
     from triton.backends.compiler import GPUTarget
     from triton.compiler import ASTSource
@@ -148,7 +181,9 @@ def compile_and_count(fn, signature: dict, constexprs: dict, values: dict, *, ar
            "divisible_args": sorted(signature_name(fn, i) for (i,) in attrs), "total_instructions": len(rows),
            "lanes": lanes, "weights_per_iteration": weights_per_iteration, "inner_loop": loop}
     if loop:
-        rec.update(per_weight(loop, lanes, weights_per_iteration))
+        unroll = unroll_factor(loop, block_m=tile[0], block_n=tile[1], kc=tile[2], num_warps=num_warps) if tile else 1
+        rec["unroll"] = unroll
+        rec.update(per_weight(loop, lanes, weights_per_iteration * unroll))
     return rec
 
 
@@ -202,10 +237,12 @@ def main(argv=None) -> int:
             sig, consts, values, wpi = k25_served(shape)
             rec = compile_and_count(fn, sig, consts, values, arch=arch, num_warps=K25_PLAN["num_warps"],
                                     num_stages=K25_PLAN["num_stages"], weights_per_iteration=wpi, out_dir=a.out,
+                                    tile=(16, K25_PLAN["BLOCK_N"], K25_PLAN["KC"]),
                                     tag=f"{a.module}.{shape}", specialize=not a.no_specialize)
             report["targets"][f"sm{arch}.{shape}"] = rec
             lpw = rec.get("lane_instr_per_weight")
-            print(f"sm_{arch} {shape}: inner loop {rec['inner_loop'] and rec['inner_loop']['instructions']} instr, "
+            body = rec["inner_loop"] and rec["inner_loop"]["instructions"]
+            print(f"sm_{arch} {shape}: inner loop {body} instr (unroll {rec.get('unroll')}), "
                   f"{lpw and round(lpw, 2)} lane instr/weight", flush=True)
     if a.out:
         with open(os.path.join(a.out, "sass_count.json"), "w", encoding="utf-8", newline="\n") as f:

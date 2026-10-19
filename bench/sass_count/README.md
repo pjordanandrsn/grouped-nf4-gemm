@@ -18,9 +18,18 @@ python sass_count.py --kernel-dir ../../kernel --no-specialize      # the same c
   - Without them the count is inflated: K25 scalarizes its weight-byte loads and adds per-element 64-bit address
     arithmetic.
   - The test fails if the hints go missing. It also checks that `--no-specialize` does show the scalar loads.
+  - The rule assumes every argument is a fresh allocation, as K25's served arguments are. A tensor VIEW at an offset
+    that is not a multiple of 16 bytes would get no hint from the real JIT, so a config with a sliced argument must
+    drop that argument's hint, or its count is over-specialized.
 - **The inner loop:** the smallest backward branch whose body holds an MMA, so an outer persistent loop is never
   taken for it. Lane instructions per weight = body x lanes / weights per iteration (BLOCK_N x KC). It is a static
   floor under one issue per scheduler per cycle.
+- **The unroll guard:** one K iteration of a BLOCK_M x BLOCK_N x KC tile on W warps issues
+  (BLOCK_M/m)(BLOCK_N/n)(KC/k)/W MMAs per warp, for the MMA's shape (HMMA.1688 = m16n8k8, HMMA.16816 = m16n8k16).
+  - A body holding k times that is a k-fold unroll by ptxas. It counts against k x the weights per iteration, and k is
+    recorded as `unroll`.
+  - A count that is no whole number of iterations, or an unknown MMA shape, is refused.
+  - Without the guard, an unroll would overstate the count k-fold and raise no error.
 
 ## Recorded counts (triton 3.4.0, its bundled ptxas 12.8)
 

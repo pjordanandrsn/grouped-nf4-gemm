@@ -42,6 +42,32 @@ def test_the_parser_and_the_inner_loop_on_a_fixture():
     assert pw["lane_instr_per_weight"] == 5 * 128 / 2048 and abs(sum(pw["by_class"].values()) - 5 / 16) < 1e-12
 
 
+def _loop_with(mmas: int, op: str = "HMMA.1688.F32.TF32") -> dict:
+    lines = [f"        /*{16 * i:04x}*/   {op} R8, R10, R12, R8 ;" for i in range(mmas)]
+    lines.append(f"        /*{16 * mmas:04x}*/   @P0 BRA 0x0 ;")
+    return sc.inner_loop(sc.parse_sass("\n".join(lines)))
+
+
+def test_the_unroll_guard_counts_whole_iterations_and_scales():
+    """K25's served tile (16 x 32 x 64, 4 warps, m16n8k8) issues 8 MMAs per warp per K iteration. A body holding 16
+    is a 2-fold unroll and counts against twice the weights. A body holding 12 is no whole number of iterations, and
+    is refused."""
+    tile = dict(block_m=16, block_n=32, kc=64, num_warps=4)
+    assert sc.unroll_factor(_loop_with(8), **tile) == 1
+    assert sc.unroll_factor(_loop_with(16), **tile) == 2
+    with pytest.raises(ValueError, match="whole number of iterations"):
+        sc.unroll_factor(_loop_with(12), **tile)
+    assert sc.unroll_factor(_loop_with(4, "HMMA.16816.F32.BF16"), **tile) == 1    # m16n8k16: half the MMAs
+    with pytest.raises(ValueError, match="unknown MMA"):
+        sc.unroll_factor(_loop_with(8, "HMMA.884.F16.F16"), **tile)
+
+
+def test_an_unrolled_loop_counts_per_weight_against_all_its_iterations():
+    loop = _loop_with(16)                               # 17 instructions, 2 iterations of 2048 weights on 128 lanes
+    k = sc.unroll_factor(loop, block_m=16, block_n=32, kc=64, num_warps=4)
+    assert sc.per_weight(loop, 128, 2048 * k)["lane_instr_per_weight"] == 17 * 128 / 4096
+
+
 def test_no_mma_means_no_inner_loop():
     assert sc.inner_loop(sc.parse_sass("        /*0000*/  @P0 BRA 0x0 ;\n")) is None
 
@@ -89,7 +115,7 @@ def test_k25_at_the_served_plan_loads_vectorized_only_when_specialized():
     import nf4_smallm
     fn = nf4_smallm._gemm_nf4_grouped_smallm
     sig, consts, values, wpi = sc.k25_served("gate_up")
-    kw = dict(arch=86, num_warps=4, num_stages=3, weights_per_iteration=wpi)
+    kw = dict(arch=86, num_warps=4, num_stages=3, weights_per_iteration=wpi, tile=(16, 32, 64))
     served = sc.compile_and_count(fn, sig, consts, values, **kw)
     bare = sc.compile_and_count(fn, sig, consts, values, specialize=False, **kw)
     s_ops, b_ops = served["inner_loop"]["opcodes"], bare["inner_loop"]["opcodes"]
@@ -97,5 +123,6 @@ def test_k25_at_the_served_plan_loads_vectorized_only_when_specialized():
     assert "LDG.E.U8" not in s_ops, "the served compile scalarized its weight loads: the JIT's hints are missing"
     assert "LDG.E.U8" in b_ops                          # ...and without them they do scalarize
     assert served["lane_instr_per_weight"] < bare["lane_instr_per_weight"]
+    assert served["unroll"] == 1 == bare["unroll"]         # one K iteration per loop body: no silent unroll
     if triton.__version__ == "3.4.0":                   # the served stack's version: the counts are pinned there
         assert served["inner_loop"]["instructions"] == 402 and served["lane_instr_per_weight"] == 402 * 128 / 2048
