@@ -68,6 +68,17 @@ def test_an_unrolled_loop_counts_per_weight_against_all_its_iterations():
     assert sc.per_weight(loop, 128, 2048 * k)["lane_instr_per_weight"] == 17 * 128 / 4096
 
 
+def test_a_record_without_a_tile_never_claims_the_unroll_check():
+    """No ``tile``: the guard did not run, so ``unroll`` is None (the CLI prints 'unchecked'), not a silent 1. With
+    the tile, the same 2-fold body reads unroll 2 and counts against both iterations."""
+    rows = sc.parse_sass("\n".join([f"        /*{16 * i:04x}*/   HMMA.1688.F32.TF32 R8, R10, R12, R8 ;"
+                                    for i in range(16)] + ["        /*0100*/   @P0 BRA 0x0 ;"]))
+    bare = sc.loop_record(rows, num_warps=4, weights_per_iteration=2048)
+    assert bare["unroll"] is None and bare["lane_instr_per_weight"] == 17 * 128 / 2048      # unchecked: 1 assumed
+    checked = sc.loop_record(rows, num_warps=4, weights_per_iteration=2048, tile=(16, 32, 64))
+    assert checked["unroll"] == 2 and checked["lane_instr_per_weight"] == 17 * 128 / 4096
+
+
 def test_no_mma_means_no_inner_loop():
     assert sc.inner_loop(sc.parse_sass("        /*0000*/  @P0 BRA 0x0 ;\n")) is None
 

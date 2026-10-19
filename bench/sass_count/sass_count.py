@@ -176,15 +176,24 @@ def compile_and_count(fn, signature: dict, constexprs: dict, values: dict, *, ar
     else:
         os.remove(tmp)
     rows = parse_sass(raw)
+    rec = {"arch": f"sm_{arch}", "triton": triton.__version__, "specialized": specialize,
+           "divisible_args": sorted(signature_name(fn, i) for (i,) in attrs), "total_instructions": len(rows)}
+    rec.update(loop_record(rows, num_warps=num_warps, weights_per_iteration=weights_per_iteration, tile=tile))
+    return rec
+
+
+def loop_record(rows: list, *, num_warps: int, weights_per_iteration: int, tile: tuple | None = None) -> dict:
+    """The inner loop's record from parsed SASS. With ``tile`` = (BLOCK_M, BLOCK_N, KC) the unroll guard runs, and
+    ``unroll`` is the k it found. Without it, ``unroll`` is ``None``: the record never claims a check it did not run,
+    and the per-weight figure assumes one iteration per loop body, unchecked."""
     loop = inner_loop(rows)
     lanes = num_warps * 32
-    rec = {"arch": f"sm_{arch}", "triton": triton.__version__, "specialized": specialize,
-           "divisible_args": sorted(signature_name(fn, i) for (i,) in attrs), "total_instructions": len(rows),
-           "lanes": lanes, "weights_per_iteration": weights_per_iteration, "inner_loop": loop}
+    rec = {"lanes": lanes, "weights_per_iteration": weights_per_iteration, "inner_loop": loop}
     if loop:
-        unroll = unroll_factor(loop, block_m=tile[0], block_n=tile[1], kc=tile[2], num_warps=num_warps) if tile else 1
+        unroll = (unroll_factor(loop, block_m=tile[0], block_n=tile[1], kc=tile[2], num_warps=num_warps)
+                  if tile else None)
         rec["unroll"] = unroll
-        rec.update(per_weight(loop, lanes, weights_per_iteration * unroll))
+        rec.update(per_weight(loop, lanes, weights_per_iteration * (unroll or 1)))
     return rec
 
 
@@ -243,7 +252,8 @@ def main(argv=None) -> int:
             report["targets"][f"sm{arch}.{shape}"] = rec
             lpw = rec.get("lane_instr_per_weight")
             body = rec["inner_loop"] and rec["inner_loop"]["instructions"]
-            print(f"sm_{arch} {shape}: inner loop {body} instr (unroll {rec.get('unroll')}), "
+            unroll = "unchecked" if rec.get("unroll") is None else rec["unroll"]
+            print(f"sm_{arch} {shape}: inner loop {body} instr (unroll {unroll}), "
                   f"{lpw and round(lpw, 2)} lane instr/weight", flush=True)
     if a.out:
         with open(os.path.join(a.out, "sass_count.json"), "w", encoding="utf-8", newline="\n") as f:
