@@ -61,6 +61,7 @@ On CPU it explains which GPU measurement is unavailable.
 | :--- | :--- |
 | Grouped NF4 forward and backward | `nf4_grouped.gemm_4bit_grouped`, `dgrad_4bit_grouped` |
 | NF4 single-row decode, bandwidth route (default at Qwen3-30B-A3B's, Granite-3.1-3b-a800m's, OLMoE-1B-7B's and Mixtral-8x7B's expert shapes on >= 160-SM parts; Qwen3's also on the RTX 4090: sm_89, 128 SMs) | `GNF4_GEMV_BW` (`auto`; `1` everywhere, `0` off) with `gemm_4bit_grouped`; [NF4 guide](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/nf4-grouped-gemm-without-bf16-materialization.md) |
+| Dense bf16 single-row decode GEMV (lane K35; an API only: it routes nothing, and its consumer's served read is the timing of record) | `dense_gemv.gemv_bf16_bw` |
 | Native MXFP4 expert math | `mxfp4_grouped.gemm_mxfp4_grouped` |
 | INT4 decode | [INT4 guide](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/int4-decode-gemv.md) |
 | FP8 paged attention | [Attention guide](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/fp8-paged-attention-for-moe-serving.md) |
