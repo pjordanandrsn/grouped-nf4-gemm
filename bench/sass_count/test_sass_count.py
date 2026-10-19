@@ -109,6 +109,70 @@ def test_counts_compare_only_within_one_toolchain():
         sc.compare({**a, "ptxas": None}, {**b, "ptxas": None})
 
 
+#: loggetta's fixture: a small loop that loads indices (one 4-byte LDG), a bigger weight loop (two 16-byte LDGs, no
+#: MMA, as an ablation's), and an outer loop around both. "Smallest" would take the index loop; the outer loop holds the
+#: most bytes of all. The load key must take the weight loop.
+FIXTURE_LOADS = """
+        /*0000*/                   S2R R0, SR_CTAID.X ;
+        /*0010*/                   LDG.E R2, desc[UR4][R4.64] ;
+        /*0020*/                   IADD3 R4, R4, 0x4, RZ ;
+        /*0030*/              @P0  BRA 0x10 ;
+        /*0040*/                   LDG.E.128 R8, desc[UR4][R6.64] ;
+        /*0050*/                   LDG.E.128 R12, desc[UR4][R6.64+0x10] ;
+        /*0060*/                   FFMA R16, R8, R9, R16 ;
+        /*0070*/                   IADD3 R6, R6, 0x20, RZ ;
+        /*0080*/              @P1  BRA 0x40 ;
+        /*0090*/              @P2  BRA 0x0 ;
+        /*00a0*/                   EXIT ;
+"""
+
+
+def test_the_load_key_takes_the_weight_stream_not_the_smallest_loop():
+    rows = sc.parse_sass(FIXTURE_LOADS)
+    assert sc.inner_loop(rows) is None                                  # no MMA: the MMA key finds nothing
+    loop = sc.inner_loop(rows, key="load")
+    assert (loop["target"], loop["branch"], loop["load_bytes"]) == ("0x40", "0x80", 32)
+    assert loop["runner_up"] == {"target": "0x10", "branch": "0x30", "instructions": 3, "load_bytes": 4,
+                                 "loads": {"LDG.E": 1}}
+    assert {(r["target"], r["branch"]) for r in loop["rejected"]} == {("0x10", "0x30"), ("0x0", "0x90")}
+    with pytest.raises(ValueError, match="loop key"):
+        sc.inner_loop(rows, key="smallest")
+
+
+def test_both_keys_take_the_same_loop_where_the_k_loop_holds_the_mmas():
+    """K25's case on a fixture (the compiled A0 test below is the real one): the loop holding the MMAs also moves the
+    most bytes, so the keys agree. A necessary check, not a sufficient one: the fixture above is the one that bites."""
+    rows = sc.parse_sass(FIXTURE)
+    mma, load = sc.inner_loop(rows), sc.inner_loop(rows, key="load")
+    assert (mma["target"], mma["branch"]) == (load["target"], load["branch"]) == ("0x20", "0x60")
+
+
+def test_load_widths_and_the_load_signature():
+    widths = {"LDG.E.128": 16, "LDG.E.64": 8, "LDG.E": 4, "LDG.E.U16": 2, "LDG.E.U8": 1, "LDGSTS.E.BYPASS.128": 16,
+              "LDGDEPBAR": 0}
+    assert {op: sc.load_bytes(op) for op in widths} == widths
+    loop = sc.inner_loop(sc.parse_sass(FIXTURE_LOADS), key="load")
+    assert sc.load_signature(loop, lanes=128, weights_per_iteration=2048) == {"LDG.E.128": 2 * 128 / 2048}
+
+
+def test_a_loop_without_mmas_records_its_loads_and_no_unroll_check():
+    """The MMA unroll guard runs only on a loop that holds MMAs; a no-MMA loop records ``unroll`` None and its loads,
+    which :func:`same_loads` compares with the control's (whose loop the guard did check)."""
+    rec = sc.loop_record(sc.parse_sass(FIXTURE_LOADS), num_warps=4, weights_per_iteration=2048, tile=(16, 32, 64),
+                         loop_key="load")
+    assert rec["loop_key"] == "load" and rec["unroll"] is None and rec["loads_per_weight"] == {"LDG.E.128": 0.125}
+
+
+def test_same_loads_compares_one_toolchain_and_one_target_only():
+    a = {"triton": "3.4.0", "ptxas": "12.8.93", "arch": "sm_120", "loads_per_weight": {"LDG.E.128": 0.125}}
+    assert sc.same_loads(a, dict(a)) and not sc.same_loads(a, dict(a, loads_per_weight={"LDG.E.128": 0.25}))
+    assert not sc.same_loads(a, dict(a, loads_per_weight={"LDG.E.64": 0.125}))             # the same count, narrower
+    with pytest.raises(ValueError, match="across toolchains"):
+        sc.same_loads(a, dict(a, triton="3.8.0"))
+    with pytest.raises(ValueError, match="across targets"):
+        sc.same_loads(a, dict(a, arch="sm_86"))
+
+
 def test_no_mma_means_no_inner_loop():
     assert sc.inner_loop(sc.parse_sass("        /*0000*/  @P0 BRA 0x0 ;\n")) is None
 
@@ -157,6 +221,33 @@ def _pinned_toolchain():
         return False
 
 
+try:                                                    # a variant with no MMA, compiled like K25 (an ablation's shape)
+    import triton
+    import triton.language as tl
+
+    @triton.jit
+    def _loads_and_sum(w_ptr, out_ptr, K, BLOCK_N: tl.constexpr, KC: tl.constexpr):
+        """K's weight stream with no MMA: each tile loaded and summed into the accumulator."""
+        n = tl.program_id(0) * BLOCK_N + tl.arange(0, BLOCK_N)
+        acc = tl.zeros((BLOCK_N,), dtype=tl.float32)
+        for k0 in range(0, K, KC):
+            w = tl.load(w_ptr + n[:, None] * K + (k0 + tl.arange(0, KC))[None, :])
+            acc += tl.sum(w.to(tl.float32), axis=1)
+        tl.store(out_ptr + n, acc)
+except Exception:                                       # no triton here: the compiled tests skip
+    _loads_and_sum = None
+
+
+@functools.lru_cache(maxsize=None)
+def _k25_by_load_key(arch: int) -> dict:
+    """K25's served gate_up compile for ``sm_<arch>``, its inner loop found by the load key."""
+    sys.path.insert(0, str(KERNEL))
+    import nf4_smallm
+    sig, consts, values, wpi = sc.k25_served("gate_up")
+    return sc.compile_and_count(nf4_smallm._gemm_nf4_grouped_smallm, sig, consts, values, arch=arch, num_warps=4,
+                                num_stages=3, weights_per_iteration=wpi, tile=(16, 32, 64), loop_key="load")
+
+
 @functools.lru_cache(maxsize=None)
 def _k25_compiles(arch: int) -> tuple:
     """K25's gate_up at the served plan for ``sm_<arch>``: (served, bare), the compile with and without the hints."""
@@ -183,6 +274,34 @@ def test_k25_at_the_served_plan_loads_vectorized_only_when_specialized(arch):
     assert "LDG.E.U8" in b_ops                          # ...and without them they do scalarize
     assert served["unroll"] == 1 == bare["unroll"]         # one K iteration per loop body: no silent unroll
     assert served["triton"] == bare["triton"] == triton.__version__ and served["ptxas"] == bare["ptxas"]
+
+
+@pytest.mark.skipif(not _nvidia_backend(), reason="triton's NVIDIA backend (cuobjdump) is not installed")
+@pytest.mark.parametrize("arch", [86, 120])
+def test_both_loop_keys_take_the_same_loop_on_served_k25(arch):
+    """A0, the control: on served K25 the MMA key and the load key pick the same loop, with the same loads, under the
+    toolchain running this (CI runs it at the latest triton and at the pinned 3.4.0: both toolchains). Necessary, not
+    sufficient: the index-loop fixture is the case that bites."""
+    served, _ = _k25_compiles(arch)
+    by_load = _k25_by_load_key(arch)
+    pick = lambda rec: (rec["inner_loop"]["target"], rec["inner_loop"]["branch"])          # noqa: E731
+    assert pick(by_load) == pick(served) and by_load["loop_key"] == "load" and served["loop_key"] == "mma"
+    assert by_load["loads_per_weight"] and sc.same_loads(by_load, served)
+    assert by_load["unroll"] == 1 == served["unroll"]                  # the loop holds the MMAs: the guard still runs
+
+
+@pytest.mark.skipif(not _nvidia_backend() or _loads_and_sum is None,
+                    reason="triton's NVIDIA backend (cuobjdump) is not installed")
+@pytest.mark.parametrize("arch", [86, 120])
+def test_a_variant_without_an_mma_is_found_by_the_load_key_only(arch):
+    sig = {"w_ptr": "*u8", "out_ptr": "*fp32", "K": "i32", "BLOCK_N": "constexpr", "KC": "constexpr"}
+    kw = dict(arch=arch, num_warps=4, num_stages=3, weights_per_iteration=32 * 64, tile=(16, 32, 64))
+    by_mma = sc.compile_and_count(_loads_and_sum, sig, {"BLOCK_N": 32, "KC": 64}, {"K": 2048}, **kw)
+    by_load = sc.compile_and_count(_loads_and_sum, sig, {"BLOCK_N": 32, "KC": 64}, {"K": 2048}, loop_key="load", **kw)
+    assert by_mma["inner_loop"] is None                                 # no MMA: the MMA key finds no loop
+    loop = by_load["inner_loop"]
+    assert loop and not loop["classes"].get("mma") and loop["load_bytes"] > 0
+    assert by_load["unroll"] is None and by_load["loads_per_weight"]     # its loads stand in for the guard
 
 
 @pytest.mark.skipif(not _nvidia_backend(), reason="triton's NVIDIA backend (cuobjdump) is not installed")

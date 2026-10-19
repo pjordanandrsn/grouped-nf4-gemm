@@ -7,6 +7,7 @@ quote.
 ```
 python sass_count.py --kernel-dir ../../kernel --out out/           # K25 at e4b's served plan, sm_120 and sm_86
 python sass_count.py --kernel-dir ../../kernel --no-specialize      # the same compile without the JIT's hints
+python sass_count.py --kernel-dir DIR --module MOD --fn ARM --loop-key load   # a K25-signature variant with no MMA
 ```
 
 - **What it compiles:** `triton.compile` for `GPUTarget("cuda", <arch>, 32)` with the served plan's warps and stages,
@@ -21,9 +22,20 @@ python sass_count.py --kernel-dir ../../kernel --no-specialize      # the same c
   - The rule assumes every argument is a fresh allocation, as K25's served arguments are. A tensor VIEW at an offset
     that is not a multiple of 16 bytes would get no hint from the real JIT, so a config with a sliced argument must
     drop that argument's hint, or its count is over-specialized.
-- **The inner loop:** the smallest backward branch whose body holds an MMA, so an outer persistent loop is never
-  taken for it. Lane instructions per weight = body x lanes / weights per iteration (BLOCK_N x KC). It is a static
-  floor under one issue per scheduler per cycle.
+- **The inner loop:** found by one of two keys (`--loop-key`). Lane instructions per weight = body x lanes /
+  weights per iteration (BLOCK_N x KC), a static floor under one issue per scheduler per cycle.
+  - `mma`, the default: the smallest backward branch whose body holds an MMA, so an outer persistent loop is never
+    taken for it.
+  - `load`: the weight stream, for a variant with no MMA (an ablation that removes it). Of the innermost loops whose
+    body holds a global load, the one moving the most load bytes per iteration. It is not the smallest, because a
+    small loop that loads indices (a gather, a tile-table walk) also holds a load. The record lists the loops passed
+    over (`rejected`) and the next candidate with its loads (`runner_up`).
+  - On served K25 both keys take the same loop (the compiled test, at both toolchains). That is necessary, not
+    sufficient: the test's fixture with an index loop beside the weight loop is the case that bites.
+- **The loads, per weight:** every record carries `loads_per_weight`, the loop's global-load opcodes (so each count
+  carries its width: `LDG.E.128`, `LDGSTS.E.BYPASS.128`, `LDG.E.U8`). `same_loads(a, b)` says whether a variant keeps
+  every load of its control, and refuses across toolchains and targets. A loop with no MMA has no unroll guard
+  (`unroll` None); its loads are compared with the control's instead, and an unrolled body would show more of them.
 - **The unroll guard:** one K iteration of a BLOCK_M x BLOCK_N x KC tile on W warps issues
   (BLOCK_M/m)(BLOCK_N/n)(KC/k)/W MMAs per warp, for the MMA's shape (HMMA.1688 = m16n8k8, HMMA.16816 = m16n8k16).
   - A body holding k times that is a k-fold unroll by ptxas. It counts against k x the weights per iteration, and k is
