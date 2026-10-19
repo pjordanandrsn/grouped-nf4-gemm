@@ -109,9 +109,9 @@ def test_counts_compare_only_within_one_toolchain():
         sc.compare({**a, "ptxas": None}, {**b, "ptxas": None})
 
 
-#: loggetta's fixture: a small loop that loads indices (one 4-byte LDG), a bigger weight loop (two 16-byte LDGs, no
-#: MMA, as an ablation's), and an outer loop around both. "Smallest" would take the index loop; the outer loop holds the
-#: most bytes of all. The load key must take the weight loop.
+#: An index loop beside a weight loop, inside an outer loop: a small loop that loads indices (one 4-byte LDG), a
+#: bigger weight loop (two 16-byte LDGs, no MMA, as an ablation's), and an outer loop around both. "Smallest" would take
+#: the index loop; the outer loop holds the most bytes in all. The load key must take the weight loop.
 FIXTURE_LOADS = """
         /*0000*/                   S2R R0, SR_CTAID.X ;
         /*0010*/                   LDG.E R2, desc[UR4][R4.64] ;
@@ -131,12 +131,34 @@ def test_the_load_key_takes_the_weight_stream_not_the_smallest_loop():
     rows = sc.parse_sass(FIXTURE_LOADS)
     assert sc.inner_loop(rows) is None                                  # no MMA: the MMA key finds nothing
     loop = sc.inner_loop(rows, key="load")
-    assert (loop["target"], loop["branch"], loop["load_bytes"]) == ("0x40", "0x80", 32)
+    assert (loop["target"], loop["branch"], loop["load_bytes"], loop["own_load_bytes"]) == ("0x40", "0x80", 32, 32)
     assert loop["runner_up"] == {"target": "0x10", "branch": "0x30", "instructions": 3, "load_bytes": 4,
-                                 "loads": {"LDG.E": 1}}
+                                 "own_load_bytes": 4, "loads": {"LDG.E": 1}}
     assert {(r["target"], r["branch"]) for r in loop["rejected"]} == {("0x10", "0x30"), ("0x0", "0x90")}
+    assert [r["own_load_bytes"] for r in loop["rejected"]] == [4, 0] and loop["nested_loops"] == 0   # the outer owns 0
     with pytest.raises(ValueError, match="loop key"):
         sc.inner_loop(rows, key="smallest")
+
+
+#: A weight loop that wraps an inner index loop (a gather inside K that ptxas did not unroll). An "innermost" rule
+#: would take the index loop; own bytes take the weight loop.
+FIXTURE_NESTED = """
+        /*0000*/                   LDG.E.128 R8, desc[UR4][R6.64] ;
+        /*0010*/                   LDG.E.128 R12, desc[UR4][R6.64+0x10] ;
+        /*0020*/                   LDG.E R2, desc[UR4][R4.64] ;
+        /*0030*/                   IADD3 R4, R4, 0x4, RZ ;
+        /*0040*/              @P0  BRA 0x20 ;
+        /*0050*/                   FFMA R16, R8, R9, R16 ;
+        /*0060*/              @P1  BRA 0x0 ;
+"""
+
+
+def test_a_weight_loop_that_wraps_an_index_loop_still_wins():
+    loop = sc.inner_loop(sc.parse_sass(FIXTURE_NESTED), key="load")
+    assert (loop["target"], loop["branch"], loop["own_load_bytes"], loop["nested_loops"]) == ("0x0", "0x60", 32, 1)
+    assert loop["runner_up"]["target"] == "0x20" and loop["runner_up"]["own_load_bytes"] == 4
+    with pytest.raises(ValueError, match="nested loop"):          # its bytes per iteration are not static: no guard
+        sc.unroll_by_bytes(loop, lanes=128, bytes_per_iteration=4096)
 
 
 def test_both_keys_take_the_same_loop_where_the_k_loop_holds_the_mmas():
@@ -155,22 +177,58 @@ def test_load_widths_and_the_load_signature():
     assert sc.load_signature(loop, lanes=128, weights_per_iteration=2048) == {"LDG.E.128": 2 * 128 / 2048}
 
 
-def test_a_loop_without_mmas_records_its_loads_and_no_unroll_check():
-    """The MMA unroll guard runs only on a loop that holds MMAs; a no-MMA loop records ``unroll`` None and its loads,
-    which :func:`same_loads` compares with the control's (whose loop the guard did check)."""
-    rec = sc.loop_record(sc.parse_sass(FIXTURE_LOADS), num_warps=4, weights_per_iteration=2048, tile=(16, 32, 64),
-                         loop_key="load")
-    assert rec["loop_key"] == "load" and rec["unroll"] is None and rec["loads_per_weight"] == {"LDG.E.128": 0.125}
+def test_a_loop_without_mmas_is_guarded_by_its_bytes_or_says_unchecked():
+    """The MMA guard needs MMAs. A no-MMA loop is guarded by a stated ``bytes_per_iteration`` (the weight loop moves
+    32 bytes a lane, 4,096 on 128 lanes): k = 1 at 4,096, k = 2 at 2,048 (its per-weight figures halve), and a body
+    that is no whole number of iterations is refused. Without the stream it says unchecked, never 1."""
+    rows = sc.parse_sass(FIXTURE_LOADS)
+    kw = dict(num_warps=4, weights_per_iteration=2048, tile=(16, 32, 64), loop_key="load")
+    bare = sc.loop_record(rows, **kw)
+    assert bare["unroll"] is None and bare["unroll_guard"] is None and bare["loads_per_weight"] == {"LDG.E.128": 0.125}
+    one = sc.loop_record(rows, bytes_per_iteration=4096, **kw)
+    assert (one["unroll"], one["unroll_guard"], one["loads_per_weight"]) == (1, "bytes", {"LDG.E.128": 0.125})
+    two = sc.loop_record(rows, bytes_per_iteration=2048, **kw)
+    assert (two["unroll"], two["loads_per_weight"]) == (2, {"LDG.E.128": 0.0625})
+    with pytest.raises(ValueError, match="whole number"):
+        sc.loop_record(rows, bytes_per_iteration=3000, **kw)
+    assert sc.stream_bytes(one) == 4096 and sc.stream_bytes(two) == 2048    # one iteration's, not the body's
+    with pytest.raises(ValueError, match="unchecked"):
+        sc.stream_bytes(bare)
+
+
+def test_the_function_and_outside_loop_load_totals():
+    """For a variant whose loop was unrolled away: the raw load counts of the whole function and of what lies outside
+    the picked loop, so the totals can be checked against the control's per-iteration loads x trips + its outside."""
+    rec = sc.loop_record(sc.parse_sass(FIXTURE_LOADS), num_warps=4, weights_per_iteration=2048, loop_key="load")
+    assert rec["loads_in_function"] == {"LDG.E": 1, "LDG.E.128": 2}
+    assert rec["loads_outside_loop"] == {"LDG.E": 1}                   # the index loop's load lies outside the pick
+    straight = sc.loop_record(sc.parse_sass("        /*0000*/   LDG.E.64 R2, desc[UR4][R4.64] ;\n"
+                                            "        /*0010*/   EXIT ;"), num_warps=4, weights_per_iteration=2048,
+                              loop_key="load")
+    assert straight["inner_loop"] is None and straight["loads_in_function"] == {"LDG.E.64": 1}
 
 
 def test_same_loads_compares_one_toolchain_and_one_target_only():
-    a = {"triton": "3.4.0", "ptxas": "12.8.93", "arch": "sm_120", "loads_per_weight": {"LDG.E.128": 0.125}}
+    a = {"triton": "3.4.0", "ptxas": "12.8.93", "arch": "sm_120", "unroll": 1, "loads_per_weight": {"LDG.E.128": 0.125}}
     assert sc.same_loads(a, dict(a)) and not sc.same_loads(a, dict(a, loads_per_weight={"LDG.E.128": 0.25}))
     assert not sc.same_loads(a, dict(a, loads_per_weight={"LDG.E.64": 0.125}))             # the same count, narrower
     with pytest.raises(ValueError, match="across toolchains"):
         sc.same_loads(a, dict(a, triton="3.8.0"))
     with pytest.raises(ValueError, match="across targets"):
         sc.same_loads(a, dict(a, arch="sm_86"))
+
+
+def test_an_unchecked_loop_that_reads_as_unrolled_is_refused_not_called_different():
+    """Every load count a whole k times the control's, on a side whose unroll is unchecked: that is an unroll, not a
+    different kernel, so the comparison refuses and names k rather than answering False."""
+    control = {"triton": "3.4.0", "ptxas": "12.8.93", "arch": "sm_120", "unroll": 1,
+               "loads_per_weight": {"LDG.E.128": 0.0625, "LDG.E": 0.03125}}
+    unchecked = dict(control, unroll=None, loads_per_weight={"LDG.E.128": 0.25, "LDG.E": 0.125})
+    with pytest.raises(ValueError, match="unrolled 4-fold"):
+        sc.same_loads(unchecked, control)
+    with pytest.raises(ValueError, match="unrolled 4-fold"):
+        sc.same_loads(control, unchecked)
+    assert not sc.same_loads(dict(unchecked, loads_per_weight={"LDG.E.128": 0.25, "LDG.E": 0.0625}), control)  # no k
 
 
 def test_the_shared_memory_signature_and_same_shared():
@@ -332,6 +390,8 @@ def test_both_loop_keys_take_the_same_loop_on_served_k25(arch):
     assert by_load["loads_per_weight"] and sc.same_loads(by_load, served) and sc.same_shared(by_load, served)
     assert served["shared_per_weight"], "K25's served loop stages its MMA operands through shared memory"
     assert by_load["unroll"] == 1 == served["unroll"]                  # the loop holds the MMAs: the guard still runs
+    assert by_load["unroll_guard"] == "mma" == served["unroll_guard"]
+    assert sc.stream_bytes(by_load) == sc.stream_bytes(served)        # the stream a variant is counted against
 
 
 @pytest.mark.skipif(not _nvidia_backend() or _loads_and_sum is None,
@@ -345,7 +405,37 @@ def test_a_variant_without_an_mma_is_found_by_the_load_key_only(arch):
     assert by_mma["inner_loop"] is None                                 # no MMA: the MMA key finds no loop
     loop = by_load["inner_loop"]
     assert loop and not loop["classes"].get("mma") and loop["load_bytes"] > 0
-    assert by_load["unroll"] is None and by_load["loads_per_weight"]     # its loads stand in for the guard
+    assert by_load["unroll"] is None and by_load["unroll_guard"] is None             # no stream stated: unchecked
+    guarded = sc.compile_and_count(_loads_and_sum, sig, {"BLOCK_N": 32, "KC": 64}, {"K": 2048}, loop_key="load",
+                                   bytes_per_iteration=32 * 64, **kw)            # the tile: 32 x 64 u8 bytes
+    assert guarded["unroll_guard"] == "bytes" and _bytes_per_weight(guarded) == 1.0  # one byte a u8 weight
+
+
+def _bytes_per_weight(rec):
+    return sum(sc.load_bytes(op) * n for op, n in rec["loads_per_weight"].items())
+
+
+@pytest.mark.skipif(not _nvidia_backend() or _loads_and_sum is None,
+                    reason="triton's NVIDIA backend (cuobjdump) is not installed")
+def test_a_no_mma_loop_that_ptxas_unrolled_counts_one_iteration_per_iteration():
+    """K a constexpr (as in any variant built to K25's signature): the trip count is known, and ptxas unrolls the
+    no-MMA loop on sm_120 (4-fold under triton 3.4.0 and 3.8.0). Unguarded, the record says unchecked and reads 4 bytes
+    a weight; guarded by the tile's 2,048-byte stream, it finds k and reads the one byte a u8 weight moves. And
+    compared unguarded against the guarded record, the loads refuse with k instead of calling it a different kernel."""
+    import triton
+    sig = {"w_ptr": "*u8", "out_ptr": "*fp32", "K": "constexpr", "BLOCK_N": "constexpr", "KC": "constexpr"}
+    consts = {"BLOCK_N": 32, "KC": 64, "K": 2048}
+    kw = dict(arch=120, num_warps=4, num_stages=3, weights_per_iteration=32 * 64, tile=(16, 32, 64), loop_key="load")
+    bare = sc.compile_and_count(_loads_and_sum, sig, consts, {}, **kw)
+    guarded = sc.compile_and_count(_loads_and_sum, sig, consts, {}, bytes_per_iteration=32 * 64, **kw)
+    k = guarded["unroll"]
+    assert bare["unroll"] is None and guarded["unroll_guard"] == "bytes" and k >= 1
+    assert _bytes_per_weight(guarded) == 1.0 and _bytes_per_weight(bare) == float(k)
+    if triton.__version__ == "3.4.0":
+        assert k == 4 and guarded["loads_per_weight"] == {"LDG.E.128": 0.0625}       # the case pinned
+    if k > 1:
+        with pytest.raises(ValueError, match=f"unrolled {k}-fold"):
+            sc.same_loads(bare, guarded)
 
 
 @pytest.mark.skipif(not _nvidia_backend(), reason="triton's NVIDIA backend (cuobjdump) is not installed")
@@ -359,3 +449,4 @@ def test_k25_counts_at_the_pinned_toolchain():
         assert served["ptxas"] == "12.8.93"
         assert sc.compare(served, bare) < 1
         assert served["inner_loop"]["instructions"] == body and served["lane_instr_per_weight"] == body * 128 / 2048
+        assert sc.stream_bytes(served) == 3584      # a variant's bytes_per_iteration: 28 bytes a lane x 128 lanes

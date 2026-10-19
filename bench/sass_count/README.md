@@ -26,16 +26,27 @@ python sass_count.py --kernel-dir DIR --module MOD --fn ARM --loop-key load   # 
   weights per iteration (BLOCK_N x KC), a static floor under one issue per scheduler per cycle.
   - `mma`, the default: the smallest backward branch whose body holds an MMA, so an outer persistent loop is never
     taken for it.
-  - `load`: the weight stream, for a variant with no MMA (an ablation that removes it). Of the innermost loops whose
-    body holds a global load, the one moving the most load bytes per iteration. It is not the smallest, because a
-    small loop that loads indices (a gather, a tile-table walk) also holds a load. The record lists the loops passed
-    over (`rejected`) and the next candidate with its loads (`runner_up`).
+  - `load`: the weight stream, for a variant with no MMA (an ablation that removes it). Of the loops whose body holds
+    a global load, the one whose OWN load bytes per iteration (less those of loops nested inside it) are the most.
+    It is not the smallest, because a small loop that loads indices (a gather, a tile-table walk) also holds a load.
+    Own bytes keep an outer persistent loop from winning on the K loop's bytes, and keep a weight loop that wraps an
+    inner index loop from losing to it. The record lists the loops passed over (`rejected`), the next candidate with
+    its loads (`runner_up`) and how many loops sit inside the pick (`nested_loops`).
   - On served K25 both keys take the same loop (the compiled test, at both toolchains). That is necessary, not
-    sufficient: the test's fixture with an index loop beside the weight loop is the case that bites.
+    sufficient: the test's fixtures (an index loop beside the weight loop, and one inside it) are the cases that bite.
 - **The loads, per weight:** every record carries `loads_per_weight`, the loop's global-load opcodes (so each count
   carries its width: `LDG.E.128`, `LDGSTS.E.BYPASS.128`, `LDG.E.U8`). `same_loads(a, b)` says whether a variant keeps
-  every load of its control, and refuses across toolchains and targets. A loop with no MMA has no unroll guard
-  (`unroll` None); its loads are compared with the control's instead, and an unrolled body would show more of them.
+  every load of its control, and refuses across toolchains and targets. Where one side's unroll is unchecked and its
+  every count is the same whole multiple k of the other's, it refuses and names k (an unroll, not a different kernel).
+- **The unroll guard for a loop with no MMA:** ptxas unrolls such a loop when the trip count is known at compile time,
+  as it is for any variant built to K25's signature (`K` is a constexpr). Pass `bytes_per_iteration` (CLI
+  `--bytes-per-iteration`): k = the loop's load bytes per lane x lanes / bytes_per_iteration, refused unless whole,
+  and refused on a loop that wraps a nested loop. Take the stream from the control with `stream_bytes(rec)` (K25's
+  served loop moves 3,584 bytes an iteration, not its 3,200-byte formula, since some lanes load redundantly). Every
+  record names its `unroll_guard` (`"mma"`, `"bytes"` or None, unchecked).
+- **The loads as totals:** `loads_in_function` and `loads_outside_loop`, raw counts, for a variant whose loop ptxas
+  unrolled away entirely: its function's loads equal the control's per-iteration loads x the trip count, plus the
+  control's loads outside its loop.
 - **The shared-memory traffic, per weight:** `shared_per_weight` (`LDSM.16.M88.4`, `LDS.64`, `STS.128` ...), and
   `same_shared(a, b)` with the same refusals: the check behind a claim that a variant keeps its control's operand
   staging.
