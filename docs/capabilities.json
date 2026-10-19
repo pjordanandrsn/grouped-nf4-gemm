@@ -496,7 +496,9 @@
     "int4_b32:swiglu_rows",
     "int4_b32:combine_rows",
     "int4_b32:reduce_partials",
-    "dense_gemv:gemv_bf16_bw"
+    "dense_gemv:gemv_bf16_bw",
+    "dense_gemv:gemv_i8_bw",
+    "dense_gemv:quantize_rows_int8"
    ],
    "documentation": [
     "docs/solutions/fp8-paged-attention-for-moe-serving.md",
@@ -513,7 +515,8 @@
     "int4_b32 imports triton at module level and is not importable without it",
     "combine_rows and reduce_partials carry an accuracy contract, not a bitwise one: each is within the error bound of a correct fp32 summation in every census case on an RTX 5090, and neither is bitwise the torch chain it replaced (lane B393; gnf4.kernel.combine-rows-accuracy.5090.2026-09-23, gnf4.kernel.reduce-partials-slot-order.5090.2026-09-23); the kernel's output and torch's chain were each bit-identical on sm_86 and sm_120 at the census cases (corrected 2026-09-24)",
     "GNF4_PDL is on by default, capped at 8 activation rows, since experts4bit-qlora lane P113 read CAP_DEFAULT on SC1's int4 serving configuration (e4b.serve.p113.gnf4-pdl-capped.qwen3-int4.5090.2026-10-04; uncapped it cost the 16-request step there, which is why the cap is the default); lane K28 read the mechanism on the decode chain (gnf4.kernel.k28-pdl-decode-chain.5090.2026-10-04); it is inert on CPU, under the interpreter, on ROCm and below sm_90, and its speed elsewhere is unread",
-    "dense_gemv.gemv_bf16_bw (lane K35) is experts4bit-qlora's P148 prototype kernel verbatim behind a frozen per-shape plan (any other shape runs the default plan, untimed): one activation row only (a multi-row call keeps cuBLAS), and it routes no model call by itself. Its tolerance contract against cuBLAS is checked on the card (kernel/test_dense_gemv.py); no speed is claimed here, because the consumer's served read is the timing of record"
+    "dense_gemv.gemv_bf16_bw (lane K35) is experts4bit-qlora's P148 prototype kernel verbatim behind a frozen per-shape plan (any other shape runs the default plan, untimed): one activation row only (a multi-row call keeps cuBLAS), and it routes no model call by itself. Its tolerance contract against cuBLAS is checked on the card (kernel/test_dense_gemv.py); no speed is claimed here, because the consumer's served read is the timing of record",
+    "dense_gemv.gemv_i8_bw (lane K36) is experts4bit-qlora's P148 int8 prototype kernel verbatim, with its quantizer quantize_rows_int8 (symmetric per-row absmax, s = absmax / 127) verbatim, behind a frozen plan at the int8 lm_head's 151936 x 2048 (any other shape runs the default plan, untimed): one activation row only, int8 weights with an fp32 per-row scale, and it routes no model call by itself. Its tolerance contract against cuBLAS on the bf16 head is checked on the card (kernel/test_dense_gemv_i8.py); the int8 grid's effect on a model's quality is the consumer's ruling (experts4bit-qlora P150), and no speed is claimed here: the consumer's served read is the timing of record"
    ],
    "status": "measured-private"
   },

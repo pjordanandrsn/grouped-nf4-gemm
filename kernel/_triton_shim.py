@@ -129,7 +129,10 @@ _CPU_PATH = {
         "torch.nn.functional.linear(x, w) -- the bf16 reference that "
         "test_dense_gemv_interp pins gemv_bf16_bw against (within bf16's "
         "output rounding; the tolerance contract against cuBLAS is checked "
-        "compiled, on the card).",
+        "compiled, on the card). For gemv_i8_bw, use "
+        "(q.float() * s[:, None]) @ x.float() over the same int8 weights and "
+        "fp32 row scales -- the dequantized reference test_dense_gemv_i8_interp "
+        "pins it against.",
     "int4_b32":
         "For a CPU-checkable result over the same int4-b32 bytes, use "
         "(xq.float() * xs.repeat_interleave(32, dim=1)) @ "
