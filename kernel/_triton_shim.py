@@ -124,6 +124,12 @@ _CPU_PATH = {
         "values and fp32 scales into the paged row layout -- the eager path test_fp8_kv_append pins the "
         "fused append against byte for byte. fp8_kv takes only rocm_refusal from this shim; it imports "
         "triton itself and refuses a launch without it before reaching this message.",
+    "dense_gemv":
+        "For a CPU-checkable result over the same bf16 weights, use "
+        "torch.nn.functional.linear(x, w) -- the bf16 reference that "
+        "test_dense_gemv_interp pins gemv_bf16_bw against (within bf16's "
+        "output rounding; the tolerance contract against cuBLAS is checked "
+        "compiled, on the card).",
     "int4_b32":
         "For a CPU-checkable result over the same int4-b32 bytes, use "
         "(xq.float() * xs.repeat_interleave(32, dim=1)) @ "
