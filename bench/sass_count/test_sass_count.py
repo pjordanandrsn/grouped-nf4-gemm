@@ -5,7 +5,11 @@ compiled at e4b's served plan.
 
 The specialization is the point of the compile test. With the JIT's ``tt.divisibility`` hints, K25's weight bytes
 load vectorized. Without them, they load as single bytes with per-element address arithmetic, the inflated count.
-So the test fails if the hints go missing, not just if a number moves."""
+So the test fails if the hints go missing, not just if a number moves.
+
+The STRUCTURE is checked on any triton (CI's latest-triton step). The COUNTS are pinned only at the served stack's
+toolchain, triton 3.4.0 with its bundled ptxas 12.8.93 (CI's hip-compile step), because a newer one moves them."""
+import functools
 import os
 import pathlib
 import sys
@@ -79,6 +83,32 @@ def test_a_record_without_a_tile_never_claims_the_unroll_check():
     assert checked["unroll"] == 2 and checked["lane_instr_per_weight"] == 17 * 128 / 4096
 
 
+def test_a_branch_with_its_predicate_as_an_operand_closes_a_loop():
+    """Newer ptxas (12.9.86, triton 3.8.0) closes K25's sm_120 K loop with ``BRA.U UP0, 0xb70``: the uniform predicate
+    is an operand, not an ``@UP0`` guard. Missed, the loop is not found at all."""
+    rows = sc.parse_sass("""
+        /*0000*/                   S2R R0, SR_CTAID.X ;
+        /*0010*/                   HMMA.1688.F32.TF32 R4, R56, R36, R4 ;
+        /*0020*/                   BRA.U UP0, 0x10 ;
+        /*0030*/                   BRA.U !UP1, 0x50 ;
+        /*0040*/                   HMMA.1688.F32.TF32 R4, R56, R36, R4 ;
+        /*0050*/                   EXIT ;
+""")
+    assert sc.backward_branches(rows) == [(0x10, 0x20)]      # the forward branch to 0x50 is no loop
+    assert sc.inner_loop(rows)["instructions"] == 2
+
+
+def test_counts_compare_only_within_one_toolchain():
+    a = {"triton": "3.4.0", "ptxas": "12.8.93", "lane_instr_per_weight": 17.0}
+    b = {"triton": "3.4.0", "ptxas": "12.8.93", "lane_instr_per_weight": 24.125}
+    assert sc.compare(a, b) == 17.0 / 24.125
+    for other in ({**b, "triton": "3.8.0"}, {**b, "ptxas": "12.9.86"}, {**b, "ptxas": None}):
+        with pytest.raises(ValueError, match="across toolchains"):
+            sc.compare(a, other)
+    with pytest.raises(ValueError, match="across toolchains"):           # unknown on both sides is still unknown
+        sc.compare({**a, "ptxas": None}, {**b, "ptxas": None})
+
+
 def test_no_mma_means_no_inner_loop():
     assert sc.inner_loop(sc.parse_sass("        /*0000*/  @P0 BRA 0x0 ;\n")) is None
 
@@ -119,21 +149,50 @@ def _nvidia_backend():
         return False
 
 
-@pytest.mark.skipif(not _nvidia_backend(), reason="triton's NVIDIA backend (cuobjdump) is not installed")
-def test_k25_at_the_served_plan_loads_vectorized_only_when_specialized():
-    import triton
+def _pinned_toolchain():
+    try:
+        import triton
+        return triton.__version__ == "3.4.0"
+    except Exception:
+        return False
+
+
+@functools.lru_cache(maxsize=None)
+def _k25_compiles(arch: int) -> tuple:
+    """K25's gate_up at the served plan for ``sm_<arch>``: (served, bare), the compile with and without the hints."""
     sys.path.insert(0, str(KERNEL))
     import nf4_smallm
     fn = nf4_smallm._gemm_nf4_grouped_smallm
     sig, consts, values, wpi = sc.k25_served("gate_up")
-    kw = dict(arch=86, num_warps=4, num_stages=3, weights_per_iteration=wpi, tile=(16, 32, 64))
-    served = sc.compile_and_count(fn, sig, consts, values, **kw)
-    bare = sc.compile_and_count(fn, sig, consts, values, specialize=False, **kw)
+    kw = dict(arch=arch, num_warps=4, num_stages=3, weights_per_iteration=wpi, tile=(16, 32, 64))
+    return (sc.compile_and_count(fn, sig, consts, values, **kw),
+            sc.compile_and_count(fn, sig, consts, values, specialize=False, **kw))
+
+
+@pytest.mark.skipif(not _nvidia_backend(), reason="triton's NVIDIA backend (cuobjdump) is not installed")
+@pytest.mark.parametrize("arch", [86, 120])
+def test_k25_at_the_served_plan_loads_vectorized_only_when_specialized(arch):
+    """STRUCTURE, on any triton: the served instruction shape and count, one K iteration per loop body, and
+    vectorized weight loads under the JIT's hints (scalar without them). It holds under triton 3.4.0 and 3.8.0
+    alike. The counts do not, so they are pinned only at the served stack's toolchain (the next test)."""
+    import triton
+    served, bare = _k25_compiles(arch)
     s_ops, b_ops = served["inner_loop"]["opcodes"], bare["inner_loop"]["opcodes"]
     assert s_ops.get("HMMA.1688.F32.TF32") == 8 == b_ops.get("HMMA.1688.F32.TF32")     # the served instruction shape
     assert "LDG.E.U8" not in s_ops, "the served compile scalarized its weight loads: the JIT's hints are missing"
     assert "LDG.E.U8" in b_ops                          # ...and without them they do scalarize
-    assert served["lane_instr_per_weight"] < bare["lane_instr_per_weight"]
     assert served["unroll"] == 1 == bare["unroll"]         # one K iteration per loop body: no silent unroll
-    if triton.__version__ == "3.4.0":                   # the served stack's version: the counts are pinned there
-        assert served["inner_loop"]["instructions"] == 402 and served["lane_instr_per_weight"] == 402 * 128 / 2048
+    assert served["triton"] == bare["triton"] == triton.__version__ and served["ptxas"] == bare["ptxas"]
+
+
+@pytest.mark.skipif(not _nvidia_backend(), reason="triton's NVIDIA backend (cuobjdump) is not installed")
+@pytest.mark.skipif(not _pinned_toolchain(), reason="the counts are pinned at triton 3.4.0, the served stack's; "
+                                                    "another toolchain moves them, so only the structure is checked")
+def test_k25_counts_at_the_pinned_toolchain():
+    """The recorded counts, at triton 3.4.0 and its bundled ptxas 12.8.93 only. There the hints LOWER the count (under
+    3.8.0 they raise it: 36.2 served against 32.6 bare on sm_120)."""
+    for arch, body in ((86, 402), (120, 386)):
+        served, bare = _k25_compiles(arch)
+        assert served["ptxas"] == "12.8.93"
+        assert sc.compare(served, bare) < 1
+        assert served["inner_loop"]["instructions"] == body and served["lane_instr_per_weight"] == body * 128 / 2048

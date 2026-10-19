@@ -30,8 +30,15 @@ python sass_count.py --kernel-dir ../../kernel --no-specialize      # the same c
     recorded as `unroll`.
   - A count that is no whole number of iterations, or an unknown MMA shape, is refused.
   - Without the guard, an unroll would overstate the count k-fold and raise no error.
+- **The toolchain is part of the count:** every record names its triton and the bundled ptxas's version. `compare(a,
+  b)` gives the ratio of two counts only when both come from one toolchain, and refuses otherwise.
+  - A newer triton moves counts further than a decode change does (the table below).
+  - The test checks STRUCTURE on any triton: the MMA shape and count, no unroll, and loads that vectorize under the
+    hints and scalarize without them. It pins the COUNTS only at triton 3.4.0, the served stack's.
+- **Branches:** a loop closes on a backward `BRA`, guarded (`@P0 BRA 0x..`) or with its predicate as an operand
+  (`BRA.U UP0, 0x..`, newer ptxas's form on sm_120).
 
-## Recorded counts (triton 3.4.0, its bundled ptxas 12.8)
+## Recorded counts (triton 3.4.0, its bundled ptxas 12.8.93)
 
 K25 (`nf4_smallm._gemm_nf4_grouped_smallm`) at experts4bit-qlora's served plan: BLOCK_N 32, KC 64, 4 warps, 3 stages,
 the select-tree decode, TF32 on fp32 weights. The shapes are Qwen3-30B-A3B's W16 gate_up (K 2048) and down (K 768);
@@ -43,4 +50,15 @@ both have the same loop body.
 | sm_86 (RTX A2000) | 402 | 25.1 |
 
 On sm_120, per weight: the select tree (FSEL) 10.3, logic, shift and integer 9.9, shared memory 1.1, the absmax
-multiply 1.0, MMA 0.5, global loads 0.4. The sm_86 count is pinned in `test_sass_count.py` on triton 3.4.0.
+multiply 1.0, MMA 0.5, global loads 0.4. Both counts are pinned in `test_sass_count.py` on triton 3.4.0.
+
+## The same compile under triton 3.8.0 (ptxas 12.9.86): not comparable, recorded as a finding
+
+| target | served (hints) | bare (no hints) | at 3.4.0, served |
+|---|---|---|---|
+| sm_120 | 579 instructions, **36.2** per weight | 32.6 | 24.1 |
+| sm_86 | 606, **37.9** | 33.8 | 25.1 |
+
+The structure is unchanged: 8 HMMA.1688 a warp, unroll 1, and vectorized loads under the hints. But the served loop
+costs about 50 % more per weight, and the hints no longer lower the count. The served stack pins triton 3.4.0, so this
+moves nothing served today. A triton bump on the served path would need its own read first.

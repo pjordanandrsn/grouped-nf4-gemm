@@ -13,6 +13,12 @@ per-element address arithmetic, an inflated count. An early K25 count read 34.5 
 against 24.1 as served. :func:`jit_attrs` builds the hints from the served call's own values, and the test fails if
 they go missing.
 
+**The toolchain is part of the count.** The SASS is triton's and its bundled ptxas's, and a newer one can move a count
+further than the change being measured. K25's served loop on sm_120 is 24.1 lane instructions per weight under
+triton 3.4.0 (ptxas 12.8.93, the served stack's) and 36.2 under 3.8.0 (ptxas 12.9.86), where it also exceeds the
+unspecialized compile's 32.6. So every record names its triton and ptxas, and :func:`compare` refuses a ratio across
+two toolchains.
+
 **The loop.** The inner K loop is the backward branch whose body holds the MMAs. Per loop iteration, a program covers
 ``weights_per_iteration`` weights (BLOCK_N x KC for a weight-streaming GEMM) with ``lanes`` threads, so::
 
@@ -46,7 +52,8 @@ CLASSES = (
     ("sync_ctrl", r"^(BAR|DEPBAR|BRA|WARPSYNC|BSYNC|BSSY|NOP|EXIT|ERRBAR|MEMBAR|SYNCS|YIELD)"),
 )
 _LINE = re.compile(r"^\s*/\*([0-9a-f]{4,})\*/\s+(@!?U?P[T0-9]+\s+)?([A-Z][A-Z0-9_.]*)\b([^;]*);")
-_BRA = re.compile(r"BRA[A-Z.]*\s+(?:`\()?(0x[0-9a-f]+)")
+#: A branch's target. The predicate can be an operand: newer ptxas closes K25's sm_120 loop with ``BRA.U UP0, 0xb70``.
+_BRA = re.compile(r"BRA[A-Z.]*\s+(?:!?U?P[T0-9]+\s*,\s*)?(?:`\()?(0x[0-9a-f]+)")
 
 
 def classify(opcode: str) -> str:
@@ -176,10 +183,34 @@ def compile_and_count(fn, signature: dict, constexprs: dict, values: dict, *, ar
     else:
         os.remove(tmp)
     rows = parse_sass(raw)
-    rec = {"arch": f"sm_{arch}", "triton": triton.__version__, "specialized": specialize,
+    rec = {"arch": f"sm_{arch}", **toolchain(), "specialized": specialize,
            "divisible_args": sorted(signature_name(fn, i) for (i,) in attrs), "total_instructions": len(rows)}
     rec.update(loop_record(rows, num_warps=num_warps, weights_per_iteration=weights_per_iteration, tile=tile))
     return rec
+
+
+def toolchain() -> dict:
+    """The compiler behind a count: triton's version and its bundled ptxas's (``ptxas`` is None if it cannot be
+    read). Both move counts, so every record carries them."""
+    import triton
+    ptxas = None
+    try:
+        from triton.backends.nvidia.compiler import get_ptxas_version
+        m = re.search(r"V(\d+\.\d+\.\d+)", get_ptxas_version())
+        ptxas = m.group(1) if m else None
+    except Exception:                                   # an older or newer backend without the helper: unknown
+        pass
+    return {"triton": triton.__version__, "ptxas": ptxas}
+
+
+def compare(a: dict, b: dict) -> float:
+    """``a``'s lane instructions per weight over ``b``'s, for two records of ONE toolchain (the same triton and ptxas,
+    both known). Across toolchains the ratio is refused, not computed: a triton bump moved K25's served count on sm_120
+    from 24.1 (3.4.0) to 36.2 (3.8.0), more than the decode changes this instrument is for."""
+    for key in ("triton", "ptxas"):
+        if a.get(key) is None or a.get(key) != b.get(key):
+            raise ValueError(f"refusing to compare counts across toolchains: {key} {a.get(key)!r} vs {b.get(key)!r}")
+    return a["lane_instr_per_weight"] / b["lane_instr_per_weight"]
 
 
 def loop_record(rows: list, *, num_warps: int, weights_per_iteration: int, tile: tuple | None = None) -> dict:
@@ -241,7 +272,8 @@ def main(argv=None) -> int:
     import importlib
     mod = importlib.import_module(a.module)
     fn = mod._gemm_nf4_grouped_smallm
-    report = {"config": a.config, "module": a.module, "plan": K25_PLAN, "targets": {}}
+    report = {"config": a.config, "module": a.module, "plan": K25_PLAN, "toolchain": toolchain(), "targets": {}}
+    print(f"triton {report['toolchain']['triton']}, ptxas {report['toolchain']['ptxas']}", flush=True)
     for arch in a.arch:
         for shape in K25_SHAPES:
             sig, consts, values, wpi = k25_served(shape)

@@ -192,9 +192,10 @@ jobs:
         run: cd bench/phase1 && python -m pytest test_plan_modes.py -q
 
       # The static instruction counter (bench/sass_count): compiled for NVIDIA targets with triton's bundled ptxas, no
-      # GPU. It fails if the JIT's divisibility hints go missing (then K25's weight loads scalarize). The counts
-      # themselves are pinned in the hip-compile job, which runs triton 3.4.0.
-      - name: static instruction counter (no GPU)
+      # GPU. On this latest triton it checks STRUCTURE only: the MMA shape and count, no unroll, and weight loads
+      # that vectorize under the JIT's divisibility hints and scalarize without them. The counts move with the
+      # toolchain, so they are pinned only in the hip-compile job, which runs triton 3.4.0.
+      - name: static instruction counter, structure only (no GPU)
         run: cd bench/sass_count && python -m pytest test_sass_count.py -q
 
       - name: packaging allowlist + test-wiring guard + the register/prose checkers' own tests
@@ -224,7 +225,8 @@ jobs:
           python -m pip install --quiet torch --index-url https://download.pytorch.org/whl/cpu
           python -m pip install --quiet "triton==3.4.0" "numpy==2.3.2" pytest
           python -c "import triton, numpy; assert triton.__version__ == '3.4.0', triton.__version__; assert numpy.__version__ == '2.3.2', numpy.__version__; import triton.backends.amd.compiler"
-      # bench/sass_count at the pinned triton 3.4.0: the recorded NVIDIA instruction counts are asserted here
+      # bench/sass_count at the pinned triton 3.4.0 (its bundled ptxas 12.8.93): the recorded NVIDIA instruction
+      # counts are asserted here, and only here
       - name: static instruction counter at triton 3.4.0 (counts pinned)
         run: cd bench/sass_count && python -m pytest test_sass_count.py -q
       - name: harvest kernel specializations from the interpreter suites
