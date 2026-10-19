@@ -4,7 +4,7 @@ row (a decode step at T == 1).
 
 ``out[n] = sum_k W[n, k] * x[k]`` for one bf16 row ``x [K]`` and bf16 ``W [N, K]``, accumulated in fp32 and stored in
 bf16. It is meant for a model's dense bf16 projections at decode (Qwen3-30B-A3B's fused q/k/v 5120 x 2048 and o
-2048 x 4096), where cuBLAS's GEMV left about 15 % of the DRAM rate unused in experts4bit-qlora's P142 census.
+2048 x 4096), where experts4bit-qlora's P142 census found cuBLAS's GEMV short of the card's DRAM rate.
 
 The kernel body, :func:`_gemv_bf16_kernel`, is experts4bit-qlora's P148 prototype VERBATIM (``bench/p148/p148_kernels.py``
 at ``caf5a28c``; ``tests`` pin its source's sha256). P148 timed that prototype against cuBLAS in a CUDA-graph
@@ -19,10 +19,12 @@ from __future__ import annotations
 
 from _triton_shim import tl, triton  # noqa: F401  (re-exported names)
 
-#: P148's measured winners (``p148-5090-2``, RTX 5090): (BLOCK_N, KC, num_warps) per (N, K). Frozen: a new shape needs a
-#: read of its own before it joins.
+#: P148's measured winners (``p148-5090-2``, RTX 5090): (BLOCK_N, KC, num_warps) per (N, K). Frozen: a new shape joins
+#: only after a read of its own.
 PLANS = {(5120, 2048): (2, 1024, 4), (2048, 4096): (2, 1024, 4)}
-#: the plan for a shape :data:`PLANS` does not list: the same config (both registered shapes chose it).
+#: the plan for a shape :data:`PLANS` does not list: the same config (both registered shapes chose it). Such a shape
+#: runs UNTIMED: no read licenses it, and its speed there is unknown (the contract still holds; its tests cover ragged
+#: shapes).
 PLAN_DEFAULT = (2, 1024, 4)
 
 
