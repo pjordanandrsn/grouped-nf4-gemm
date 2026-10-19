@@ -36,10 +36,10 @@ GPU kernels need **Linux, an NVIDIA sm_80+ GPU, torch ≥ 2.8 and Triton ≥ 3.4
 CI tests Python 3.11. CPU pack/decode and provenance tools work without CUDA;
 macOS and Windows are not exercised by CI. ROCm and XPU are port targets.
 
-**New in 0.47.1:** `fp8_paged_attn.decode_split_plan(...)` returns the split count the paged FP8 decode attention plans,
-as a pure function of the call's shape and the SM count, so a caller can read the plan without a GPU. An optional
-`split_cap` (default None, today's plan) plans `min(split_cap, plan)` splits; results then agree within tolerance, not
-bit for bit. The default plan is unchanged: a frozen table of 9,216 pre-refactor values holds it.
+**New in 0.48.0:** a new module, `dense_gemv`, ships two single-row decode GEMVs for a decode step at T == 1:
+`gemv_i8_bw(x, q, s)` over an int8 weight with an fp32 per-row scale (with `quantize_rows_int8(w)`), for an int8
+lm_head at half the bf16 bytes, and `gemv_bf16_bw(x, w)` for dense bf16 projections. Each kernel is a timed
+experts4bit-qlora prototype shipped verbatim under a tolerance contract. Nothing routes through them by default.
 [Release notes](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/CHANGELOG.md)
 
 ## Try it on your GPU

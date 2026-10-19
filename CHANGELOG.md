@@ -4,6 +4,51 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
+## 0.48.0 — 2026-10-19 — two single-row decode GEMVs: dense bf16 (K35) and an int8 lm_head (K36)
+
+### `dense_gemv.gemv_i8_bw` (K36): an int8-weight single-row decode GEMV for an int8 lm_head, shipped verbatim under a tolerance contract
+
+`dense_gemv` adds `gemv_i8_bw(x, q, s, out=None)` and `quantize_rows_int8(w)`. Together they make a GEMV for one bf16
+activation row over an int8 `[N, K]` weight with an fp32 per-row scale: `out[n] = s[n] * sum_k q[n, k] * x[k]`, with
+fp32 accumulation and a bf16 output. It suits an int8 lm_head, which has half the bf16 bytes.
+- **Provenance:** the kernel and the quantizer (symmetric per-row absmax, `s = absmax / 127`) are experts4bit-qlora's
+  P148 prototypes verbatim, and tests pin both sources' sha256.
+  - P148 timed that kernel against cuBLAS on an RTX 5090, at Qwen3-30B-A3B's 151936 x 2048 head.
+  - experts4bit-qlora P150 ruled the quantizer's grid GO on quality.
+- **The plan** is frozen to P148's winner at the head. Any other shape runs on `PLAN_I8_DEFAULT` (4, 1024, 4), untimed.
+- **Refusals:** a multi-row call, a dtype other than bf16 `x` / int8 `q` / fp32 `s`, and non-contiguous weight rows or
+  scales.
+- **The tolerance contract** is checked compiled on a CUDA card, as P148's was:
+  - at the head, relative RMS against the dequantized weights at most 1.05 x cuBLAS's on the bf16 head;
+  - one-hot readback exact, and bitwise run to run;
+  - every output within bf16's rounding.
+
+  The interpreter suite runs in CI.
+
+Nothing routes through it and nothing is quantized by default. No speed is claimed here: the consumer's served read is
+the timing of record (`kernel/PREREG-k36-int8-head-gemv.md`).
+
+### `dense_gemv.gemv_bf16_bw` (K35): a dense bf16 single-row decode GEMV, shipped verbatim under a tolerance contract
+
+A new module, `dense_gemv`, ships `gemv_bf16_bw(x, w, out=None)`. It is a bf16 GEMV for one activation row (a decode
+step at T == 1), with fp32 accumulation, a bf16 output and no split-K.
+- Its kernel body is experts4bit-qlora's P148 prototype verbatim; a test pins the source's sha256. That prototype was
+  timed against cuBLAS on an RTX 5090 at Qwen3-30B-A3B's attention-projection shapes.
+- The launch plan is frozen to P148's measured winners. Any other shape runs on `PLAN_DEFAULT` (2, 1024, 4), untimed.
+- A multi-row call is refused (the caller keeps cuBLAS).
+- The tolerance contract is checked compiled on a CUDA card: relative RMS at most 1.05 x cuBLAS's own, one-hot
+  readback exact, bitwise run to run. The interpreter suite runs in CI.
+
+Nothing routes through it by default, and no speed is claimed here: the consumer's served read is the timing of record
+(`kernel/PREREG-k35-dense-bf16-decode-gemv.md`).
+
+### Changed
+
+- `docs/system-manifest.json`: both experts4bit-qlora compatibility records now say the consumer's CI installs the
+  kernel from the v0.47.1 release commit (they said v0.45.0). experts4bit-qlora#1768 moved its CI pin to v0.47.1
+  (`decode_split_plan` and `split_cap`, #558). Prose only: no floor, record or kernel changes. The same bytes land in
+  experts4bit-qlora's copy once a release carries this one (its CI compares against this repository's latest tag).
+
 ## 0.47.1 — 2026-10-18 — the paged decode's split planner as a pure function, with an optional split cap
 
 ### `decode_split_plan` and `split_cap`: the paged decode's split planner as a pure function (experts4bit-qlora#1313)
