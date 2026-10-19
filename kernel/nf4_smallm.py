@@ -18,7 +18,21 @@ Arithmetic. The weight operand is ``(codebook[nibble] * absmax).to(bf16)``, comp
 ``dequant_ref(...).to(bfloat16)`` bit for bit; activations stay bf16 and the accumulation is fp32. That is NOT the
 served kernel's arithmetic (TF32 on the fp32 weight, which rounds the weight less), so a consumer gates it on quality.
 
-Codebook decode, three ways, the same fp32 values and the same outputs bit for bit (the compiled suite holds that).
+Codebook decode, four ways, the same fp32 values and the same outputs bit for bit (the compiled suite holds that).
+``lut="prmt"`` (lane K39, opt-in, no speed claim) decodes with byte-permute (``prmt``) table lookups in inline PTX
+(:func:`_prmt_decode`).
+- **The technique:** the 16 fp32 codebook values are four byte planes. One ``prmt`` looks up four weights' byte among 8
+  entries, a ``lop3`` merges the two halves, and an 8-``prmt`` transpose rebuilds the fp32 words. That is about 6
+  integer instructions per weight, against the tree's ~10 selects plus its nibble interleave.
+- **The static count** (``bench/sass_count``, K25's served plan, triton 3.4.0): 17.0 lane instructions per weight on
+  sm_120, against the tree's 24.1. It is also 64 registers against 80.
+- **The table words** are ``nf4_grouped._bw_table_words()``, the same ones ``_nf4_prmt32`` (K33's GEMV decode)
+  reads.
+- **Why the byte path:** it runs on the packed BYTES, K25's own load. ``_nf4_prmt32`` runs on int32 words, which
+  changes the dot's operand layout and so its accumulation order: a K25 built on it was not bit-identical (~1 bf16 ulp
+  on most calls). On the bytes, K39 is BIT-IDENTICAL to ``"tree"`` on real W16 routing, multi-tile experts, masked
+  tails, the bf16 path and CUDA-graph replay (``test_nf4_smallm_prmt_gpu.py``).
+- **NVIDIA only:** under the interpreter it decodes through the tree, and on ROCm it is refused.
 ``lut="tree"`` (the default since lane K26) loads the 16 codebook values once per program and selects each weight with
 a 4-level tree on the nibble's bits, no load per element: on an RTX 5090 it runs at 0.37-0.38 of the paired lookup's
 time at the NF4 families' B=16 shapes. ``"pair"`` loads ONE int64 per packed byte from a 256-entry table holding both of the byte's fp32 codebook values
@@ -39,10 +53,10 @@ from __future__ import annotations
 import torch
 
 from _triton_shim import triton, tl
-from nf4_grouped import BLOCKSIZE, NF4_LUT, _TL_INTERLEAVE, _lut
+from nf4_grouped import BLOCKSIZE, NF4_LUT, _TL_INTERLEAVE, _bw_table_words, _lut
 
 _SUPPORTED_KC = (64, 128, 256)
-_LUT_MODES = {"load": 0, "pair": 2, "tree": 3}
+_LUT_MODES = {"load": 0, "pair": 2, "tree": 3, "prmt": 4}
 _PAIR_CACHE: dict = {}
 
 
@@ -57,6 +71,61 @@ def pair_lut(device) -> torch.Tensor:
         od = lut[b & 0xF].view(torch.int32).to(torch.int64) & 0xFFFFFFFF
         _PAIR_CACHE[key] = (ev | (od << 32)).to(device)
     return _PAIR_CACHE[key]
+
+
+def _prmt_chunk(src: str, outs: tuple) -> str:
+    """PTX decoding the low 16 bits of register ``src`` (4 nibbles) into the fp32 codebook bits ``outs`` = (field 0..3),
+    where the nibble fields are (byte0.lo, byte0.hi, byte1.lo, byte1.hi).
+    - The selector is ``src & 0x7777``: each nibble's low 3 bits.
+    - Per byte plane p, ``prmt`` reads entries 0-7 and 8-15 (``t{4p}..t{4p+3}``). A ``lop3`` merges them by a byte
+      mask of each nibble's bit 3, built by one sign-replicating ``prmt`` (field 8 replicates 0x80 -> 0xFF, field 1
+      copies 0x00).
+    - Eight ``prmt`` then transpose the four planes into four fp32 words."""
+    lines = [f"and.b32 sel, {src}, 0x7777;",
+             f"shr.b32 fm, {src}, 3;", "and.b32 fm, fm, 0x1111;", "mad.lo.u32 fm, fm, 7, 0x1111;",
+             "prmt.b32 msk, c80, zero, fm;"]
+    for p in range(4):
+        t = [f"t{4 * p + q}" for q in range(4)]
+        lines += [f"prmt.b32 lo, {t[0]}, {t[1]}, sel;", f"prmt.b32 hi, {t[2]}, {t[3]}, sel;",
+                  f"lop3.b32 b{p}, hi, lo, msk, 0xE4;"]                      # (hi & msk) | (lo & ~msk)
+    lines += ["prmt.b32 x0, b0, b1, 0x5140;", "prmt.b32 x1, b0, b1, 0x7362;",
+              "prmt.b32 y0, b2, b3, 0x5140;", "prmt.b32 y1, b2, b3, 0x7362;",
+              f"prmt.b32 {outs[0]}, x0, y0, 0x5410;", f"prmt.b32 {outs[1]}, x0, y0, 0x7632;",
+              f"prmt.b32 {outs[2]}, x1, y1, 0x5410;", f"prmt.b32 {outs[3]}, x1, y1, 0x7632;"]
+    return "\n".join(lines)
+
+
+def _prmt_asm() -> str:
+    """One inline-asm instance of ``lut="prmt"``: ``$8`` = 4 packed bytes, consecutive along K/2. ``$0-$3`` = their
+    HIGH nibbles' fp32 codebook bits (even elements), ``$4-$7`` = their LOW nibbles' (odd elements), byte j at j.
+
+    The 16 table words are ``nf4_grouped._bw_table_words()``, the same byte planes ``_nf4_prmt32`` (K33's GEMV decode)
+    reads, so there is one source of truth for the constants."""
+    words = [w & 0xFFFFFFFF for w in _bw_table_words()]
+    body = ["{", ".reg .b32 t<16>, c80, zero, sel, fm, msk, lo, hi, b<4>, x<2>, y<2>, v;",
+            *[f"mov.b32 t{i}, {hex(w)};" for i, w in enumerate(words)], "mov.b32 c80, 0x80;", "mov.b32 zero, 0;",
+            _prmt_chunk("$8", ("$4", "$0", "$5", "$1")),                    # bytes 0, 1 -> (odd0, even0, odd1, even1)
+            "shr.b32 v, $8, 16;",
+            _prmt_chunk("v", ("$6", "$2", "$7", "$3")),                     # bytes 2, 3 -> (odd2, even2, odd3, even3)
+            "}"]
+    return "\n".join(body)
+
+
+PRMT_ASM_TEXT = _prmt_asm()
+PRMT_CONSTRAINTS_TEXT = "=r,=r,=r,=r,=r,=r,=r,=r,r"
+# a jit kernel reads globals only as constexprs; without triton the shim's tl.constexpr is a placeholder (no kernel can
+# launch there anyway), so the import stays CPU-safe
+_PRMT_ASM = tl.constexpr(PRMT_ASM_TEXT) if callable(tl.constexpr) else PRMT_ASM_TEXT
+_PRMT_CONSTRAINTS = tl.constexpr(PRMT_CONSTRAINTS_TEXT) if callable(tl.constexpr) else PRMT_CONSTRAINTS_TEXT
+
+
+@triton.jit
+def _prmt_decode(wb8):
+    """``lut="prmt"``: ``[..., KC/2]`` packed uint8 -> ``[..., KC]`` fp32 codebook values in k order (element 2j = the
+    HIGH nibble), by byte-permute (``prmt``) table lookups in inline PTX (:func:`_prmt_asm`), exact fp32."""
+    ev, od = tl.inline_asm_elementwise(_PRMT_ASM, _PRMT_CONSTRAINTS, [wb8], dtype=(tl.float32, tl.float32),
+                                       is_pure=True, pack=4)
+    return _TL_INTERLEAVE(ev, od)
 
 
 @triton.jit
@@ -158,6 +227,10 @@ def _gemm_nf4_grouped_smallm(x_ptr, ord_ptr, w_ptr, am_ptr, lut_ptr, row0_ptr, r
             v0 = tl.where(b2, u1, u0)
             v1 = tl.where(b2, u3, u2)
             w = tl.where(b3, v1, v0)
+        elif LUT == 4:
+            # byte-permute decode in inline PTX on the packed BYTES (K25's own load, so its operand layout is kept and
+            # the outputs stay bit-identical; nf4_grouped._nf4_prmt32 decodes int32 words, which changes the layout)
+            w = _prmt_decode(wb.to(tl.uint8))
         else:
             nib = _TL_INTERLEAVE((wb >> 4) & 0xF, wb & 0xF)                  # element 2j = HIGH nibble
             w = tl.load(lut_ptr + nib)
@@ -191,7 +264,9 @@ def gemm_nf4_grouped_smallm(x: torch.Tensor, packed: torch.Tensor, absmax: torch
     ``x`` as the ``[R // k, K]`` token rows.
 
     KC is 64, 128 or 256; when it does not divide K the last chunk is masked (K21's tail). ``lut`` picks the codebook
-    decode (``"pair"``, ``"load"`` or ``"tree"``), the same outputs bit for bit. Capture-legal: every launch parameter is static and
+    decode (``"pair"``, ``"load"``, ``"tree"`` or ``"prmt"``), the same outputs bit for bit. ``"prmt"`` (K39, opt-in, no
+    speed claim) is inline PTX for NVIDIA targets: under the interpreter it decodes through the tree (the same values),
+    and on ROCm it is refused. Capture-legal: every launch parameter is static and
     every input a device tensor; the only allocation is ``out``. Opt-in, no consumer, no speed claim."""
     from int4_smallm import _interpreting
     R, K = x.shape
@@ -217,7 +292,14 @@ def gemm_nf4_grouped_smallm(x: torch.Tensor, packed: torch.Tensor, absmax: torch
     if kc not in _SUPPORTED_KC:
         raise ValueError(f"kc={kc}: expected 64, 128 or 256")
     if lut not in _LUT_MODES:
-        raise ValueError(f"lut={lut!r}: expected 'pair', 'load' or 'tree'")
+        raise ValueError(f"lut={lut!r}: expected 'pair', 'load', 'tree' or 'prmt'")
+    mode = _LUT_MODES[lut]
+    if lut == "prmt":
+        if torch.version.hip:
+            raise ValueError("lut='prmt' is an inline-PTX decode for NVIDIA targets; on ROCm take lut='tree' (the same "
+                             "values)")
+        if _interpreting():
+            mode = _LUT_MODES["tree"]               # the interpreter cannot run inline PTX; the tree decodes the same
     if scatter is not None and scatter.numel() != R:
         raise ValueError(f"scatter has {scatter.numel()} rows, the call has {R}")
     if dot_bf16 is None:
@@ -231,6 +313,6 @@ def gemm_nf4_grouped_smallm(x: torch.Tensor, packed: torch.Tensor, absmax: torch
     _gemm_nf4_grouped_smallm[(t_row0.numel(), triton.cdiv(N, block_n))](
         x.contiguous(), order if gather else t_row0, packed, absmax, table, t_row0, t_rows, t_group, out,
         N, packed.stride(0), packed.stride(1), absmax.stride(0), absmax.stride(1),
-        K=K, BLOCK_M=16, BLOCK_N=block_n, KC=kc, LUT=_LUT_MODES[lut], GATHER=bool(gather), DOT_BF16=bool(dot_bf16),
+        K=K, BLOCK_M=16, BLOCK_N=block_n, KC=kc, LUT=mode, GATHER=bool(gather), DOT_BF16=bool(dot_bf16),
         EVEN_K=K % kc == 0, num_warps=warps, num_stages=stages, **extra)
     return out

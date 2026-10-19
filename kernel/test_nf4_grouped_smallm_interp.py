@@ -36,7 +36,7 @@ DEV = "cpu" if INTERP else ("cuda" if torch.cuda.is_available() else None)
 if DEV is None:
     pytest.skip("compiled mode needs a CUDA device; set TRITON_INTERPRET=1 for the CPU contract run", allow_module_level=True)
 
-LUTS = ["pair", "load", "tree"]
+LUTS = ["pair", "load", "tree", "prmt"]       # "prmt" (K39): compiled, the PTX decode; interpreted, the tree
 
 
 def _stack(E, N, K, seed=0):
@@ -202,7 +202,7 @@ def test_mismatches_are_refused_before_launch():
         gemm_nf4_grouped_smallm(xd, w[0], absmax.to(torch.int32).to(DEV), *w[2:], order)
     with pytest.raises(ValueError, match="expected 64, 128 or 256"):
         gemm_nf4_grouped_smallm(xd, *w, order, kc=96)
-    with pytest.raises(ValueError, match="expected 'pair', 'load' or 'tree'"):
+    with pytest.raises(ValueError, match="expected 'pair', 'load', 'tree' or 'prmt'"):
         gemm_nf4_grouped_smallm(xd, *w, order, lut="reg")
     with pytest.raises(ValueError, match="contiguous along their last"):
         gemm_nf4_grouped_smallm(xd, packed.transpose(1, 2).contiguous().transpose(1, 2).to(DEV), *w[1:], order)
