@@ -133,6 +133,12 @@ _CPU_PATH = {
         "(q.float() * s[:, None]) @ x.float() over the same int8 weights and "
         "fp32 row scales -- the dequantized reference test_dense_gemv_i8_interp "
         "pins it against.",
+    "dense_i8":
+        "For a CPU-checkable result over the same int8 weights and fp32 row "
+        "scales, use x.float() @ (q.float() * s[:, None]).T -- the dequantized "
+        "reference test_dense_i8_interp pins linear_i8 against (within bf16's "
+        "output rounding; the tolerance contract against cuBLAS is checked "
+        "compiled, on the card).",
     "int4_b32":
         "For a CPU-checkable result over the same int4-b32 bytes, use "
         "(xq.float() * xs.repeat_interleave(32, dim=1)) @ "
