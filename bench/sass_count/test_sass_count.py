@@ -173,6 +173,27 @@ def test_same_loads_compares_one_toolchain_and_one_target_only():
         sc.same_loads(a, dict(a, arch="sm_86"))
 
 
+def test_the_shared_memory_signature_and_same_shared():
+    """The operand staging, checked the way the loads are: shared-memory opcodes per weight, with their widths."""
+    rows = sc.parse_sass("""
+        /*0000*/                   LDG.E.128 R8, desc[UR4][R6.64] ;
+        /*0010*/                   STS.128 [R3], R8 ;
+        /*0020*/                   LDSM.16.M88.4 R12, [R3] ;
+        /*0030*/                   LDS.64 R16, [R5] ;
+        /*0040*/                   HMMA.1688.F32.TF32 R20, R12, R16, R20 ;
+        /*0050*/              @P0  BRA 0x0 ;
+""")
+    rec = sc.loop_record(rows, num_warps=4, weights_per_iteration=2048)
+    assert rec["shared_per_weight"] == {"LDS.64": 0.0625, "LDSM.16.M88.4": 0.0625, "STS.128": 0.0625}
+    a = {"triton": "3.4.0", "ptxas": "12.8.93", "arch": "sm_120", "shared_per_weight": rec["shared_per_weight"]}
+    assert sc.same_shared(a, dict(a))
+    assert not sc.same_shared(a, dict(a, shared_per_weight={**rec["shared_per_weight"], "LDS.64": 0.125}))
+    assert not sc.same_shared(a, dict(a, shared_per_weight={"LDS.32": 0.0625, "LDSM.16.M88.4": 0.0625,
+                                                            "STS.128": 0.0625}))           # the same count, narrower
+    with pytest.raises(ValueError, match="across toolchains"):
+        sc.same_shared(a, dict(a, ptxas="12.9.86"))
+
+
 def test_no_mma_means_no_inner_loop():
     assert sc.inner_loop(sc.parse_sass("        /*0000*/  @P0 BRA 0x0 ;\n")) is None
 
@@ -286,7 +307,8 @@ def test_both_loop_keys_take_the_same_loop_on_served_k25(arch):
     by_load = _k25_by_load_key(arch)
     pick = lambda rec: (rec["inner_loop"]["target"], rec["inner_loop"]["branch"])          # noqa: E731
     assert pick(by_load) == pick(served) and by_load["loop_key"] == "load" and served["loop_key"] == "mma"
-    assert by_load["loads_per_weight"] and sc.same_loads(by_load, served)
+    assert by_load["loads_per_weight"] and sc.same_loads(by_load, served) and sc.same_shared(by_load, served)
+    assert served["shared_per_weight"], "K25's served loop stages its MMA operands through shared memory"
     assert by_load["unroll"] == 1 == served["unroll"]                  # the loop holds the MMAs: the guard still runs
 
 

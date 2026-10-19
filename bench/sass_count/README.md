@@ -36,6 +36,9 @@ python sass_count.py --kernel-dir DIR --module MOD --fn ARM --loop-key load   # 
   carries its width: `LDG.E.128`, `LDGSTS.E.BYPASS.128`, `LDG.E.U8`). `same_loads(a, b)` says whether a variant keeps
   every load of its control, and refuses across toolchains and targets. A loop with no MMA has no unroll guard
   (`unroll` None); its loads are compared with the control's instead, and an unrolled body would show more of them.
+- **The shared-memory traffic, per weight:** `shared_per_weight` (`LDSM.16.M88.4`, `LDS.64`, `STS.128` ...), and
+  `same_shared(a, b)` with the same refusals: the check behind a claim that a variant keeps its control's operand
+  staging.
 - **The unroll guard:** one K iteration of a BLOCK_M x BLOCK_N x KC tile on W warps issues
   (BLOCK_M/m)(BLOCK_N/n)(KC/k)/W MMAs per warp, for the MMA's shape (HMMA.1688 = m16n8k8, HMMA.16816 = m16n8k16).
   - A body holding k times that is a k-fold unroll by ptxas. It counts against k x the weights per iteration, and k is

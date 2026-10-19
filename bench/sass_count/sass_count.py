@@ -260,21 +260,41 @@ def compare(a: dict, b: dict) -> float:
     return a["lane_instr_per_weight"] / b["lane_instr_per_weight"]
 
 
-def load_signature(loop: dict, lanes: int, weights_per_iteration: int) -> dict:
-    """The loop's global loads per weight, by opcode, so each count carries its width (``LDG.E.128``, ``LDGSTS.E.64``,
-    ``LDG.E.U8`` ...)."""
+def traffic_signature(loop: dict, lanes: int, weights_per_iteration: int, cls: str) -> dict:
+    """The loop's instructions of class ``cls`` per weight, by opcode, so each count carries its width."""
     scale = lanes / weights_per_iteration
-    return {op: n * scale for op, n in sorted(loop["opcodes"].items()) if classify(op) == "load_global"}
+    return {op: n * scale for op, n in sorted(loop["opcodes"].items()) if classify(op) == cls}
+
+
+def load_signature(loop: dict, lanes: int, weights_per_iteration: int) -> dict:
+    """The loop's global loads per weight (``LDG.E.128``, ``LDGSTS.E.BYPASS.128``, ``LDG.E.U8`` ...)."""
+    return traffic_signature(loop, lanes, weights_per_iteration, "load_global")
+
+
+def shared_signature(loop: dict, lanes: int, weights_per_iteration: int) -> dict:
+    """The loop's shared-memory traffic per weight (``LDSM.16.M88.4``, ``LDS.64``, ``STS.128`` ...): the operand
+    staging an ablation may claim to keep."""
+    return traffic_signature(loop, lanes, weights_per_iteration, "shared")
+
+
+def _same(a: dict, b: dict, key: str, what: str) -> bool:
+    _one_toolchain(a, b)
+    if a.get("arch") != b.get("arch"):
+        raise ValueError(f"refusing to compare {what} across targets: {a.get('arch')!r} vs {b.get('arch')!r}")
+    return a[key] == b[key]
 
 
 def same_loads(a: dict, b: dict) -> bool:
     """Whether two records' inner loops issue the same global loads (count and width) per weight: an ablation of a
     kernel must keep every load of its control, or it is a different kernel. Refused across toolchains, as
     :func:`compare` is, and across targets."""
-    _one_toolchain(a, b)
-    if a.get("arch") != b.get("arch"):
-        raise ValueError(f"refusing to compare loads across targets: {a.get('arch')!r} vs {b.get('arch')!r}")
-    return a["loads_per_weight"] == b["loads_per_weight"]
+    return _same(a, b, "loads_per_weight", "loads")
+
+
+def same_shared(a: dict, b: dict) -> bool:
+    """Whether two records' inner loops issue the same shared-memory traffic (count and width) per weight: the check
+    behind a claim that a variant keeps its control's operand staging. Refused as :func:`same_loads` is."""
+    return _same(a, b, "shared_per_weight", "shared-memory traffic")
 
 
 def loop_record(rows: list, *, num_warps: int, weights_per_iteration: int, tile: tuple | None = None,
@@ -293,6 +313,7 @@ def loop_record(rows: list, *, num_warps: int, weights_per_iteration: int, tile:
         rec["unroll"] = unroll
         rec.update(per_weight(loop, lanes, weights_per_iteration * (unroll or 1)))
         rec["loads_per_weight"] = load_signature(loop, lanes, weights_per_iteration * (unroll or 1))
+        rec["shared_per_weight"] = shared_signature(loop, lanes, weights_per_iteration * (unroll or 1))
     return rec
 
 
