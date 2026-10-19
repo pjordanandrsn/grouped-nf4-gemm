@@ -194,6 +194,28 @@ def test_the_shared_memory_signature_and_same_shared():
         sc.same_shared(a, dict(a, ptxas="12.9.86"))
 
 
+def test_a_parity_set_compares_the_named_opcodes_only():
+    """Math parity for a compute-only variant: the same MMAs and decode-only opcodes per weight as the control, while
+    the load-address arithmetic it drops (IMAD here) may differ. An empty set is refused."""
+    def rec(extra_imad, fsel=2):
+        lines = ["HMMA.1688.F32.TF32 R8, R10, R12, R8"] * 2 + ["FSEL R1, R2, R3, P0"] * fsel + ["FMUL R4, R4, R5"]
+        lines += ["IMAD R6, R6, R7, R8"] * extra_imad
+        sass = "\n".join(f"        /*{16 * i:04x}*/   {op} ;" for i, op in enumerate(lines))
+        sass += f"\n        /*{16 * len(lines):04x}*/   @P0 BRA 0x0 ;"
+        r = sc.loop_record(sc.parse_sass(sass), num_warps=4, weights_per_iteration=2048)
+        return dict(r, triton="3.4.0", ptxas="12.8.93", arch="sm_120")
+    math = dict(classes=("mma",), prefixes=("FSEL", "FMUL"))
+    a0p, ac = rec(extra_imad=6), rec(extra_imad=0)                     # AC drops the address math, keeps the math
+    assert sc.opcode_signature(a0p, **math) == {"FMUL": 0.0625, "FSEL": 0.125, "HMMA.1688.F32.TF32": 0.125}
+    assert sc.same_signature(a0p, ac, **math)
+    assert not sc.same_signature(a0p, ac, classes=("mma", "logic_shift"))   # the whole class sees the address math
+    assert not sc.same_signature(a0p, rec(extra_imad=6, fsel=1), **math)    # a folded decode fails parity
+    with pytest.raises(ValueError, match="empty opcode set"):
+        sc.same_signature(a0p, ac)
+    with pytest.raises(ValueError, match="across targets"):
+        sc.same_signature(a0p, dict(ac, arch="sm_86"), **math)
+
+
 def test_no_mma_means_no_inner_loop():
     assert sc.inner_loop(sc.parse_sass("        /*0000*/  @P0 BRA 0x0 ;\n")) is None
 

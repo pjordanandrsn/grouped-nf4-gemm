@@ -297,6 +297,31 @@ def same_shared(a: dict, b: dict) -> bool:
     return _same(a, b, "shared_per_weight", "shared-memory traffic")
 
 
+def opcode_signature(rec: dict, *, classes: tuple = (), prefixes: tuple = ()) -> dict:
+    """A record's inner-loop opcodes per weight, those whose class is in ``classes`` or whose name starts with one of
+    ``prefixes``. A parity check names its own set: "the same math" for a variant that drops K25's weight loads is the
+    MMAs plus the instructions only the decode issues (for the select tree, ``FSEL`` and the absmax ``FMUL``). The
+    ``logic_shift`` class mixes the decode's nibble work with load-address arithmetic, so a parity set should name
+    opcodes rather than take that whole class."""
+    loop = rec["inner_loop"]
+    scale = rec["lanes"] / (rec["weights_per_iteration"] * (rec.get("unroll") or 1))
+    return {op: n * scale for op, n in sorted(loop["opcodes"].items())
+            if classify(op) in classes or op.startswith(tuple(prefixes))}
+
+
+def same_signature(a: dict, b: dict, *, classes: tuple = (), prefixes: tuple = ()) -> bool:
+    """Whether two records issue the same opcodes per weight in the named set (:func:`opcode_signature`), such as a
+    compute-only variant's math against its control's. Refused across toolchains and targets; an empty set is refused,
+    since it would always match."""
+    if not classes and not prefixes:
+        raise ValueError("an empty opcode set always matches: name classes or prefixes")
+    _one_toolchain(a, b)
+    if a.get("arch") != b.get("arch"):
+        raise ValueError(f"refusing to compare opcodes across targets: {a.get('arch')!r} vs {b.get('arch')!r}")
+    return (opcode_signature(a, classes=classes, prefixes=prefixes)
+            == opcode_signature(b, classes=classes, prefixes=prefixes))
+
+
 def loop_record(rows: list, *, num_warps: int, weights_per_iteration: int, tile: tuple | None = None,
                 loop_key: str = "mma") -> dict:
     """The inner loop's record from parsed SASS, the loop found by ``loop_key`` (:data:`LOOP_KEYS`). With ``tile`` =

@@ -39,6 +39,11 @@ python sass_count.py --kernel-dir DIR --module MOD --fn ARM --loop-key load   # 
 - **The shared-memory traffic, per weight:** `shared_per_weight` (`LDSM.16.M88.4`, `LDS.64`, `STS.128` ...), and
   `same_shared(a, b)` with the same refusals: the check behind a claim that a variant keeps its control's operand
   staging.
+- **A named parity set:** `opcode_signature(rec, classes=..., prefixes=...)` and `same_signature(a, b, ...)` compare
+  the opcodes per weight in a set the caller names: "the same math" for a variant that drops the weight loads, say
+  the MMAs plus the decode-only opcodes (for the select tree, `FSEL` and the absmax `FMUL`). Name opcodes rather than
+  the whole `logic_shift` class, which mixes the decode's nibble work with load-address arithmetic. An empty set is
+  refused.
 - **The unroll guard:** one K iteration of a BLOCK_M x BLOCK_N x KC tile on W warps issues
   (BLOCK_M/m)(BLOCK_N/n)(KC/k)/W MMAs per warp, for the MMA's shape (HMMA.1688 = m16n8k8, HMMA.16816 = m16n8k16).
   - A body holding k times that is a k-fold unroll by ptxas. It counts against k x the weights per iteration, and k is
