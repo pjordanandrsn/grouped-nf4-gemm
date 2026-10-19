@@ -80,7 +80,9 @@ def test_every_shape_reads_the_fp64_reference(n, k):
     ref = _ref(x, w)
     out = D.gemv_bf16_bw(x, w)
     assert out.shape == (n,) and out.dtype == torch.bfloat16
-    assert _rel_rms(out, ref) < 4e-3                       # bf16 output rounding with fp32 accumulation
+    # the interpreter TRUNCATES fp32 -> bf16: a relative RMS near 2^-7 / sqrt(3), about 4.5e-3 (the compiled store
+    # rounds to nearest, about half that; test_dense_gemv.py holds the card to 1.05 x cuBLAS)
+    assert _rel_rms(out, ref) < 2.0 ** -7
     step = ref.abs() * 2.0 ** -7 + 1e-30                    # one bf16 step (the interpreter truncates)
     assert bool(((out.double().cpu() - ref).abs() <= step + ref.abs().max() * 2.0 ** -20).all())
 
