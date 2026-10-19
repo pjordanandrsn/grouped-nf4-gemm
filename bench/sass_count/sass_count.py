@@ -128,7 +128,8 @@ def unroll_factor(loop: dict, *, block_m: int, block_n: int, kc: int, num_warps:
 def jit_attrs(fn, signature: dict, values: dict, backend) -> dict:
     """The served JIT launch's specialization, as ``ASTSource`` attrs: ``tt.divisibility = 16`` on every pointer
     argument (torch allocations are 16-byte aligned) and on every int in ``values`` divisible by 16, through the
-    backend's own ``parse_attr("D")``. An int equal to 1 must be passed as a constexpr by the caller, as the JIT does."""
+    backend's own ``parse_attr("D")``. An int equal to 1 must be passed as a constexpr by the caller, as the JIT
+    does."""
     for name, v in values.items():
         if isinstance(v, int) and v == 1:
             raise ValueError(f"{name} == 1: the JIT makes it a constexpr; pass it in constexprs")
@@ -144,8 +145,8 @@ def compile_and_count(fn, signature: dict, constexprs: dict, values: dict, *, ar
     inner K loop, and return the record. Writes the SASS, PTX and cubin to ``out_dir`` when given.
 
     ``tile`` = (BLOCK_M, BLOCK_N, KC) turns on the unroll guard (:func:`unroll_factor`). A loop body that holds k K
-    iterations counts against k x ``weights_per_iteration``, and k is recorded as ``unroll``. A count that is not a whole
-    number of iterations is refused."""
+    iterations counts against k x ``weights_per_iteration``, and k is recorded as ``unroll``. A count that is not a
+    whole number of iterations is refused."""
     import triton
     from triton.backends.compiler import GPUTarget
     from triton.compiler import ASTSource
@@ -193,9 +194,9 @@ def signature_name(fn, index: int) -> str:
 
 # --------------------------------------------------------------------------------------------- the built-in configs --
 
-#: K25 (``nf4_smallm._gemm_nf4_grouped_smallm``) at experts4bit-qlora's served plan (``hot_residency._K25_PLAN``: BLOCK_N
-#: 32, KC 64, 4 warps, 3 stages, the select-tree decode, fp32 weights through TF32 MMA) on Qwen3-30B-A3B's W16 shapes,
-#: through the lean route (gather, ``gather_div`` = top-k on gate_up, scatter).
+#: K25 (``nf4_smallm._gemm_nf4_grouped_smallm``) at experts4bit-qlora's served plan (``hot_residency._K25_PLAN``:
+#: BLOCK_N 32, KC 64, 4 warps, 3 stages, the select-tree decode, fp32 weights through TF32 MMA) on Qwen3-30B-A3B's
+#: W16 shapes, through the lean route (gather, ``gather_div`` = top-k on gate_up, scatter).
 K25_SIGNATURE = {
     "x_ptr": "*bf16", "ord_ptr": "*i64", "w_ptr": "*u8", "am_ptr": "*fp32", "lut_ptr": "*fp32",
     "row0_ptr": "*i32", "rows_ptr": "*i32", "grp_ptr": "*i32", "out_ptr": "*bf16",
