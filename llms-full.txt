@@ -47,8 +47,9 @@ macOS and Windows are not exercised by CI. ROCm and XPU are port targets.
 
 **New in 0.48.0:** a new module, `dense_gemv`, ships two single-row decode GEMVs for a decode step at T == 1:
 `gemv_i8_bw(x, q, s)` over an int8 weight with an fp32 per-row scale (with `quantize_rows_int8(w)`), for an int8
-lm_head at half the bf16 bytes, and `gemv_bf16_bw(x, w)` for dense bf16 projections. Each kernel is a timed
-experts4bit-qlora prototype shipped verbatim under a tolerance contract. Nothing routes through them by default.
+lm_head at half the bf16 bytes, and `gemv_bf16_bw(x, w)` for dense bf16 projections. Each is a prototype
+experts4bit-qlora timed against cuBLAS, shipped verbatim under a tolerance contract; no speed is claimed here, and
+nothing routes through them by default.
 [Release notes](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/CHANGELOG.md)
 
 ## Try it on your GPU
