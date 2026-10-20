@@ -22,6 +22,15 @@ on:
     types: [labeled, ready_for_review]
   workflow_dispatch:
 
+# One group per pull request, and one per run for everything else (2026-10-20). A pull_request run cancels its own
+# superseded run; a cancelled conclusion never passes a required check. That arm is safe ONLY because no required job
+# can skip (each starts with a failing gate; kernel/test_ci_workflow_shape.py fails if a job-level if: or needs: comes
+# back). Push runs are NOT collapsed: on this repository's history no main run was ever overtaken by a newer one, so a
+# shared group would only add waiting. Every main commit keeps its own run.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}', github.event.pull_request.number) || format('ci-run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   anchor-gate:
     # R1: the projection model must reproduce the published flagship rows.
@@ -118,7 +127,7 @@ jobs:
         run: |
           python -m pip install --quiet --upgrade pip
           python -m pip install --quiet torch --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install --quiet triton pytest numpy
+          python -m pip install --quiet triton pytest numpy pyyaml
 
       # The interpreter suites `importorskip("triton")` -- correct on macOS,
       # where there is no triton wheel at all, but it means a BROKEN install
@@ -157,6 +166,8 @@ jobs:
           TRITON_INTERPRET: "1"
         run: cd kernel && python -m pytest test_shape_feasibility.py -q
 
+      - name: the CI and release workflows' shape (static)
+        run: cd kernel && python -m pytest test_ci_workflow_shape.py -q
       - name: README CPU quickstart (executed) + CPU refusal guard + the declared Python floor (static)
         run: cd kernel && python -m pytest test_readme_cpu_block.py test_cpu_refusal.py test_decode_anchor.py test_census_drift.py test_b393_census_helpers.py test_requires_python_floor.py -q
 
