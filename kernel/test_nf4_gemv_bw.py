@@ -12,6 +12,9 @@ timing here (K33's microbench owns speed, on the registered card; an RTX A2000 r
    build's does not; spills and vector-load use are reported.
 5. **PDL** (sm_90+ only; inert below): the preamble's ``griddepcontrol.wait`` precedes the first global load in the PTX,
    and PDL on is bitwise PDL off.
+6. **swiglu_in** (experts4bit-qlora#1313): the down projection reading ``bf16(silu(gate) * up)`` in its loads is bitwise
+   ``swiglu_rows`` then the GEMV, at the families' down shapes, both decodes, one pass and split-K; every route the
+   bandwidth GEMV does not take falls back to that pair, bitwise; malformed inputs are refused.
 """
 import os
 
@@ -175,3 +178,87 @@ def test_gather_div_is_bitwise_the_expanded_rows_on_the_card(monkeypatch, decode
                             gather_div=8)
     torch.cuda.synchronize()
     assert torch.equal(got, want)
+
+
+# ---- 6. swiglu_in (experts4bit-qlora#1313) ------------------------------------------------------------------------------
+DOWN_SHAPES = [(2048, 768), (1536, 512), (2048, 1024)]      # Qwen3-30B-A3B, Granite-3.1-3b-a800m, OLMoE-1B-7B
+
+
+def _gu(T, K, seed):
+    """bf16 gate-then-up rows: sigmoid's saturated tails on both sides, signed zeros and tiny values among normal draws."""
+    g = torch.Generator(DEV).manual_seed(seed)
+    gu = torch.randn(T, 2 * K, dtype=torch.float32, device=DEV, generator=g) * 4
+    gu[0, :8] = torch.tensor([0.0, -0.0, 30.0, -30.0, 88.0, -88.0, 1e-3, -1e-3], device=DEV)
+    gu[1, K:K + 4] = torch.tensor([0.0, -0.0, 1e4, -1e4], device=DEV)
+    return gu.to(torch.bfloat16)
+
+
+@needs_cuda
+@pytest.mark.parametrize("decode", ["tree", "prmt32"])
+@pytest.mark.parametrize("plan", [None, (16, 256, 4, 2), (32, 512, 4, 1)])
+@pytest.mark.parametrize("N,K", DOWN_SHAPES)
+def test_swiglu_in_is_bitwise_the_two_launches(monkeypatch, decode, plan, N, K):
+    from int4_b32 import swiglu_rows
+    B, A = _stack(N, K, E=8, seed=21)
+    gu = _gu(8, K, 5)
+    ids = [7, 0, 3, 5, 1, 6, 2, 4]
+    want = _run(monkeypatch, B, A, swiglu_rows(gu), ids, decode=decode, plan=plan)
+    nf4_grouped.reset_dispatch_counts()
+    got = gemm_4bit_grouped(gu, B, A, [1] * 8, torch.tensor(ids, dtype=torch.int32, device=DEV), bw_config=plan,
+                            swiglu_in=True)
+    torch.cuda.synchronize()
+    assert nf4_grouped.dispatch_counts()["bw_swiglu"] == 1
+    assert torch.equal(got, want)
+
+
+@needs_cuda
+@pytest.mark.parametrize("decode", ["tree", "prmt32"])
+def test_swiglu_in_reads_swiglu_rows_bytes_elementwise(monkeypatch, decode):
+    """An identity NF4 weight (code 1.0 x absmax 1.0 on the diagonal, code 0.0 elsewhere: exact) makes the down GEMV
+    return its activation, so the fused loads' ``h`` is compared with ``swiglu_rows``' element for element: 393,216
+    values per seed, three seeds. The GEMV's sums would hide a change in how the expression rounds; this does not."""
+    from int4_b32 import swiglu_rows
+    from nf4_pack_ref import quantize_pack_nf4
+    K, T = 768, 512
+    packed, absmax = quantize_pack_nf4(torch.eye(K))
+    B, A = packed[None].to(DEV), absmax[None].to(DEV)
+    assert torch.equal(dequant_ref(B[0], A[0], K, K).float(), torch.eye(K, device=DEV))      # the readback is exact
+    monkeypatch.setenv("GNF4_GEMV_BW", "1")
+    monkeypatch.setenv("GNF4_GEMV_BW_DECODE", decode)
+    for seed in (31, 32, 33):
+        gu = _gu(T, K, seed)
+        got = gemm_4bit_grouped(gu, B, A, [1] * T, torch.zeros(T, dtype=torch.int32, device=DEV),
+                                bw_config=(16, 256, 4, 1), swiglu_in=True)
+        torch.cuda.synchronize()
+        assert torch.equal(got, swiglu_rows(gu)), seed
+
+
+@needs_cuda
+@pytest.mark.parametrize("route", ["dotpad_or_scalar", "tiles"])
+def test_swiglu_in_falls_back_bitwise_off_the_bw_route(monkeypatch, route):
+    """Off the bandwidth GEMV (``GNF4_GEMV_BW=0``, or groups of more than one row) the call runs ``swiglu_rows`` first:
+    bitwise the caller's own two launches, and the fused tally stays at zero."""
+    from int4_b32 import swiglu_rows
+    N, K = 2048, 768
+    B, A = _stack(N, K, E=8, seed=22)
+    monkeypatch.setenv("GNF4_GEMV_BW", "0" if route == "dotpad_or_scalar" else "1")
+    sizes = [1] * 8 if route == "dotpad_or_scalar" else [2, 3, 1, 2]
+    ids = torch.tensor([7, 0, 3, 5, 1, 6, 2, 4][:len(sizes)], dtype=torch.int32, device=DEV)
+    gu = _gu(sum(sizes), K, 6)
+    want = gemm_4bit_grouped(swiglu_rows(gu), B, A, sizes, ids)
+    nf4_grouped.reset_dispatch_counts()
+    got = gemm_4bit_grouped(gu, B, A, sizes, ids, swiglu_in=True)
+    torch.cuda.synchronize()
+    assert nf4_grouped.dispatch_counts()["bw_swiglu"] == 0
+    assert torch.equal(got, want)
+
+
+@needs_cuda
+def test_swiglu_in_refuses_malformed_rows():
+    B, A = _stack(2048, 768, E=2)
+    ids = torch.tensor([0, 1], dtype=torch.int32, device=DEV)
+    for bad, kw in ((torch.zeros(2, 1535, dtype=torch.bfloat16, device=DEV), {}),        # not [T, 2K]
+                    (torch.zeros(2, 1536, dtype=torch.float16, device=DEV), {}),         # not bf16
+                    (torch.zeros(1, 1536, dtype=torch.bfloat16, device=DEV), {"gather_div": 2})):
+        with pytest.raises(ValueError, match="swiglu_in"):
+            gemm_4bit_grouped(bad, B, A, [1, 1], ids, swiglu_in=True, **kw)

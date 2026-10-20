@@ -99,7 +99,7 @@ def _wide_loads() -> bool:
 #: exactly what every replay goes on to execute.
 _DISPATCH_COUNTS = {"dotpad": 0, "dotpad_splitk": 0,
                     "scalar": 0, "scalar_splitk": 0,
-                    "bw_tree": 0, "bw_prmt32": 0, "bw_splitk": 0}
+                    "bw_tree": 0, "bw_prmt32": 0, "bw_splitk": 0, "bw_swiglu": 0}
 
 
 def dispatch_counts() -> dict:
@@ -1184,11 +1184,24 @@ def _nf4_prmt32(words, t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t1
 
 
 @triton.jit
+def _bw_x(xoff, j: tl.constexpr, m, K, SWIGLU: tl.constexpr):
+    """One activation load of :func:`_gemv_nf4_bw` as fp32. ``SWIGLU``: the row is a ``[2K]`` gate-then-up block and the
+    activation is ``h = silu(gate) * up`` rounded to bf16 -- int4_b32's ``_swiglu_rows`` expression, in its order, then
+    its one bf16 store, so the GEMV reads exactly the bytes the separate launch would have written."""
+    if SWIGLU:
+        g = tl.load(xoff + j, mask=m, other=0.0).to(tl.float32)
+        u = tl.load(xoff + K + j, mask=m, other=0.0).to(tl.float32)
+        return ((g * tl.sigmoid(g)) * u).to(tl.bfloat16).to(tl.float32)
+    return tl.load(xoff + j, mask=m, other=0.0).to(tl.float32)
+
+
+@triton.jit
 def _gemv_nf4_bw(a_ptr, b_ptr, amax_ptr, out_ptr, lut_ptr, tbl_ptr, eids_ptr,
                  K, N, T, KBLOCKS_PER_SPLIT,
                  stride_be, stride_bn, stride_ae, stride_an,
                  BLOCK_N: tl.constexpr, KC: tl.constexpr, DECODE: tl.constexpr,
-                 SPLITK: tl.constexpr, GATHER_DIV: tl.constexpr = 1, PDL: tl.constexpr = False):
+                 SPLITK: tl.constexpr, GATHER_DIV: tl.constexpr = 1, PDL: tl.constexpr = False,
+                 SWIGLU: tl.constexpr = False):
     """K33: the single-row NF4 decode GEMV, aimed at the streaming ceiling (kernel/PREREG-k33-nf4-decode-gemv-bw.md).
 
     Program (g, n-tile, k-split) computes ``out[g, n]`` for BLOCK_N rows of expert ``eids[g]`` over its K span. Per
@@ -1205,7 +1218,10 @@ def _gemv_nf4_bw(a_ptr, b_ptr, amax_ptr, out_ptr, lut_ptr, tbl_ptr, eids_ptr,
     exactly. ``SPLITK`` stores fp32 partials ``ws[(k_split * T + g) * N + n]`` (host-reduced in split order, as the
     scalar split-K path does); otherwise one bf16 store. b_ptr is the int32 VIEW of the packed weights. ``GATHER_DIV``
     (default 1): row g's activation is row ``g // GATHER_DIV`` of ``a_ptr`` -- the token rows a top-k MoE expands to
-    (token, slot) rows, read where they are rather than copied ``GATHER_DIV`` times (experts4bit-qlora#1313, P127)."""
+    (token, slot) rows, read where they are rather than copied ``GATHER_DIV`` times (experts4bit-qlora#1313, P127).
+    ``SWIGLU`` (default off): each activation row is a ``[2K]`` gate-then-up row and the GEMV reads
+    ``bf16(silu(gate) * up)`` through :func:`_bw_x` -- the down projection with the separate swiglu launch folded into
+    its loads, bitwise the two-launch path (experts4bit-qlora#1313)."""
     _pdl_enter_nf4(PDL)
     g = tl.program_id(0)
     pid_n = tl.program_id(1)
@@ -1218,7 +1234,10 @@ def _gemv_nf4_bw(a_ptr, b_ptr, amax_ptr, out_ptr, lut_ptr, tbl_ptr, eids_ptr,
     w8 = tl.arange(0, 8)
     b_base = b_ptr + eid * stride_be + offs_n[:, None, None] * stride_bn
     am_base = amax_ptr + eid * stride_ae + offs_n[:, None] * stride_an
-    a_base = a_ptr + (g // GATHER_DIV) * K
+    if SWIGLU:
+        a_base = a_ptr + (g // GATHER_DIV) * (2 * K)
+    else:
+        a_base = a_ptr + (g // GATHER_DIV) * K
     KB = K // 64
     if SPLITK:
         kb_lo = pid_k * KBLOCKS_PER_SPLIT
@@ -1272,19 +1291,19 @@ def _gemv_nf4_bw(a_ptr, b_ptr, amax_ptr, out_ptr, lut_ptr, tbl_ptr, eids_ptr,
             for j in tl.static_range(8):
                 nib = (words >> ((j // 2) * 8 + 4 * (1 - j % 2))) & 0xF
                 wj = _nf4_tree(nib, c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15)
-                xj = tl.load(xoff + j, mask=bmask[:, None], other=0.0).to(tl.float32)
+                xj = _bw_x(xoff, j, bmask[:, None], K, SWIGLU)
                 part += wj * xj[None, :, :]
         else:
             e0, e1, e2, e3, e4, e5, e6, e7 = _nf4_prmt32(words, t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11,
                                                           t12, t13, t14, t15)
-            part += e0.to(tl.float32, bitcast=True) * tl.load(xoff + 0, mask=bmask[:, None], other=0.0).to(tl.float32)[None, :, :]
-            part += e1.to(tl.float32, bitcast=True) * tl.load(xoff + 1, mask=bmask[:, None], other=0.0).to(tl.float32)[None, :, :]
-            part += e2.to(tl.float32, bitcast=True) * tl.load(xoff + 2, mask=bmask[:, None], other=0.0).to(tl.float32)[None, :, :]
-            part += e3.to(tl.float32, bitcast=True) * tl.load(xoff + 3, mask=bmask[:, None], other=0.0).to(tl.float32)[None, :, :]
-            part += e4.to(tl.float32, bitcast=True) * tl.load(xoff + 4, mask=bmask[:, None], other=0.0).to(tl.float32)[None, :, :]
-            part += e5.to(tl.float32, bitcast=True) * tl.load(xoff + 5, mask=bmask[:, None], other=0.0).to(tl.float32)[None, :, :]
-            part += e6.to(tl.float32, bitcast=True) * tl.load(xoff + 6, mask=bmask[:, None], other=0.0).to(tl.float32)[None, :, :]
-            part += e7.to(tl.float32, bitcast=True) * tl.load(xoff + 7, mask=bmask[:, None], other=0.0).to(tl.float32)[None, :, :]
+            part += e0.to(tl.float32, bitcast=True) * _bw_x(xoff, 0, bmask[:, None], K, SWIGLU)[None, :, :]
+            part += e1.to(tl.float32, bitcast=True) * _bw_x(xoff, 1, bmask[:, None], K, SWIGLU)[None, :, :]
+            part += e2.to(tl.float32, bitcast=True) * _bw_x(xoff, 2, bmask[:, None], K, SWIGLU)[None, :, :]
+            part += e3.to(tl.float32, bitcast=True) * _bw_x(xoff, 3, bmask[:, None], K, SWIGLU)[None, :, :]
+            part += e4.to(tl.float32, bitcast=True) * _bw_x(xoff, 4, bmask[:, None], K, SWIGLU)[None, :, :]
+            part += e5.to(tl.float32, bitcast=True) * _bw_x(xoff, 5, bmask[:, None], K, SWIGLU)[None, :, :]
+            part += e6.to(tl.float32, bitcast=True) * _bw_x(xoff, 6, bmask[:, None], K, SWIGLU)[None, :, :]
+            part += e7.to(tl.float32, bitcast=True) * _bw_x(xoff, 7, bmask[:, None], K, SWIGLU)[None, :, :]
         am = tl.load(am_base + blk[None, :], mask=n_mask[:, None] & bmask[None, :], other=0.0)
         acc += tl.sum(tl.sum(part, axis=2) * am, axis=1)
     if SPLITK:
@@ -1293,10 +1312,11 @@ def _gemv_nf4_bw(a_ptr, b_ptr, amax_ptr, out_ptr, lut_ptr, tbl_ptr, eids_ptr,
         tl.store(out_ptr + g * N + offs_n, acc.to(tl.bfloat16), mask=n_mask)
 
 
-def _gemv_nf4_bw_launch(a_cat, B, absmax, eids, out, N, K, T, dev, bw_config=None, gather_div=1):
+def _gemv_nf4_bw_launch(a_cat, B, absmax, eids, out, N, K, T, dev, bw_config=None, gather_div=1, swiglu=False):
     """Launch :func:`_gemv_nf4_bw` for one single-row decode call; returns ``out``. ``bw_config`` (BLOCK_N, KC,
     num_warps, split_k) overrides :func:`_bw_plan` (harness sweeps). ``gather_div``: ``a_cat`` holds T // gather_div
-    token rows and row g reads token g // gather_div."""
+    token rows and row g reads token g // gather_div. ``swiglu``: ``a_cat`` rows are ``[2K]`` gate-then-up rows and the
+    kernel reads ``bf16(silu(gate) * up)`` (``_bw_x``)."""
     plan = tuple(bw_config) if bw_config is not None else _bw_plan(N, K)
     _bw_check_plan(plan)
     bn, kc, warps, sk = plan
@@ -1309,9 +1329,11 @@ def _gemv_nf4_bw_launch(a_cat, B, absmax, eids, out, N, K, T, dev, bw_config=Non
         pdl = _pdl_kw(dev, T)
     except ImportError:
         pdl = {}
-    common = dict(BLOCK_N=bn, KC=kc, DECODE=_BW_DECODES[decode], GATHER_DIV=int(gather_div), num_warps=warps,
-                  num_stages=2, **pdl)
+    common = dict(BLOCK_N=bn, KC=kc, DECODE=_BW_DECODES[decode], GATHER_DIV=int(gather_div), SWIGLU=bool(swiglu),
+                  num_warps=warps, num_stages=2, **pdl)
     _DISPATCH_COUNTS["bw_" + decode] += 1
+    if swiglu:
+        _DISPATCH_COUNTS["bw_swiglu"] += 1
     if sk > 1:
         span = -(-kb // sk)
         ws = torch.empty(sk, T, N, dtype=torch.float32, device=dev)
@@ -1873,6 +1895,7 @@ def gemm_4bit_grouped(
     prefill_groups: int = 1,
     bw_config: tuple | None = None,
     gather_div: int = 1,
+    swiglu_in: bool = False,
 ):
     """Single-launch grouped NF4 GEMM. ``a_cat [T,K]`` bf16/fp16 in group-sorted
     order, ``B [E,N,K//2]`` uint8, ``absmax [E,N,K//64]`` fp32, ``sizes`` the
@@ -1908,6 +1931,11 @@ def gemm_4bit_grouped(
     caller's ``index_select`` expanding them. The bandwidth GEMV reads the token rows where they are; the other
     single-row routes make that expansion here, so every route's output is bitwise the expanded call's
     (experts4bit-qlora#1313, lane P127).
+
+    ``swiglu_in`` (default False; bf16, ``gather_div`` 1): ``a_cat [T, 2K]`` holds gate-then-up rows and the call computes
+    ``down(silu(gate) * up)``. Where the bandwidth GEMV engages it reads ``bf16(silu(gate) * up)`` in its loads (no
+    separate launch, no ``[T, K]`` intermediate); every other route runs int4_b32's ``swiglu_rows`` first. Either way the
+    output is bitwise ``gemm_4bit_grouped(swiglu_rows(a_cat), ...)`` (experts4bit-qlora#1313).
     """
     E, N, _ = B.shape
     gd = int(gather_div)
@@ -1916,6 +1944,11 @@ def gemm_4bit_grouped(
     if gd > 1 and max(sizes) != 1:
         raise ValueError("gather_div serves the singleton decode (every group one row) only")
     T, K = a_cat.shape
+    if swiglu_in:
+        if a_cat.dtype != torch.bfloat16 or K % 2 or gd != 1:
+            raise ValueError(f"swiglu_in needs bf16 [T, 2K] gate-then-up rows and gather_div 1 (got {a_cat.dtype}, "
+                             f"width {K}, gather_div {gd})")
+        K //= 2
     T *= gd
     assert sum(sizes) == T, (sum(sizes), T)
     dev = a_cat.device
@@ -1928,6 +1961,9 @@ def gemm_4bit_grouped(
             f"use dequant_ref(packed, absmax, N, K) — the pure-torch reference the property "
             f"suite pins the kernel against."
         )
+    if swiglu_in and not (max(sizes) == 1 and _bw_engages(N, K, dev)):
+        from int4_b32 import swiglu_rows         # the separate launch: the bytes the fused loads reproduce
+        a_cat, swiglu_in = swiglu_rows(a_cat), False
     # A CUDA tensor passes straight through; anything HOST — a list, or a CPU
     # tensor (Bugbot, PR #85: `torch.tensor([...])` with no device= used to work
     # via the per-element path and must keep working) — is converted ONCE here,
@@ -1955,7 +1991,8 @@ def gemm_4bit_grouped(
         # K33 opt-in (GNF4_GEMV_BW): the bandwidth-targeted single-row GEMV, ahead of dot-pad when it engages;
         # off (the default) leaves every route below exactly as it was.
         if _bw_engages(N, K, dev):
-            return _gemv_nf4_bw_launch(a_cat, B, absmax, eids, out, N, K, T, dev, bw_config, gather_div=gd)
+            return _gemv_nf4_bw_launch(a_cat, B, absmax, eids, out, N, K, T, dev, bw_config, gather_div=gd,
+                                       swiglu=swiglu_in)
         if gd > 1:
             # the other single-row routes read one row per program: make the (token, slot) rows the caller skipped
             a_cat = a_cat.repeat_interleave(gd, dim=0)
