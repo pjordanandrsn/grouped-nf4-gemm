@@ -84,17 +84,69 @@ def backward_branches(rows: list) -> list:
     return found
 
 
-def inner_loop(rows: list) -> dict | None:
-    """The inner K loop: of the loops whose body holds MMAs, the smallest (so an outer persistent loop over work items,
-    if any, is not taken for it). ``None`` when no loop holds an MMA."""
+#: What keys the inner loop: "mma", a body holding an MMA (K25's K loop); "load", the weight stream, for a variant
+#: without an MMA, such as an ablation that removes it. On served K25 both keys pick the same loop.
+LOOP_KEYS = {"mma": "mma", "load": "load_global"}
+#: Bytes a lane moves per global-load instruction, by the opcode's width suffix (no suffix: 32 bits).
+_LOAD_WIDTH = {"128": 16, "64": 8, "U16": 2, "S16": 2, "U8": 1, "S8": 1}
+
+
+def load_bytes(op: str) -> int:
+    """Bytes one lane moves in one global-load instruction ``op`` (0 for the LDGDEPBAR barrier)."""
+    if op.startswith("LDGDEPBAR"):
+        return 0
+    return next((_LOAD_WIDTH[p] for p in op.split(".")[1:] if p in _LOAD_WIDTH), 4)
+
+
+def inner_loop(rows: list, key: str = "mma") -> dict | None:
+    """The inner K loop. ``None`` when no loop holds the ``key`` class.
+
+    - ``key="mma"``: of the loops whose body holds an MMA, the smallest, so an outer persistent loop over work items,
+      if any, is not taken for it.
+    - ``key="load"``: the weight stream. Of the loops whose body holds a global load, the one whose OWN load bytes
+      per iteration (its body's, less those of the loops nested inside it) are the most. It is not the smallest: a
+      small loop that loads indices (a gather over ``order``, a tile-table walk) also holds a load. Own bytes, not
+      total bytes, keep an outer loop from winning on the K loop's bytes alone, and keep a weight loop that wraps an
+      inner index loop from losing to it. They do NOT settle a pipelined persistent kernel, whose stage-ahead prologue
+      inside the outer loop can out-load the K loop; there the outer loop can win, and :func:`unroll_by_bytes`
+      refuses it (it wraps a nested loop), so a guarded count is never silent. The loops passed over are in the
+      pick's ``rejected``, and the next one, with its loads, is its ``runner_up`` (``None`` when there is none), so a
+      reader sees what lost. The pick records ``nested_loops``, how many loops sit inside it."""
+    if key not in LOOP_KEYS:
+        raise ValueError(f"loop key {key!r}: expected one of {sorted(LOOP_KEYS)}")
     loops = []
     for a, b in backward_branches(rows):
         body = [r for r in rows if a <= r[0] <= b]
         ops = collections.Counter(classify(r[1]) for r in body)
-        if ops.get("mma"):
+        if ops.get(LOOP_KEYS[key]):
+            opcodes = collections.Counter(r[1] for r in body)
             loops.append({"target": hex(a), "branch": hex(b), "instructions": len(body), "classes": dict(ops),
-                          "opcodes": dict(collections.Counter(r[1] for r in body))})
-    return min(loops, key=lambda x: x["instructions"]) if loops else None
+                          "opcodes": dict(opcodes), "span": (a, b),
+                          "load_bytes": sum(load_bytes(op) * n for op, n in opcodes.items()
+                                            if classify(op) == "load_global")})
+    if not loops:
+        return None
+    if key == "mma":
+        pick = min(loops, key=lambda x: x["instructions"])
+    else:
+        every = backward_branches(rows)
+        for lp in loops:
+            a, b = lp["span"]
+            inside = [(c, d) for c, d in every if a <= c and d <= b and (c, d) != (a, b)]
+            nested = {r[0] for r in rows if any(c <= r[0] <= d for c, d in inside)}
+            lp["nested_loops"] = len(inside)
+            lp["own_load_bytes"] = sum(load_bytes(r[1]) for r in rows if a <= r[0] <= b and r[0] not in nested
+                                       and classify(r[1]) == "load_global")
+        ranked = sorted(loops, key=lambda x: (-x["own_load_bytes"], x["instructions"]))
+        pick = ranked[0]
+        keys = ("target", "branch", "instructions", "load_bytes", "own_load_bytes")
+        pick["rejected"] = [{k: lp[k] for k in keys} for lp in ranked[1:]]
+        pick["runner_up"] = ({k: ranked[1][k] for k in keys} |
+                             {"loads": {op: n for op, n in sorted(ranked[1]["opcodes"].items())
+                                        if classify(op) == "load_global"}}) if len(ranked) > 1 else None
+    for lp in loops:
+        del lp["span"]
+    return pick
 
 
 def per_weight(loop: dict, lanes: int, weights_per_iteration: int) -> dict:
@@ -147,13 +199,15 @@ def jit_attrs(fn, signature: dict, values: dict, backend) -> dict:
 
 def compile_and_count(fn, signature: dict, constexprs: dict, values: dict, *, arch: int, num_warps: int,
                       num_stages: int, weights_per_iteration: int, out_dir: str | None = None, tag: str = "",
-                      specialize: bool = True, tile: tuple | None = None) -> dict:
+                      specialize: bool = True, tile: tuple | None = None, loop_key: str = "mma",
+                      bytes_per_iteration: int | None = None) -> dict:
     """Compile ``fn`` for ``sm_<arch>`` as the JIT would (``specialize=False`` only to show what is lost), count its
     inner K loop, and return the record. Writes the SASS, PTX and cubin to ``out_dir`` when given.
 
     ``tile`` = (BLOCK_M, BLOCK_N, KC) turns on the unroll guard (:func:`unroll_factor`). A loop body that holds k K
     iterations counts against k x ``weights_per_iteration``, and k is recorded as ``unroll``. A count that is not a
-    whole number of iterations is refused."""
+    whole number of iterations is refused. ``loop_key`` picks how the inner loop is found (:func:`inner_loop`), and
+    ``bytes_per_iteration`` turns on the guard for a loop with no MMA (:func:`unroll_by_bytes`)."""
     import triton
     from triton.backends.compiler import GPUTarget
     from triton.compiler import ASTSource
@@ -185,7 +239,8 @@ def compile_and_count(fn, signature: dict, constexprs: dict, values: dict, *, ar
     rows = parse_sass(raw)
     rec = {"arch": f"sm_{arch}", **toolchain(), "specialized": specialize,
            "divisible_args": sorted(signature_name(fn, i) for (i,) in attrs), "total_instructions": len(rows)}
-    rec.update(loop_record(rows, num_warps=num_warps, weights_per_iteration=weights_per_iteration, tile=tile))
+    rec.update(loop_record(rows, num_warps=num_warps, weights_per_iteration=weights_per_iteration, tile=tile,
+                           loop_key=loop_key, bytes_per_iteration=bytes_per_iteration))
     return rec
 
 
@@ -203,28 +258,159 @@ def toolchain() -> dict:
     return {"triton": triton.__version__, "ptxas": ptxas}
 
 
+def _one_toolchain(a: dict, b: dict) -> None:
+    for key in ("triton", "ptxas"):
+        if a.get(key) is None or a.get(key) != b.get(key):
+            raise ValueError(f"refusing to compare counts across toolchains: {key} {a.get(key)!r} vs {b.get(key)!r}")
+
+
 def compare(a: dict, b: dict) -> float:
     """``a``'s lane instructions per weight over ``b``'s, for two records of ONE toolchain (the same triton and ptxas,
     both known). Across toolchains the ratio is refused, not computed: a triton bump moved K25's served count on sm_120
     from 24.1 (3.4.0) to 36.2 (3.8.0), more than the decode changes this instrument is for."""
-    for key in ("triton", "ptxas"):
-        if a.get(key) is None or a.get(key) != b.get(key):
-            raise ValueError(f"refusing to compare counts across toolchains: {key} {a.get(key)!r} vs {b.get(key)!r}")
+    _one_toolchain(a, b)
     return a["lane_instr_per_weight"] / b["lane_instr_per_weight"]
 
 
-def loop_record(rows: list, *, num_warps: int, weights_per_iteration: int, tile: tuple | None = None) -> dict:
-    """The inner loop's record from parsed SASS. With ``tile`` = (BLOCK_M, BLOCK_N, KC) the unroll guard runs, and
-    ``unroll`` is the k it found. Without it, ``unroll`` is ``None``: the record never claims a check it did not run,
-    and the per-weight figure assumes one iteration per loop body, unchecked."""
-    loop = inner_loop(rows)
+def traffic_signature(loop: dict, lanes: int, weights_per_iteration: int, cls: str) -> dict:
+    """The loop's instructions of class ``cls`` per weight, by opcode, so each count carries its width."""
+    scale = lanes / weights_per_iteration
+    return {op: n * scale for op, n in sorted(loop["opcodes"].items()) if classify(op) == cls}
+
+
+def load_signature(loop: dict, lanes: int, weights_per_iteration: int) -> dict:
+    """The loop's global loads per weight (``LDG.E.128``, ``LDGSTS.E.BYPASS.128``, ``LDG.E.U8`` ...)."""
+    return traffic_signature(loop, lanes, weights_per_iteration, "load_global")
+
+
+def shared_signature(loop: dict, lanes: int, weights_per_iteration: int) -> dict:
+    """The loop's shared-memory traffic per weight (``LDSM.16.M88.4``, ``LDS.64``, ``STS.128`` ...): the operand
+    staging an ablation may claim to keep."""
+    return traffic_signature(loop, lanes, weights_per_iteration, "shared")
+
+
+def _same(a: dict, b: dict, key: str, what: str) -> bool:
+    _one_toolchain(a, b)
+    if a.get("arch") != b.get("arch"):
+        raise ValueError(f"refusing to compare {what} across targets: {a.get('arch')!r} vs {b.get('arch')!r}")
+    if a[key] == b[key]:
+        return True
+    # an unchecked side whose every count is the same whole multiple of the other's reads as an unroll, not a
+    # different kernel: refuse rather than answer False
+    for x, y in ((a, b), (b, a)):
+        if x.get("unroll") is None and x[key] and set(x[key]) == set(y[key]) and all(y[key].values()):
+            ratios = {round(x[key][op] / y[key][op], 9) for op in x[key]}
+            if len(ratios) == 1 and (k := ratios.pop()) > 1 and float(k).is_integer():
+                raise ValueError(f"{what}: an unchecked loop reads {int(k)}x the other's, as if unrolled "
+                                 f"{int(k)}-fold: recount it with bytes_per_iteration")
+    return False
+
+
+def same_loads(a: dict, b: dict) -> bool:
+    """Whether two records' inner loops issue the same global loads (count and width) per weight: an ablation of a
+    kernel must keep every load of its control, or it is a different kernel. Refused across toolchains, as
+    :func:`compare` is, and across targets."""
+    return _same(a, b, "loads_per_weight", "loads")
+
+
+def same_shared(a: dict, b: dict) -> bool:
+    """Whether two records' inner loops issue the same shared-memory traffic (count and width) per weight: the check
+    behind a claim that a variant keeps its control's operand staging. Refused as :func:`same_loads` is."""
+    return _same(a, b, "shared_per_weight", "shared-memory traffic")
+
+
+def opcode_signature(rec: dict, *, classes: tuple = (), prefixes: tuple = ()) -> dict:
+    """A record's inner-loop opcodes per weight, those whose class is in ``classes`` or whose name starts with one of
+    ``prefixes``. A parity check names its own set: "the same math" for a variant that drops K25's weight loads is the
+    MMAs plus the instructions only the decode issues (for the select tree, ``FSEL`` and the absmax ``FMUL``). The
+    ``logic_shift`` class mixes the decode's nibble work with load-address arithmetic, so a parity set should name
+    opcodes rather than take that whole class."""
+    loop = rec["inner_loop"]
+    scale = rec["lanes"] / (rec["weights_per_iteration"] * (rec.get("unroll") or 1))
+    return {op: n * scale for op, n in sorted(loop["opcodes"].items())
+            if classify(op) in classes or op.startswith(tuple(prefixes))}
+
+
+def same_signature(a: dict, b: dict, *, classes: tuple = (), prefixes: tuple = ()) -> bool:
+    """Whether two records issue the same opcodes per weight in the named set (:func:`opcode_signature`), such as a
+    compute-only variant's math against its control's. Refused across toolchains and targets; an empty set is refused,
+    since it would always match."""
+    if not classes and not prefixes:
+        raise ValueError("an empty opcode set always matches: name classes or prefixes")
+    _one_toolchain(a, b)
+    if a.get("arch") != b.get("arch"):
+        raise ValueError(f"refusing to compare opcodes across targets: {a.get('arch')!r} vs {b.get('arch')!r}")
+    return (opcode_signature(a, classes=classes, prefixes=prefixes)
+            == opcode_signature(b, classes=classes, prefixes=prefixes))
+
+
+def function_loads(rows: list) -> dict:
+    """Global-load opcodes in ``rows`` as raw counts, not per weight: over a whole function (``loads_in_function``) or
+    outside its loop (``loads_outside_loop``). A variant whose loop ptxas unrolled away entirely has no loop to compare,
+    so its loads are checked as totals: the function's equal the control's per-iteration loads x the trip count, plus
+    the control's loads outside its loop."""
+    return dict(sorted(collections.Counter(r[1] for r in rows if classify(r[1]) == "load_global").items()))
+
+
+def unroll_by_bytes(loop: dict, *, lanes: int, bytes_per_iteration: int) -> int:
+    """The unroll guard for a loop without MMAs: how many iterations of a stated ``bytes_per_iteration`` global-load
+    stream its body moves (its load bytes per lane x ``lanes``). ptxas unrolls such loops when the trip count is known
+    at compile time, as it is for any variant built to K25's signature (K is a constexpr). Returns k >= 1, or raises on
+    a body that is no whole number of iterations, or that wraps a nested loop (its bytes per iteration are not
+    static)."""
+    if loop.get("nested_loops"):
+        raise ValueError(f"unroll guard by bytes: the loop wraps {loop['nested_loops']} nested loop(s); "
+                         "its bytes per iteration are not static")
+    moved = loop["load_bytes"] * lanes
+    k, rem = divmod(moved, bytes_per_iteration)
+    if rem or k < 1:
+        raise ValueError(f"unroll guard by bytes: {moved} bytes in the loop is not a whole number of "
+                         f"{bytes_per_iteration}-byte iterations")
+    return k
+
+
+def stream_bytes(rec: dict) -> int:
+    """The global-load bytes one iteration of a CHECKED record's loop moves (load bytes per lane x lanes / unroll):
+    the ``bytes_per_iteration`` to count a variant against, taken from its control rather than from a formula (K25's
+    served loop moves 3,584 bytes an iteration, more than its 3,200-byte stream, since some lanes load redundantly)."""
+    if rec.get("unroll") is None:
+        raise ValueError("stream_bytes: the record's unroll is unchecked")
+    moved = rec["inner_loop"]["load_bytes"] * rec["lanes"]
+    if moved % rec["unroll"]:
+        raise ValueError(f"stream_bytes: {moved} bytes in the loop do not split into {rec['unroll']} iterations")
+    return moved // rec["unroll"]
+
+
+def loop_record(rows: list, *, num_warps: int, weights_per_iteration: int, tile: tuple | None = None,
+                loop_key: str = "mma", bytes_per_iteration: int | None = None) -> dict:
+    """The inner loop's record from parsed SASS, the loop found by ``loop_key`` (:data:`LOOP_KEYS`).
+
+    The unroll guard runs one of two ways, and ``unroll_guard`` names which:
+    - ``"mma"``: ``tile`` = (BLOCK_M, BLOCK_N, KC) given and the loop holds MMAs (:func:`unroll_factor`);
+    - ``"bytes"``: the loop holds no MMA and ``bytes_per_iteration`` is given (:func:`unroll_by_bytes`; take it from
+      the control with :func:`stream_bytes`).
+
+    Otherwise ``unroll`` and ``unroll_guard`` are ``None``: the record never claims a check it did not run, and its
+    per-weight figures assume one iteration per loop body, unchecked."""
+    loop = inner_loop(rows, loop_key)
     lanes = num_warps * 32
-    rec = {"lanes": lanes, "weights_per_iteration": weights_per_iteration, "inner_loop": loop}
+    rec = {"lanes": lanes, "weights_per_iteration": weights_per_iteration, "loop_key": loop_key, "inner_loop": loop,
+           "loads_in_function": function_loads(rows)}
     if loop:
-        unroll = (unroll_factor(loop, block_m=tile[0], block_n=tile[1], kc=tile[2], num_warps=num_warps)
-                  if tile else None)
-        rec["unroll"] = unroll
+        a, b = int(loop["target"], 16), int(loop["branch"], 16)
+        rec["loads_outside_loop"] = function_loads([r for r in rows if not a <= r[0] <= b])
+    if loop:
+        unroll, guard = None, None
+        if loop["classes"].get("mma"):
+            if tile:
+                unroll, guard = unroll_factor(loop, block_m=tile[0], block_n=tile[1], kc=tile[2],
+                                              num_warps=num_warps), "mma"
+        elif bytes_per_iteration:
+            unroll, guard = unroll_by_bytes(loop, lanes=lanes, bytes_per_iteration=bytes_per_iteration), "bytes"
+        rec["unroll"], rec["unroll_guard"] = unroll, guard
         rec.update(per_weight(loop, lanes, weights_per_iteration * (unroll or 1)))
+        rec["loads_per_weight"] = load_signature(loop, lanes, weights_per_iteration * (unroll or 1))
+        rec["shared_per_weight"] = shared_signature(loop, lanes, weights_per_iteration * (unroll or 1))
     return rec
 
 
@@ -267,12 +453,19 @@ def main(argv=None) -> int:
     ap.add_argument("--arch", type=int, nargs="+", default=[120, 86])
     ap.add_argument("--out", default=None)
     ap.add_argument("--no-specialize", action="store_true", help="drop the JIT's hints (to show the inflation)")
+    ap.add_argument("--fn", default="_gemm_nf4_grouped_smallm",
+                    help="the jit kernel's name in --module (an ablation built to K25's signature, for instance)")
+    ap.add_argument("--bytes-per-iteration", type=int, default=None,
+                    help="the unroll guard for a loop with no MMA: the global-load bytes one iteration moves (a control's stream_bytes)")
+    ap.add_argument("--loop-key", default="mma", choices=sorted(LOOP_KEYS),
+                    help="find the inner loop by its MMAs (default) or by its weight stream (a variant with no MMA)")
     a = ap.parse_args(argv)
     sys.path.insert(0, os.path.abspath(a.kernel_dir))
     import importlib
     mod = importlib.import_module(a.module)
-    fn = mod._gemm_nf4_grouped_smallm
-    report = {"config": a.config, "module": a.module, "plan": K25_PLAN, "toolchain": toolchain(), "targets": {}}
+    fn = getattr(mod, a.fn)
+    report = {"config": a.config, "module": a.module, "fn": a.fn, "loop_key": a.loop_key, "plan": K25_PLAN,
+              "toolchain": toolchain(), "targets": {}}
     print(f"triton {report['toolchain']['triton']}, ptxas {report['toolchain']['ptxas']}", flush=True)
     for arch in a.arch:
         for shape in K25_SHAPES:
@@ -280,13 +473,15 @@ def main(argv=None) -> int:
             rec = compile_and_count(fn, sig, consts, values, arch=arch, num_warps=K25_PLAN["num_warps"],
                                     num_stages=K25_PLAN["num_stages"], weights_per_iteration=wpi, out_dir=a.out,
                                     tile=(16, K25_PLAN["BLOCK_N"], K25_PLAN["KC"]),
-                                    tag=f"{a.module}.{shape}", specialize=not a.no_specialize)
+                                    tag=f"{a.module}.{a.fn}.{shape}", specialize=not a.no_specialize,
+                                    loop_key=a.loop_key, bytes_per_iteration=a.bytes_per_iteration)
             report["targets"][f"sm{arch}.{shape}"] = rec
             lpw = rec.get("lane_instr_per_weight")
             body = rec["inner_loop"] and rec["inner_loop"]["instructions"]
             unroll = "unchecked" if rec.get("unroll") is None else rec["unroll"]
+            loads = ", ".join(f"{op} {n:.4g}" for op, n in (rec.get("loads_per_weight") or {}).items())
             print(f"sm_{arch} {shape}: inner loop {body} instr (unroll {unroll}), "
-                  f"{lpw and round(lpw, 2)} lane instr/weight", flush=True)
+                  f"{lpw and round(lpw, 2)} lane instr/weight; loads/weight: {loads or 'none'}", flush=True)
     if a.out:
         with open(os.path.join(a.out, "sass_count.json"), "w", encoding="utf-8", newline="\n") as f:
             json.dump(report, f, indent=1, default=str)
