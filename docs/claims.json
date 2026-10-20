@@ -90,7 +90,7 @@
   {
    "id": "gnf4.kernel.sm120-census-vs-grouped-mm",
    "area": "kernel",
-   "claim": "At the Qwen3-30B-A3B serving cell (E=128, top-8, B=16) on an RTX 5090, gemm_4bit_grouped runs the routed expert GEMM in 0.42 / 0.21 ms where torch._grouped_mm on unquantised bf16 takes 0.88-1.30 ms: 2.1-6.0x across two boxes, on half the weight bytes.",
+   "claim": "At the Qwen3-30B-A3B serving cell (E=128, top-8, B=16) on an RTX 5090, gemm_4bit_grouped runs the routed expert GEMM in 0.42 / 0.21 ms where torch._grouped_mm on unquantised bf16 takes 0.88-1.30 ms: 2.1-6.0x across two boxes. The NF4 arm reads 4.5 bits a weight (4-bit codes plus one fp32 absmax per 64) and the bf16 arm 16, so 3.56x fewer weight bytes.",
    "value": "2.1-6.0",
    "unit": "x vs torch._grouped_mm",
    "status": "measured",

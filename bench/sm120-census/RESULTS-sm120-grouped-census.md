@@ -24,7 +24,9 @@ beside them.
 
 `torch._grouped_mm` is the engine transformers v5 ships as
 `grouped_mm_experts_forward` — PyTorch's own grouped-MoE path, running
-on weights at **2× the bytes**. Two boxes measured
+on bf16 weights: **3.56× the bytes** of the NF4 arm (16 bits a weight against 4.5, the probe's own
+`nf4_gb` = 4-bit codes plus one fp32 absmax per 64; corrected 2026-10-20 from "2×", the probe
+docstring's estimate). Two boxes measured
 (`receipts/gemm_p0b.json`, `receipts/gemm_p0b_box2_gated.json`,
 rel err vs the NF4 truth ≤ 5.0e-3): **this kernel reproduces to ~1%
 across boxes while the torch engine varies up to 2.5×** — quote the

@@ -26,7 +26,7 @@ it has never measured less accurate than dequantise-to-bf16-then-GEMM in any reg
 | Energy, J/token below baseline | 104 of 112 cells | confirmed | `gnf4.kernel.energy-104-of-112` |
 | Real OLMoE QLoRA finetune, fused vs per-expert loop (prose) | 4.50× (4090), 4.75× (H100) | confirmed | `gnf4.kernel.e2e-training-real-prose` |
 | vs Unsloth's own kernel, 4-bit-storage regime, decode | 1.70× (H100), 2.79× (4090) | confirmed | `gnf4.kernel.h2h-unsloth` |
-| vs `torch._grouped_mm` on bf16, Qwen3-30B cell (RTX 5090) | 2.1–6.0×, on half the bytes | measured | `gnf4.kernel.sm120-census-vs-grouped-mm` |
+| vs `torch._grouped_mm` on bf16, Qwen3-30B cell (RTX 5090) | 2.1–6.0×, on 3.56× fewer weight bytes | measured | `gnf4.kernel.sm120-census-vs-grouped-mm` |
 | Training backward, one launch: gradient vs the exact per-expert loop (A2000, a correctness read) | ~0.0029 relative, inside the bf16 budget | measured | `gnf4.kernel.dgrad` |
 | Fused training step with it vs the per-expert loop, Qwen3-30B-A3B, 48 layers (rented RTX A6000; experts4bit-qlora's receipt) | 2.52× (1.72× without it) | measured | `gnf4.kernel.dgrad-step.a6000.2026-08-06` |
 
