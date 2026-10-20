@@ -52,3 +52,36 @@ def test_the_committed_bundle_is_plain_text_safe():
     text = (ROOT / "llms-full.txt").read_text(encoding="utf-8")
     assert B.unsafe_urls(text) == []                       # (a relative link, with no scheme, is never autolinked)
     assert ".md (https://" not in text                      # every section heading's source URL is in angle brackets
+
+
+# ---- code is copied byte for byte (review of #574): an example a reader copies must still run
+def test_a_fenced_code_block_is_never_rewritten():
+    src = ("prose ([notes](https://x.org/a.md)).\n"
+           "```python\n"
+           "url = 'https://example.com/a.json'\n"
+           "see(https://example.com/b).\n"
+           "```\n"
+           "after (https://x.org/c).\n")
+    out = B.plain_text_links(src)
+    lines = out.splitlines()
+    assert lines[2] == "url = 'https://example.com/a.json'" and lines[3] == "see(https://example.com/b)."
+    assert lines[0] == "prose (notes <https://x.org/a.md>)." and lines[5] == "after (<https://x.org/c>)."
+    assert B.unsafe_urls(out) == []                         # the fenced line is code, not prose: never flagged
+
+
+def test_an_inline_code_span_is_never_rewritten_but_a_link_with_code_text_is():
+    src = "run `curl https://x.org/y).` then [`changelog`](https://x.org/CHANGELOG.md)."
+    out = B.plain_text_links(src)
+    assert "`curl https://x.org/y).`" in out and "`changelog` <https://x.org/CHANGELOG.md>." in out
+    assert B.unsafe_urls(out) == []
+
+
+def test_a_single_quoted_url_is_left_whole():
+    """' is not URL punctuation to trim: a single-quoted URL in prose keeps its quotes and is not rewritten."""
+    src = "set it to 'https://example.com/a.json' first"
+    assert B.plain_text_links(src) == src and B.unsafe_urls(src) == []
+
+
+def test_the_check_still_refuses_unsafe_prose():
+    assert B.unsafe_urls("see (https://x/y).") == ["https://x/y)."]
+    assert B.unsafe_urls("```\nsee (https://x/y).\n```\n") == []
