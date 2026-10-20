@@ -32,6 +32,7 @@ jobs:
     environment: pypi
     permissions:
       id-token: write
+      actions: read   # read ci.yml's runs at the tagged commit (the gate below)
     steps:
       # On a release event the default checkout is the tag. On manual
       # dispatch it is the branch tip, which is NOT what was tagged --
@@ -50,6 +51,25 @@ jobs:
             echo "::error::tag $TAG and pyproject version $GOT disagree -- refusing to publish a version no tag names"
             exit 1
           }
+      - name: CI is green at the tagged commit (refuse to publish otherwise)
+        # The commit is read from the checkout above, which is the tag on both events. On a manual dispatch
+        # GITHUB_SHA is the dispatching branch's head, NOT the tagged commit, so it is never used here. Only push and
+        # workflow_dispatch runs of ci.yml count: a pull_request run whose head is this commit tested refs/pull/N/merge.
+        # The release script waits for that commit's CI to go green before publishing; this step is the backstop.
+        # The count is checked as an integer: anything unreadable refuses.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SHA=$(git rev-parse HEAD)
+          n=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SHA}&status=success&per_page=100" \
+                --jq '[.workflow_runs[] | select(.event == "push" or .event == "workflow_dispatch")] | length') \
+            || { echo "::error::could not read ci.yml's runs at ${SHA}; refusing to publish"; exit 1; }
+          [ "${n:-0}" -ge 1 ] 2>/dev/null || {
+            echo "::error::no successful CI run at the tagged commit ${SHA} (read: '${n}'). If a CI run at ${SHA} is still running, wait for it to go green and re-run this job; otherwise dispatch CI at the tag (gh workflow run ci --ref <tag>), then re-run this job."
+            exit 1
+          }
+          echo "CI green at ${SHA} (${n} successful run(s))"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
