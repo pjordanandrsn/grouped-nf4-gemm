@@ -11,6 +11,10 @@ name: ci
 # `ready-to-merge` label (or the PR leaves draft) -- never on every push
 # (since 2026-09-06). A head with no CI run is not green: remove and re-apply
 # the label after a new push. `workflow_dispatch` is the manual escape hatch.
+# Any other label event runs each gated job's first step only, and that step
+# FAILS ("not labelled ready-to-merge"), because a skipped required check would
+# count as passing (2026-10-20). A label event on a PR that already carries
+# ready-to-merge re-runs CI on its head.
 on:
   push:
     branches: [main]
@@ -20,11 +24,22 @@ on:
 
 jobs:
   anchor-gate:
-    if: ${{ github.event_name != 'pull_request' || github.event.action == 'ready_for_review' || github.event.label.name == 'ready-to-merge' }}
     # R1: the projection model must reproduce the published flagship rows.
     # Pure stdlib — no torch/triton — so it's fast and can never bit-rot silently.
     runs-on: ubuntu-24.04
     steps:
+      - name: gate (a required check must FAIL, never skip, when this head is not being tested)
+        # GitHub counts a SKIPPED required check as passing, so a job-level `if:`
+        # that skipped on every other label minted a passing check for an
+        # untested head. On a pull_request event that is not
+        # ready_for_review and whose PR does not carry ready-to-merge, fail in
+        # seconds instead. contains() reads the PR's CURRENT labels, so adding
+        # another label to a ready PR re-tests its head rather than turning a
+        # tested head red.
+        if: ${{ github.event_name == 'pull_request' && github.event.action != 'ready_for_review' && !contains(github.event.pull_request.labels.*.name, 'ready-to-merge') }}
+        run: |
+          echo "::error::not labelled ready-to-merge: nothing was tested on this head. Apply ready-to-merge to run CI."
+          exit 1
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
@@ -33,7 +48,6 @@ jobs:
         run: cd projections && python test_anchors.py
 
   example-runs:
-    if: ${{ github.event_name != 'pull_request' || github.event.action == 'ready_for_review' || github.event.label.name == 'ready-to-merge' }}
     # D6: examples/dequant_tax.py is the one file a stranger executes. If it
     # drifts from the API it stops being that, silently — the way the README's
     # decision tree once did. This exercises the CPU path (no GPU on the runner),
@@ -41,6 +55,18 @@ jobs:
     # asserts the file stays under the 150-line rail that keeps it readable.
     runs-on: ubuntu-24.04
     steps:
+      - name: gate (a required check must FAIL, never skip, when this head is not being tested)
+        # GitHub counts a SKIPPED required check as passing, so a job-level `if:`
+        # that skipped on every other label minted a passing check for an
+        # untested head. On a pull_request event that is not
+        # ready_for_review and whose PR does not carry ready-to-merge, fail in
+        # seconds instead. contains() reads the PR's CURRENT labels, so adding
+        # another label to a ready PR re-tests its head rather than turning a
+        # tested head red.
+        if: ${{ github.event_name == 'pull_request' && github.event.action != 'ready_for_review' && !contains(github.event.pull_request.labels.*.name, 'ready-to-merge') }}
+        run: |
+          echo "::error::not labelled ready-to-merge: nothing was tested on this head. Apply ready-to-merge to run CI."
+          exit 1
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
@@ -67,12 +93,23 @@ jobs:
           [ "$n" -lt 150 ] || { echo "examples/dequant_tax.py grew past the 150-line rail"; exit 1; }
 
   interp-contract:
-    if: ${{ github.event_name != 'pull_request' || github.event.action == 'ready_for_review' || github.event.label.name == 'ready-to-merge' }}
     # Triton interpreter-mode (CPU) contract + fuzz suite: kernel SEMANTICS,
     # nibble order, boundary/adversarial shapes — validated with no GPU and no
     # bitsandbytes (pure-torch NF4 packer as fixture oracle).
     runs-on: ubuntu-24.04
     steps:
+      - name: gate (a required check must FAIL, never skip, when this head is not being tested)
+        # GitHub counts a SKIPPED required check as passing, so a job-level `if:`
+        # that skipped on every other label minted a passing check for an
+        # untested head. On a pull_request event that is not
+        # ready_for_review and whose PR does not carry ready-to-merge, fail in
+        # seconds instead. contains() reads the PR's CURRENT labels, so adding
+        # another label to a ready PR re-tests its head rather than turning a
+        # tested head red.
+        if: ${{ github.event_name == 'pull_request' && github.event.action != 'ready_for_review' && !contains(github.event.pull_request.labels.*.name, 'ready-to-merge') }}
+        run: |
+          echo "::error::not labelled ready-to-merge: nothing was tested on this head. Apply ready-to-merge to run CI."
+          exit 1
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
@@ -202,7 +239,6 @@ jobs:
         run: cd kernel && python -m pytest test_packaging_covers_kernel.py test_check_readme_links.py test_check_scripts.py test_check_claims_register.py test_check_readme_claims.py test_check_shared_tooling.py test_check_capabilities_role.py test_changelog_fragments.py test_build_llms_bundle.py -q
 
   hip-compile:
-    if: ${{ github.event_name != 'pull_request' || github.event.action == 'ready_for_review' || github.event.label.name == 'ready-to-merge' }}
     # AMD compile-only check, CPU, no GPU and no ROCm. The interpreter suites run with a recording hook
     # (scripts/hip_harvest.py) that writes down every kernel specialization they launch; each one, capped per kernel,
     # is then compiled for gfx942, gfx950 and gfx1100 with triton's AMD backend and a copy-only stand-in for ROCm's
@@ -212,6 +248,18 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
+      - name: gate (a required check must FAIL, never skip, when this head is not being tested)
+        # GitHub counts a SKIPPED required check as passing, so a job-level `if:`
+        # that skipped on every other label minted a passing check for an
+        # untested head. On a pull_request event that is not
+        # ready_for_review and whose PR does not carry ready-to-merge, fail in
+        # seconds instead. contains() reads the PR's CURRENT labels, so adding
+        # another label to a ready PR re-tests its head rather than turning a
+        # tested head red.
+        if: ${{ github.event_name == 'pull_request' && github.event.action != 'ready_for_review' && !contains(github.event.pull_request.labels.*.name, 'ready-to-merge') }}
+        run: |
+          echo "::error::not labelled ready-to-merge: nothing was tested on this head. Apply ready-to-merge to run CI."
+          exit 1
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
@@ -269,7 +317,6 @@ jobs:
           if-no-files-found: ignore
 
   wheel-smoke:
-    if: ${{ github.event_name != 'pull_request' || github.event.action == 'ready_for_review' || github.event.label.name == 'ready-to-merge' }}
     # Built-artifact gate: the README's promised import surface must equal the
     # wheel's importable surface (scripts/wheel_smoke.py is the hardcoded
     # mirror of the Install comment). Runs from /tmp so imports resolve from
@@ -277,6 +324,18 @@ jobs:
     # release tag mapped to main (the tag exists only at release time).
     runs-on: ubuntu-24.04
     steps:
+      - name: gate (a required check must FAIL, never skip, when this head is not being tested)
+        # GitHub counts a SKIPPED required check as passing, so a job-level `if:`
+        # that skipped on every other label minted a passing check for an
+        # untested head. On a pull_request event that is not
+        # ready_for_review and whose PR does not carry ready-to-merge, fail in
+        # seconds instead. contains() reads the PR's CURRENT labels, so adding
+        # another label to a ready PR re-tests its head rather than turning a
+        # tested head red.
+        if: ${{ github.event_name == 'pull_request' && github.event.action != 'ready_for_review' && !contains(github.event.pull_request.labels.*.name, 'ready-to-merge') }}
+        run: |
+          echo "::error::not labelled ready-to-merge: nothing was tested on this head. Apply ready-to-merge to run CI."
+          exit 1
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
@@ -310,11 +369,22 @@ jobs:
           python scripts/check_readme_links.py --map-ref "$TAG" "$REF"
 
   discoverability:
-    if: ${{ github.event_name != 'pull_request' || github.event.action == 'ready_for_review' || github.event.label.name == 'ready-to-merge' }}
     # CPU-only, deterministic: the machine-readable contracts and the
     # packaging metadata. Nothing here imports the kernels.
     runs-on: ubuntu-24.04
     steps:
+      - name: gate (a required check must FAIL, never skip, when this head is not being tested)
+        # GitHub counts a SKIPPED required check as passing, so a job-level `if:`
+        # that skipped on every other label minted a passing check for an
+        # untested head. On a pull_request event that is not
+        # ready_for_review and whose PR does not carry ready-to-merge, fail in
+        # seconds instead. contains() reads the PR's CURRENT labels, so adding
+        # another label to a ready PR re-tests its head rather than turning a
+        # tested head red.
+        if: ${{ github.event_name == 'pull_request' && github.event.action != 'ready_for_review' && !contains(github.event.pull_request.labels.*.name, 'ready-to-merge') }}
+        run: |
+          echo "::error::not labelled ready-to-merge: nothing was tested on this head. Apply ready-to-merge to run CI."
+          exit 1
       - uses: actions/checkout@v4
         with:
           # Full history and tags: the change-impact check diffs against the
