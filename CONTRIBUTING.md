@@ -26,7 +26,7 @@ python -m pytest test_readme_cpu_block.py test_cpu_refusal.py -q   # CPU-only, n
 TRITON_INTERPRET=1 python -m pytest test_interp_contract.py -q      # device-free semantics; needs real triton (Linux)
 ```
 
-The private-marker guard CI runs as a required check (`guard`) is also a
+The private-marker guard CI runs as a required check (`private-marker-guard`) is also a
 pre-push hook, scanning with the same `.github/private-markers.txt`:
 `ln -sf ../../scripts/hooks/pre-push .git/hooks/pre-push`.
 

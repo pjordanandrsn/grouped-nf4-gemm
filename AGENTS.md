@@ -192,12 +192,16 @@ was a test-harness defect, and the claim that they miss their reference,
   maintainer reviews every pull request, including the maintainer's own, and
   squash-merges it (one commit per pull request, titled `… (#N)`) once the
   required checks are green and every review thread is resolved; no second
-  reviewer or bot review is waited for. The required checks are `guard` (the
-  private-marker guard, which runs on every push and pull request) and the `ci`
-  workflow's `anchor-gate`, `example-runs`, `interp-contract`, `wheel-smoke` and
-  `discoverability`. `ci` runs on `main` and on a pull request once it carries
-  the `ready-to-merge` label (or leaves draft), never on every push; a head with
-  no CI run is not green, so remove and re-apply the label after a new push.
+  reviewer or bot review is waited for. The required checks are
+  `private-marker-guard` and `conflict-marker-guard` (each runs on every push and
+  pull-request event, not on a label; push-scan runs report as "(push scan)" and
+  are not required) and the `ci` workflow's `anchor-gate`, `example-runs`,
+  `interp-contract`, `wheel-smoke` and `discoverability`. `ci` runs on `main` and
+  on a pull request once it carries the `ready-to-merge` label (or leaves draft),
+  never on every push. A label event other than `ready-to-merge` fails the
+  required `ci` jobs instead of skipping them. A head with no CI run is not green,
+  and re-running a failed job replays the old event, so re-apply the label to
+  test a head, including after a new push.
 - A task pull request never moves a gate, a threshold, a compiled-kernel default
   or a registered claim. If the task needs one, stop and say so on the issue.
   **Kernel changes need the GPU tests run on the named hardware, with the receipt
