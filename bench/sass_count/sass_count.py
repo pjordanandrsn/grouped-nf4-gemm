@@ -106,10 +106,12 @@ def inner_loop(rows: list, key: str = "mma") -> dict | None:
     - ``key="load"``: the weight stream. Of the loops whose body holds a global load, the one whose OWN load bytes
       per iteration (its body's, less those of the loops nested inside it) are the most. It is not the smallest: a
       small loop that loads indices (a gather over ``order``, a tile-table walk) also holds a load. Own bytes, not
-      total bytes, keep an outer persistent loop from winning on the K loop's bytes, and keep a weight loop that
-      wraps an inner index loop from losing to it. The loops passed over are in the pick's ``rejected``, and the next
-      one, with its loads, is its ``runner_up`` (``None`` when there is none), so a reader sees what lost. The pick
-      records ``nested_loops``, how many loops sit inside it."""
+      total bytes, keep an outer loop from winning on the K loop's bytes alone, and keep a weight loop that wraps an
+      inner index loop from losing to it. They do NOT settle a pipelined persistent kernel, whose stage-ahead prologue
+      inside the outer loop can out-load the K loop; there the outer loop can win, and :func:`unroll_by_bytes`
+      refuses it (it wraps a nested loop), so a guarded count is never silent. The loops passed over are in the
+      pick's ``rejected``, and the next one, with its loads, is its ``runner_up`` (``None`` when there is none), so a
+      reader sees what lost. The pick records ``nested_loops``, how many loops sit inside it."""
     if key not in LOOP_KEYS:
         raise ValueError(f"loop key {key!r}: expected one of {sorted(LOOP_KEYS)}")
     loops = []
@@ -374,7 +376,8 @@ def stream_bytes(rec: dict) -> int:
     if rec.get("unroll") is None:
         raise ValueError("stream_bytes: the record's unroll is unchecked")
     moved = rec["inner_loop"]["load_bytes"] * rec["lanes"]
-    assert moved % rec["unroll"] == 0, (moved, rec["unroll"])
+    if moved % rec["unroll"]:
+        raise ValueError(f"stream_bytes: {moved} bytes in the loop do not split into {rec['unroll']} iterations")
     return moved // rec["unroll"]
 
 

@@ -29,9 +29,11 @@ python sass_count.py --kernel-dir DIR --module MOD --fn ARM --loop-key load   # 
   - `load`: the weight stream, for a variant with no MMA (an ablation that removes it). Of the loops whose body holds
     a global load, the one whose OWN load bytes per iteration (less those of loops nested inside it) are the most.
     It is not the smallest, because a small loop that loads indices (a gather, a tile-table walk) also holds a load.
-    Own bytes keep an outer persistent loop from winning on the K loop's bytes, and keep a weight loop that wraps an
-    inner index loop from losing to it. The record lists the loops passed over (`rejected`), the next candidate with
-    its loads (`runner_up`) and how many loops sit inside the pick (`nested_loops`).
+    Own bytes keep an outer loop from winning on the K loop's bytes alone, and keep a weight loop that wraps an
+    inner index loop from losing to it. They do not settle a pipelined persistent kernel, whose stage-ahead prologue
+    inside the outer loop can out-load the K loop. There the outer loop can win, and the bytes guard refuses it (it
+    wraps a nested loop), so a guarded count is never silent. The record lists the loops passed over (`rejected`),
+    the next candidate with its loads (`runner_up`) and how many loops sit inside the pick (`nested_loops`).
   - On served K25 both keys take the same loop (the compiled test, at both toolchains). That is necessary, not
     sufficient: the test's fixtures (an index loop beside the weight loop, and one inside it) are the cases that bite.
 - **The loads, per weight:** every record carries `loads_per_weight`, the loop's global-load opcodes (so each count
