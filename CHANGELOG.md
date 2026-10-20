@@ -4,6 +4,72 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
+## 0.50.0 — 2026-10-20 — a byte-permute NF4 decode for K25, bit-identical to the select tree (K39, opt-in)
+
+### `bench/sass_count`: a load-keyed loop finder, for kernel variants with no MMA
+
+- **The key:** `inner_loop(rows, key="load")` (CLI `--loop-key load`) finds the weight stream in a variant with no MMA,
+  such as an ablation that removes it. It takes the loop whose own load bytes per iteration (less those of the loops
+  nested inside it) are the most, not the smallest: a small loop that loads indices also holds a load. The pick lists
+  the loops it passed over, the runner-up with its loads, and how many loops sit inside it.
+- **The unroll guard for a loop with no MMA:** ptxas unrolls such loops when the trip count is a compile-time constant.
+  `bytes_per_iteration` (CLI `--bytes-per-iteration`) gives k = load bytes x lanes / the stated stream, refused unless
+  whole; `stream_bytes(rec)` takes that stream from a checked control. Every record names its `unroll_guard` (`"mma"`,
+  `"bytes"`, or None for unchecked).
+- **The loads:** every record carries `loads_per_weight` (each global-load opcode, so its width too), and
+  `same_loads(a, b)` says whether a variant keeps every load of its control. It refuses across toolchains and targets,
+  and where an unchecked side reads a whole k times the other, it names k instead of answering False.
+  `loads_in_function` and `loads_outside_loop` give raw totals, for a loop unrolled away entirely. `shared_per_weight`
+  and `same_shared(a, b)` do the same for the shared-memory traffic (LDSM / LDS / STS), the operand staging.
+  `same_signature(a, b, classes=..., prefixes=...)` compares a named opcode set per weight (a math-parity check).
+- **The control:** on served K25 both keys take the same loop, at triton 3.4.0 and 3.8.0, on sm_86 and sm_120. The
+  fixtures (an index loop beside the weight loop, and inside it) and two compiled no-MMA kernels, one that ptxas
+  unrolls 4-fold, pin the key and the guard.
+- **The CLI:** `--fn` names the jit kernel in `--module`.
+- **No change to any kernel.**
+
+### K39: `lut="prmt"`, a byte-permute codebook decode for K25 (opt-in, bit-identical, no speed claim)
+
+`gemm_nf4_grouped_smallm` gains `lut="prmt"`: NF4 nibbles decode through byte-permute (`prmt`) table lookups in
+inline PTX instead of the select tree. It is off by default.
+
+- **Bit-identical to `lut="tree"`:** it decodes the packed BYTES (K25's own load), so the dot's operand layout and
+  accumulation order are K25's.
+  - On an RTX A2000 under triton 3.4.0 it matched the tree bit for bit in 394 of 394 cases: real W16 routing for
+    gate_up (lean route) and down, an 8-tile expert, masked columns, a masked K tail, the bf16 path, no gather,
+    determinism, and CUDA-graph replay.
+  - The merged kernel compiles to the same machine code as the build that was read, at every configuration the
+    suite ran.
+  - A K25 built on `nf4_grouped._nf4_prmt32` (int32 words) was NOT bit-identical (~1 bf16 ulp on most calls), which
+    is why the byte path is used.
+- **Fewer instructions (static, no timing):** `bench/sass_count` at experts4bit-qlora's served plan counts 17.0 lane
+  instructions per weight on sm_120, against the tree's 24.1. It also uses 64 registers against 80 (theoretical
+  occupancy 67 % against 50 %).
+- **The same table words** as K33's GEMV decode: `nf4_grouped._bw_table_words()`.
+- **NVIDIA only:** refused on ROCm; under the interpreter it decodes through the tree.
+- **Tests:**
+  - `test_nf4_smallm_prmt.py` executes the shipped PTX on the CPU, over every 16-bit chunk.
+  - `test_nf4_smallm_prmt_gpu.py` checks bit-identity on CUDA.
+  - `test_nf4_grouped_smallm_interp.py` adds `prmt` to its decode modes.
+
+### `bench/sass_count`: a static instructions-per-weight instrument for kernel PRs
+
+- **What it is:** `bench/sass_count/sass_count.py` compiles a Triton kernel as a served launch would, for a named GPU
+  target, with no GPU. It disassembles the result and reports the inner K loop's lane instructions per weight, by
+  class. A kernel PR that changes a decode or a load path can quote one number per target.
+- **The JIT's specialization is built in:** every 16-aligned tensor and every int divisible by 16 is marked
+  `tt.divisibility = 16`. A count compiled without those hints is inflated, because loads scalarize and per-element
+  address arithmetic enters the loop. The test fails if the hints go missing.
+- **Recorded counts:** K25 at experts4bit-qlora's served plan reads 24.1 lane instructions per weight on sm_120 and
+  25.1 on sm_86 (triton 3.4.0). The select-tree decode is 10.3 of the 24.1.
+- **The toolchain is part of the count:** every record names its triton and bundled ptxas, and `compare` refuses a
+  ratio across two toolchains. Under triton 3.8.0 (ptxas 12.9.86), K25's served loop reads 36.2 on sm_120 and 37.9
+  on sm_86, about 50 % above 3.4.0, and the hints no longer lower it. CI checks the structure on the latest triton
+  and pins the counts at 3.4.0, the served stack's.
+- **Newer ptxas's loop branch:** a backward `BRA.U UP0, <target>`, with the predicate as an operand, now closes a
+  loop. Without it, the counter found no loop on sm_120 under triton 3.8.0.
+- **No change to any kernel.**
+
 ## 0.49.0 — 2026-10-19 — int8-weight decode projections for 1 to 16 rows (K37)
 
 ### `dense_i8.linear_i8` (K37): int8-weight projections at decode, one row and 2 to 16 rows, shipped verbatim under a tolerance contract
