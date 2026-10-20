@@ -47,11 +47,10 @@ it has never measured less accurate than dequantise-to-bf16-then-GEMM in any reg
   served it decodes one request 1.2417× as fast, and 16 requests unchanged (`e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`). Dot-pad
   covers the same two shapes, so it now runs only with `GNF4_GEMV_BW=0`; every other shape takes the scalar GEMV.
   The one smaller part it also serves is the RTX 4090 (sm_89, 128 SMs), where experts4bit-qlora's P133 read one request 1.5145× as
-  fast and 16 unchanged, within P110's quality bar (experts4bit-qlora#1695, run `p133-4090-2`; UNVERIFIED: no claim and no
-  public results record yet); dot-pad stays off there.
+  fast and 16 unchanged, within P110's quality bar (`e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18`, run `p133-4090-2`); dot-pad stays off there.
   Since P134 it also serves Granite-3.1-3b-a800m's and OLMoE-1B-7B's expert shapes on >= 160-SM parts: on an RTX 5090 one
-  request decoded 1.3979× and 1.5011× as fast, 16 unchanged, within P110's bar (experts4bit-qlora#1697, run `p134-5090-1`;
-  UNVERIFIED: no claim and no public results record yet).
+  request decoded 1.3979× and 1.5011× as fast, 16 unchanged, within P110's bar (`e4b.serve.p134.gemv-bw.granite.5090.2026-10-18`, `e4b.serve.p134.gemv-bw.olmoe.5090.2026-10-18`, run
+  `p134-5090-1`, on a 400 W card).
   Since P141 it serves Mixtral-8x7B's too, at the plans P141's phase 1 selected on the card: one request decoded 2.4075× as
   fast (19.53 → 8.11 ms a step), 16 unchanged (0.9964), within P110's bar (`e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18`,
   experts4bit-qlora#1754, run `p141-5090-2`).

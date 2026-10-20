@@ -6,6 +6,7 @@
   experts4bit-qlora serves it by default on `qwen3_moe` from 0.56.0 (its P158).
 - **The bandwidth GEMV's `auto` scope** is stated as shipped: Qwen3-30B-A3B, Granite-3.1-3b-a800m, OLMoE-1B-7B and
   Mixtral-8x7B on >= 160-SM parts, and Qwen3-30B-A3B on the RTX 4090. Dot-pad runs only with `GNF4_GEMV_BW=0`.
-- **P133 and P134's figures** are labelled UNVERIFIED, because neither has a claim or a public results record. P141 cites
-  its claim id. P127's read is cited, and the line saying it was unread is gone.
+- **P133's and P134's figures** cite their claims (`e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18`,
+  `e4b.serve.p134.gemv-bw.{granite,olmoe}.5090.2026-10-18`). P141 cites its claim id. P127's read is cited, and the line
+  saying it was unread is gone.
 - **Two dot-pad claims:** their text now says dot-pad was the default when measured. Their values are unchanged.
