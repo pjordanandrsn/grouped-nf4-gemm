@@ -36,10 +36,10 @@ GPU kernels need **Linux, an NVIDIA sm_80+ GPU, torch ≥ 2.8 and Triton ≥ 3.4
 CI tests Python 3.11. CPU pack/decode and provenance tools work without CUDA;
 macOS and Windows are not exercised by CI. ROCm and XPU are port targets.
 
-**New in 0.49.0:** a new module, `dense_i8`, ships `linear_i8(x, q, s)`: int8-weight projections at decode for 1
-to 16 bf16 rows, over an int8 weight with an fp32 per-row scale (W8A16, for Mixtral-8x7B's attention projections at
-half the bf16 bytes). Both kernels are experts4bit-qlora prototypes, shipped verbatim under a tolerance contract; no
-speed is claimed here, and nothing routes through them by default.
+**New in 0.50.0:** `gemm_nf4_grouped_smallm` gains `lut="prmt"` (K39), an NF4 decode through byte-permute table
+lookups instead of the select tree. It is bit-identical to `lut="tree"` and off by default. `bench/sass_count`, a
+static instructions-per-weight instrument, counts it at 17.0 lane instructions per weight against the tree's 24.1
+(sm_120, triton 3.4.0). No speed is claimed here, and nothing routes through it by default.
 [Release notes](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/CHANGELOG.md)
 
 ## Try it on your GPU
