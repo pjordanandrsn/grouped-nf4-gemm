@@ -198,8 +198,9 @@ was a test-harness defect, and the claim that they miss their reference,
   are not required) and the `ci` workflow's `anchor-gate`, `example-runs`,
   `interp-contract`, `wheel-smoke` and `discoverability`. `ci` runs on `main` and
   on a pull request once it carries the `ready-to-merge` label (or leaves draft),
-  never on every push. A label event other than `ready-to-merge` fails the
-  required `ci` jobs instead of skipping them. A head with no CI run is not green,
+  never on every push. A label event on a pull request that does not carry
+  `ready-to-merge` fails the required `ci` jobs instead of skipping them; on one
+  that does, any label re-runs CI on its head. A head with no CI run is not green,
   and re-running a failed job replays the old event, so re-apply the label to
   test a head, including after a new push.
 - A task pull request never moves a gate, a threshold, a compiled-kernel default
