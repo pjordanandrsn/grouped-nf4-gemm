@@ -47,11 +47,14 @@ it has never measured less accurate than dequantise-to-bf16-then-GEMM in any reg
   served it decodes one request 1.2417× as fast, and 16 requests unchanged (`e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`). Dot-pad
   covers the same two shapes, so it now runs only with `GNF4_GEMV_BW=0`; every other shape takes the scalar GEMV.
   The one smaller part it also serves is the RTX 4090 (sm_89, 128 SMs), where experts4bit-qlora's P133 read one request 1.5145× as
-  fast and 16 unchanged, within P110's quality bar (experts4bit-qlora#1695, run `p133-4090-2`); dot-pad stays off there.
+  fast and 16 unchanged, within P110's quality bar (experts4bit-qlora#1695, run `p133-4090-2`; UNVERIFIED: no claim and no
+  public results record yet); dot-pad stays off there.
   Since P134 it also serves Granite-3.1-3b-a800m's and OLMoE-1B-7B's expert shapes on >= 160-SM parts: on an RTX 5090 one
-  request decoded 1.3979× and 1.5011× as fast, 16 unchanged, within P110's bar (experts4bit-qlora#1697, run `p134-5090-1`).
+  request decoded 1.3979× and 1.5011× as fast, 16 unchanged, within P110's bar (experts4bit-qlora#1697, run `p134-5090-1`;
+  UNVERIFIED: no claim and no public results record yet).
   Since P141 it serves Mixtral-8x7B's too, at the plans P141's phase 1 selected on the card: one request decoded 2.4075× as
-  fast (19.53 → 8.11 ms a step), 16 unchanged (0.9964), within P110's bar (experts4bit-qlora#1754, run `p141-5090-2`).
+  fast (19.53 → 8.11 ms a step), 16 unchanged (0.9964), within P110's bar (`e4b.serve.p141.gemv-bw.mixtral.5090.2026-10-18`,
+  experts4bit-qlora#1754, run `p141-5090-2`).
 - **The decode anchor** for Qwen3-30B-A3B on the RTX 5090 class is 7.37 ms/step ±4.2% (≈130–142 tok/s); quote the
   range, not a point (`gnf4.serve.decode-anchor-5090`).
 - **Paged attention** takes fp8 compute where fp8 can run (sm_89+) and f32 otherwise, and never downgrades an explicit
@@ -63,7 +66,10 @@ it has never measured less accurate than dequantise-to-bf16-then-GEMM in any reg
   dequant path on o_proj at M=16 and experts4bit-qlora's default for the attention projections
   (`gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19`); K19's grouped small-M GEMM at 0.736× the served GEMV route at
   B=16 (`gnf4.kernel.k20-k19-plan-sweep.5090.2026-10-01`). NF4's K25 decodes with an exact select tree
-  (`gnf4.kernel.k26-nf4-decode-ablation.5090.2026-10-01`).
+  (`gnf4.kernel.k26-nf4-decode-ablation.5090.2026-10-01`), or, with `lut="prmt"` (K39, from 0.50.0; opt-in here),
+  through byte-permute table lookups, bit-identical to the tree. experts4bit-qlora serves `prmt` by default on
+  `qwen3_moe` since its P158, which read sixteen requests 1.0925× as fast and one unchanged on Qwen3-30B-A3B on an RTX
+  5090 (`e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20`).
 - **K16's 32- and 64-row tiles** (#522) serve experts4bit-qlora's attention projections of 17–64 rows by default since
   its P124 read. K34's census of 48 plans kept the shipped plan: it is the fastest at `qkv`. The one faster cell, `o` at
   64 rows (0.794× with BLOCK_N 32, a grid-fill effect), is about 1 % of the served step and licenses nothing
@@ -165,12 +171,15 @@ often met:
 
 - **#60:** arena staging blocks ~30% of a training step; the next layer's rows are prefetchable (`gnf4.open.issues`).
 - **The chunked tile table** is read at 128 experts × 512 rows only (P122); larger tables stay opt-in in experts4bit-qlora.
-- **The P127 decode options** (0.45.0) are bitwise-tested but unread for speed; experts4bit-qlora's P127 reads them.
+- **The P127 decode options** (0.45.0) were read together with experts4bit-qlora's launch-bound glue changes, not alone:
+  one request 1.1321× as fast, sixteen 1.0156×, bitwise-identical tokens (`e4b.serve.p127.launch-bound-glue.qwen3.5090.2026-10-09`).
+  Each option's own share is unread.
 - **The multi-program tile table** is read at 4 programs on Qwen3-30B-A3B int4 only
   (`e4b.serve.p126.tile-programs.qwen3-int4.5090.2026-10-09`); 8 programs was not licensed.
 - **A per-shape plan for the small-M GEMM** (BLOCK_N chosen so the grid fills the card) is unread served; K34 put it at
   0.794× for one cell, about 1 % of the step.
-- **The bandwidth GEMV** is unread on other families, other cards and beside experts4bit-qlora's fused B=1 stack.
+- **The bandwidth GEMV** is read at four families' expert shapes (Qwen3-30B-A3B, Granite-3.1-3b-a800m, OLMoE-1B-7B,
+  Mixtral-8x7B) on an RTX 5090 and at Qwen3-30B-A3B's on an RTX 4090; other families, shapes and cards are unread.
 - **The cold cost model:** why two gen 4 x16 hosts read different `link_eff` is unmeasured, and `cold_dest="deadline"`
   still omits the hybrid tier's mixed-layer dispatch term.
 - **`docs/context-budgets.md` is rung-one only**; full-depth confirmation is pending (`gnf4.open.context-budgets-rung-two`).

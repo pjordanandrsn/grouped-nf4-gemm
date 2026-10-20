@@ -39,7 +39,9 @@ macOS and Windows are not exercised by CI. ROCm and XPU are port targets.
 **New in 0.50.0:** `gemm_nf4_grouped_smallm` gains `lut="prmt"` (K39), an NF4 decode through byte-permute table
 lookups instead of the select tree. It is bit-identical to `lut="tree"` and off by default. `bench/sass_count`, a
 static instructions-per-weight instrument, counts it at 17.0 lane instructions per weight against the tree's 24.1
-(sm_120, triton 3.4.0). No speed is claimed here, and nothing routes through it by default.
+(sm_120, triton 3.4.0). No speed is claimed here, and nothing in this package routes through it by default.
+experts4bit-qlora serves it by default on `qwen3_moe` since 0.56.0 (its read P158: 1.0925× at 16 requests,
+`e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20`).
 [Release notes](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/CHANGELOG.md)
 
 ## Try it on your GPU

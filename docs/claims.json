@@ -202,7 +202,7 @@
   {
    "id": "gnf4.kernel.word-boundary-wide-dotpad.5090.2026-09-23",
    "area": "kernel",
-   "claim": "The word-addressed NF4 decode routes -- wide loads and dot-pad, the default decode route on parts with >= 160 SMs at its census shapes -- read the right expert past their own 2^31-word (8 GiB) offset boundary on an RTX 5090: the 4 cases of kernel/test_offset_boundary_words_gpu.py (scalar and split-K with wide loads, dot-pad and dot-pad split-K) pass on the shipped kernels, and all 4 fail by reading the decoy at the int32-wrapped address when the six int64 promotions are stripped, closing #374.",
+   "claim": "The word-addressed NF4 decode routes -- wide loads and dot-pad, the default decode route on parts with >= 160 SMs at its census shapes when measured (since 0.43.0 dot-pad runs there only with GNF4_GEMV_BW=0) -- read the right expert past their own 2^31-word (8 GiB) offset boundary on an RTX 5090: the 4 cases of kernel/test_offset_boundary_words_gpu.py (scalar and split-K with wide loads, dot-pad and dot-pad split-K) pass on the shipped kernels, and all 4 fail by reading the decoy at the int32-wrapped address when the six int64 promotions are stripped, closing #374.",
    "value": 4,
    "unit": "GPU cases past 2^31 words, passing shipped and failing unpromoted",
    "status": "measured",
@@ -850,7 +850,7 @@
   {
    "id": "gnf4.kernel.nf4-dotpad-gemv-row-invariant.5090.2026-09-24",
    "area": "kernel",
-   "claim": "The NF4 dot-pad decode GEMV -- the default decode route at its census shapes on >= 160-SM parts -- is row-count invariant on an RTX 5090: every row of one call over 16, 17 or 160 tokens' routed rows (128, 136, 1,280 rows) is bit-equal to that token's own 8-row call, at Qwen3-30B-A3B's gate_up shape on its own activations and routing (one program per row, no split-K unless GNF4_GEMV_SPLITK is set).",
+   "claim": "The NF4 dot-pad decode GEMV -- the default decode route at its census shapes on >= 160-SM parts when measured (since 0.43.0 it runs there only with GNF4_GEMV_BW=0) -- is row-count invariant on an RTX 5090: every row of one call over 16, 17 or 160 tokens' routed rows (128, 136, 1,280 rows) is bit-equal to that token's own 8-row call, at Qwen3-30B-A3B's gate_up shape on its own activations and routing (one program per row, no split-K unless GNF4_GEMV_SPLITK is set).",
    "value": 1544,
    "unit": "rows bit-equal to their token's T = 1 call, of 1,544 (128 + 136 + 1,280)",
    "status": "measured",
