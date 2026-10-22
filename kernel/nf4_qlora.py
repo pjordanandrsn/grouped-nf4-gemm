@@ -912,7 +912,11 @@ class _CompactPaddedDelta(torch.autograd.Function):
         x = torch.zeros(G * widest, a_cat.shape[1], dtype=A.dtype, device=a_cat.device)
         x.index_copy_(0, flat, a_cat.to(A.dtype))
         h = torch.bmm(x.view(G, widest, -1), A.transpose(1, 2))           # [G, widest, r]
+        # The block is not saved (backward rebuilds it) and nothing else holds it: freed here, before the delta is built, so the
+        # [G, W, K] block and the [G, W, N] delta are never live together (the forward twin of the backward's order).
+        del x, A
         d = torch.bmm(h, B.transpose(1, 2))                                # [G, widest, N]
+        del B
         ctx.save_for_backward(a_cat, lora_A, lora_B, eid, flat, h)
         ctx.G, ctx.widest, ctx.unique = G, widest, unique
         return d.view(G * widest, -1).index_select(0, flat)

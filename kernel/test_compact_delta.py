@@ -289,3 +289,109 @@ def test_reordered_backward_peak_drops_by_about_a_block(monkeypatch, ad_dtype):
         assert torch.equal(o, n), name
     block = 8 * 60 * K * torch.tensor([], dtype=ad_dtype).element_size()
     assert bwd_old - bwd_new >= 0.9 * block, (bwd_old, bwd_new, block)
+
+
+class _OldForward(_NEW_ORDER):
+    """The compact node's forward as it was before the padded block was freed early (grouped-nf4-gemm 75421b30): the block ``x``
+    stayed live until the forward returned, so it was live while the delta ``d`` was built. A test-local reference only."""
+
+    @staticmethod
+    def forward(ctx, a_cat, lora_A, lora_B, eid, flat, G, widest, unique):
+        if unique:
+            A, B = lora_A.index_select(0, eid), lora_B.index_select(0, eid)
+        else:
+            A, B = lora_A[eid], lora_B[eid]
+        x = torch.zeros(G * widest, a_cat.shape[1], dtype=A.dtype, device=a_cat.device)
+        x.index_copy_(0, flat, a_cat.to(A.dtype))
+        h = torch.bmm(x.view(G, widest, -1), A.transpose(1, 2))
+        d = torch.bmm(h, B.transpose(1, 2))
+        ctx.save_for_backward(a_cat, lora_A, lora_B, eid, flat, h)
+        ctx.G, ctx.widest, ctx.unique = G, widest, unique
+        return d.view(G * widest, -1).index_select(0, flat)
+
+
+@pytest.mark.parametrize("dev", DEVICES)
+@pytest.mark.parametrize("sizes,eids", CASES)
+@pytest.mark.parametrize("ad_dtype", [torch.bfloat16, torch.float32])
+@pytest.mark.parametrize("scaling", [1.0, 2.0])
+@pytest.mark.parametrize("reuse", ["0", "1"])
+def test_freed_forward_is_bit_identical_to_the_old_forward(monkeypatch, dev, sizes, eids, ad_dtype, scaling, reuse):
+    """Freeing the block (and the gathered adapters) at their last use changes no value: every output and gradient is the same
+    bytes as the old forward's."""
+    if reuse == "1" and dev != "cuda":
+        pytest.skip("host reuse is CUDA-only")
+    monkeypatch.setenv("NF4_QLORA_LORA_PATH", "padded")
+    monkeypatch.setenv("GNF4_HOST_REUSE", reuse)
+    monkeypatch.setenv("NF4_QLORA_COMPACT_DELTA", "1")
+    _fresh()
+    new = _run(dev, sizes, eids, ad_dtype, scaling)
+    monkeypatch.setattr(nf4_qlora, "_CompactPaddedDelta", _OldForward)
+    _fresh()
+    old = _run(dev, sizes, eids, ad_dtype, scaling)
+    for name, o, n in zip(("out", "d_a", "d_A", "d_B"), old, new):
+        assert o.dtype == n.dtype and o.shape == n.shape, name
+        assert torch.equal(o, n), f"{name} differs (max |diff| {(o.float() - n.float()).abs().max().item()})"
+
+
+class _PairCensus(torch.utils._python_dispatch.TorchDispatchMode):
+    """Inside the mode, every tensor an op returns with ``numel_x`` or ``numel_d`` elements is tracked by its storage until its
+    Python object is freed. ``together`` records whether one of each kind was ever live at the same time."""
+
+    def __init__(self, numel_x, numel_d):
+        super().__init__()
+        self.kind = {numel_x: "x", numel_d: "d"}
+        self.live = {"x": set(), "d": set()}
+        self.together = False
+
+    def __torch_dispatch__(self, func, types, args=(), kwargs=None):
+        out = func(*args, **(kwargs or {}))
+        for t in (out if isinstance(out, (tuple, list)) else (out,)):
+            if isinstance(t, torch.Tensor) and t.numel() in self.kind:
+                k, key = self.kind[t.numel()], t.untyped_storage().data_ptr()
+                if key not in self.live[k]:
+                    self.live[k].add(key)
+                    weakref.finalize(t, self.live[k].discard, key)
+                self.together = self.together or (bool(self.live["x"]) and bool(self.live["d"]))
+        return out
+
+
+def _block_and_delta_together(node, ad_dtype, monkeypatch):
+    """One hot-expert forward through the compact node ``node``: whether a [G * W, K] block and a [G, W, N] delta were ever live
+    at once."""
+    monkeypatch.setenv("NF4_QLORA_LORA_PATH", "padded")
+    monkeypatch.setenv("NF4_QLORA_COMPACT_DELTA", "1")
+    monkeypatch.setattr(nf4_qlora, "_CompactPaddedDelta", node)
+    _fresh()
+    E, K, N, R = 16, 512, 384, 16
+    sizes = [60, 2, 2, 2, 2, 2, 2, 2]                 # G = 8 groups padded to W = 60 rows
+    g = torch.Generator().manual_seed(7)
+    a = torch.randn(sum(sizes), K, generator=g).to(torch.bfloat16).requires_grad_(True)
+    A = (torch.randn(E, R, K, generator=g) * 0.05).to(ad_dtype).requires_grad_(True)
+    B = (torch.randn(E, N, R, generator=g) * 0.05).to(ad_dtype).requires_grad_(True)
+    census = _PairCensus(8 * 60 * K, 8 * 60 * N)       # no other buffer of the forward has either element count
+    with census:
+        lora_delta_grouped(a, A, B, sizes, list(range(8)), 1.0)
+    return census.together
+
+
+@pytest.mark.parametrize("ad_dtype", [torch.bfloat16, torch.float32])
+def test_the_block_and_the_delta_are_never_live_together(monkeypatch, ad_dtype):
+    """The point of the change: the forward frees the block before it builds the delta. The census proves it can see the
+    difference: the old forward holds both."""
+    assert _block_and_delta_together(_OldForward, ad_dtype, monkeypatch) is True
+    assert _block_and_delta_together(_NEW_ORDER, ad_dtype, monkeypatch) is False
+
+
+@pytest.mark.skipif(not CUDA, reason="max_memory_allocated is a CUDA allocator statistic")
+@pytest.mark.parametrize("ad_dtype", [torch.bfloat16, torch.float32])
+@pytest.mark.parametrize("K,N", [(512, 384), (384, 512)])   # gate_up-like (K > N) and down-like (N > K)
+def test_freed_forward_peak_drops_by_the_smaller_of_block_and_delta(monkeypatch, ad_dtype, K, N):
+    """On CUDA the compact forward's peak falls by at least about the smaller of the [G * W, K] block and the [G, W, N] delta
+    against the old forward, with the same bytes."""
+    new, fwd_new, _ = _peaks("cuda", True, ad_dtype, K, N, monkeypatch)
+    monkeypatch.setattr(nf4_qlora, "_CompactPaddedDelta", _OldForward)
+    old, fwd_old, _ = _peaks("cuda", True, ad_dtype, K, N, monkeypatch)
+    for name, o, n in zip(("out", "d_a", "d_A", "d_B"), old, new):
+        assert torch.equal(o, n), name
+    size = torch.tensor([], dtype=ad_dtype).element_size()
+    assert fwd_old - fwd_new >= 0.9 * 8 * 60 * min(K, N) * size, (fwd_old, fwd_new, K, N)
