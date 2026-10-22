@@ -2,9 +2,9 @@
 
 `_CompactPaddedDelta.forward` (`NF4_QLORA_COMPACT_DELTA=1`) frees the zero-padded `[G * W, K]` block, and the gathered `A`, right after
 the first product, and the gathered `B` after the second. The block is not saved for backward (backward rebuilds it), so freeing it
-early changes no value. The block and the `[G, W, N]` delta are no longer live together, which takes about the smaller of the two off
-the forward's transient. With fp32 adapters on Qwen3-30B-A3B's widest groups, that is about 0.6 GB. This is the forward twin of the
-backward's order (#584).
+early changes no value. The block and the `[G, W, N]` delta are no longer live together, which takes the smaller of the two off the
+forward's transient: about 0.47 GB at the gate_up site where Qwen3-30B-A3B's field recipe (fp32 adapters) peaked on an RTX 4090, where
+the delta is the smaller. This is the forward twin of the backward's order (#584).
 
 - Tests: byte-equality of every output and gradient against the old forward (distinct and repeated ids, bf16 and fp32 adapters,
   scaling 1 and 2, host reuse on and off); a TorchDispatchMode census showing the block and the delta are never live together, where
