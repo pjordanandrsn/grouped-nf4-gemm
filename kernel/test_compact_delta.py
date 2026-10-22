@@ -5,8 +5,11 @@ expert ids, bf16 and fp32 adapters, scaling 1 and not, with and without GNF4_HOS
 knowledge); plus the point of it: far fewer bytes saved for backward, without a larger backward transient than the autograd
 path's.
 """
+import weakref
+
 import pytest
 import torch
+import torch.utils._python_dispatch
 
 import nf4_grouped as NG
 import nf4_qlora
@@ -146,3 +149,143 @@ def test_compact_backward_peak_at_most_autograd(monkeypatch, ad_dtype, K, N, reu
 def test_off_by_default(monkeypatch):
     monkeypatch.delenv("NF4_QLORA_COMPACT_DELTA", raising=False)
     assert nf4_qlora._compact_delta_enabled() is False
+
+
+_NEW_ORDER = nf4_qlora._CompactPaddedDelta                       # captured before any test patches the module attribute
+
+
+class _OldOrder(_NEW_ORDER):
+    """The compact node's backward as it was before experts4bit-qlora TC1 amendment 75's lever (grouped-nf4-gemm a83f6bb3): the
+    block's grad ``gx`` was built while the rebuilt block ``x`` was still live. A test-local reference only."""
+
+    @staticmethod
+    def backward(ctx, g):
+        a_cat, lora_A, lora_B, eid, flat, h = ctx.saved_tensors
+        G, W, unique = ctx.G, ctx.widest, ctx.unique
+        if unique:
+            A, B = lora_A.index_select(0, eid), lora_B.index_select(0, eid)
+        else:
+            A, B = lora_A[eid], lora_B[eid]
+        gd = g.new_zeros((G * W,) + tuple(g.shape[1:]))
+        gd.index_copy_(0, flat, g)
+        gd = gd.view(G, W, -1)
+        gh = gd.bmm(B)
+        del B
+        gBt = h.transpose(1, 2).bmm(gd)
+        del gd, h
+        x = torch.zeros(G * W, a_cat.shape[1], dtype=A.dtype, device=a_cat.device)
+        x.index_copy_(0, flat, a_cat.to(A.dtype))
+        gx = gh.bmm(A)
+        del A
+        gAt = x.view(G, W, -1).transpose(1, 2).bmm(gh)
+        del x, gh
+        grad_a = None
+        if ctx.needs_input_grad[0]:
+            grad_a = gx.view(G * W, -1).index_select(0, flat)
+            del gx
+            if grad_a.dtype != a_cat.dtype:
+                grad_a = grad_a.to(a_cat.dtype)
+        else:
+            del gx
+        gA = gB = None
+        if ctx.needs_input_grad[1]:
+            gA = torch.zeros_like(lora_A)
+            if unique:
+                gA.index_copy_(0, eid, gAt.transpose(1, 2))
+            else:
+                gA.index_put_((eid,), gAt.transpose(1, 2), accumulate=True)
+        del gAt
+        if ctx.needs_input_grad[2]:
+            gB = torch.zeros_like(lora_B)
+            if unique:
+                gB.index_copy_(0, eid, gBt.transpose(1, 2))
+            else:
+                gB.index_put_((eid,), gBt.transpose(1, 2), accumulate=True)
+        del gBt
+        return grad_a, gA, gB, None, None, None, None, None
+
+
+@pytest.mark.parametrize("dev", DEVICES)
+@pytest.mark.parametrize("sizes,eids", CASES)
+@pytest.mark.parametrize("ad_dtype", [torch.bfloat16, torch.float32])
+@pytest.mark.parametrize("scaling", [1.0, 2.0])
+@pytest.mark.parametrize("reuse", ["0", "1"])
+def test_backward_order_is_bit_identical_to_the_old_order(monkeypatch, dev, sizes, eids, ad_dtype, scaling, reuse):
+    """The reordered backward (the adapters' product before the block's grad, the block freed between them) gives the same
+    bytes as the old order on every output and gradient: each product reads the same operands either way."""
+    if reuse == "1" and dev != "cuda":
+        pytest.skip("host reuse is CUDA-only")
+    monkeypatch.setenv("NF4_QLORA_LORA_PATH", "padded")
+    monkeypatch.setenv("GNF4_HOST_REUSE", reuse)
+    monkeypatch.setenv("NF4_QLORA_COMPACT_DELTA", "1")
+    _fresh()
+    new = _run(dev, sizes, eids, ad_dtype, scaling)
+    monkeypatch.setattr(nf4_qlora, "_CompactPaddedDelta", _OldOrder)
+    _fresh()
+    old = _run(dev, sizes, eids, ad_dtype, scaling)
+    for name, o, n in zip(("out", "d_a", "d_A", "d_B"), old, new):
+        assert o.dtype == n.dtype and o.shape == n.shape, name
+        assert torch.equal(o, n), f"{name} differs (max |diff| {(o.float() - n.float()).abs().max().item()})"
+
+
+class _BlockCensus(torch.utils._python_dispatch.TorchDispatchMode):
+    """Inside the mode, every tensor an op returns with exactly ``numel`` elements is tracked by its storage until its Python
+    object is freed (a weakref finalizer). ``most`` is the largest number of such storages ever live together. Views and
+    in-place results share their base's storage and are not counted twice."""
+
+    def __init__(self, numel):
+        super().__init__()
+        self.numel, self.live, self.most = numel, set(), 0
+
+    def __torch_dispatch__(self, func, types, args=(), kwargs=None):
+        out = func(*args, **(kwargs or {}))
+        for t in (out if isinstance(out, (tuple, list)) else (out,)):
+            if isinstance(t, torch.Tensor) and t.numel() == self.numel:
+                key = t.untyped_storage().data_ptr()
+                if key not in self.live:
+                    self.live.add(key)
+                    weakref.finalize(t, self.live.discard, key)
+                    self.most = max(self.most, len(self.live))
+        return out
+
+
+def _most_blocks_live(node, ad_dtype, monkeypatch):
+    """One hot-expert delta through the compact node ``node``: the most [G * W, K] buffers live at once during its backward."""
+    monkeypatch.setenv("NF4_QLORA_LORA_PATH", "padded")
+    monkeypatch.setenv("NF4_QLORA_COMPACT_DELTA", "1")
+    monkeypatch.setattr(nf4_qlora, "_CompactPaddedDelta", node)
+    _fresh()
+    E, K, N, R = 16, 512, 384, 16
+    sizes = [60, 2, 2, 2, 2, 2, 2, 2]                 # G = 8 groups padded to W = 60 rows: the block is 8 x 60 x 512
+    g = torch.Generator().manual_seed(5)
+    a = torch.randn(sum(sizes), K, generator=g).to(torch.bfloat16).requires_grad_(True)
+    A = (torch.randn(E, R, K, generator=g) * 0.05).to(ad_dtype).requires_grad_(True)
+    B = (torch.randn(E, N, R, generator=g) * 0.05).to(ad_dtype).requires_grad_(True)
+    out = lora_delta_grouped(a, A, B, sizes, list(range(8)), 1.0)
+    gout = torch.randn(out.shape, generator=g).to(out.dtype)
+    census = _BlockCensus(8 * 60 * K)                  # x is [G*W, K], gx is [G, W, K]: no other buffer has this many elements
+    with census:
+        out.backward(gout)
+    return census.most
+
+
+@pytest.mark.parametrize("ad_dtype", [torch.bfloat16, torch.float32])
+def test_the_block_and_its_grad_are_never_live_together(monkeypatch, ad_dtype):
+    """The point of the order: the rebuilt block x is freed before its grad gx is allocated, so the backward never holds two
+    [G * W, K] buffers. The census proves it can see the difference: the old order holds two."""
+    assert _most_blocks_live(_OldOrder, ad_dtype, monkeypatch) == 2
+    assert _most_blocks_live(_NEW_ORDER, ad_dtype, monkeypatch) == 1
+
+
+@pytest.mark.skipif(not CUDA, reason="max_memory_allocated is a CUDA allocator statistic")
+@pytest.mark.parametrize("ad_dtype", [torch.bfloat16, torch.float32])
+def test_reordered_backward_peak_drops_by_about_a_block(monkeypatch, ad_dtype):
+    """On CUDA the compact backward's peak falls by about one [G * W, K] block against the old order, with the same bytes."""
+    K = 512
+    new, _, bwd_new = _peaks("cuda", True, ad_dtype, K, 384, monkeypatch)
+    monkeypatch.setattr(nf4_qlora, "_CompactPaddedDelta", _OldOrder)
+    old, _, bwd_old = _peaks("cuda", True, ad_dtype, K, 384, monkeypatch)
+    for name, o, n in zip(("out", "d_a", "d_A", "d_B"), old, new):
+        assert torch.equal(o, n), name
+    block = 8 * 60 * K * torch.tensor([], dtype=ad_dtype).element_size()
+    assert bwd_old - bwd_new >= 0.9 * block, (bwd_old, bwd_new, block)

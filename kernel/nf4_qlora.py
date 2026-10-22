@@ -922,8 +922,12 @@ class _CompactPaddedDelta(torch.autograd.Function):
         # Every intermediate is dropped at its last use, as autograd frees each node's buffers once that node has run. Held to
         # the return, the padded output grad `gd` [G, W, N] was still live while the block `x` and its grad `gx` (both
         # [G, W, K]) were built -- a larger transient than the autograd path's, which has freed `gd` before `gx` exists
-        # (experts4bit-qlora TC1 amendment 36: training peak +0.23 GB with fp32 adapters). Only references move: every op,
-        # operand layout, dtype and the order of the calls are unchanged, so every gradient is the same bytes.
+        # (experts4bit-qlora TC1 amendment 36: training peak +0.23 GB with fp32 adapters). Every op, operand layout and dtype
+        # is autograd's, so every gradient is the same bytes. ONE ORDER DIFFERS: of h = x @ A^T's two products, the adapters'
+        # gAt = x^T @ gh runs BEFORE the block's gx = gh @ A, and the rebuilt block `x` is freed between them, so `x` and `gx`
+        # (each [G * W, K] in the adapter dtype) are never live together. Each product reads the same operands either way.
+        # experts4bit-qlora TC1 amendment 75: with fp32 adapters at Qwen3-30B-A3B's field recipe the two were 0.811 GB each
+        # and together held the training peak once the padded delta and the LM loss were lean.
         a_cat, lora_A, lora_B, eid, flat, h = ctx.saved_tensors
         G, W, unique = ctx.G, ctx.widest, ctx.unique
         if unique:
@@ -939,10 +943,10 @@ class _CompactPaddedDelta(torch.autograd.Function):
         del gd, h                                                          # before the block is rebuilt (`h` stays saved on ctx)
         x = torch.zeros(G * W, a_cat.shape[1], dtype=A.dtype, device=a_cat.device)
         x.index_copy_(0, flat, a_cat.to(A.dtype))
-        gx = gh.bmm(A)                                                     # BmmBackward0 of h = x @ A^T
-        del A
-        gAt = x.view(G, W, -1).transpose(1, 2).bmm(gh)
-        del x, gh
+        gAt = x.view(G, W, -1).transpose(1, 2).bmm(gh)                     # BmmBackward0 of h = x @ A^T: the adapters' grad
+        del x                                                              # before the block's grad exists: never both live
+        gx = gh.bmm(A)                                                     # BmmBackward0 of h = x @ A^T: the block's grad
+        del A, gh
         grad_a = None
         if ctx.needs_input_grad[0]:
             grad_a = gx.view(G * W, -1).index_select(0, flat)              # index_copy_'s backward for its source
