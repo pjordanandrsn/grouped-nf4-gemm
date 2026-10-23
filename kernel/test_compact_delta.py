@@ -280,15 +280,23 @@ def test_the_block_and_its_grad_are_never_live_together(monkeypatch, ad_dtype):
 @pytest.mark.skipif(not CUDA, reason="max_memory_allocated is a CUDA allocator statistic")
 @pytest.mark.parametrize("ad_dtype", [torch.bfloat16, torch.float32])
 def test_reordered_backward_peak_drops_by_about_a_block(monkeypatch, ad_dtype):
-    """On CUDA the compact backward's peak falls by about one [G * W, K] block against the old order, with the same bytes."""
+    """On CUDA the compact backward's peak falls by one [G * W, K] block less one gathered adapter [G, r, K] against the old order,
+    with the same bytes. The new order frees the block x before its grad gx exists, but gx = gh @ A still needs the gathered A, so A
+    and the adapters' grad gAt (the same size) are live together there; the old order freed A before gAt existed. So the drop is
+    block - |A| = block x (1 - r / W): 0.73 of a block at this shape (r 16, W 60), about a full block at real hot-expert widths.
+    An RTX 4090 (torch 2.12.1+cu130) measured exactly block - |A| in both dtypes. The bound catches a lost reorder (a drop near 0)
+    without pinning the caching allocator's rounding on every card."""
     K = 512
     new, _, bwd_new = _peaks("cuda", True, ad_dtype, K, 384, monkeypatch)
     monkeypatch.setattr(nf4_qlora, "_CompactPaddedDelta", _OldOrder)
     old, _, bwd_old = _peaks("cuda", True, ad_dtype, K, 384, monkeypatch)
     for name, o, n in zip(("out", "d_a", "d_A", "d_B"), old, new):
         assert torch.equal(o, n), name
-    block = 8 * 60 * K * torch.tensor([], dtype=ad_dtype).element_size()
-    assert bwd_old - bwd_new >= 0.9 * block, (bwd_old, bwd_new, block)
+    size = torch.tensor([], dtype=ad_dtype).element_size()
+    block, adapter = 8 * 60 * K * size, 8 * 16 * K * size            # [G * W, K] and the gathered A [G, r, K] (G 8, W 60, r 16)
+    drop = bwd_old - bwd_new
+    assert 0.9 * (block - adapter) <= drop <= block, dict(old=bwd_old, new=bwd_new, drop=drop, block_less_adapter=block - adapter,
+                                                          block=block)
 
 
 class _OldForward(_NEW_ORDER):
