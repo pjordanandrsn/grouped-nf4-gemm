@@ -10,7 +10,8 @@ every element of its output exactly once, so no zero-fill pass precedes a copy p
 * ``unpad_rows(src, dst, flat)``: ``dst[r] = cast(src[flat[r]])``, the block back in caller order (the input's gradient).
 * ``gather_pad(src, dst, idx, G)``: ``dst[g] = src[idx[g]]`` for ``g < G``, else zero (the adapters, padded to ``G'``).
 
-Every value equals the ops it replaces: copies, exact widening casts and round-to-nearest-even narrowing, and zeros. The
+Every value equals the ops it replaces: copies, exact widening casts and round-to-nearest-even narrowing (the device's
+own: ``cvt.rn`` on CUDA as torch's cast, torch's CPU rule in integers under the interpreter), and zeros. The
 ``bmm``s are untouched, so the delta and every gradient are bit for bit the lean ladder's. On a tensor that is neither on
 CUDA nor under ``TRITON_INTERPRET=1`` each function runs the torch ops it replaces, so the CPU suite checks the autograd
 wiring against the path it stands in for.
@@ -51,8 +52,8 @@ def _unpad_rows_kernel(src, dst, flat, N, s_src, s_dst, BLOCK_N: tl.constexpr, F
     p = tl.load(flat + r).to(tl.int64)
     x = tl.load(src + p * s_src + offs, mask=mn)
     if F32_TO_BF16:
-        # torch's fp32 -> bf16 rounding (round to nearest even; a NaN becomes 0x7FC0), in integer arithmetic. The GPU's
-        # cvt.rn gives the same bits; the Triton interpreter's cast truncates, so this keeps both bit for bit.
+        # torch's CPU fp32 -> bf16 rounding (round to nearest even; a NaN becomes 0x7FC0) in integer arithmetic, for the
+        # Triton interpreter, whose cast truncates. On CUDA the plain cast below is the cvt.rn torch's own CUDA cast uses.
         b = x.to(tl.uint32, bitcast=True)
         h = ((b + 0x7FFF + ((b >> 16) & 1)) >> 16).to(tl.uint16)
         h = tl.where(x != x, 0x7FC0, h).to(tl.uint16)
@@ -98,7 +99,7 @@ def unpad_rows(src: torch.Tensor, dst: torch.Tensor, flat: torch.Tensor) -> torc
     T, N = dst.shape
     if _use_triton(dst):
         bn = _block(N)
-        narrow = src.dtype == torch.float32 and dst.dtype == torch.bfloat16
+        narrow = src.dtype == torch.float32 and dst.dtype == torch.bfloat16 and not dst.is_cuda
         _unpad_rows_kernel[(T, triton.cdiv(N, bn))](src, dst, flat, N, src.stride(0), dst.stride(0), BLOCK_N=bn,
                                                      F32_TO_BF16=narrow)
         return dst
