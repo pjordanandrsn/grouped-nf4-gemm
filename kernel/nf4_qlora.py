@@ -165,6 +165,14 @@ def _single_ladder_enabled(adapter_dtype=None) -> bool:
     return v == "1"
 
 
+def _fused_pad_enabled() -> bool:
+    """``NF4_QLORA_FUSED_PAD=1`` (opt-in; EXPLORE, Map 1 T-B option C): the lean single ladder's glue in single kernels
+    (``lora_pad``): the padded block built in one launch, the adapters gathered and zero-padded in one each, and the delta's
+    padded gradient written in one, where the ladder ran a full zero fill first. Distinct expert ids only (the
+    ``_GatherRows`` route); every value and gradient is the ladder's bit for bit. Anything but ``1`` is off."""
+    return os.environ.get("NF4_QLORA_FUSED_PAD", "0").strip() == "1"
+
+
 #: ``NF4_QLORA_SINGLE_LADDER=1``'s calls (``calls``) and the padded rows it ran against the single block's (``rows_laddered``,
 #: ``rows_single``), for a receipt.
 SINGLE_LADDER_STATS = {"calls": 0, "rows_laddered": 0, "rows_single": 0}
@@ -546,9 +554,10 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
         plan = _PLAN_MEMO.get(pkey)
         if plan is not None:
             HOST_REUSE_STATS["plan_hits"] += 1
-            eid, flat, unique = plan
+            eid, flat, unique = plan[:3]
             if ladder:
-                return _lora_delta_padded_ladder(a_cat, lora_A, lora_B, eid, flat, len(rows), widest, unique, scaling)
+                return _lora_delta_padded_ladder(a_cat, lora_A, lora_B, eid, flat, len(rows), widest, unique, scaling,
+                                                 *plan[3:])
             return _lora_delta_padded(a_cat, lora_A, lora_B, eid, flat, len(rows), widest, unique, scaling)
     if host_ids is None:
         # Select the surviving groups ON DEVICE. One index_select, no round trip.
@@ -585,18 +594,18 @@ def lora_delta_grouped(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0):
     # (group, slot) pair: 1-D index_copy_ / index_select cost fewer launches than
     # two-index advanced indexing, whose backward sorted its indices first.
     G = len(rows)
-    shift = torch.repeat_interleave(
-        torch.arange(G, device=dev) * widest - (torch.cumsum(sz, 0) - sz), sz,
-        output_size=total)
+    base = torch.arange(G, device=dev) * widest      # main's op order: arange, mul, cumsum, sub, sub
+    start = torch.cumsum(sz, 0) - sz
+    shift = torch.repeat_interleave(base - start, sz, output_size=total)
     flat = torch.arange(total, device=dev) + shift
     unique = False
     if pkey is not None:
         unique = len(set(host_ids)) == len(host_ids)
         _PLAN_MEMO.clear()                 # one entry: only the gate_up -> down twin repeats
-        _PLAN_MEMO[pkey] = (eid, flat, unique)
+        _PLAN_MEMO[pkey] = (eid, flat, unique, sz, start)
         HOST_REUSE_STATS["plan_misses"] += 1
     if ladder:
-        return _lora_delta_padded_ladder(a_cat, lora_A, lora_B, eid, flat, G, widest, unique, scaling)
+        return _lora_delta_padded_ladder(a_cat, lora_A, lora_B, eid, flat, G, widest, unique, scaling, sz, start)
     return _lora_delta_padded(a_cat, lora_A, lora_B, eid, flat, G, widest, unique, scaling)
 
 
@@ -633,7 +642,11 @@ def _lora_delta_padded(a_cat, lora_A, lora_B, eid, flat, G, widest, unique, scal
     return _scaled(_GatherRows.apply(d.view(G * widest, -1), flat), scaling)
 
 
-def _lora_delta_padded_ladder(a_cat, lora_A, lora_B, eid, flat, G, width, unique, scaling):
+#: ``NF4_QLORA_FUSED_PAD=1``'s calls, for a receipt.
+FUSED_PAD_STATS = {"calls": 0}
+
+
+def _lora_delta_padded_ladder(a_cat, lora_A, lora_B, eid, flat, G, width, unique, scaling, sz=None, start=None):
     """``NF4_QLORA_SINGLE_LADDER=1``: the lean single block at ``[G', width, K]``, ``width`` already on a rung (the plan's ``flat``
     was built at it) and ``G' = _ladder_up(G)``. The gathered adapters are zero-padded from ``G`` to ``G'`` groups (``F.pad``: its
     backward drops the padded slots' gradient), the block's padded groups hold zero rows, and ``flat`` never reads them, so every
@@ -643,6 +656,13 @@ def _lora_delta_padded_ladder(a_cat, lora_A, lora_B, eid, flat, G, width, unique
     SINGLE_LADDER_STATS["calls"] += 1
     SINGLE_LADDER_STATS["rows_laddered"] += Gp * width
     SINGLE_LADDER_STATS["rows_single"] += G * int(LORA_PAD_WASTE.get("last_widest") or width)
+    if unique and sz is not None and _fused_pad_enabled():
+        from lora_pad import GatherPad, PadRows, UnpadRows
+        FUSED_PAD_STATS["calls"] += 1
+        A, B = GatherPad.apply(lora_A, eid, G, Gp), GatherPad.apply(lora_B, eid, G, Gp)
+        x = PadRows.apply(a_cat, sz, start, flat, G, Gp, width, A.dtype)
+        d = torch.bmm(torch.bmm(x.view(Gp, width, -1), A.transpose(1, 2)), B.transpose(1, 2))
+        return _scaled(UnpadRows.apply(d.view(Gp * width, -1), flat, sz, start, G, Gp, width), scaling)
     if unique:
         A, B = _GatherRows.apply(lora_A, eid), _GatherRows.apply(lora_B, eid)
     else:
