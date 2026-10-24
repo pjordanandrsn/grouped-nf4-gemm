@@ -36,12 +36,11 @@ GPU kernels need **Linux, an NVIDIA sm_80+ GPU, torch ≥ 2.8 and Triton ≥ 3.4
 CI tests Python 3.11. CPU pack/decode and provenance tools work without CUDA;
 macOS and Windows are not exercised by CI. ROCm and XPU are port targets.
 
-**New in 0.50.0:** `gemm_nf4_grouped_smallm` gains `lut="prmt"` (K39), an NF4 decode through byte-permute table
-lookups instead of the select tree. It is bit-identical to `lut="tree"` and off by default. `bench/sass_count`, a
-static instructions-per-weight instrument, counts it at 17.0 lane instructions per weight against the tree's 24.1
-(sm_120, triton 3.4.0). No speed is claimed here, and nothing in this package routes through it by default.
-experts4bit-qlora serves it by default on `qwen3_moe` since 0.56.0 (its read P158: 1.0925× at 16 requests,
-`e4b.serve.p158.k25-prmt.qwen3.5090.2026-10-20`).
+**New in 0.51.0:** with `NF4_QLORA_COMPACT_DELTA=1`, the compact delta's forward and backward each hold one padded
+block fewer at their peaks: the forward frees the zero-padded block before the delta is built, and the backward
+frees the rebuilt block before its grad. Every output and gradient is the same bytes as 0.50.0's. experts4bit-qlora's
+fit of Qwen3-30B-A3B's field recipe on a 24 GiB RTX 4090 (its TC1 amendment 78) ran on this code. The compact delta
+stays opt-in, and no memory or speed number is claimed in this package.
 [Release notes](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/CHANGELOG.md)
 
 ## Try it on your GPU

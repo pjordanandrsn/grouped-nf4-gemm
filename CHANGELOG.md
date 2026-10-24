@@ -4,6 +4,105 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
+## 0.51.0 — 2026-10-24 — the compact delta holds one padded block fewer in its forward and its backward
+
+### Compact delta: free the padded block in the forward before the delta is built
+
+`_CompactPaddedDelta.forward` (`NF4_QLORA_COMPACT_DELTA=1`) frees the zero-padded `[G * W, K]` block, and the gathered `A`, right after
+the first product, and the gathered `B` after the second. The block is not saved for backward (backward rebuilds it), so freeing it
+early changes no value. The block and the `[G, W, N]` delta are no longer live together, which takes the smaller of the two off the
+forward's transient: about 0.47 GB at the gate_up site where Qwen3-30B-A3B's field recipe (fp32 adapters) peaked on an RTX 4090, where
+the delta is the smaller. This is the forward twin of the backward's order (#584).
+
+- Tests: byte-equality of every output and gradient against the old forward (distinct and repeated ids, bf16 and fp32 adapters,
+  scaling 1 and 2, host reuse on and off); a TorchDispatchMode census showing the block and the delta are never live together, where
+  the old forward holds both; and on CUDA, the forward's peak drops by at least 0.9 × the smaller of the two.
+
+### `NF4_QLORA_COMPACT_DELTA=1`: the backward never holds the rebuilt block and its grad together
+
+`_CompactPaddedDelta.backward` now computes the adapters' product (`gAt = x^T @ gh`) before the block's grad (`gx = gh @ A`), and frees
+the rebuilt zero-padded block `x` between them. The two `[G * W, K]` buffers, in the adapter dtype, are never live together, so the
+backward's transient is one block smaller. Every op, operand, layout and dtype is unchanged, so every output and gradient is the same
+bytes. The test pins this against the old order, for fp32 and bf16 adapters. With fp32 adapters at Qwen3-30B-A3B's field recipe the two
+were 0.811 GB each and set experts4bit-qlora's training peak once the padded delta and the LM loss were lean (TC1 amendment 75).
+- `kernel/test_compact_delta.py` adds three tests. The first checks bit-identity with the old order, kept as a test-local reference. The
+  second is a `TorchDispatchMode` census that the old order holds two `[G * W, K]` buffers and the new order one; it fails when the
+  order is reverted. The third, CUDA-only, checks that the backward peak drops by about a block.
+
+### Claims register: retired rows can say when the claim was published
+
+A `retired` row may now carry `published_on: {date, evidence}`, the first public appearance of the claim it retracts,
+so `published_on` to `retired_on` is how long a wrong claim stood. The evidence is `<commit>:<path>`, which the check
+resolves: the commit is in this repository's history, the path is in its tree, and the date is its committer date in
+UTC. A commit date is only a lower bound on first publication (git does not record the push), so a lifetime read from
+it is an upper bound. A URL is also accepted; it is listed and never resolved. The field is refused on any other
+status and on a date after `retired_on`. No row here is backfilled; it is unset unless known. `docs/claims-schema.md`,
+`scripts/check_claims_register.py` and its test change in lockstep with experts4bit-qlora.
+
+### Tooling: every SHA256SUMS line is tracked or named at the same sha by STORE-ONLY.sha256
+
+`kernel/test_receipt_sums.py` reads every tracked `SHA256SUMS` in the repository: each line must be a file git tracks
+(the index, so a log ignored by `*.log` but present on disk fails) or a line of the `STORE-ONLY.sha256` beside it at
+the same sha256. One directory is excluded by name, `docs/artifacts/pypi-family-20260718/`: an ops prep manifest of
+pre-upload builds, which a new `README.md` there describes. No existing file changes.
+
+### CI: a pull request's superseded run is cancelled; publishing needs a green CI run at the tagged commit
+
+`ci.yml` cancels a pull request's superseded run; push runs keep one group each, so every main commit keeps its own
+run. The conflict-marker guard runs on pushes to `main` and on every pull request head. `publish.yml` refuses to upload
+unless `ci.yml` has a successful push or dispatch run at the tagged commit, read from the checkout, so a manual
+dispatch checks the tag and not the branch it was started from. It fails closed: a `gh` failure or a count
+that isn't an integer refuses. `kernel/test_ci_workflow_shape.py` pins all of it.
+
+### Docs: the sm_120 census's byte ratio is 3.56x, not 2x
+
+`gnf4.kernel.sm120-census-vs-grouped-mm`'s text, STATUS and the census RESULTS said the bf16 comparator ran on "half the
+bytes" / "2x the bytes". The receipt's own `nf4_gb` counts 4.5 bits a weight (4-bit codes plus one fp32 absmax per 64)
+against bf16's 16, so the NF4 arm reads 3.56x fewer weight bytes. Text only: the 2.1-6.0x speed value is unchanged.
+
+### Tooling: `check_change_impact.py` no longer passes when it checked nothing
+
+Without `--base` it used to print SKIP and exit 0, so a local review that ran it bare read as clean while CI, which
+passes the pull request's base, failed the same diff. It now diffs against `origin/main` by default and says so. When
+that ref does not resolve, or `--base` is given empty, it FAILs with exit 2 and says what to pass. CI is unchanged: it
+always passes the pull request's base sha. A shared script: experts4bit-qlora syncs it byte for byte.
+
+### Docs: the required guard checks by their new names
+
+AGENTS.md and CONTRIBUTING.md now name the two required guard checks, `private-marker-guard` and
+`conflict-marker-guard`, in place of `guard`. Each runs on every push and pull-request event, not on a label, and
+push-scan runs ("(push scan)") are not required. They also say that a label event on a pull request that does not carry
+`ready-to-merge` now fails the required `ci` jobs instead of skipping them, while on one that does, any label re-runs
+CI on its head.
+
+### Docs: consumer defaults and the bandwidth GEMV's scope, current at 0.50.0
+
+- **K25, K21 and K19:** `docs/capabilities.json` no longer calls them opt-in in experts4bit-qlora. Each is its
+  default for decode-batch rows: K25 since its P96, K21 since its P90 and K19 since its P88, each cited by claim id.
+- **K39 (`lut="prmt"`):** it stays opt-in in this package. The README, STATUS, PORTABILITY and capabilities now add that
+  experts4bit-qlora serves it by default on `qwen3_moe` from 0.56.0 (its P158).
+- **The bandwidth GEMV's `auto` scope** is stated as shipped: Qwen3-30B-A3B, Granite-3.1-3b-a800m, OLMoE-1B-7B and
+  Mixtral-8x7B on >= 160-SM parts, and Qwen3-30B-A3B on the RTX 4090. Dot-pad runs only with `GNF4_GEMV_BW=0`.
+- **P133's and P134's figures** cite their claims (`e4b.serve.p133.gemv-bw.qwen3.4090.2026-10-18`,
+  `e4b.serve.p134.gemv-bw.{granite,olmoe}.5090.2026-10-18`). P141 cites its claim id. P127's read is cited, and the line
+  saying it was unread is gone.
+- **Two dot-pad claims:** their text now says dot-pad was the default when measured. Their values are unchanged.
+
+### The llms bundle writes every URL in a plain-text-safe form
+
+`llms-full.txt` is read as plain text by language-model tools, and their autolinkers take a URL up to the next
+whitespace. So a markdown link inside parentheses, such as `([notes](https://.../README.md)).`, was requested as
+`.../README.md)).`. GitHub's traffic showed those 404s.
+
+`scripts/build_llms_bundle.py` now makes every URL safe:
+- **A markdown link:** `[text](url)` becomes `text <url>`, and a badge becomes its alt text and link.
+- **A bare URL:** one that ends in `)` or `.` becomes `<url>`, with the punctuation outside it. Any other bare URL is
+  left byte-identical, including one inside a JSON string.
+- **Section headings:** each heading's source URL is in angle brackets.
+- **The check:** the build and `--check` refuse a bundle in which a URL is still directly followed by `)` or `.`.
+
+The READMEs are unchanged. This is shared tooling, and experts4bit-qlora takes the same bytes next.
+
 ## 0.50.0 — 2026-10-20 — a byte-permute NF4 decode for K25, bit-identical to the select tree (K39, opt-in)
 
 ### `bench/sass_count`: a load-keyed loop finder, for kernel variants with no MMA
