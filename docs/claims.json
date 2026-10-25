@@ -433,8 +433,8 @@
     }
    ],
    "evidence_private": [
-    "adertha-receipts/receipts/experts4bit-qlora/2026-09-21/p319-f32prec-1/",
-    "adertha-receipts/receipts/experts4bit-qlora/2026-09-21/p319b-where-1/"
+    "receipts/experts4bit-qlora/2026-09-21/p319-f32prec-1/",
+    "receipts/experts4bit-qlora/2026-09-21/p319b-where-1/"
    ],
    "notes": "Replaces the retired row gnf4.open.f32-compute-modes-triton34, which is kept so the retraction is findable; that row is retired rather than superseded because it was not true-as-measured. The A2000 passes the identical suite on the identical wheels because sm_86 has no fp8 MMA to default to, so there the f32 arms genuinely run f32; its worst residual is one bf16 output ULP (0.015625) with a median of exactly zero. Separately, the f32 split path's dot precision is now stated rather than inherited (GNF4_ATTN_F32_PRECISION, default tf32 = prior behaviour); tf32x3 is exact at 0.51x throughput and ieee at 0.06x, emitting no mma.sync at all. That knob is not a fix for #319 and is not offered as one."
   },
