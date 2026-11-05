@@ -630,3 +630,50 @@ def test_an_unfenced_fill_does_not_wait(arena, monkeypatch):
         t.ensure(0, [0, 1])
         t.ensure(1, [0, 1])
         assert not [e for e in log if e[0] == "sync"] and t.stats()["fence_waits"] == 0
+
+
+def test_a_miss_never_evicts_a_row_the_same_request_reads_later(arena):
+    """[miss, resident] where the resident row is the LFU victim: the miss must
+    take another slot, so the request pages in exactly one row.
+
+    Resolving hits in request order let the earlier miss pick the later
+    resident row as its victim; that row was then read back from disk, two
+    page-ins for one miss, and an unrelated hotter row was evicted to hold it.
+    """
+    from nvme_arena import _seg_len, _seg_off
+    from mxfp4_loader import EXPERT_SUFFIXES
+    path, index, ground = arena
+    suf = EXPERT_SUFFIXES[0]
+    off, ln = _seg_off(index, suf), _seg_len(index, suf)
+    with _tier(path, index, 2) as t:
+        for _ in range(3):
+            t.ensure(0, [2])                       # expert 2 is hot
+        t.ensure(0, [1])                           # expert 1: the LFU victim
+        before = t.stats()
+        t.ensure(0, [3, 1])                        # 3 misses, 1 is resident
+        after = t.stats()
+        assert after["disk_reads"] - before["disk_reads"] == 1
+        assert after["misses"] - before["misses"] == 1
+        assert after["hits"] - before["hits"] == 1
+        assert t.resident(0, 1) and t.resident(0, 3)
+        assert not t.resident(0, 2), "the miss should have taken the other slot"
+        for e in (3, 1):
+            served = bytes(t.row(0, e)[off:off + ln])
+            assert served == ground[f"model.layers.0.{suf}"][e]
+
+
+def test_a_speculative_miss_never_evicts_a_row_the_same_request_reads_later(arena):
+    """The same ordering on the speculative path: a warming call must not
+    evict a row it is about to warm, then read that row back from disk."""
+    path, index, _ = arena
+    with _tier(path, index, 3) as t:
+        for _ in range(3):
+            t.ensure(0, [2])                       # expert 2 is hot
+        t.ensure(0, [1])                           # expert 1: the LFU victim
+        t.ensure(1, [0])                           # demand window moves to layer 1
+        before = t.stats()
+        t.ensure(0, [3, 1], speculative=True)      # 3 misses, 1 is resident
+        after = t.stats()
+        assert after["disk_reads"] - before["disk_reads"] == 1
+        assert t.resident(0, 1) and t.resident(0, 3) and t.resident(1, 0)
+        assert not t.resident(0, 2), "the miss should have taken the other slot"
