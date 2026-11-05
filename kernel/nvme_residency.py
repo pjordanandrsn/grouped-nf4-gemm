@@ -459,9 +459,36 @@ class ColdTier:
                 # previous layer's rows have been read and are fair game again
                 self._demand_protected = set()
 
-            # Plan — resolve hits, note keys already being filled, RESERVE
-            # slots for the misses this call will fill itself.
+            # Hits first: resolve EVERY row of this request that is already
+            # resident before any miss picks a victim. Resolving in request
+            # order let an earlier miss take a later resident row as its
+            # victim, and the same request then read that row straight back
+            # from disk: two page-ins for one miss, and an unrelated row
+            # evicted to hold the second. Resurrecting here (not only
+            # protecting) also keeps the victim heap's invariant: a
+            # RECLAIMABLE row is never excluded from a victim search, so its
+            # eager demotion entry is never held aside while a pre-demotion
+            # entry surfaces (COLD_VICTIM_VERIFY catches that).
             for key in uniq:
+                slot = self._slot_of.get(key)
+                if slot is None:
+                    continue
+                self.hits += 1
+                if speculative:
+                    self.spec_hits += 1
+                self._resurrect_locked(key, speculative)
+                resolved[key] = slot
+                own.add(slot)
+                if not speculative:
+                    self._demand_protected.add(slot)
+
+            # Plan — note keys already being filled, RESERVE slots for the
+            # misses this call will fill itself. A key can still turn up
+            # resident here: _claim_slot may drop the lock while a demand
+            # caller waits out reservations, and another ensure can publish.
+            for key in uniq:
+                if key in resolved:
+                    continue
                 slot = self._slot_of.get(key)
                 if slot is not None:
                     self.hits += 1
